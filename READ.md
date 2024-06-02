@@ -3,9 +3,11 @@
 </a>
 
 # PigPig (Discord Bot Base on LLM and Vocard bot)
+## A discord bot based on multi-modal LLM that interacts with discord through natural language
 > PigPig is a simple custom Disocrd LLM Bot built with Python & [discord.py](https://discordpy.readthedocs.io/en/stable/) <br>
 Demo: [Discord Bot Demo](https://discord.com/api/oauth2/authorize?client_id=890399639008866355&permissions=36708608&scope=bot%20applications.commands),
 [Dashboard Demo](https://vocard.xyz)
+
 ![alt text](readmeimg/image-4.png)
 
 ![alt text](readmeimg/image.png)
