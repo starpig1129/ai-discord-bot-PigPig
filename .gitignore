@@ -1,0 +1,6 @@
+.env
+*.pyc
+settings.json
+data
+models
+lavalink
