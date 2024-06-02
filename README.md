@@ -1,4 +1,4 @@
-<a href="https://discord.gg/funzKnyWeG">
+<a href="https://discord.gg/BvP64mqKzR">
     <img src="https://img.shields.io/discord/1212823415204085770?color=7289DA&label=Support&logo=discord&style=for-the-badge" alt="Discord">
 </a>
 
@@ -6,7 +6,7 @@
 ## A discord bot based on multi-modal LLM that interacts with discord through natural language
 > PigPig is a simple custom Disocrd LLM Bot built with Python & [discord.py](https://discordpy.readthedocs.io/en/stable/) <br>
 Demo: [Discord Bot Demo](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot),
-[Dashboard Demo](https://vocard.xyz)
+
 
 ## Screenshot
 ### Discord Bot

@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 class Settings:
     def __init__(self, settings: dict) -> None:
-        self.invite_link: str = "https://discord.gg/funzKnyWeG"
+        self.invite_link: str = "https://discord.gg/BvP64mqKzR"
         self.nodes: dict = settings.get("nodes", {})
         self.max_queue: int = settings.get("default_max_queue", 1000)
         self.bot_prefix: str = settings.get("prefix", "")
