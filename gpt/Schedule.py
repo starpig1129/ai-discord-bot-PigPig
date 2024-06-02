@@ -18,15 +18,12 @@ def load_schedule_data(user_name,message):
     try:
         match = re.search(r'\d+', user_name)
         user_id = match.group()
-        with open(f'../data/schedule_data/{user_id}.json', 'r', encoding='utf-8') as f:
+        with open(f'./data/schedule_data/{user_id}.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except:
         user_id = message.author.id
-        with open(f'../data/schedule_data/{user_id}.json', 'r', encoding='utf-8') as f:
+        with open(f'./data/schedule_data/{user_id}.json', 'r', encoding='utf-8') as f:
             return json.load(f)
-    finally:
-        print('load_schedule_data erro')
-    
 def find_next_class_corrected(schedule, weekday, current_class_period):
     print('目前是',weekday,'第',current_class_period,'節')
     if weekday not in schedule:

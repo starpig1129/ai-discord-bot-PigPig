@@ -22,7 +22,7 @@ async def send_img(message_to_edit,message, query):
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    service = Service('/media/e806/4T/ziyue/dcbot/chromedriver-linux64/chromedriver')
+    service = Service('./chromedriver-linux64/chromedriver')
     driver = webdriver.Chrome(options=chrome_options, service=service)
 
     try:
