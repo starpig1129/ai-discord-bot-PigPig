@@ -7,7 +7,9 @@ from gpt.math import calculate_math
 from gpt.search import internet_search
 from gpt.eat import eat_search
 from gpt.Schedule import query_schedule
-#from gpt.gen_img import generate_image
+from gpt.gen_img import generate_image
+from datetime import datetime
+from gpt.remind import send_reminder
 # 其他工具函数...
 system_prompt='''
 Here is a list of tools that you have available to you:
@@ -52,10 +54,10 @@ def calculate(expression: str):
 ```python
 def gen_img(prompt: str):
     """
-    Generates an image based on the given prompt using Stable Diffusion 
+    Generates an image based on the given keyword and img using Stable Diffusion 
     
     Args:
-        prompt (str): English prompt to generate the image 
+        prompt (str): English keyword to generate the image 
     """
     pass
 ```
@@ -80,6 +82,18 @@ def query_schedule(user_name: str = None, query_type: str = 'next'):
     """
     pass
 ```
+```python
+def send_reminder(user_name: str = None, reminder_message, time_str):
+    """
+    Queries the schedule information for the specified user
+    
+    Args:
+        user_name (str): The username or ID. If not provided, the command sender's ID will be used. Example: <@user_id>
+        reminder_message (str): The reminder message to be sent.
+        time_str (str): The reminder time in the format 'YYYY-MM-DD HH:MM:SS'.
+    """
+    pass
+```
 When using the gen_img tool, please provide English and add relevant tips.
 Write 'Action:' followed by a list of actions in JSON that you want to call, e.g.
 Action:
@@ -92,10 +106,11 @@ Action:
 ]
 ```
 '''
-async def generate_image(message_to_edit, message,prompt: str, n_steps: int = 40, high_noise_frac: float = 0.8):
-	await message_to_edit.edit(content="畫畫修練中")
+# async def generate_image(message_to_edit, message,prompt: str, n_steps: int = 40, high_noise_frac: float = 0.8):
+# 	await message_to_edit.edit(content="畫畫修練中")
 async def choose_act(prompt, message,message_to_edit):
-	
+	print(str(datetime.now()))
+	prompt = f"msgtime:[{str(datetime.now())[:-7]}]{prompt}"
 	global system_prompt
 	default_action_list = [
 		{
@@ -111,12 +126,13 @@ async def choose_act(prompt, message,message_to_edit):
 		"gen_img":generate_image,
 		"eat_search":eat_search,
 		"query_schedule": query_schedule,
+		"send_reminder":send_reminder
 	}
 
 		
 	if message.attachments:
 		# 在prompt中添加提示,告訴模型消息中包含圖片
-		prompt += "\nNote: The message contains image attachments. Consider using VQA (Visual Question Answering)."
+		prompt += "\nNote: The message contains image attachments. Consider using VQA (Visual Question Answering) or gen_img."
 	
 	# 语言模型输出的 JSON 字符串
 	
@@ -124,7 +140,6 @@ async def choose_act(prompt, message,message_to_edit):
 	responses = ''
 	for response in streamer:
 		responses += response
-
 	# 解析 JSON 字符串
 	thread.join()
 	#print(responses)
