@@ -90,7 +90,7 @@ def send_reminder(user_name: str = None, reminder_message, time_str):
     Args:
         user_name (str): The username or ID. If not provided, the command sender's ID will be used. Example: <@user_id>
         reminder_message (str): The reminder message to be sent.
-        time_str (str): The reminder time in the format 'YYYY-MM-DD HH:MM:SS'.
+        time_str (str): The reminder time in the format 'YYYY-MM-DD HH:MM:SS or a relative time like '10分鐘後'..
     """
     pass
 ```
