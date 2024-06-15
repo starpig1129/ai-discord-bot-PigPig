@@ -82,11 +82,45 @@ class PigPig(commands.Bot):
             response = None
             context = self.dialogue_history[channel_id][-5:]
             try:
-                execute_action = await choose_act(prompt,message,message_to_edit)
-                await execute_action(message_to_edit, self.dialogue_history, channel_id,prompt,message)
+                execute_action = await choose_act(prompt, message, message_to_edit)
+                await execute_action(message_to_edit, self.dialogue_history, channel_id, prompt, message)
             except Exception as e:
                 print(e)
                 #print("GPT:", response)
+        self.save_dialogue_history()
+    
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        if before.author.bot or not before.guild:
+            return
+        
+        channel_id = str(after.channel.id)
+        if channel_id not in self.dialogue_history:
+            self.dialogue_history[channel_id] = []
+        
+        try:
+            match = re.search(r"<@\d+>\s*(.*)", after.content)
+            prompt = match.group(1)
+        except AttributeError:  # 如果正則表達式沒有匹配到，會拋出 AttributeError
+            prompt = after.content
+        
+        self.dialogue_history[channel_id].append({"role": "user", "content": prompt})
+        self.dialogue_history[channel_id] = self.dialogue_history[channel_id][-100:]  # 保留最近的10條對話
+        
+        # 實現生成回應的邏輯
+        if self.user.id in after.raw_mentions and not after.mention_everyone:
+            response = None
+            context = self.dialogue_history[channel_id][-5:]
+            try:
+                # Fetch the bot's previous reply
+                async for msg in after.channel.history(limit=50):
+                    if msg.reference and msg.reference.message_id == before.id and msg.author.id == self.user.id:
+                        await msg.delete()  # 删除之前的回复
+
+                message_to_edit = await after.reply("思考中...")  # 创建新的回复
+                execute_action = await choose_act(prompt, after, message_to_edit)
+                await execute_action(message_to_edit, self.dialogue_history, channel_id, prompt, after)
+            except Exception as e:
+                print(e)
         self.save_dialogue_history()
         
 
@@ -165,8 +199,7 @@ class PigPig(commands.Bot):
         elif not issubclass(error.__class__, VoicelinkException):
             error = func.get_lang(ctx.guild.id, "unknownException") + func.settings.invite_link
             if (guildId := ctx.guild.id) not in func.ERROR_LOGS:
-                func.ERROR_LOGS[guildId] = {}
-            func.ERROR_LOGS[guildId][round(datetime.timestamp(datetime.now()))] = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
+                func.ERROR_LOGS[guildId][round(datetime.timestamp(datetime.now()))] = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
 
         try:
             return await ctx.reply(error, ephemeral=True)
