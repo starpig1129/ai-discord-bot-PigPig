@@ -13,7 +13,7 @@ async def google_search(message_to_edit,message,query):
 
     # 指定chromedriver的路徑
     service = Service('./chromedriver-linux64/chromedriver')
-    print(query)
+    print('google_search:',query)
     # 使用with語句來確保資源被正確關閉
     with webdriver.Chrome(options=chrome_options, service=service) as driver:
         url = f"https://www.google.com/search?q={query}"

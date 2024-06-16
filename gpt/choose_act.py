@@ -17,10 +17,10 @@ Here is a list of tools that you have available to you:
 def internet_search(query: str, search_type: str):
     """
     Performs a web search based on the given query and search type
-
+    If the conversation contains a URL, select url
     Args:
         query (str): Query to search the web with
-        search_type (str): Type of search to perform (one of [general, image, youtube])
+        search_type (str): Type of search to perform (one of [general, image, youtube,url])
     """
     pass
 ```
