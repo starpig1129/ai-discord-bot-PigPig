@@ -5,7 +5,6 @@ from gpt.sendmessage import gpt_message
 from gpt.vqa import vqa_answer
 from gpt.math import calculate_math
 from gpt.search import internet_search
-from gpt.eat import eat_search
 from gpt.Schedule import query_schedule
 from gpt.gen_img import generate_image
 from datetime import datetime
@@ -20,7 +19,7 @@ def internet_search(query: str, search_type: str):
     If the conversation contains a URL, select url
     Args:
         query (str): Query to search the web with
-        search_type (str): Type of search to perform (one of [general, image, youtube,url])
+        search_type (str): Type of search to perform (one of [eat,url,general, image, youtube])
     """
     pass
 ```
@@ -62,16 +61,6 @@ def gen_img(prompt: str):
     pass
 ```
 ```python
-def eat_search(keyword: str):
-    """
-    Searches for information related to the given keyword in the context of food and dining
-    
-    Args:
-        keyword (str): Keyword to search for food-related information
-    """
-    pass
-```
-```python
 def query_schedule(user_name: str = None, query_type: str = 'next'):
     """
     Queries the schedule information for the specified user
@@ -100,7 +89,7 @@ Action:
 ```json
 [
 	{
-		"tool_name": "tool name (one of [vqa_answer,internet_search, directly_answer,calculate,gen_img,eat_search,query_schedule])",
+		"tool_name": "tool name (one of [vqa_answer,internet_search, directly_answer,calculate,gen_img,query_schedule])",
 		"parameters": "the input to the tool"
 	}
 ]
@@ -124,7 +113,6 @@ async def choose_act(prompt, message,message_to_edit):
 		"vqa_answer": vqa_answer,
 		"calculate": calculate_math,
 		"gen_img":generate_image,
-		"eat_search":eat_search,
 		"query_schedule": query_schedule,
 		"send_reminder":send_reminder
 	}
@@ -157,23 +145,26 @@ async def choose_act(prompt, message,message_to_edit):
 
 	async def execute_action(message_to_edit, dialogue_history, channel_id, original_prompt, message):
 		nonlocal action_list, tool_func_dict
-		for action in action_list:
-			tool_name = action["tool_name"]
-			print(tool_name)
-			parameters = action["parameters"]
-			if tool_name in tool_func_dict:
-				tool_func = tool_func_dict[tool_name]
-				try:
-					if type(parameters) == str:
-						result = await tool_func(message_to_edit, message, parameters)
-					else:
-						result = await tool_func(message_to_edit, message, **parameters)
-					if result is not None and tool_name != "directly_answer":
-						original_prompt = f'<<information:\n{result}\n{original_prompt}>>'
-						await gpt_message(message_to_edit, message, original_prompt)
-						#dialogue_history[channel_id].append(f"<|role|>Assistant<|says|>{result}<|end|>")
-				except Exception as e:
-					print(e)
-			else:
-				print(f"未知的工具函数: {tool_name}")
+		print(action_list)
+		try:
+			for action in action_list:
+				tool_name = action["tool_name"]
+				parameters = action["parameters"]
+				if tool_name in tool_func_dict:
+					tool_func = tool_func_dict[tool_name]
+					try:
+						if type(parameters) == str:
+							result = await tool_func(message_to_edit, message, parameters)
+						else:
+							result = await tool_func(message_to_edit, message, **parameters)
+						if result is not None and tool_name != "directly_answer":
+							original_prompt = f'<<information:\n{result}\n{original_prompt}>>'
+							await gpt_message(message_to_edit, message, original_prompt)
+							#dialogue_history[channel_id].append(f"<|role|>Assistant<|says|>{result}<|end|>")
+					except Exception as e:
+						print(e)
+				else:
+					print(f"未知的工具函数: {tool_name}")
+		except:
+			await gpt_message(message_to_edit, message, original_prompt)
 	return execute_action
