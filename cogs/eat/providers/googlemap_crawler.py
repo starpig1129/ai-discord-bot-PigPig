@@ -12,7 +12,7 @@ import re
 
 # 定義一個用於從Google地圖爬取餐廳信息的類
 class GoogleMapCrawler:
-    def __init__(self, driver:str ='/media/e806/4T/ziyue/dcbot/chromedriver-linux64/chromedriver'):
+    def __init__(self, driver:str ='./chromedriver-linux64/chromedriver'):
         # 初始化Chrome WebDriver的選項
         chrome_options = Options()
         chrome_options.add_argument("--headless")  # 啟用無頭模式，不顯示瀏覽器界面
