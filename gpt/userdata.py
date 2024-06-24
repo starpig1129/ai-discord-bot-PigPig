@@ -22,7 +22,7 @@ async def manage_user_data(message_to_edit, message, user_id=None, user_data=Non
         if document:      
             data = document["user_data"]
             print(f"user<@{user_id}>data:{(data)}")
-            return f"user<@{user_id}>{(data)}"
+            return f"userid<@{user_id}>是一位{(data)}"
         else:
             return "No data found for the user."
 
