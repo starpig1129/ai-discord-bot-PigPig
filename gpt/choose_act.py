@@ -9,6 +9,7 @@ from gpt.Schedule import query_schedule
 from gpt.gen_img import generate_image
 from datetime import datetime
 from gpt.remind import send_reminder
+from gpt.userdata import manage_user_data
 # 其他工具函数...
 system_prompt='''
 Here is a list of tools that you have available to you:
@@ -66,7 +67,7 @@ def query_schedule(user_name: str = None, query_type: str = 'next'):
     Queries the schedule information for the specified user
     
     Args:
-        user_name (str): The username or ID. If not provided, the command sender's ID will be used. Example: <@user_id>
+        user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
         query_type (str): The type of query, can be 'next' (next class) or 'now' (current class)
     """
     pass
@@ -77,9 +78,25 @@ def send_reminder(user_name: str = None, reminder_message, time_str):
     Queries the schedule information for the specified user
     
     Args:
-        user_name (str): The username or ID. If not provided, the command sender's ID will be used. Example: <@user_id>
+        user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
         reminder_message (str): The reminder message to be sent.
         time_str (str): The reminder time in the format 'YYYY-MM-DD HH:MM:SS or a relative time like '10分鐘後'..
+    """
+    pass
+```
+```python
+def manage_user_data(user_id: str, user_data: str = None, action: str = 'read'):
+    """
+    Manages user data in a database.
+    Example:
+	User says: "User-related information"
+	Action: Use manage_user_data with save action to update the address in the user's profile.
+	User asks: "Ask users for relevant information"
+	Action: Use manage_user_data with read action to retrieve and display the address.
+    Args:
+        user_id (str): If not provided, the command sender's ID will be used.Example: <@user_id>
+        user_data (str): The data to be saved for the user. Required if action is 'save'.
+        action (str): The action to perform. Can be 'read' or 'save'.
     """
     pass
 ```
@@ -89,7 +106,7 @@ Action:
 ```json
 [
 	{
-		"tool_name": "tool name (one of [vqa_answer,internet_search, directly_answer,calculate,gen_img,query_schedule])",
+		"tool_name": "tool name (one of [manage_user_data,vqa_answer,internet_search, directly_answer,calculate,gen_img,query_schedule,send_reminder])",
 		"parameters": "the input to the tool"
 	}
 ]
@@ -114,7 +131,8 @@ async def choose_act(prompt, message,message_to_edit):
 		"calculate": calculate_math,
 		"gen_img":generate_image,
 		"query_schedule": query_schedule,
-		"send_reminder":send_reminder
+		"send_reminder":send_reminder,
+		"manage_user_data":manage_user_data
 	}
 
 		
