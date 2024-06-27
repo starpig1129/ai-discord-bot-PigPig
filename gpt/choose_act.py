@@ -6,7 +6,7 @@ from gpt.vqa import vqa_answer
 from gpt.math import calculate_math
 from gpt.search import internet_search
 from gpt.Schedule import query_schedule
-from gpt.gen_img import generate_image
+#from gpt.gen_img import generate_image
 from datetime import datetime
 from gpt.remind import send_reminder
 from gpt.userdata import manage_user_data
@@ -112,8 +112,8 @@ Action:
 ]
 ```
 '''
-# async def generate_image(message_to_edit, message,prompt: str, n_steps: int = 40, high_noise_frac: float = 0.8):
-# 	await message_to_edit.edit(content="畫畫修練中")
+async def generate_image(message_to_edit, message,prompt: str, n_steps: int = 40, high_noise_frac: float = 0.8):
+	await message_to_edit.edit(content="畫畫修練中")
 async def choose_act(prompt, message,message_to_edit):
 	print(str(datetime.now()))
 	prompt = f"msgtime:[{str(datetime.now())[:-7]}]{prompt}"

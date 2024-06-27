@@ -17,6 +17,7 @@ bnb_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained(
     model_name, 
     use_fast=False,
+    trust_remote_code=True
 )
 model = AutoModelForCausalLM.from_pretrained(
         model_name, 

@@ -3,7 +3,7 @@ from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session
 from .tables import *
 
-URI = "sqlite:///../data/eatdatabase.sqlite"
+URI = "sqlite:///./data/eatdatabase.sqlite"
 
 class DB:
     def __init__(self) -> None:
