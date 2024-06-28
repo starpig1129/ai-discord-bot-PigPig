@@ -172,6 +172,8 @@ async def choose_act(prompt, message,message_to_edit):
 				if tool_name in tool_func_dict:
 					tool_func = tool_func_dict[tool_name]
 					try:
+						if tool_name == "directly_answer":
+							continue
 						if type(parameters) == str:
 							result = await tool_func(message_to_edit, message, parameters)
 						else:
