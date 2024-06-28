@@ -42,10 +42,11 @@ async def send_reminder(message_to_edit, message, user_name: str = None, reminde
             await message_to_edit.edit(content=f"將在 {str(time_diff)[:-7]} 後傳送給 {user_name}")
             await asyncio.sleep(time_diff.total_seconds())
         await message.channel.send(f"{user_name} {reminder_message}")
-        print(f"已成功傳送提醒給 Discord ID: {user_name}")
+        return "已成功傳送提醒給 Discord ID: {user_name}"
     except discord.errors.NotFound:
         print(f"找不到 Discord ID 為 {user_name} 的用户")
     except discord.errors.Forbidden:
         print(f"無權限傳送訊息給 {user_name}")
     except Exception as e:
         print(f"傳送提醒時發生錯誤:{str(e)}")
+        return "傳送提醒時發生錯誤"
