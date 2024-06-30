@@ -39,7 +39,13 @@ def load_and_index_dialogue_history(dialogue_history_file):
         vector_store.add_texts(texts, metadatas)
 
 def save_vector_store(vector_store, path):
-    vector_store.save(path)
+    try:
+        cpu_index = faiss.index_gpu_to_cpu(vector_store.index)
+        faiss.write_index(cpu_index, path)
+        print(f"FAISS index saved to {path}")
+    except Exception as e:
+        print(f"Error saving FAISS index: {e}")
+        raise
 
 def load_vector_store(path):
     if os.path.exists(path):
