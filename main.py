@@ -18,7 +18,8 @@ from datetime import datetime
 from voicelink import VoicelinkException
 from addons import Settings
 from gpt.choose_act import choose_act
-from gpt.sendmessage import gpt_message
+from gpt.sendmessage import gpt_message, load_and_index_dialogue_history, save_vector_store, vector_store
+
 class Translator(discord.app_commands.Translator):
     async def load(self):
         print("Loaded Translator")
@@ -35,7 +36,9 @@ class PigPig(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.dialogue_history_file = './data/dialogue_history.json'
+        self.vector_store_path = './data/vector_store'
         self.load_dialogue_history()
+        load_and_index_dialogue_history(self.dialogue_history_file)
         self.ipc = IPCServer(
             self,
             host=func.settings.ipc_server["host"],
@@ -55,7 +58,8 @@ class PigPig(commands.Bot):
         """將對話歷史保存到檔案中"""
         with open(self.dialogue_history_file, 'w', encoding='utf-8') as file:
             json.dump(self.dialogue_history, file, ensure_ascii=False, indent=4)
-    
+        save_vector_store(vector_store, self.vector_store_path)
+        
     async def on_message(self, message: discord.Message, /) -> None:
         if message.author.bot or not message.guild:
             return
@@ -73,20 +77,15 @@ class PigPig(commands.Bot):
             prompt = message.content
         
         self.dialogue_history[channel_id].append({"role": "user", "content": prompt})
-        self.dialogue_history[channel_id] = self.dialogue_history[channel_id][-100:]  # 保留最近的10條對話
-        
         # 實現生成回應的邏輯
         if self.user.id in message.raw_mentions and not message.mention_everyone:
             # 發送初始訊息
             message_to_edit = await message.reply("思考中...")
-            response = None
-            context = self.dialogue_history[channel_id][-5:]
             try:
                 execute_action = await choose_act(prompt, message, message_to_edit)
                 await execute_action(message_to_edit, self.dialogue_history, channel_id, prompt, message)
             except Exception as e:
                 print(e)
-                #print("GPT:", response)
         self.save_dialogue_history()
     
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
@@ -104,7 +103,6 @@ class PigPig(commands.Bot):
             prompt = after.content
         
         self.dialogue_history[channel_id].append({"role": "user", "content": prompt})
-        self.dialogue_history[channel_id] = self.dialogue_history[channel_id][-100:]  # 保留最近的10條對話
         
         # 實現生成回應的邏輯
         if self.user.id in after.raw_mentions and not after.mention_everyone:

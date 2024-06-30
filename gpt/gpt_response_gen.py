@@ -32,10 +32,13 @@ model.bfloat16()
 model.eval()
 
 
-async def generate_response(inst, system_prompt):
+async def generate_response(inst, system_prompt,dialogue_history=None):
     # 增加系統提示與用戶指令到對話模板
     messages = [{'role': 'system', 'content': system_prompt},
                 {'role': 'user', 'content': inst}]
+    if dialogue_history is not None:
+        messages = [{'role': 'system', 'content': system_prompt}]+dialogue_history+[{'role': 'user', 'content': inst}]    
+    print(messages)    
     streamer = TextIteratorStreamer(tokenizer,skip_prompt=True)
     input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
 

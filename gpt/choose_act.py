@@ -15,14 +15,14 @@ system_prompt='''
 Here is a list of tools that you have available to you:
 ```python
 def internet_search(query: str, search_type: str):
-    """
-    Performs a web search based on the given query and search type
-    If the conversation contains a URL, select url
-    Args:
-        query (str): Query to search the web with
-        search_type (str): Type of search to perform (one of [eat,url,general, image, youtube])
-    """
-    pass
+	"""
+	Performs a web search based on the given query and search type
+	If the conversation contains a URL, select url
+	Args:
+		query (str): Query to search the web with
+		search_type (str): Type of search to perform (one of [eat,url,general, image, youtube])
+	"""
+	pass
 ```
 ```python
 def directly_answer(prompt:str):
@@ -44,61 +44,61 @@ def vqa_answer(prompt: str):
 ```
 ```python
 def calculate(expression: str):
-    """
-    Calculates the result of a mathematical expression with sympy
-    Args:
-        expression (str): Mathematical expression to calculate
-    """
-    pass
+	"""
+	Calculates the result of a mathematical expression with sympy
+	Args:
+		expression (str): Mathematical expression to calculate
+	"""
+	pass
 ```
 ```python
 def gen_img(prompt: str):
-    """
-    Generates an image based on the given keyword and img using Stable Diffusion 
-    
-    Args:
-        prompt (str): English keyword to generate the image 
-    """
-    pass
+	"""
+	Generates an image based on the given keyword and img using Stable Diffusion 
+	
+	Args:
+		prompt (str): English keyword to generate the image 
+	"""
+	pass
 ```
 ```python
 def query_schedule(user_name: str = None, query_type: str = 'next'):
-    """
-    Queries the schedule information for the specified user
-    
-    Args:
-        user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
-        query_type (str): The type of query, can be 'next' (next class) or 'now' (current class)
-    """
-    pass
+	"""
+	Queries the schedule information for the specified user
+	
+	Args:
+		user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
+		query_type (str): The type of query, can be 'next' (next class) or 'now' (current class)
+	"""
+	pass
 ```
 ```python
 def send_reminder(user_name: str = None, reminder_message, time_str):
-    """
-    Queries the schedule information for the specified user
-    
-    Args:
-        user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
-        reminder_message (str): The reminder message to be sent.
-        time_str (str): The reminder time in the format 'YYYY-MM-DD HH:MM:SS or a relative time like '10分鐘後'..
-    """
-    pass
+	"""
+	Queries the schedule information for the specified user
+	
+	Args:
+		user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
+		reminder_message (str): The reminder message to be sent.
+		time_str (str): The reminder time in the format 'YYYY-MM-DD HH:MM:SS or a relative time like '10分鐘後'..
+	"""
+	pass
 ```
 ```python
 def manage_user_data(user_id: str, user_data: str = None, action: str = 'read'):
-    """
-    Manages user data in a database.
-    Example:
+	"""
+	Manages user data in a database.
+	Example:
 	User says: "User-related information"
 	Action: Use manage_user_data with save action to update the address in the user's profile.
 	User asks: "Ask users for relevant information"
 	Action: Use manage_user_data with read action to retrieve and display the address.
-    Args:
-        user_id (str): If not provided, the command sender's ID will be used.Example: <@user_id>
-        user_data (str): The data to be saved for the user. Required if action is 'save'.
-        action (str): The action to perform. Can be 'read' or 'save'.
-    """
-    pass
+	Args:
+		user_id (str): If not provided, the command sender's ID will be used.Example: <@user_id>
+		user_data (str): The data to be saved for the user. Required if action is 'save'.
+		action (str): The action to perform. Can be 'read' or 'save'.
+	"""
+	pass
 ```
 When using the gen_img tool, please provide English and add relevant tips.
 Write 'Action:' followed by a list of actions in JSON that you want to call, e.g.
@@ -163,6 +163,7 @@ async def choose_act(prompt, message,message_to_edit):
 
 	async def execute_action(message_to_edit, dialogue_history, channel_id, original_prompt, message):
 		nonlocal action_list, tool_func_dict
+		final_results = []
 		print(action_list)
 		try:
 			for action in action_list:
@@ -171,18 +172,21 @@ async def choose_act(prompt, message,message_to_edit):
 				if tool_name in tool_func_dict:
 					tool_func = tool_func_dict[tool_name]
 					try:
+						if tool_name == "directly_answer":
+							continue
 						if type(parameters) == str:
 							result = await tool_func(message_to_edit, message, parameters)
 						else:
 							result = await tool_func(message_to_edit, message, **parameters)
 						if result is not None and tool_name != "directly_answer":
-							original_prompt = f'<<information:\n{result}\n{original_prompt}>>'
-							await gpt_message(message_to_edit, message, original_prompt)
-							#dialogue_history[channel_id].append(f"<|role|>Assistant<|says|>{result}<|end|>")
+							final_results.append(result)
 					except Exception as e:
 						print(e)
 				else:
 					print(f"未知的工具函数: {tool_name}")
-		except:
-			await gpt_message(message_to_edit, message, original_prompt)
+		finally:
+			integrated_results = "\n".join(final_results)
+			final_prompt = f'<<information:\n{integrated_results}\n{original_prompt}>>'
+			gptresponses = await gpt_message(message_to_edit, message, final_prompt)
+			dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
 	return execute_action

@@ -23,7 +23,7 @@ async def google_search(message_to_edit,message,query):
     soup = BeautifulSoup(html, 'html.parser')
     search_results = soup.select('.g') 
     search = ""
-    for result in search_results:
+    for result in search_results[:5]:
         title_element = result.select_one('h3')
         title = title_element.text if title_element else 'No Title'
         snippet_element = result.select_one('.VwiC3b')

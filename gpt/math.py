@@ -7,8 +7,6 @@ async def calculate_math(message_to_edit, message, expression):
         print(f'sympy:{result}')
         return f'sympy result:{result}'
     except sympy.SympifyError as e:
-        await message_to_edit.edit(content=f"無法計算: {str(e)}")
-        return None
+        return "無法計算: {str(e)}"
     except Exception as e:
-        await message_to_edit.edit(content=f"計算錯誤: {str(e)}")
-        return None
+        return "計算錯誤: {str(e)}"
