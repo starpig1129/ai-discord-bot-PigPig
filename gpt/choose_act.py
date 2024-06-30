@@ -116,7 +116,6 @@ Action:
 async def generate_image(message_to_edit, message,prompt: str, n_steps: int = 40, high_noise_frac: float = 0.8):
 	await message_to_edit.edit(content="畫畫修練中")
 async def choose_act(prompt, message,message_to_edit):
-	print(str(datetime.now()))
 	prompt = f"msgtime:[{str(datetime.now())[:-7]}]{prompt}"
 	global system_prompt
 	default_action_list = [
@@ -149,7 +148,7 @@ async def choose_act(prompt, message,message_to_edit):
 		responses += response
 	# 解析 JSON 字符串
 	thread.join()
-	#print(responses)
+	#logging.info(responses)
 	try:
 		# 提取 JSON 部分
 		json_start = responses.find("[")
@@ -165,7 +164,7 @@ async def choose_act(prompt, message,message_to_edit):
 	async def execute_action(message_to_edit, dialogue_history, channel_id, original_prompt, message):
 		nonlocal action_list, tool_func_dict
 		final_results = []
-		print(action_list)
+		logging.info(action_list)
 		try:
 			for action in action_list:
 				tool_name = action["tool_name"]
@@ -182,9 +181,9 @@ async def choose_act(prompt, message,message_to_edit):
 						if result is not None and tool_name != "directly_answer":
 							final_results.append(result)
 					except Exception as e:
-						print(e)
+						logging.info(e)
 				else:
-					print(f"未知的工具函数: {tool_name}")
+					logging.info(f"未知的工具函数: {tool_name}")
 		finally:
 			integrated_results = "\n".join(final_results)
 			final_prompt = f'<<information:\n{integrated_results}\n{original_prompt}>>'

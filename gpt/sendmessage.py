@@ -1,6 +1,7 @@
 import os
 import json
 import faiss
+import logging
 from gpt.gpt_response_gen import generate_response
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -42,9 +43,9 @@ def save_vector_store(vector_store, path):
     try:
         cpu_index = faiss.index_gpu_to_cpu(vector_store.index)
         faiss.write_index(cpu_index, path)
-        print(f"FAISS index saved to {path}")
+        logging.info(f"FAISS index saved to {path}")
     except Exception as e:
-        print(f"Error saving FAISS index: {e}")
+        logging.info(f"Error saving FAISS index: {e}")
         raise
 
 def load_vector_store(path):
@@ -52,7 +53,7 @@ def load_vector_store(path):
         vector_store.index = faiss.read_index(path)
         vector_store.index = faiss.index_cpu_to_all_gpus(vector_store.index)  # 使用 GPU 加速
     else:
-        print("向量資料庫文件不存在，將創建新的資料庫")
+        logging.info("向量資料庫文件不存在，將創建新的資料庫")
 
 def search_vector_database(query):
     try:
@@ -90,7 +91,6 @@ async def gpt_message(message_to_edit,message,prompt):
                 responsesall+=responses
                 await message_to_edit.edit(content=responsesall)  # 修改消息内容
                 responses = ""  # 清空 responses 变量
-        print("結束")
         # 处理剩余的文本
         responsesall+=responses
         responsesall = responsesall.replace('<|eot_id|>',"")
@@ -98,7 +98,7 @@ async def gpt_message(message_to_edit,message,prompt):
         thread.join()
         return responsesall
     except Exception as e:
-        print(e)
+        logging.info(e)
 # 在模塊加載時索引對話歷史並載入向量資料庫
 load_vector_store('./data/vector_store')
 load_and_index_dialogue_history('./data/dialogue_history.json')
