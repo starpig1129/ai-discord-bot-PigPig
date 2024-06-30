@@ -7,9 +7,8 @@ import aiohttp
 import update
 import function as func
 import json
-import jieba
-import jieba.analyse
 import asyncio
+import logging
 from zhconv import convert
 from discord.ext import commands
 from web import IPCServer
@@ -19,6 +18,15 @@ from voicelink import VoicelinkException
 from addons import Settings
 from gpt.choose_act import choose_act
 from gpt.sendmessage import gpt_message, load_and_index_dialogue_history, save_vector_store, vector_store
+from logs import TimedRotatingFileHandler
+
+# 配置 logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+handler = TimedRotatingFileHandler()
+formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 class Translator(discord.app_commands.Translator):
     async def load(self):
@@ -63,7 +71,7 @@ class PigPig(commands.Bot):
     async def on_message(self, message: discord.Message, /) -> None:
         if message.author.bot or not message.guild:
             return
-        
+        logging.info(f'收到訊息: {message.content} (來自: {message.author.name}, 頻道: {message.channel.name})')
         await self.process_commands(message)
         
         channel_id = str(message.channel.id)
@@ -168,7 +176,26 @@ class PigPig(commands.Bot):
         print(f"Discord Version: {discord.__version__}")
         print(f"Python Version: {sys.version}")
         print("------------------")
-
+        data = {}
+        data['guilds'] = []
+        for guild in bot.guilds:
+            guild_info = {
+                'guild_name': guild.name,
+                'guild_id': guild.id,
+                'channels': []
+            }
+            for channel in guild.channels:
+                channel_info = {
+                    'channel_name': channel.name,
+                    'channel_id': channel.id,
+                    'channel_type': str(channel.type)
+                }
+                guild_info['channels'].append(channel_info)
+            data['guilds'].append(guild_info)
+        # 將資料寫入 JSON 文件
+        with open('logs/guilds_and_channels.json', 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        print('update succesfully guilds_and_channels.json')
         func.tokens.client_id = self.user.id
         func.LOCAL_LANGS.clear()
 
