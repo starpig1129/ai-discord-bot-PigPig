@@ -71,7 +71,7 @@ class PigPig(commands.Bot):
     async def on_message(self, message: discord.Message, /) -> None:
         if message.author.bot or not message.guild:
             return
-        logging.info(f'收到訊息: {message.content} (來自: {message.author.name}, 頻道: {message.channel.name})')
+        logging.info(f'收到訊息: {message.content} (來自:伺服器:{message.guild},頻道:{message.channel.name},{message.author.name})')
         await self.process_commands(message)
         
         channel_id = str(message.channel.id)

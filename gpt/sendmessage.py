@@ -43,14 +43,18 @@ def save_vector_store(vector_store, path):
 
 def load_vector_store(path):
     if os.path.exists(path):
-        vector_store.load(path)
+        vector_store.index = faiss.read_index(path)
+        vector_store.index = faiss.index_cpu_to_all_gpus(vector_store.index)  # 使用 GPU 加速
     else:
         print("向量資料庫文件不存在，將創建新的資料庫")
 
 def search_vector_database(query):
-    results = vector_store.similarity_search(query, k=5)
-    related_data = "\n".join([result.metadata['text'] for result in results])
-    return related_data
+    try:
+        results = vector_store.similarity_search(query, k=5)
+        related_data = "\n".join([result.metadata['text'] for result in results])
+        return related_data
+    except:
+        return ''
 
 async def gpt_message(message_to_edit,message,prompt):
     

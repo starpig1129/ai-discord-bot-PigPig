@@ -38,7 +38,7 @@ async def generate_response(inst, system_prompt,dialogue_history=None):
                 {'role': 'user', 'content': inst}]
     if dialogue_history is not None:
         messages = [{'role': 'system', 'content': system_prompt}]+dialogue_history+[{'role': 'user', 'content': inst}]    
-    print(messages)    
+    #print(messages)    
     streamer = TextIteratorStreamer(tokenizer,skip_prompt=True)
     input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
 

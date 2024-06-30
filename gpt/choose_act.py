@@ -1,5 +1,6 @@
 import json
 import aiohttp
+import logging
 from gpt.gpt_response_gen import generate_response
 from gpt.sendmessage import gpt_message
 from gpt.vqa import vqa_answer
@@ -189,4 +190,5 @@ async def choose_act(prompt, message,message_to_edit):
 			final_prompt = f'<<information:\n{integrated_results}\n{original_prompt}>>'
 			gptresponses = await gpt_message(message_to_edit, message, final_prompt)
 			dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
+			logging.info(f'PigPig:{gptresponses}')
 	return execute_action
