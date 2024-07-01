@@ -71,7 +71,7 @@ async def gpt_message(message_to_edit,message,prompt):
     related_data = search_vector_database(prompt)  # 使用 LangChain 搜尋相關資料
     # 讀取該訊息頻道最近的歷史紀錄
     history = []
-    async for msg in channel.history(limit=10):
+    async for msg in channel.history(limit=5):
         history.append(msg)
     history.reverse()
     history = history[:-2]

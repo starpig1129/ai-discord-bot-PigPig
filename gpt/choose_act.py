@@ -1,6 +1,5 @@
 import json
 import aiohttp
-import logging
 from gpt.gpt_response_gen import generate_response
 from gpt.sendmessage import gpt_message
 from gpt.vqa import vqa_answer
@@ -21,7 +20,7 @@ def internet_search(query: str, search_type: str):
 	If the conversation contains a URL, select url
 	Args:
 		query (str): Query to search the web with
-		search_type (str): Type of search to perform (one of [eat,url,general, image, youtube])
+		search_type (str): Type of search to perform (one of [general,eat,url, image, youtube])
 	"""
 	pass
 ```
@@ -115,7 +114,8 @@ Action:
 '''
 async def generate_image(message_to_edit, message,prompt: str, n_steps: int = 40, high_noise_frac: float = 0.8):
 	await message_to_edit.edit(content="畫畫修練中")
-async def choose_act(prompt, message,message_to_edit):
+async def choose_act(bot,prompt, message,message_to_edit):
+	logger = bot.get_logger_for_guild(message.guild.name)
 	prompt = f"msgtime:[{str(datetime.now())[:-7]}]{prompt}"
 	global system_prompt
 	default_action_list = [
@@ -148,7 +148,7 @@ async def choose_act(prompt, message,message_to_edit):
 		responses += response
 	# 解析 JSON 字符串
 	thread.join()
-	#logging.info(responses)
+	logger.info(responses)
 	try:
 		# 提取 JSON 部分
 		json_start = responses.find("[")
@@ -162,9 +162,10 @@ async def choose_act(prompt, message,message_to_edit):
 		action_list = default_action_list
 
 	async def execute_action(message_to_edit, dialogue_history, channel_id, original_prompt, message):
+		logger = bot.get_logger_for_guild(message_to_edit.guild.name)
 		nonlocal action_list, tool_func_dict
 		final_results = []
-		logging.info(action_list)
+		logger.info(action_list)
 		try:
 			for action in action_list:
 				tool_name = action["tool_name"]
@@ -181,13 +182,13 @@ async def choose_act(prompt, message,message_to_edit):
 						if result is not None and tool_name != "directly_answer":
 							final_results.append(result)
 					except Exception as e:
-						logging.info(e)
+						logger.info(e)
 				else:
-					logging.info(f"未知的工具函数: {tool_name}")
+					logger.info(f"未知的工具函数: {tool_name}")
 		finally:
 			integrated_results = "\n".join(final_results)
 			final_prompt = f'<<information:\n{integrated_results}\n{original_prompt}>>'
 			gptresponses = await gpt_message(message_to_edit, message, final_prompt)
 			dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
-			logging.info(f'PigPig:{gptresponses}')
+			logger.info(f'PigPig:{gptresponses}')
 	return execute_action
