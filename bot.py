@@ -16,6 +16,7 @@ from datetime import datetime
 from voicelink import VoicelinkException
 from gpt.choose_act import choose_act
 from gpt.sendmessage import gpt_message, load_and_index_dialogue_history, save_vector_store, vector_store
+from gpt.gpt_response_gen import get_model_and_tokenizer
 from logs import TimedRotatingFileHandler
 class Translator(discord.app_commands.Translator):
     async def load(self):
@@ -106,6 +107,14 @@ class PigPig(commands.Bot):
         # 實現生成回應的邏輯
         if self.user.id in message.raw_mentions and not message.mention_everyone:
             # 發送初始訊息
+            global global_model, global_tokenizer
+    
+            model, tokenizer = get_model_and_tokenizer()
+            if model is None or tokenizer is None:
+                await message.reply("豬腦休息中")
+                self.save_dialogue_history()
+                return
+            
             message_to_edit = await message.reply("思考中...")
             try:
                 execute_action = await choose_act(self,prompt, message, message_to_edit)
@@ -208,7 +217,13 @@ class PigPig(commands.Bot):
                 guild_info['channels'].append(channel_info)
             data['guilds'].append(guild_info)
             self.setup_logger_for_guild(guild.name)  # 設置每個伺服器的 logger
-
+        try:
+            model_management_cog = self.get_cog('ModelManagement')
+            if model_management_cog:
+                await model_management_cog.reload_LLM()
+                await model_management_cog.reload_vqa_model()
+        except Exception as e:
+            print(e)
         # 將資料寫入 JSON 文件
         with open('logs/guilds_and_channels.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)

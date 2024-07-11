@@ -10,10 +10,18 @@ import os
 
 load_dotenv()  # 加載 .env 文件中的環境變量
 
-vqa_model_name = os.getenv("VQA_MODEL_NAME")
-model = AutoModel.from_pretrained(vqa_model_name, trust_remote_code=True)
-tokenizer = AutoTokenizer.from_pretrained(vqa_model_name, trust_remote_code=True)
-model.eval()
+global_VQA = None
+global_VQAtokenizer = None
+
+def get_VQA_and_tokenizer():
+    global global_VQA, global_VQAtokenizer
+    return global_VQA, global_VQAtokenizer
+
+def set_VQA_and_tokenizer(model, tokenizer):
+    global global_VQA, global_VQAtokenizer
+    global_VQA = model
+    global_VQAtokenizer = tokenizer
+    return model, tokenizer
 async def vqa_answer(message_to_edit,message, prompt):
     vqares=""
     if message.attachments:
@@ -29,10 +37,10 @@ async def vqa_answer(message_to_edit,message, prompt):
             for n_img, image_data in enumerate(image_data_list):
                 image_data = Image.open(io.BytesIO(image_data)).convert('RGB')
                 msgs = [{'role': 'user', 'content': prompt}]
-                res = model.chat(
+                res = global_VQA.chat(
                     image=image_data,
                     msgs=msgs,
-                    tokenizer=tokenizer,
+                    tokenizer=global_VQAtokenizer,
                     sampling=True,
                     num_beams=3,
                     temperature=0.7,

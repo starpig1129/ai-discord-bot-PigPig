@@ -41,19 +41,18 @@ def load_and_index_dialogue_history(dialogue_history_file):
 
 def save_vector_store(vector_store, path):
     try:
-        cpu_index = faiss.index_gpu_to_cpu(vector_store.index)
-        faiss.write_index(cpu_index, path)
+        faiss.write_index(vector_store.index, path)
         logging.info(f"FAISS index saved to {path}")
     except Exception as e:
-        logging.info(f"Error saving FAISS index: {e}")
+        logging.error(f"Error saving FAISS index: {e}")
         raise
 
 def load_vector_store(path):
     if os.path.exists(path):
         vector_store.index = faiss.read_index(path)
-        vector_store.index = faiss.index_cpu_to_all_gpus(vector_store.index)  # 使用 GPU 加速
+        logging.info("FAISS index loaded successfully")
     else:
-        logging.info("向量資料庫文件不存在，將創建新的資料庫")
+        logging.info("Vector database file does not exist, a new database will be created")
 
 def search_vector_database(query):
     try:
@@ -62,7 +61,11 @@ def search_vector_database(query):
         return related_data
     except:
         return ''
+def to_gpu(index):
+    return faiss.index_cpu_to_all_gpus(index)
 
+def to_cpu(index):
+    return faiss.index_gpu_to_cpu(index)
 async def gpt_message(message_to_edit,message,prompt):
     
     channel = message.channel
