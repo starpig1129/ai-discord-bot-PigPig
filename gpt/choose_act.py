@@ -115,7 +115,6 @@ Action:
 async def generate_image(message_to_edit, message,prompt: str, n_steps: int = 40, high_noise_frac: float = 0.8):
 	await message_to_edit.edit(content="畫畫修練中")
 async def choose_act(bot,prompt, message,message_to_edit):
-	logger = bot.get_logger_for_guild(message.guild.name)
 	prompt = f"msgtime:[{str(datetime.now())[:-7]}]{prompt}"
 	global system_prompt
 	default_action_list = [
@@ -148,7 +147,6 @@ async def choose_act(bot,prompt, message,message_to_edit):
 		responses += response
 	# 解析 JSON 字符串
 	thread.join()
-	logger.info(responses)
 	try:
 		# 提取 JSON 部分
 		json_start = responses.find("[")
