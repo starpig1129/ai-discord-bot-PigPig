@@ -69,7 +69,8 @@ OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 | GENIUS_TOKEN | Your genius api key [(Genius Lyrics API)](https://genius.com/api-clients) ***(optional)*** |
 | MONGODB_URL | Your Mongo datebase url [(Mongodb)](https://www.mongodb.com/) |
 | MONGODB_NAME | The datebase name that you created on [Mongodb](https://www.mongodb.com/) |
-
+| ANTHROPIC_API_KEY | Your Anthropic api key [(Anthropic API)](https://www.anthropic.com/api) ***(optional)*** |
+| OPENAI_API_KEY | Your OpenAI api key [(OpenAI API)](https://openai.com/api/) ***(optional)*** |
 2. **Rename `settings Example.json` to `settings.json` and customize your settings**
 ***(Note: Do not change any keys from `settings.json`)***
 ```json
