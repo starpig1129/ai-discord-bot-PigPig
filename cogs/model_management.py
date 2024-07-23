@@ -50,7 +50,8 @@ class ModelManagement(commands.Cog):
         tokenizer = AutoTokenizer.from_pretrained(
             model_name, 
             use_fast=False,
-            trust_remote_code=True
+            trust_remote_code=True,
+            skip_special_tokens=True
         )
         model = AutoModelForCausalLM.from_pretrained(
             model_name, 

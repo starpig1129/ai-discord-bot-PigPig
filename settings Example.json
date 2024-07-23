@@ -1,0 +1,105 @@
+{
+    "nodes": {
+        "DEFAULT": {
+            "host": "127.0.0.1",
+            "port": 2333,
+            "password": "password",
+            "secure": false,
+            "identifier": "DEFAULT"
+        }   
+    },
+    "prefix": "?",
+    "activity":[
+        {"listen": "/help"}
+    ],
+    "bot_access_user": [],
+    "embed_color":"0xb3b3b3",
+    "default_max_queue": 1000,
+    "lyrics_platform": "A_ZLyrics",
+    "ipc_server": {
+        "host": "127.0.0.1",
+        "port": 8000,
+        "enable": false
+    },
+    "sources_settings": {
+        "youtube": {
+            "emoji": "<:youtube:826661982760992778>",
+            "color": "0xFF0000"
+        },
+        "youtube music": {
+            "emoji": "<:youtube:826661982760992778>",
+            "color": "0xFF0000"
+        },
+        "spotify": {
+            "emoji": "<:spotify:826661996615172146>",
+            "color": "0x1DB954"
+        },
+        "soundcloud": {
+            "emoji": "<:soundcloud:852729280027033632>",
+            "color": "0xFF7700"
+        },
+        "twitch": {
+            "emoji": "<:twitch:852729278285086741>",
+            "color": "0x9B4AFF"
+        },
+        "bandcamp": {
+            "emoji": "<:bandcamp:864694003811221526>",
+            "color": "0x6F98A7"
+        },
+        "vimeo": {
+            "emoji": "<:vimeo:864694001919721473>",
+            "color": "0x1ABCEA"
+        },
+        "apple": {
+            "emoji": "<:applemusic:994844332374884413>",
+            "color": "0xE298C4"
+        },
+        "reddit": {
+            "emoji": "<:reddit:996007566863773717>",
+            "color": "0xFF5700"
+        },
+        "tiktok": {
+            "emoji": "<:tiktok:996007689798811698>",
+            "color": "0x74ECE9"
+        }
+    },
+    "default_controller": {
+        "embeds": {
+            "active": {
+                "description": "**Now Playing: ```[@@track_name@@]```\nLink: [Click Me](@@track_url@@) | Requester: @@requester@@ | DJ: @@dj@@**",
+                "footer": {
+                    "text": "Queue Length: @@queue_length@@ | Duration: @@track_duration@@ | Volume: @@volume@@% {{loop_mode != 'Off' ?? | Repeat: @@loop_mode@@}}"
+                },
+                "image": "@@track_thumbnail@@",
+                "author": {
+                    "name": "Music Controller | @@channel_name@@",
+                    "icon_url": "@@bot_icon@@"
+                },
+                "color": "@@track_color@@"
+            },
+            "inactive": {
+                "header": {
+                    "title": "There are no songs playing right now"
+                },
+                "description": "[Support](@@server_invite_link@@) | [Invite](@@invite_link@@) | [Questionnaire](https://forms.gle/Qm8vjBfg2kp13YGD7)",
+                "image": "https://i.imgur.com/dIFBwU7.png",
+                "color": "@@default_embed_color@@"
+            }
+        },
+        "default_buttons": [
+            ["back", "resume", "skip", {"stop": "red"}, "add"],
+            ["tracks"]
+        ],
+        "disableButtonText": false
+    },
+    "cooldowns": {
+        "connect": [2, 30],
+        "playlist view": [1, 30]
+    },
+    "aliases": {
+        "connect": ["join"],
+        "leave": ["stop", "bye"],
+        "play": ["p"],
+        "view": ["v"]
+    }
+}
