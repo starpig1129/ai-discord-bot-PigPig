@@ -55,7 +55,7 @@ class ModelManagement(commands.Cog):
         )
         model = AutoModelForCausalLM.from_pretrained(
             model_name, 
-            torch_dtype=torch.float16,
+            torch_dtype=torch.bfloat16,
             quantization_config=bnb_config,
             device_map={"":0},
             attn_implementation='sdpa',

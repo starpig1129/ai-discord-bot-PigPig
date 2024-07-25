@@ -126,7 +126,9 @@ async def gpt_message(message_to_edit, message, prompt):
             if len(responsesall+responses) > 1900:
                 current_message = await channel.send(responses)
             else:
-                await current_message.edit(content=responsesall+responses)
+                responsesall+=responses
+                responsesall = responsesall.replace('<|eot_id|>', "")
+                await current_message.edit(content=responsesall)
             thread.join()
             return message_result
     except Exception as e:
