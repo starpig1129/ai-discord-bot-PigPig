@@ -3,183 +3,115 @@ import aiohttp
 from gpt.gpt_response_gen import generate_response
 from gpt.sendmessage import gpt_message
 from gpt.vqa import vqa_answer
-from gpt.math import calculate_math
-from gpt.search import internet_search
-from gpt.Schedule import query_schedule
 #from gpt.gen_img import generate_image
 from datetime import datetime
-from gpt.remind import send_reminder
-from gpt.userdata import manage_user_data
-# 其他工具函数...
-system_prompt='''
-Here is a list of tools that you have available to you:
 
-def internet_search(query: str, search_type: str):
-    """
-    Performs a web search based on the given query and search type
-    If the conversation contains a URL, select url
-    Args:
-        query (str): Query to search the web with
-        search_type (str): Type of search to perform (one of [general,eat,url, image, youtube])
-    """
-    pass
+class ActionHandler:
+    def __init__(self, bot):
+        self.bot = bot
+        self.system_prompt = self.load_system_prompt()
+        self.tool_func_dict = {
+            "internet_search": self.internet_search,
+            "directly_answer": gpt_message,
+            "vqa_answer": vqa_answer,
+            "calculate": self.calculate_math,
+            "gen_img": self.generate_image,
+            "query_schedule": self.query_schedule,
+            "send_reminder": self.send_reminder,
+            "manage_user_data": self.manage_user_data
+        }
 
-def directly_answer(prompt:str):
-    """
-    Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history
-    Args:
-        prompt (str): prompt to generate the response with
-    """
-    pass
+    @staticmethod
+    def load_system_prompt():
+        with open('./choseAct_system_prompt.txt', 'r') as f:
+            return f.read()
 
-def vqa_answer(prompt: str):
-    """
-    Answers a question based on the given image
-    Args:
-        prompt (str): Prompt to generate the answer
-    """
-    pass
+    async def choose_act(self, prompt, message, message_to_edit):
+        prompt = f"time:[{datetime.now().isoformat(timespec='seconds')}]{prompt}"
+        
+        if message.attachments:
+            prompt += "\nNote: The message contains image attachments. Consider using VQA (Visual Question Answering) or gen_img."
+        
+        action_list = await self.get_action_list(prompt)
+        
+        async def execute_action(message_to_edit, dialogue_history, channel_id, original_prompt,message):
+            logger = self.bot.get_logger_for_guild(message_to_edit.guild.name)
+            final_results = []
+            logger.info(action_list)
+            
+            for action in action_list:
+                tool_name = action["tool_name"]
+                parameters = action["parameters"]
+                
+                if tool_name in self.tool_func_dict:
+                    tool_func = self.tool_func_dict[tool_name]
+                    try:
+                        if tool_name == "directly_answer":
+                            continue
+                        elif type(parameters) == str:
+                            result = await tool_func(message_to_edit, message, parameters)
+                        else:
+                            result = await tool_func(message_to_edit, message, **parameters)
+                        if result is not None and tool_name != "directly_answer":
+                            final_results.append(result)
+                    except Exception as e:
+                        logger.info(f"執行 {tool_name} 時發生錯誤: {str(e)}")
+                else:
+                    logger.info(f"未知的工具函數: {tool_name}")
+            
+            integrated_results = "\n".join(final_results)
+            final_prompt = f'<<information:\n{integrated_results}\n{original_prompt}>>'
+            gptresponses = await gpt_message(message_to_edit, message, final_prompt)
+            dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
+            logger.info(f'PigPig:{gptresponses}')
+        
+        return execute_action
 
-def calculate(expression: str):
-    """
-    Calculates the result of a mathematical expression with sympy
-    Args:
-        expression (str): Mathematical expression to calculate
-    """
-    pass
+    async def get_action_list(self, prompt: str):
+        thread, streamer = await generate_response(prompt, self.system_prompt)
+        responses = ''.join([response for response in streamer])
+        thread.join()
+        
+        try:
+            json_string = self.extract_json_from_response(responses)
+            return json.loads(json_string) if json_string else self.get_default_action_list(prompt)
+        except json.JSONDecodeError:
+            return self.get_default_action_list(prompt)
 
-def gen_img(prompt: str):
-    """
-    Generates an image based on the given keyword and img using Stable Diffusion 
-    
-    Args:
-        prompt (str): English keyword to generate the image 
-    """
-    pass
+    @staticmethod
+    def extract_json_from_response(response: str) -> str:
+        json_start = response.find("[")
+        json_end = response.rfind("]") + 1
+        return response[json_start:json_end] if json_start != -1 and json_end != -1 else ""
 
-def query_schedule(user_name: str = None, query_type: str = 'next'):
-    """
-    Queries the schedule information for the specified user
-    
-    Args:
-        user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
-        query_type (str): The type of query, can be 'next' (next class) or 'now' (current class)
-    """
-    pass
+    @staticmethod
+    def get_default_action_list(prompt: str):
+        return [{"tool_name": "directly_answer", "parameters": {"prompt": prompt}}]
 
-def send_reminder(user_name: str = None, reminder_message, time_str):
-    """
-    Queries the schedule information for the specified user
-    
-    Args:
-        user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
-        reminder_message (str): The reminder message to be sent.
-        time_str (str): The reminder time in the format 'YYYY-MM-DD HH:MM:SS or a relative time like '10 minutes later'.
-    """
-    pass
+    # Tool functions
+    async def internet_search(self, message_to_edit, message, query, search_type):
+        
+        internet_search_cog = self.bot.get_cog("InternetSearchCog")
+        return await internet_search_cog.internet_search(message, query, search_type,message_to_edit) if internet_search_cog else "搜索功能未啟用"
 
-def manage_user_data(user_id: str, user_data: str = None, action: str = 'read'):
-    """
-    Manages user data in a database.
-    Example:
-    User says: "User-related information"
-    Action: Use manage_user_data with save action to update the address in the user's profile.
-    User asks: "Ask users for relevant information"
-    Action: Use manage_user_data with read action to retrieve and display the address.
-    Args:
-        user_id (str): If not provided, the command sender's ID will be used. Example: <@user_id>
-        user_data (str): The data to be saved for the user. Required if action is 'save'.
-        action (str): The action to perform. Can be 'read' or 'save'.
-    """
-    pass
+    async def calculate_math(self, message_to_edit, message, expression):
+        
+        math_cog = self.bot.get_cog("MathCalculatorCog")
+        return await math_cog.calculate_math(expression,message_to_edit) if math_cog else "數學計算功能未啟用"
 
-You are a multi-functional Discord bot assistant. Your role is to analyze user requests, choose the most appropriate tool(s) from the list above, and provide helpful responses. When using the gen_img tool, provide English prompts and add relevant tips.
+    async def generate_image(self, message_to_edit, message, prompt, n_steps=10):
+        image_gen_cog = self.bot.get_cog("ImageGenerationCog")
+        return await image_gen_cog.generate_image(message.channel, prompt, n_steps,message_to_edit) if image_gen_cog else "圖片生成功能未啟用"
 
-To use a tool, write 'Action:' followed by a list of actions in JSON format, e.g.:
-Action:
-```json
-[
-    {
-        "tool_name": "tool name (one of [manage_user_data,vqa_answer,internet_search, directly_answer,calculate,gen_img,query_schedule,send_reminder])",
-        "parameters": "the input to the tool"
-    }
-]
-'''
-async def generate_image(message_to_edit, message,prompt: str, n_steps: int = 40, high_noise_frac: float = 0.8):
-	await message_to_edit.edit(content="畫畫修練中")
-async def choose_act(bot,prompt, message,message_to_edit):
-	prompt = f"msgtime:[{str(datetime.now())[:-7]}]{prompt}"
-	global system_prompt
-	default_action_list = [
-		{
-			"tool_name": "directly_answer",
-			"parameters": {"prompt": prompt}
-		}
-	]
-	tool_func_dict = {
-		"internet_search": internet_search,
-		"directly_answer": gpt_message,
-		"vqa_answer": vqa_answer,
-		"calculate": calculate_math,
-		"gen_img":generate_image,
-		"query_schedule": query_schedule,
-		"send_reminder":send_reminder,
-		"manage_user_data":manage_user_data
-	}
+    async def query_schedule(self, message_to_edit, message, query_type="next"):
+        
+        schedule_cog = self.bot.get_cog("ScheduleCog")
+        return await schedule_cog.query_schedule(message.author, query_type,message_to_edit) if schedule_cog else "課表查詢功能未啟用"
 
-		
-	if message.attachments:
-		# 在prompt中添加提示,告訴模型消息中包含圖片
-		prompt += "\nNote: The message contains image attachments. Consider using VQA (Visual Question Answering) or gen_img."
-	
-	# 语言模型输出的 JSON 字符串
-	
-	thread, streamer = await generate_response(prompt, system_prompt)
-	responses = ''
-	for response in streamer:
-		responses += response
-	# 解析 JSON 字符串
-	thread.join()
-	try:
-		# 提取 JSON 部分
-		json_start = responses.find("[")
-		json_end = responses.find("]") + 1
-		if json_start != -1 and json_end != -1:
-			json_string = responses[json_start:json_end]
-		else:
-			json_string = ""
-		action_list = json.loads(json_string)
-	except json.JSONDecodeError:
-		action_list = default_action_list
+    async def send_reminder(self, message_to_edit, message, time_str, reminder_message):
+        reminder_cog = self.bot.get_cog("ReminderCog")
+        return await reminder_cog.set_reminder(message.channel, message.author, time_str, reminder_message,message_to_edit) if reminder_cog else "提醒功能未啟用"
 
-	async def execute_action(message_to_edit, dialogue_history, channel_id, original_prompt, message):
-		logger = bot.get_logger_for_guild(message_to_edit.guild.name)
-		nonlocal action_list, tool_func_dict
-		final_results = []
-		logger.info(action_list)
-		try:
-			for action in action_list:
-				tool_name = action["tool_name"]
-				parameters = action["parameters"]
-				if tool_name in tool_func_dict:
-					tool_func = tool_func_dict[tool_name]
-					try:
-						if tool_name == "directly_answer":
-							continue
-						if type(parameters) == str:
-							result = await tool_func(message_to_edit, message, parameters)
-						else:
-							result = await tool_func(message_to_edit, message, **parameters)
-						if result is not None and tool_name != "directly_answer":
-							final_results.append(result)
-					except Exception as e:
-						logger.info(e)
-				else:
-					logger.info(f"未知的工具函数: {tool_name}")
-		finally:
-			integrated_results = "\n".join(final_results)
-			final_prompt = f'<<information:\n{integrated_results}\n{original_prompt}>>'
-			gptresponses = await gpt_message(message_to_edit, message, final_prompt)
-			dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
-			logger.info(f'PigPig:{gptresponses}')
-	return execute_action
+    async def manage_user_data(self, message_to_edit, message, user_id=None, user_data=None, action="read"):
+        user_data_cog = self.bot.get_cog("UserDataCog")
+        return await user_data_cog.manage_user_data_message(message, user_id, user_data, action,message_to_edit) if user_data_cog else "用戶數據管理功能未啟用"

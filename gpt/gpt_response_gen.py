@@ -39,7 +39,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None):
         streamer=streamer,
         max_new_tokens=8192,
         do_sample=True,
-        temperature=0.1,
+        temperature=0.6,
         top_p=0.9,
     )
     

@@ -14,7 +14,7 @@ from web import IPCServer
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 from voicelink import VoicelinkException
-from gpt.choose_act import choose_act
+from gpt.choose_act import ActionHandler
 from gpt.sendmessage import gpt_message, load_and_index_dialogue_history, save_vector_store, vector_store
 from gpt.gpt_response_gen import get_model_and_tokenizer
 from logs import TimedRotatingFileHandler
@@ -52,7 +52,7 @@ class PigPig(commands.Bot):
             sercet_key=func.tokens.sercet_key
         )
         self.loggers = {}
-        
+        self.action_handler = ActionHandler(self)
     def setup_logger_for_guild(self, guild_name):
         if guild_name not in self.loggers:
             self.loggers[guild_name] = setup_logger(guild_name)
@@ -117,7 +117,7 @@ class PigPig(commands.Bot):
             
             message_to_edit = await message.reply("思考中...")
             try:
-                execute_action = await choose_act(self,prompt, message, message_to_edit)
+                execute_action = await self.action_handler.choose_act(prompt, message, message_to_edit)
                 await execute_action(message_to_edit, self.dialogue_history, channel_id, prompt, message)
             except Exception as e:
                 print(e)
@@ -152,7 +152,7 @@ class PigPig(commands.Bot):
                         await msg.delete()  # 删除之前的回复
 
                 message_to_edit = await after.reply("思考中...")  # 创建新的回复
-                execute_action = await choose_act(self,prompt, after, message_to_edit)
+                execute_action = await self.action_handler.choose_act(prompt, after, message_to_edit)
                 await execute_action(message_to_edit, self.dialogue_history, channel_id, prompt, after)
             except Exception as e:
                 print(e)
