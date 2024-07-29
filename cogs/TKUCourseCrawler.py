@@ -39,7 +39,7 @@ class TKUCourseCrawler:
         chrome_options.add_argument("--headless")  # 無頭
         chrome_options.add_argument("--no-sandbox")  # 禁用沙盒模式
         chrome_options.add_argument("--disable-dev-shm-usage")  
-        s = Service('./chromedriver-linux64/chromedriver')  # 指定chromedriver的路径
+        s = Service('./chromedriverlinux64/chromedriver')  # 指定chromedriver的路径
         self.driver = webdriver.Chrome(options=chrome_options, service=s)
 
     def login(self):

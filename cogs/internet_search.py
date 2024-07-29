@@ -86,7 +86,7 @@ class InternetSearchCog(commands.Cog):
 
     async def google_search(self, ctx, query, message_to_edit=None):
         chrome_options = self.get_chrome_options()
-        service = Service('./chromedriver-linux64/chromedriver')
+        service = Service('./chromedriverlinux64/chromedriver')
         
         with webdriver.Chrome(options=chrome_options, service=service) as driver:
             url = f"https://www.google.com/search?q={query}"
@@ -108,7 +108,7 @@ class InternetSearchCog(commands.Cog):
 
         url = f"https://www.google.com.hk/search?q={query}&tbm=isch"
         chrome_options = self.get_chrome_options()
-        service = Service('./chromedriver-linux64/chromedriver')
+        service = Service('./chromedriverlinux64/chromedriver')
 
         try:
             with webdriver.Chrome(options=chrome_options, service=service) as driver:

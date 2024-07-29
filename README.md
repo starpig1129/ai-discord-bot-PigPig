@@ -1,14 +1,32 @@
-<a href="https://discord.gg/BvP64mqKzR">
+# PigPig: Advanced Multi-modal LLM Discord Bot
+
+<p align="center">
+  <a href="https://discord.gg/BvP64mqKzR">
     <img src="https://img.shields.io/discord/1212823415204085770?color=7289DA&label=Support&logo=discord&style=for-the-badge" alt="Discord">
-</a>
+  </a>
+</p>
 
-# PigPig (Discord Bot Base on LLM and Vocard bot)
-## A discord bot based on multi-modal LLM that interacts with discord through natural language
-> PigPig is a simple custom Disocrd LLM Bot built with Python & [discord.py](https://discordpy.readthedocs.io/en/stable/) <br>
-Demo: [Discord Bot Demo](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot),
+PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM), designed to interact with users through natural language. It combines advanced AI capabilities with practical features, offering a rich experience for Discord communities.
 
+[Invite PigPig to your server](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot)
 
-## Screenshot
+## 🌟 Key Features
+
+- 🧠 **AI-Powered Conversations**: Utilizes LLMs and LangChain for natural language understanding and generation.
+- 🎵 **Advanced Music Player**: Stream music from various sources with playlist management and lyrics search.
+- 🖼️ **Multi-modal Capabilities**: Visual question answering and image generation.
+- 🍽️ **Practical Features**: Set reminders, get recommendations, and perform calculations.
+- 👤 **User Information Management**: Create and maintain user profiles.
+- 📊 **Channel Data RAG**: Use channel history for context-aware responses.
+
+## 🖥️ System Requirements
+
+- [Python 3.10+](https://www.python.org/downloads/)
+- [Lavalink Server (4.0.0+)](https://github.com/freyacodes/Lavalink)
+- [Modules in requirements](https://github.com/ChocoMeow/Vocard/blob/main/requirements.txt)
+- NVIDIA GPU with at least 12GB VRAM (required for optimal AI performance)
+
+## 📸 Feature Showcase
 ### Discord Bot
 
 ![alt text](readmeimg/image-4.png)
@@ -20,12 +38,8 @@ Demo: [Discord Bot Demo](https://discord.com/oauth2/authorize?client_id=12086619
 ![alt text](readmeimg/image-2.png)
 
 ![alt text](readmeimg/image-3.png)
-## Requirements
-* [Python 3.10+](https://www.python.org/downloads/)
-* [Modules in requirements](https://github.com/ChocoMeow/Vocard/blob/main/requirements.txt)
-* [Lavalink Server (Requires 4.0.0+)](https://github.com/freyacodes/Lavalink)
 
-## Quick Start
+## 🚀 Quick Start
 ```sh
 git clone https://github.com/starpig1129/PigPig-discord-LLM-bot.git  #Clone the repository
 cd PigPig-discord-LLM-bot                                        #Go to the directory
@@ -34,7 +48,7 @@ python -m pip install -r requirements.txt          #Install required packages
 After installing all packages, you must configure the bot before to start! [How To Configure](https://github.com/ChocoMeow/Vocard#configuration)<br />
 Start your bot with `python main.py`
 
-## Configuration
+## ⚙️ Configuration
 1. **Rename `.env Example` to `.env` and fill all the values**
 ```sh
 TOKEN = XXXXXXXXXXXXXXXXXXXXXXXX.XXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -193,7 +207,7 @@ OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 * For `aliases` you can set custom aliases in the command. Example: `"command_name": [alias1, alias2, ...]`
 * For `default_controller` you can set custom embeds and buttons in controller, [Example Here](https://github.com/ChocoMeow/Vocard/blob/main/PLACEHOLDERS.md#controller-embeds)
 
-## How to update? (For Windows and Linux)
+## 🔄 How to update? (For Windows and Linux)
 ***Note: Make sure there are no personal files in the directory! Otherwise it will be deleted.***
 ```sh
 # Check the current version
