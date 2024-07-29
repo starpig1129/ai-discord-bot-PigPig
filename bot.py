@@ -1,3 +1,24 @@
+# MIT License
+
+# Copyright (c) 2024 starpig1129
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 import discord
 import sys
 import os
@@ -8,14 +29,13 @@ import update
 import function as func
 import json
 import logging
-from zhconv import convert
 from discord.ext import commands
 from web import IPCServer
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 from voicelink import VoicelinkException
 from gpt.choose_act import ActionHandler
-from gpt.sendmessage import gpt_message, load_and_index_dialogue_history, save_vector_store, vector_store
+from gpt.sendmessage import load_and_index_dialogue_history, save_vector_store, vector_stores
 from gpt.gpt_response_gen import get_model_and_tokenizer
 from logs import TimedRotatingFileHandler
 class Translator(discord.app_commands.Translator):
@@ -80,7 +100,7 @@ class PigPig(commands.Bot):
         """將對話歷史保存到檔案中"""
         with open(self.dialogue_history_file, 'w', encoding='utf-8') as file:
             json.dump(self.dialogue_history, file, ensure_ascii=False, indent=4)
-        save_vector_store(vector_store, self.vector_store_path)
+        save_vector_store(vector_stores, self.vector_store_path)
         
     async def on_message(self, message: discord.Message, /) -> None:
         if message.author.bot or not message.guild:
