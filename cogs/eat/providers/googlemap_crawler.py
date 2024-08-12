@@ -23,7 +23,7 @@ class GoogleMapCrawler:
     
     def search(self, keyword):
         # 使用webdriver打開特定的Google地圖搜索URL
-        self.webdriver.get(f"https://www.google.com/maps/search/{keyword}餐廳/@25.1760362,121.4491291,17z")
+        self.webdriver.get(f"https://www.google.com/maps/search/{keyword}餐廳")
         html = self.webdriver.page_source
         soup = BeautifulSoup(html, "html.parser")
         try:
@@ -37,7 +37,7 @@ class GoogleMapCrawler:
             selected = BeautifulSoup(html, "lxml")
         except:
             print('只有一個結果')
-            url=f"https://www.google.com/maps/search/{keyword}餐廳/@25.1760362,121.4491291,17z"
+            url=f"https://www.google.com/maps/search/{keyword}餐廳"
             selected = BeautifulSoup(html, "lxml")
         # 提取餐廳的標題、評分、類別和地址
         title = selected.find('h1', class_='DUwDvf lfPIob').text.strip()

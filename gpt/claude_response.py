@@ -1,65 +1,68 @@
-# MIT License
-
-# Copyright (c) 2024 starpig1129
-
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-from anthropic import Anthropic, AsyncAnthropic, HUMAN_PROMPT, AI_PROMPT
-import requests
-import logging
 import os
+from anthropic import AsyncAnthropic, HUMAN_PROMPT, AI_PROMPT
+from dotenv import load_dotenv
+import asyncio
+from threading import Thread
+from queue import Queue
+
+# 加載 .env 文件中的環境變量
+load_dotenv()
+
 # 初始化 Anthropic 客戶端
-anthropic = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 async_anthropic = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-# 檢查 Claude API 的額度
-def check_claude_api_quota():
-    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-    if not ANTHROPIC_API_KEY:
-        logging.warning("找不到 Anthropic API 金鑰")
-        return None
-    
-    try:
-        # 發送請求到 Anthropic 的額度檢查端點
-        response = requests.get(
-            "https://api.anthropic.com/v1/quota",
-            headers={"Authorization": f"Bearer {ANTHROPIC_API_KEY}"}
-        )
-        response.raise_for_status()
-        quota_info = response.json()
-        
-        # 返回剩餘額度信息
-        return quota_info.get("remaining_quota")
-    except Exception as e:
-        logging.error(f"檢查 Claude API 額度時發生錯誤: {e}")
-        return None
-# 使用 Claude API 生成流式回應
-async def generate_claude_stream_response(system_prompt,prompt, history, message_to_edit, channel):
-    try:
-        # 準備對話歷史
-        messages = []
-        for msg in history:
+
+class FakeThread:
+    def __init__(self, target, *args, **kwargs):
+        self._target = target
+        self._args = args
+        self._kwargs = kwargs
+        self.thread = Thread(target=self._run)
+        self.is_finished = False
+
+    def _run(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self._target(*self._args, **self._kwargs))
+        self.is_finished = True
+
+    def start(self):
+        self.thread.start()
+
+    def join(self):
+        self.thread.join()
+
+class Streamer:
+    def __init__(self):
+        self.queue = Queue()
+        self.is_finished = False
+
+    def write(self, content):
+        self.queue.put(content)
+
+    def finish(self):
+        self.is_finished = True
+        self.queue.put(None)  # 结束标记
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        item = self.queue.get()
+        if item is None:
+            raise StopIteration
+        return item
+
+async def generate_claude_response_with_fake_thread(inst, system_prompt, streamer, dialogue_history=None):
+    messages = []
+    if dialogue_history:
+        for msg in dialogue_history:
             role = HUMAN_PROMPT if msg["role"] == "user" else AI_PROMPT
             messages.append(f"{role} {msg['content']}")
-        
-        messages.append(f"{HUMAN_PROMPT}{system_prompt}{prompt}")
-        full_prompt = "\n\n".join(messages)
+    
+    messages.append(f"{HUMAN_PROMPT}{system_prompt}{inst}")
+    full_prompt = "\n\n".join(messages)
 
-        # 使用 Claude API 生成流式回應
+    try:
         async with async_anthropic as client:
             response_stream = await client.completions.create(
                 model="claude-3-5-sonnet-20240620",
@@ -68,35 +71,30 @@ async def generate_claude_stream_response(system_prompt,prompt, history, message
                 stream=True
             )
 
-            full_response = ""
-            current_message = message_to_edit
-            buffer = ""
-            message_result = ""
-            buffer_size = 40  # 設置緩衝區大小
-
             async for completion in response_stream:
                 if completion.stop_reason:
                     break
                 chunk = completion.completion
-                full_response += chunk
-                buffer += chunk
-                message_result += chunk
-                if len(buffer) >= buffer_size:
-                    # 檢查是否超過 1900 字符
-                    if len(full_response+buffer)> 1900:
-                        # 創建新消息
-                        current_message = await channel.send("繼續輸出中...")
-                        full_response = ""
-                    await current_message.edit(content=full_response + buffer)
-                    buffer = ""  # 清空緩衝區
-
-            # 處理剩餘的文本
-            if buffer:
-                if len(full_response+buffer)> 1900:
-                    current_message = await channel.send(buffer)
-                else:
-                    await current_message.edit(content=full_response + buffer)
-        return message_result
+                streamer.write(chunk)
     except Exception as e:
-        logging.error(f"使用 Claude API 生成回應時發生錯誤: {e}")
-        raise e
+        streamer.write(f"\nAn error occurred: {str(e)}")
+    finally:
+        streamer.finish()
+
+async def generate_claude_response(inst, system_prompt, dialogue_history=None):
+    streamer = Streamer()
+    fake_thread = FakeThread(generate_claude_response_with_fake_thread, inst, system_prompt, streamer, dialogue_history)
+    fake_thread.start()
+    return fake_thread, streamer
+
+# 使用示例
+def main():
+    thread, streamer = asyncio.run(generate_claude_response("Hello, how are you?", "You are a helpful assistant."))
+    
+    for content in streamer:
+        print(content, end='', flush=True)
+    
+    thread.join()
+
+if __name__ == "__main__":
+    main()

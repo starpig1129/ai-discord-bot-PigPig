@@ -34,9 +34,9 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # 初始化 tokenizer
-tokenizer = tiktoken.encoding_for_model("gpt-4o")
+tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
 
-def num_tokens_from_messages(messages, model="gpt-4o"):
+def num_tokens_from_messages(messages, model="gpt-4o-mini"):
     """計算消息列表的 token 數量"""
     num_tokens = 0
     for message in messages:
@@ -102,7 +102,7 @@ async def generate_response_with_fake_thread(inst, system_prompt, streamer, dial
 
     try:
         stream = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=messages,
             max_tokens=4096,
             temperature=0.5,

@@ -23,9 +23,7 @@ import os
 import json
 import faiss
 import logging
-import discord
 from gpt.gpt_response_gen import generate_response
-from gpt.claude_response import generate_claude_stream_response
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.docstore.in_memory import InMemoryDocstore
@@ -70,7 +68,7 @@ def save_vector_store(stores, path):
     try:
         for channel_id, store in stores.items():
             channel_path = f"{path}_{channel_id}"
-            faiss.write_index(store.index, channel_path)
+            #faiss.write_index(store.index, channel_path)
         logging.info(f"FAISS 索引已保存到 {path}")
     except Exception as e:
         logging.error(f"保存 FAISS 索引時發生錯誤: {e}")
@@ -93,9 +91,9 @@ def search_vector_database(query, channel_id):
     try:
         if channel_id not in vector_stores:
             return ''
-        results = vector_stores[channel_id].similarity_search(query, k=5)
+        results = vector_stores[channel_id].similarity_search(query, k=20)
         related_data = [result.metadata['text'] for result in results]
-        
+        related_data = set(related_data)
         # 格式化相關資訊
         formatted_data = "Database:\n"
         for i, data in enumerate(related_data, 1):
@@ -131,47 +129,38 @@ async def gpt_message(message_to_edit, message, prompt):
     combined_prompt = f"information:<<{related_data}>>user: {prompt}"
     
     try:
-        # 嘗試使用 Claude API
-        try:
-            claude_response = await generate_claude_stream_response(system_prompt,combined_prompt, history_dict, message_to_edit, channel)
-            return claude_response
-        except Exception as e:
-            logging.error(f"Claude API 錯誤: {e}")
-            logging.warning("無法使用 Claude API，切換到原有的回應邏輯")
-            
-            # 如果 Claude API 失敗，使用原有的回應邏輯
-            responses = ""
-            responsesall = ""
-            message_result = ""
-            thread, streamer = await generate_response(combined_prompt, system_prompt, history_dict)
-            buffer_size = 40  # 設置緩衝區大小
-            current_message = message_to_edit
-            
-            for response in streamer:
-                print(response, end="", flush=True)
-                responses += response
-                message_result += response
-                if len(responses) >= buffer_size:
-                    # 檢查是否超過 2000 字符
-                    if len(responsesall+responses) > 1900:
-                        # 創建新消息
-                        current_message = await channel.send("繼續輸出中...")
-                        responsesall = ""
-                    responsesall += responses
-                    responsesall = responsesall.replace('<|eot_id|>', "")
-                    await current_message.edit(content=responsesall)
-                    responses = ""  # 清空 responses 變數
-            
-            # 處理剩餘的文本
-            responsesall = responsesall.replace('<|eot_id|>', "")
-            if len(responsesall+responses) > 1900:
-                current_message = await channel.send(responses)
-            else:
-                responsesall+=responses
+        responses = ""
+        responsesall = ""
+        message_result = ""
+        thread, streamer = await generate_response(combined_prompt, system_prompt, history_dict)
+        buffer_size = 40  # 設置緩衝區大小
+        current_message = message_to_edit
+        
+        for response in streamer:
+            print(response, end="", flush=True)
+            responses += response
+            message_result += response
+            if len(responses) >= buffer_size:
+                # 檢查是否超過 2000 字符
+                if len(responsesall+responses) > 1900:
+                    # 創建新消息
+                    current_message = await channel.send("繼續輸出中...")
+                    responsesall = ""
+                responsesall += responses
                 responsesall = responsesall.replace('<|eot_id|>', "")
                 await current_message.edit(content=responsesall)
-            thread.join()
-            return message_result
+                responses = ""  # 清空 responses 變數
+        
+        # 處理剩餘的文本
+        responsesall = responsesall.replace('<|eot_id|>', "")
+        if len(responsesall+responses) > 1900:
+            current_message = await channel.send(responses)
+        else:
+            responsesall+=responses
+            responsesall = responsesall.replace('<|eot_id|>', "")
+            await current_message.edit(content=responsesall)
+        thread.join()
+        return message_result
     except Exception as e:
         logging.error(f"生成回應時發生錯誤: {e}")
         await message_to_edit.edit(content="抱歉，我不會講話了。")
