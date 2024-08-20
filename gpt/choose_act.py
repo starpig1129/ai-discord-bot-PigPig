@@ -20,11 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import json
-import aiohttp
 from gpt.gpt_response_gen import generate_response
 from gpt.sendmessage import gpt_message
 from gpt.vqa import vqa_answer
-#from gpt.gen_img import generate_image
 from datetime import datetime
 
 class ActionHandler:

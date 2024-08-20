@@ -111,7 +111,7 @@ class ModelManagement(commands.Cog):
         await interaction.followup.send("VQA模型已加載。")
     async def reload_vqa_model(self):
         vqa_model_name = os.getenv("VQA_MODEL_NAME")
-        model = AutoModel.from_pretrained(vqa_model_name, trust_remote_code=True)
+        model = AutoModel.from_pretrained(vqa_model_name, trust_remote_code=True,attn_implementation='sdpa', torch_dtype=torch.bfloat16)
         tokenizer = AutoTokenizer.from_pretrained(vqa_model_name, trust_remote_code=True)
         model.eval()
         set_VQA_and_tokenizer(model, tokenizer)    

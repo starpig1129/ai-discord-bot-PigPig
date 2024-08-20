@@ -26,3 +26,5 @@ tqdm==4.66.2
 requests==2.32.3
 beautifulsoup4==4.12.3
 selenium==4.22.0
+decord
+pdf2image
