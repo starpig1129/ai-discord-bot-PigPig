@@ -41,7 +41,7 @@ PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM
 
 ## 🚀 Quick Start
 ```sh
-git clone https://github.com/starpig1129/PigPig-discord-LLM-bot.git  #Clone the repository
+git clone https://github.com/starpig1129/discord-LLM-bot-PigPig.git  #Clone the repository
 cd PigPig-discord-LLM-bot                                        #Go to the directory
 python -m pip install -r requirements.txt          #Install required packages
 ```
