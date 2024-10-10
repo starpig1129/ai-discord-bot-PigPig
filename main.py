@@ -55,7 +55,7 @@ bot = PigPig(
     tree_cls=CommandCheck,
     chunk_guilds_at_startup=False,
     member_cache_flags=member_cache,
-    activity=discord.Activity(type=discord.ActivityType.listening, name="啟動中..."),
+    activity=discord.Activity(type=discord.ActivityType.listening, name="大家的聲音"),
     case_insensitive=True,
     intents=intents
 )

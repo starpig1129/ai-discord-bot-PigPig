@@ -31,9 +31,9 @@ class ImageGenerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.model_id = "timbrooks/instruct-pix2pix"
-        self.pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(self.model_id, torch_dtype=torch.float16, safety_checker=None)
-        self.pipe.to("cuda:1")
-        self.pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(self.pipe.scheduler.config)
+        #self.pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(self.model_id, torch_dtype=torch.float16, safety_checker=None)
+        #self.pipe.to("cuda:1")
+        #self.pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(self.pipe.scheduler.config)
 
     @app_commands.command(name="generate_image", description="生成一張圖片")
     @app_commands.describe(
@@ -47,7 +47,7 @@ class ImageGenerationCog(commands.Cog):
             file = discord.File(image, filename="generated_image.png")
             await interaction.followup.send(f"生成的圖片：{prompt}", file=file)
         else:
-            await interaction.followup.send("生成圖片時發生錯誤。")
+            await interaction.followup.send("繪圖功能修復中。")
 
     async def generate_image(self, channel, prompt: str, n_steps: int = 10,message_to_edit: discord.Message = None):
         try:
@@ -83,5 +83,5 @@ class ImageGenerationCog(commands.Cog):
             print(f"生成圖片時發生錯誤：{str(e)}")
             return None
 
-# async def setup(bot):
-#     await bot.add_cog(ImageGenerationCog(bot))
+async def setup(bot):
+    await bot.add_cog(ImageGenerationCog(bot))
