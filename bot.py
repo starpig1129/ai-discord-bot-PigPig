@@ -98,7 +98,7 @@ class PigPig(commands.Bot):
         try:
             match = re.search(r"<@\d+>\s*(.*)", message.content)
             prompt = match.group(1)
-        except AttributeError:  # 如果正則表達式沒有匹配到，會拋出 AttributeError
+        except AttributeError:  
             prompt = message.content
         
         self.dialogue_history[channel_id].append({"role": "user", "content": prompt})

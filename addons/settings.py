@@ -17,3 +17,6 @@ class TOKENS:
         self.client_secret_id = os.getenv("CLIENT_SECRET_ID")
         self.sercet_key = os.getenv("SERCET_KEY")
         self.bug_report_channel_id = int(os.getenv("BUG_REPORT_CHANNEL_ID"))
+        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY",None)
+        self.openai_api_key = os.getenv("OPENAI_API_KEY",None)
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY",None)
