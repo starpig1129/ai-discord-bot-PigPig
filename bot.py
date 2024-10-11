@@ -206,4 +206,4 @@ class PigPig(commands.Bot):
             json.dump(data, f, ensure_ascii=False, indent=4)
         print('update succesfully guilds_and_channels.json')
         func.tokens.client_id = self.user.id
-        
+        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="大家的聲音"))
