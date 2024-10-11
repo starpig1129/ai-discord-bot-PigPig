@@ -44,13 +44,14 @@ def gen_img(prompt: str):
     """
     pass
 
-def query_schedule(user_name: str = None, query_type: str = 'next'):
+def query_schedule(user_name: str = None, query_type: str = 'next', time: str = None):
     """
     Queries the schedule information for the specified user
     
     Args:
         user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
-        query_type (str): The type of query, can be 'next' (next class) or 'now' (current class)
+        query_type (str): The type of query, can be 'next' (next class), 'full'(full schedule), or 'specific_time'(schedule at specific time)
+        time (str): The specific time to query the schedule for, in 'YYYY-MM-DD HH:MM:SS' format. Only required for query_type='specific_time'.
     """
     pass
 
@@ -91,4 +92,3 @@ Action:
         "parameters": "the input to the tool"
     }
 ]
-```

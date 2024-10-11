@@ -24,6 +24,7 @@ from gpt.gpt_response_gen import generate_response
 from gpt.sendmessage import gpt_message
 from gpt.vqa import vqa_answer
 from datetime import datetime
+import os
 
 class ActionHandler:
     def __init__(self, bot):
@@ -122,10 +123,9 @@ class ActionHandler:
         image_gen_cog = self.bot.get_cog("ImageGenerationCog")
         return await image_gen_cog.generate_image(message.channel, prompt, n_steps,message_to_edit) if image_gen_cog else "圖片生成功能未啟用"
 
-    async def query_schedule(self, message_to_edit, message, query_type="next"):
-        
+    async def query_schedule(self, message_to_edit, message, query_type="next", time=None):
         schedule_cog = self.bot.get_cog("ScheduleCog")
-        return await schedule_cog.query_schedule(message.author, query_type,message_to_edit) if schedule_cog else "課表查詢功能未啟用"
+        return await schedule_cog.query_schedule(message.author.id, query_type, time) if schedule_cog else "課表查詢功能未啟用"
 
     async def send_reminder(self, message_to_edit, message, time_str, reminder_message):
         reminder_cog = self.bot.get_cog("ReminderCog")
