@@ -1,13 +1,17 @@
+import json
 import os
 from dotenv import load_dotenv
 
 class Settings:
-    def __init__(self, settings: dict) -> None:
+    def __init__(self, settings_path: str = "settings.json") -> None:
+        with open(settings_path, 'r') as f:
+            settings = json.load(f)
         self.invite_link: str = "https://discord.gg/BvP64mqKzR"
         self.bot_prefix: str = settings.get("prefix", "")
         self.activity: dict = settings.get("activity", [{"listen": "/help"}])
         self.ipc_server: dict = settings.get("ipc_server", {})
         self.version: str = settings.get("version", "")
+        self.mongodb_uri: str = settings.get("mongodb", "")
 
 class TOKENS:
     def __init__(self) -> None:

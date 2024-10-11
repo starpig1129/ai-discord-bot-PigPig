@@ -25,11 +25,13 @@ from discord.ext import commands
 from discord import app_commands
 import discord
 from gpt.gpt_response_gen import generate_response
+from addons.settings import Settings
 
 class UserDataCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.client = MongoClient("mongodb://localhost:27017/")
+        self.settings = Settings()
+        self.client = MongoClient(self.settings.mongodb_uri)
         self.db = self.client["user_data"]
         self.collection = self.db["users"]
 
