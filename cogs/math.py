@@ -23,10 +23,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import sympy
+import re
 
 class MathCalculatorCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.dangerous_functions = ["exec", "eval", "system", "import", "open"]
 
     @app_commands.command(name="calculate", description="計算數學表達式")
     @app_commands.describe(expression="要計算的數學表達式")
@@ -35,19 +37,27 @@ class MathCalculatorCog(commands.Cog):
         result = await self.calculate_math(expression)
         await interaction.followup.send(result)
 
-    async def calculate_math(self, expression: str,message_to_edit: discord.Message = None) -> str:
+    async def calculate_math(self, expression: str) -> str:
         try:
-            if message_to_edit:
-                await message_to_edit.edit(content="1 2 3...")
-            # 將文字表達式轉換為 sympy 表達式對象
+            # Sanitize input
+            expression = self.sanitize_input(expression)
+            # Convert to sympy expression
             sympy_expr = sympy.sympify(expression)
-            # 計算表達式的值
+            # Calculate and return result
             result = sympy.N(sympy_expr)
             return f'計算結果: {result}'
         except sympy.SympifyError as e:
             return f"無法計算: {str(e)}"
         except Exception as e:
             return f"計算錯誤: {str(e)}"
+
+    def sanitize_input(self, expression):
+        # Remove dangerous functions
+        for func in self.dangerous_functions:
+            expression = expression.replace(func, "")
+        # Remove potentially harmful characters (adjust as needed)
+        expression = re.sub(r"[^0-9a-zA-Z+\-*/(). ]", "", expression)
+        return expression
 
 async def setup(bot):
     await bot.add_cog(MathCalculatorCog(bot))
