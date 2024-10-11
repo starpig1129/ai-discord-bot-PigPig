@@ -1,9 +1,10 @@
 .env
 *.pyc
 settings.json
-data
+data/*
 models
 lavalink
 logs
 chromedriverlinux64
 ./cogs/TKUCourseCrawler.py
+./cogs/TKUSchedule.py

@@ -27,7 +27,7 @@ import pytz
 import json
 import re
 
-class ScheduleCog(commands.Cog):
+class SchoolScheduleCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.weekday_map = {
@@ -35,7 +35,7 @@ class ScheduleCog(commands.Cog):
             'Thursday': '星期四', 'Friday': '星期五', 'Saturday': '星期六', 'Sunday': '星期日'
         }
 
-    @app_commands.command(name="schedule", description="查詢課表")
+    @app_commands.command(name="TKUschedule", description="查詢課表")
     @app_commands.describe(
         query_type="查詢類型（next: 下一節課，now: 當前課程）",
         user="要查詢的用戶（可選，默認為自己）"
@@ -96,4 +96,4 @@ class ScheduleCog(commands.Cog):
             return "現在沒在上課。"
 
 async def setup(bot):
-    await bot.add_cog(ScheduleCog(bot))
+    await bot.add_cog(SchoolScheduleCog(bot))
