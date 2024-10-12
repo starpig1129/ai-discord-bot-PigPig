@@ -6,5 +6,5 @@ models
 lavalink
 logs
 chromedriverlinux64
-./cogs/school_course_crawler.py
-./cogs/school_schedule.py
+cogs/school_course_crawler.py
+cogs/school_schedule.py
