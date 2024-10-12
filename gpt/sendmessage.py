@@ -149,7 +149,7 @@ async def gpt_message(message_to_edit, message, prompt):
         responses = ""
         responsesall = ""
         message_result = ""
-        thread, streamer = await generate_response(combined_prompt, system_prompt, history_dict)
+        thread, streamer = await generate_response(prompt, system_prompt, history_dict)
         buffer_size = 40  # 設置緩衝區大小
         current_message = message_to_edit
         
