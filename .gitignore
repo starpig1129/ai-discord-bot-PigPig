@@ -11,6 +11,8 @@ data/*.json
 data/*.sqlite
 data/vector_store
 data/schedule_data/
+data/schedule/*.yaml
+!data/schedule/template.yaml
 
 # 忽略模型與日誌檔案
 models/
