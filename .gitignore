@@ -1,10 +1,25 @@
+# 忽略環境設定檔與編譯後的 Python 檔案
 .env
 *.pyc
+__pycache__/
+
+# 忽略應用程式的設定檔案
 settings.json
-data/*
-models
-lavalink
-logs
-chromedriverlinux64
+
+# 忽略資料庫檔案與向量儲存
+data/*.json
+data/*.sqlite
+data/vector_store
+data/schedule_data/
+
+# 忽略模型與日誌檔案
+models/
+logs/
+lavalink/
+
+# 忽略特定的瀏覽器驅動檔案
+chromedriverlinux64/
+
+# 忽略 cogs 模組中的特定檔案
 cogs/school_course_crawler.py
 cogs/school_schedule.py
