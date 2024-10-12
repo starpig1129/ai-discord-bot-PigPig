@@ -1,6 +1,10 @@
 # PigPig: Advanced Multi-modal LLM Discord Bot
 
 <p align="center">
+  <a href="README.md">English</a> | <a href="README_zh-TW.md">繁體中文</a>
+</p>
+
+<p align="center">
   <a href="https://discord.gg/BvP64mqKzR">
     <img src="https://img.shields.io/discord/1212823415204085770?color=7289DA&label=Support&logo=discord&style=for-the-badge" alt="Discord">
   </a>
@@ -13,7 +17,6 @@ PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM
 ## 🌟 Key Features
 
 - 🧠 **AI-Powered Conversations**: Utilizes LLMs and LangChain for natural language understanding and generation.
-- 🎵 **Advanced Music Player**: Stream music from various sources with playlist management and lyrics search.
 - 🖼️ **Multi-modal Capabilities**: Visual question answering and image generation.
 - 🍽️ **Practical Features**: Set reminders, get recommendations, and perform calculations.
 - 👤 **User Information Management**: Create and maintain user profiles.
@@ -72,6 +75,7 @@ OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 | BUG_REPORT_CHANNEL_ID | All the error messages will send to this text channel ***(optional)*** |
 | ANTHROPIC_API_KEY | Your Anthropic api key [(Anthropic API)](https://www.anthropic.com/api) ***(optional)*** |
 | OPENAI_API_KEY | Your OpenAI api key [(OpenAI API)](https://openai.com/api/) ***(optional)*** |
+| GEMINI_API_KEY | Your GEMINI API key [(GEMINI API)](https://aistudio.google.com/app/apikey/) ***(optional)*** |
 1. **Rename `settings Example.json` to `settings.json` and customize your settings**
 ***(Note: Do not change any keys from `settings.json`)***
 ```json
