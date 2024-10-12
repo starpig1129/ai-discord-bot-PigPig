@@ -115,7 +115,7 @@ class DiscordBotCog(commands.Cog):
         crawler.close()
         return courses
         
-    @commands.hybrid_command(name="建立課表")
+    @commands.hybrid_command(name="建立課表", description="透過系統獲取課表")
     @app_commands.describe(username="用戶名稱，學號",password="淡江單一登入密碼")
     async def get_courses(self,ctx, username: str, password: str):
         try:
