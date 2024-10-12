@@ -36,7 +36,7 @@ class ActionHandler:
             "vqa_answer": vqa_answer,
             "calculate": self.calculate_math,
             "gen_img": self.generate_image,
-            "query_schedule": self.query_schedule,
+            "schedule_management": self.schedule_management,
             "send_reminder": self.send_reminder,
             "manage_user_data": self.manage_user_data
         }
@@ -123,9 +123,16 @@ class ActionHandler:
         image_gen_cog = self.bot.get_cog("ImageGenerationCog")
         return await image_gen_cog.generate_image(message.channel, prompt, n_steps,message_to_edit) if image_gen_cog else "圖片生成功能未啟用"
 
-    async def query_schedule(self, message_to_edit, message, query_type="next", time=None):
-        schedule_cog = self.bot.get_cog("ScheduleCog")
-        return await schedule_cog.query_schedule(message.author.id, query_type, time) if schedule_cog else "課表查詢功能未啟用"
+    async def schedule_management(self, message_to_edit, message, action: str = "query", query_type="next", time=None, date=None, description=None):
+        schedule_cog = self.bot.get_cog("ScheduleManager")
+        if action == "query":
+            return await schedule_cog.query_schedule(message.author.id, query_type, time) if schedule_cog else "課表查詢功能未啟用"
+        elif action == "create":
+            return await schedule_cog.create_schedule(message.author.id) if schedule_cog else "課表創建功能未啟用"
+        elif action == "update":
+            return await schedule_cog.update_schedule(message.author.id, date, time, description) if schedule_cog else "課表更新功能未啟用"
+        else:
+            return "無效的行程表操作。"
 
     async def send_reminder(self, message_to_edit, message, time_str, reminder_message):
         reminder_cog = self.bot.get_cog("ReminderCog")

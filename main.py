@@ -38,7 +38,7 @@ async def get_prefix(bot, message: discord.Message):
     return settings.get("prefix", func.settings.bot_prefix)
 
 # Loading settings
-func.settings = Settings(func.open_json("settings.json"))
+func.settings = Settings("settings.json")
 
 # Setup the bot object
 intents = discord.Intents.default()

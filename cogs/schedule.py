@@ -32,14 +32,15 @@ class ScheduleManager(commands.Cog):
             raise Exception(f"YAML檔案解析錯誤：{str(e)}")
 
     @app_commands.command(name="query_schedule", description="查詢行程表")
-    @app_commands.describe(
-        query_type="查詢類型 (full, specific_time, next)",
-        time="指定時間 (YYYY-MM-DD HH:MM:SS, only for specific_time)"
-    )
-    async def query_schedule_command(self, interaction: discord.Interaction, query_type: str, time: str = None):
+    @app_commands.choices(query_type=[
+        app_commands.Choice(name="完整行程表", value="full"),
+        app_commands.Choice(name="特定時間", value="specific_time"),
+        app_commands.Choice(name="下一個行程", value="next")
+    ])
+    async def query_schedule_command(self, interaction: discord.Interaction, query_type: app_commands.Choice[str], time: str = None):
         await interaction.response.defer(thinking=True)
         try:
-            result = await self.query_schedule(interaction.user.id, query_type, time)
+            result = await self.query_schedule(interaction.user.id, query_type.value, time)
             await interaction.followup.send(result)
         except Exception as e:
             await interaction.followup.send(f"查詢行程表時發生錯誤：{str(e)}")
@@ -114,6 +115,33 @@ class ScheduleManager(commands.Cog):
             return f"下一個行程：{next_event[0].strftime('%H:%M:%S')} - {next_event[1]}"
         else:
             return "沒有找到下一個行程。"
+
+    @app_commands.command(name="update_schedule", description="更新行程表")
+    async def update_schedule_command(self, interaction: discord.Interaction, date: str, time: str, description: str):
+        await interaction.response.defer(thinking=True)
+        try:
+            await self.update_schedule(interaction.user.id, date, time, description)
+            await interaction.followup.send("行程表已成功更新！")
+        except Exception as e:
+            await interaction.followup.send(f"更新行程表時發生錯誤：{str(e)}")
+
+    async def update_schedule(self, user_id: int, date: str, time: str, description: str):
+        filepath = os.path.join(self.schedule_dir, f"{user_id}.yaml")
+        if not os.path.exists(filepath):
+            raise Exception("找不到您的行程表。請使用 `/upload_schedule` 命令上傳行程表。")
+        with open(filepath, "r") as f:
+            schedule = yaml.safe_load(f)
+
+        if date not in schedule:
+            schedule[date] = []
+        schedule[date].append({"time": time, "description": description})
+
+        with open(filepath, "w") as f:
+            yaml.dump(schedule, f)
+
+    @app_commands.command(name="create_schedule", description="創建行程表")
+    async def create_schedule_command(self, interaction: discord.Interaction):
+        await interaction.response.send_message("請使用`/upload_schedule` 命令上傳行程表。")
 
 
 async def setup(bot):

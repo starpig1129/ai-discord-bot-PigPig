@@ -44,14 +44,16 @@ def gen_img(prompt: str):
     """
     pass
 
-def query_schedule(user_name: str = None, query_type: str = 'next', time: str = None):
+def schedule_management(action: str = "query", query_type: str = 'next', time: str = None, date: str = None, description: str = None):
     """
-    Queries the schedule information for the specified user
-    
+    Manages schedule information.
     Args:
-        user_name (str): If not provided, the command sender's ID will be used. Example: <@user_id>
-        query_type (str): The type of query, can be 'next' (next class), 'full'(full schedule), or 'specific_time'(schedule at specific time)
-        time (str): The specific time to query the schedule for, in 'YYYY-MM-DD HH:MM:SS' format. Only required for query_type='specific_time'.
+        action (str): The action to perform ('query', 'create', 'update').
+        query_type (str): The type of query ('next', 'full', 'specific_time'). Only used if action='query'.
+        time (str): Specific time for query (YYYY-MM-DD HH:MM:SS). Only used if action='query' and query_type='specific_time'.
+        date (str): Date for update (YYYY-MM-DD). Only used if action='update'.
+        description (str): Description for update. Only used if action='update'.
+
     """
     pass
 
@@ -88,7 +90,7 @@ Action:
 ```json
 [
     {
-        "tool_name": "tool name (one of [manage_user_data,vqa_answer,internet_search, directly_answer,calculate,gen_img,query_schedule,send_reminder])",
+        "tool_name": "tool name (one of [manage_user_data,vqa_answer,internet_search, directly_answer,calculate,gen_img,schedule_management,send_reminder])",
         "parameters": "the input to the tool"
     }
 ]
