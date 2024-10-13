@@ -24,29 +24,9 @@ def num_tokens_from_messages(messages, model="gpt-4o-mini"):
     num_tokens += 2  # Start and end tokens for the conversation
     return num_tokens
 
-class Streamer:
-    def __init__(self):
-        self.queue = Queue()
-        self.is_finished = False
-
-    def write(self, content):
-        self.queue.put(content)
-
-    def finish(self):
-        self.is_finished = True
-        self.queue.put(None)  # End marker
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        item = self.queue.get()
-        if item is None:
-            raise StopIteration
-        return item
 
 async def generate_response(inst, system_prompt, dialogue_history=None, image_input=None):
-    streamer = Streamer()
+
     messages = [{'role': 'system', 'content': system_prompt},
                 {'role': 'user', 'content': inst}]
     if dialogue_history is not None:
@@ -61,35 +41,19 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
         messages.pop(1)
 
     async def run_generation():
-        try:
-            stream = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                max_tokens=4096,
-                temperature=0.5,
-                top_p=0.9,
-                stream=True
-            )
+        stream = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=4096,
+            temperature=0.5,
+            top_p=0.9,
+            stream=True
+        )
 
-            for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    streamer.write(chunk.choices[0].delta.content)
-        except Exception as e:
-            streamer.write(f"\nAn error occurred: {str(e)}")
-        finally:
-            streamer.finish()
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
 
-    thread = Thread(target=lambda: asyncio.run(run_generation()))
+    thread = Thread()
     thread.start()
-    return thread, streamer
-
-# Example usage
-if __name__ == "__main__":
-    import asyncio
-    async def main():
-        thread, streamer = await generate_response("Hello, how are you?", "You are a helpful assistant.")
-        for content in streamer:
-            print(content, end='', flush=True)
-        thread.join()
-
-    asyncio.run(main())
+    return thread, run_generation()
