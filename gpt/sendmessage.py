@@ -23,6 +23,7 @@ import os
 import json
 import faiss
 import logging
+import opencc
 from gpt.gpt_response_gen import generate_response
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -56,6 +57,9 @@ system_prompt='''
 # 初始化 Hugging Face 嵌入模型
 hf_embeddings_model = "sentence-transformers/all-MiniLM-L6-v2"
 embeddings = HuggingFaceEmbeddings(model_name=hf_embeddings_model)
+
+# 創建一個轉換器，將簡體轉為台灣繁體
+converter = opencc.OpenCC('s2twp')  # s2twp 代表簡體轉台灣繁體（含台灣用語）
 
 # 創建一個字典來存儲每個頻道的向量存儲
 vector_stores = {}
@@ -165,7 +169,7 @@ async def gpt_message(message_to_edit, message, prompt):
                     responsesall = ""
                 responsesall += responses
                 responsesall = responsesall.replace('<|eot_id|>', "")
-                await current_message.edit(content=responsesall)
+                await current_message.edit(content=converter.convert(responsesall))
                 responses = ""  # 清空 responses 變數
         
         # 處理剩餘的文本
@@ -175,7 +179,7 @@ async def gpt_message(message_to_edit, message, prompt):
         else:
             responsesall+=responses
             responsesall = responsesall.replace('<|eot_id|>', "")
-            await current_message.edit(content=responsesall)
+            await current_message.edit(content=converter.convert(responsesall))
         thread.join()
         return message_result
     except Exception as e:
