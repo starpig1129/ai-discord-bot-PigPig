@@ -27,7 +27,7 @@ class ScheduleManager(commands.Cog):
         try:
             schedule = yaml.safe_load(yaml_data)
             schedule_data = {"channel_id": channel_id, "schedule": schedule}
-            with open(os.path.join(self.schedule_dir, f"{user_id}.yaml"), "w") as f:
+            with open(os.path.join(self.schedule_dir, f"{user_id}.yaml"), "w", encoding='utf-8') as f:
                 yaml.dump(schedule_data, f)
         except yaml.YAMLError as e:
             raise Exception(f"YAML檔案解析錯誤：{str(e)}")
@@ -66,7 +66,7 @@ class ScheduleManager(commands.Cog):
         filepath = os.path.join(self.schedule_dir, f"{target_user_id}.yaml")
         if not os.path.exists(filepath):
             return "找不到您的行程表。請使用 `/upload_schedule` 命令上傳行程表。"
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding='utf-8') as f:
             schedule_data = yaml.safe_load(f)
 
         guild = interaction_or_ctx.guild
@@ -176,10 +176,10 @@ class ScheduleManager(commands.Cog):
     async def update_schedule(self, user_id: int, day: str, time: str, description: str):
         filepath = os.path.join(self.schedule_dir, f"{user_id}.yaml")
         if not os.path.exists(filepath):
-            with open(filepath, 'w') as f:
+            with open(filepath, 'w', encoding='utf-8') as f:
                 yaml.dump({"channel_id": 0, "schedule": {}}, f)
 
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding='utf-8') as f:
             schedule_data = yaml.safe_load(f)
         schedule = schedule_data["schedule"]
 
@@ -188,12 +188,12 @@ class ScheduleManager(commands.Cog):
         schedule[day].append({"time": time, "description": description})
 
         schedule_data["schedule"] = schedule
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding='utf-8') as f:
             yaml.dump(schedule_data, f)
 
     @app_commands.command(name="show_template", description="顯示行程表範本")
     async def show_template_command(self, interaction: discord.Interaction):
-        with open(os.path.join(self.schedule_dir, "template.yaml"), "r") as f:
+        with open(os.path.join(self.schedule_dir, "template.yaml"), "r", encoding='utf-8') as f:
             template = f.read()
         await interaction.response.send_message(f"```yaml\n{template}\n```")
 
