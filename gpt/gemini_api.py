@@ -1,8 +1,8 @@
 import google.generativeai as genai
 import os
 from addons.settings import TOKENS
-from threading import Thread
-from queue import Queue
+import asyncio
+from asyncio import Queue
 
 # Initialize the Gemini model
 tokens = TOKENS()
@@ -11,23 +11,23 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 
 class Streamer:
     def __init__(self):
-        self.queue = Queue()
+        self.queue = asyncio.Queue()
         self.is_finished = False
 
-    def write(self, content):
-        self.queue.put(content)
+    async def write(self, content):
+        await self.queue.put(content)
 
-    def finish(self):
+    async def finish(self):
         self.is_finished = True
-        self.queue.put(None)  # End marker
+        await self.queue.put(None)  # End marker
 
-    def __iter__(self):
+    def __aiter__(self):
         return self
 
-    def __next__(self):
-        item = self.queue.get()
+    async def __anext__(self):
+        item = await self.queue.get()
         if item is None:
-            raise StopIteration
+            raise StopAsyncIteration
         return item
 
 async def generate_response(prompt, system_prompt, dialogue_history=None, image_input=None):
@@ -41,27 +41,27 @@ async def generate_response(prompt, system_prompt, dialogue_history=None, image_
     if image_input:
         full_prompt += f"\nImage: {image_input}"
 
-    def run_generation():
+    async def run_generation():
         try:
-            response_stream = model.generate_content(full_prompt, stream=True)
-            for chunk in response_stream:
-                streamer.write(chunk)
+            response_stream = model.generate_content(full_prompt,
+                                                    safety_settings = 'BLOCK_NONE',
+                                                    stream=True)
+            async for chunk in response_stream:
+                await streamer.write(chunk.text)
         except Exception as e:
-            streamer.write(f"\nAn error occurred: {str(e)}")
+            await streamer.write(f"\nAn error occurred: {str(e)}")
         finally:
-            streamer.finish()
+            await streamer.finish()
 
-    thread = Thread(target=run_generation)
-    thread.start()
-    return thread, streamer
+    task = asyncio.create_task(run_generation())
+    return task, streamer
 
 # Example usage
 if __name__ == "__main__":
-    import asyncio
     async def main():
-        thread, streamer = await generate_response("Write a story about a magic backpack.", "System prompt here")
-        for content in streamer:
+        task, streamer = await generate_response("Write a story about a magic backpack.", "System prompt here")
+        async for content in streamer:
             print(content, end='', flush=True)
-        thread.join()
+        await task
 
     asyncio.run(main())
