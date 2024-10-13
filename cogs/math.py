@@ -37,7 +37,9 @@ class MathCalculatorCog(commands.Cog):
         result = await self.calculate_math(expression)
         await interaction.followup.send(result)
 
-    async def calculate_math(self, expression: str) -> str:
+    async def calculate_math(self, expression: str ,message_to_edit=None) -> str:
+        if message_to_edit is not None:
+            await message_to_edit.edit(content='123...')
         try:
             # Sanitize input
             expression = self.sanitize_input(expression)
