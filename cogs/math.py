@@ -47,11 +47,14 @@ class MathCalculatorCog(commands.Cog):
             sympy_expr = sympy.sympify(expression)
             # Calculate and return result
             result = sympy.N(sympy_expr)
+            print(f'計算結果: {expression}={result}')
             return f'計算結果: {expression}={result}'
         except sympy.SympifyError as e:
-            return f"無法計算: {str(e)}"
+            print(f"無法計算: {str(e)}")
+            return f"無法計算: {str(sympy_expr)}"
         except Exception as e:
-            return f"計算錯誤: {str(e)}"
+            print(f"無法計算: {str(e)}")
+            return f"計算錯誤: {str(sympy_expr)}"
 
     def sanitize_input(self, expression):
         # Remove dangerous functions
