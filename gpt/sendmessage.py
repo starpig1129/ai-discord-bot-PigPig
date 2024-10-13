@@ -24,7 +24,7 @@ import json
 import faiss
 import logging
 import opencc
-from gpt.gpt_response_gen import generate_response
+from gpt.gemini_api import generate_response
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.docstore.in_memory import InMemoryDocstore
@@ -180,12 +180,13 @@ async def gpt_message(message_to_edit, message, prompt):
             responsesall+=responses
             responsesall = responsesall.replace('<|eot_id|>', "")
             await current_message.edit(content=converter.convert(responsesall))
-        thread.join()
         return message_result
     except Exception as e:
         logging.error(f"生成回應時發生錯誤: {e}")
         await message_to_edit.edit(content="抱歉，我不會講話了。")
         return None
+    finally:
+        thread.join()
 # 在模塊加載時索引對話歷史並載入向量資料庫
 load_vector_store('./data/vector_store')
 load_and_index_dialogue_history('./data/dialogue_history.json')
