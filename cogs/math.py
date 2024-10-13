@@ -45,7 +45,7 @@ class MathCalculatorCog(commands.Cog):
             sympy_expr = sympy.sympify(expression)
             # Calculate and return result
             result = sympy.N(sympy_expr)
-            return f'計算結果: {result}'
+            return f'計算結果: {expression}={result}'
         except sympy.SympifyError as e:
             return f"無法計算: {str(e)}"
         except Exception as e:

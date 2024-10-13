@@ -31,7 +31,7 @@ def calculate(expression: str):
     """
     Calculates the result of a mathematical expression with sympy
     Args:
-        expression (str): Mathematical expression to calculate
+        expression (str): Mathematical expression to calculate Example:"2 * (3 + 5)"
     """
     pass
 

@@ -117,7 +117,7 @@ class ActionHandler:
     async def calculate_math(self, message_to_edit, message, expression):
         
         math_cog = self.bot.get_cog("MathCalculatorCog")
-        return await math_cog.calculate_math(expression,message_to_edit) if math_cog else "數學計算功能未啟用"
+        return await math_cog.calculate_math(expression) if math_cog else "數學計算功能未啟用"
 
     async def generate_image(self, message_to_edit, message, prompt, n_steps=10):
         image_gen_cog = self.bot.get_cog("ImageGenerationCog")
