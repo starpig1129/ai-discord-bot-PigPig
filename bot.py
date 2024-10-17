@@ -51,6 +51,7 @@ class PigPig(commands.Bot):
         load_and_index_dialogue_history(self.dialogue_history_file)
         self.loggers = {}
         self.action_handler = ActionHandler(self)
+
     def setup_logger_for_guild(self, guild_name):
         if guild_name not in self.loggers:
             self.loggers[guild_name] = setup_logger(guild_name)
@@ -94,7 +95,13 @@ class PigPig(commands.Bot):
         channel_id = str(message.channel.id)
         if channel_id not in self.dialogue_history:
             self.dialogue_history[channel_id] = []
-        
+
+        guild_id = str(message.guild.id)
+        channel_manager = self.get_cog('ChannelManager')
+        if channel_manager:
+            if not channel_manager.is_allowed_channel(message.channel, guild_id):
+                return
+
         try:
             match = re.search(r"<@\d+>\s*(.*)", message.content)
             prompt = match.group(1)
@@ -133,6 +140,12 @@ class PigPig(commands.Bot):
         if channel_id not in self.dialogue_history:
             self.dialogue_history[channel_id] = []
         
+        guild_id = str(after.guild.id)
+        channel_manager = self.get_cog('ChannelManager')
+        if channel_manager:
+            if not channel_manager.is_allowed_channel(after.channel, guild_id):
+                return
+
         try:
             match = re.search(r"<@\d+>\s*(.*)", after.content)
             prompt = match.group(1)

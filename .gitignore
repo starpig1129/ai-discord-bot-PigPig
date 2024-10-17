@@ -7,6 +7,7 @@ __pycache__/
 settings.json
 
 # 忽略資料庫檔案與向量儲存
+data/channel_configs
 data/*.json
 data/*.sqlite
 data/vector_store
