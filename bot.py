@@ -34,6 +34,7 @@ from gpt.choose_act import ActionHandler
 from gpt.sendmessage import load_and_index_dialogue_history, save_vector_store, vector_stores
 from gpt.gpt_response_gen import get_model_and_tokenizer
 from logs import TimedRotatingFileHandler
+from addons.settings import Settings
 # 配置 logging
 def setup_logger(server_name):
     logger = logging.getLogger(server_name)
@@ -171,21 +172,55 @@ class PigPig(commands.Bot):
         self.save_dialogue_history()
         
     async def setup_hook(self) -> None:
-        # Loading all the module in `cogs` folder
-        for module in os.listdir(func.ROOT_DIR + '/cogs'):
-            if module.endswith('.py'):
-                try:
-                    await self.load_extension(f"cogs.{module[:-3]}")
-                    print(f"Loaded {module[:-3]}")
-                except Exception as e:
-                    print(traceback.format_exc())
+        # 從設定檔中讀取伺服器和功能模組的規則
+        allowed_guilds = func.settings.allowed_guilds
+        restricted_cogs = func.settings.restricted_cogs
 
+        for guild in self.guilds:
+            guild_id = str(guild.id)
+
+            # 如果伺服器在 allowed_guilds 中，則只加載對應的功能模組
+            if guild_id in allowed_guilds:
+                allowed_cogs = allowed_guilds[guild_id]
+                print(f"Loading only allowed cogs for guild {guild.name} ({guild_id})")
+                for cog_name in allowed_cogs:
+                    try:
+                        await self.load_extension(f"cogs.{cog_name}")
+                        print(f"Loaded {cog_name} for guild {guild.name} ({guild_id})")
+                    except Exception as e:
+                        print(f"Failed to load {cog_name} for guild {guild.name} ({guild_id}):")
+                        print(traceback.format_exc())
+                continue  # 直接跳過剩下的流程，因為只允許加載設定的功能
+
+            # 遍歷所有 `cogs` 並根據 `restricted_cogs` 決定是否加載
+            for module in os.listdir(func.ROOT_DIR + '/cogs'):
+                if module.endswith('.py'):
+                    cog_name = module[:-3]
+
+                    # 如果功能模組在 `restricted_cogs` 中，則檢查伺服器是否允許加載
+                    if cog_name in restricted_cogs:
+                        allowed_guilds_for_cog = restricted_cogs[cog_name]
+                        if guild_id not in allowed_guilds_for_cog:
+                            print(f"Skipping {cog_name} in guild {guild.name} ({guild_id}) as it is restricted.")
+                            continue
+
+                    # 嘗試加載模組
+                    try:
+                        await self.load_extension(f"cogs.{cog_name}")
+                        print(f"Loaded {cog_name} for guild {guild.name} ({guild_id})")
+                    except Exception as e:
+                        print(f"Failed to load {cog_name} for guild {guild.name} ({guild_id}):")
+                        print(traceback.format_exc())
+
+        # 如果啟用了 IPC server，則啟動
         if func.settings.ipc_server.get("enable", False):
             await self.ipc.start()
 
+        # 檢查並更新版本資訊
         if not func.settings.version or func.settings.version != update.__version__:
             func.update_json("settings.json", new_data={"version": update.__version__})
 
+        # 同步命令樹
         await self.tree.sync()
 
     async def on_ready(self):

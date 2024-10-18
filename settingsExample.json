@@ -10,5 +10,15 @@
         "port": 8000,
         "enable": false
     },
-    "version": "v1.2.0"
+    "version": "v1.2.0",
+    "excluded_guilds": {
+        "guid_id": ["cogs_name"]
+    },
+    "allowed_guilds": {
+        "guid_id":["cogs_name"]
+    },
+    
+    "restricted_cogs": {
+        "cogs_name": ["guid_id"]
+    }
 }

@@ -12,6 +12,8 @@ class Settings:
         self.ipc_server: dict = settings.get("ipc_server", {})
         self.version: str = settings.get("version", "")
         self.mongodb_uri: str = settings.get("mongodb", "")
+        self.allowed_guilds: dict = settings.get("allowed_guilds",{})
+        self.restricted_cogs: dict = settings.get("restricted_cogs",{})
 
 class TOKENS:
     def __init__(self) -> None:
