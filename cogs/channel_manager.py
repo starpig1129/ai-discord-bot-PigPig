@@ -26,19 +26,20 @@ class ChannelManager(commands.Cog):
         with open(config_path, "w") as f:
             json.dump(config, f, indent=4)
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+    async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
         # 檢查是否有管理員權限
         if interaction.user.guild_permissions.administrator or str(interaction.user.id) == '597028717948043274':
             return True
         await interaction.response.send_message("您沒有權限執行此操作，僅限管理員使用此命令。", ephemeral=True)
         return False
-
+    
     @app_commands.command(name="set_channel_mode", description="設定頻道回應模式")
     @app_commands.choices(mode=[
         app_commands.Choice(name="無限制", value="unrestricted"),
         app_commands.Choice(name="白名單", value="whitelist"),
         app_commands.Choice(name="黑名單", value="blacklist")
     ])
+    @app_commands.check(check_admin_permissions)
     async def set_mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
         guild_id = str(interaction.guild_id)
         config = self.load_config(guild_id)
@@ -51,6 +52,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="白名單", value="whitelist"),
         app_commands.Choice(name="黑名單", value="blacklist")
     ])
+    @app_commands.check(check_admin_permissions)
     async def add_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
         guild_id = str(interaction.guild_id)
         config = self.load_config(guild_id)
@@ -67,6 +69,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="白名單", value="whitelist"),
         app_commands.Choice(name="黑名單", value="blacklist")
     ])
+    @app_commands.check(check_admin_permissions)
     async def remove_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
         guild_id = str(interaction.guild_id)
         config = self.load_config(guild_id)
