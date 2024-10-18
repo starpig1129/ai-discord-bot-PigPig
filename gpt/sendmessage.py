@@ -83,7 +83,10 @@ def load_and_index_dialogue_history(dialogue_history_file):
             vector_stores[channel_id] = create_faiss_index()
         texts = [msg["content"] for msg in messages if msg["role"] == "user"]
         metadatas = [{"text": text} for text in texts]
-        vector_stores[channel_id].add_texts(texts, metadatas)
+        try:
+            vector_stores[channel_id].add_texts(texts, metadatas)
+        except Exception as e:
+            print(f"Error adding texts to vector store: {e}") #added debug print statement
 
 def save_vector_store(stores, path):
     try:
