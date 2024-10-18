@@ -21,6 +21,8 @@ PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM
 - 🍽️ **Practical Features**: Set reminders, get recommendations, and perform calculations.
 - 👤 **User Information Management**: Create and maintain user profiles.
 - 📊 **Channel Data RAG**: Use channel history for context-aware responses.
+- 💭 **Chain of Thought Reasoning**: Employs Chain of Thought reasoning to provide detailed, step-by-step explanations of its thought process, enhancing transparency and understanding.  This feature allows the bot to break down complex problems into smaller, manageable steps, providing a more comprehensive and insightful response.
+
 
 ## 🖥️ System Requirements
 
@@ -65,6 +67,7 @@ LLM_MODEL_NAME = shenzhi-wang/Llama3-8B-Chinese-Chat
 VQA_MODEL_NAME = openbmb/MiniCPM-Llama3-V-2_5-int4
 ANTHROPIC_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 | Values | Description |
 | --- | --- |
@@ -94,6 +97,22 @@ OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
     "version": "v1.2.0"
 }
 ```
+
+## Cogs Overview
+
+This bot utilizes a modular design with several cogs (modules) to handle different functionalities.  Here's a brief overview:
+
+- **CoT_AI:** Implements Chain of Thought reasoning for detailed, step-by-step responses.
+- **Channel Manager:** Manages channel-specific settings and permissions.
+- **Image Generation:** Generates images based on text prompts.
+- **Help:** Provides a list of available commands.
+- **Internet Search:** Performs various web searches (general, image, YouTube, URL content).
+- **Math:** Performs mathematical calculations.
+- **Model Management:** Loads and unloads language models.
+- **Reminder:** Sets reminders for users.
+- **Schedule:** Manages user schedules.
+- **User Data:** Manages user-specific data.
+- **Eat:** Provides food recommendations.
 
 
 ## License
