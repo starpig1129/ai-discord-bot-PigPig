@@ -35,6 +35,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="白名單", value="whitelist"),
         app_commands.Choice(name="黑名單", value="blacklist")
     ])
+    @commands.has_permissions(administrator=True)
     async def set_mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
         guild_id = str(interaction.guild_id)
         config = self.load_config(guild_id)
@@ -47,6 +48,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="白名單", value="whitelist"),
         app_commands.Choice(name="黑名單", value="blacklist")
     ])
+    @commands.has_permissions(administrator=True)
     async def add_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
         guild_id = str(interaction.guild_id)
         config = self.load_config(guild_id)
@@ -63,6 +65,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="白名單", value="whitelist"),
         app_commands.Choice(name="黑名單", value="blacklist")
     ])
+    @commands.has_permissions(administrator=True)
     async def remove_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
         guild_id = str(interaction.guild_id)
         config = self.load_config(guild_id)
