@@ -25,8 +25,8 @@ class ChannelManager(commands.Cog):
         config_path = self.get_config_path(guild_id)
         with open(config_path, "w") as f:
             json.dump(config, f, indent=4)
-
-    async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
+    @staticmethod
+    async def check_admin_permissions(interaction: discord.Interaction) -> bool:
         # 檢查是否有管理員權限
         if interaction.user.guild_permissions.administrator or str(interaction.user.id) == '597028717948043274':
             return True
