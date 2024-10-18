@@ -28,6 +28,7 @@ import update
 import function as func
 import json
 import logging
+import asyncio
 from discord.ext import commands
 from gpt.choose_act import ActionHandler
 from gpt.sendmessage import load_and_index_dialogue_history, save_vector_store, vector_stores
@@ -219,4 +220,8 @@ class PigPig(commands.Bot):
             json.dump(data, f, ensure_ascii=False, indent=4)
         print('update succesfully guilds_and_channels.json')
         func.tokens.client_id = self.user.id
-        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="大家的聲音"))
+        while True:
+            await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="大家的聲音"))
+            await asyncio.sleep(5) 
+            await self.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name=f"泥巴在{len(self.guilds)}個伺服器中"))
+            await asyncio.sleep(5)
