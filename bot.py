@@ -102,12 +102,8 @@ class PigPig(commands.Bot):
         if channel_manager:
             if not channel_manager.is_allowed_channel(message.channel, guild_id):
                 return
-
-        try:
-            match = re.search(r"<@\d+>\s*(.*)", message.content)
-            prompt = match.group(1)
-        except AttributeError:  
-            prompt = message.content
+            
+        prompt = message.content.replace(f"<@{self.user.id}>","")
         
         self.dialogue_history[channel_id].append({"role": "user", "content": prompt})
         # 實現生成回應的邏輯
