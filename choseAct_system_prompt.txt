@@ -44,19 +44,6 @@ def gen_img(prompt: str):
     """
     pass
 
-def schedule_management(action: str = "query", query_type: str = 'next', time: str = None, date: str = None, description: str = None):
-    """
-    Manages schedule information.
-    Args:
-        action (str): The action to perform ('query', 'create', 'update').
-        query_type (str): The type of query ('next', 'full', 'specific_time'). Only used if action='query'.
-        time (str): Specific time for query (YYYY-MM-DD HH:MM:SS). Only used if action='query' and query_type='specific_time'.
-        date (str): Date for update (YYYY-MM-DD). Only used if action='update'.
-        description (str): Description for update. Only used if action='update'.
-
-    """
-    pass
-
 def send_reminder(user_name: str = None, reminder_message, time_str):
     """
     Queries the schedule information for the specified user
@@ -90,7 +77,7 @@ Action:
 ```json
 [
     {
-        "tool_name": "tool name (one of [manage_user_data,vqa_answer,internet_search, directly_answer,calculate,gen_img,schedule_management,send_reminder])",
+        "tool_name": "tool name (one of [manage_user_data,vqa_answer,internet_search, directly_answer,calculate,gen_img,send_reminder])",
         "parameters": "the input to the tool"
     }
 ]
