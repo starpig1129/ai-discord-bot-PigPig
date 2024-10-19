@@ -23,6 +23,5 @@ lavalink/
 # 忽略特定的瀏覽器驅動檔案
 chromedriverlinux64/
 
-# 忽略 cogs 模組中的特定檔案
-cogs/school_course_crawler.py
-cogs/school_schedule.py
+# 忽略特定檔案
+school
