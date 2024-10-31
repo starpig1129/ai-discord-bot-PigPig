@@ -17,14 +17,19 @@ class ChannelManager(commands.Cog):
         config_path = self.get_config_path(guild_id)
         if os.path.exists(config_path):
             with open(config_path, "r") as f:
-                return json.load(f)
+                config = json.load(f)
+                # Ensure auto_response key exists
+                if "auto_response" not in config:
+                    config["auto_response"] = {}
+                return config
         else:
-            return {"mode": "unrestricted", "whitelist": [], "blacklist": []}
+            return {"mode": "unrestricted", "whitelist": [], "blacklist": [], "auto_response": {}}
 
     def save_config(self, guild_id, config):
         config_path = self.get_config_path(guild_id)
         with open(config_path, "w") as f:
             json.dump(config, f, indent=4)
+
     @staticmethod
     async def check_admin_permissions(interaction: discord.Interaction) -> bool:
         # 檢查是否有管理員權限
@@ -32,7 +37,7 @@ class ChannelManager(commands.Cog):
             return True
         await interaction.response.send_message("您沒有權限執行此操作，僅限管理員使用此命令。", ephemeral=True)
         return False
-    
+
     @app_commands.command(name="set_channel_mode", description="設定頻道回應模式")
     @app_commands.choices(mode=[
         app_commands.Choice(name="無限制", value="unrestricted"),
@@ -81,18 +86,30 @@ class ChannelManager(commands.Cog):
         else:
             await interaction.response.send_message(f"頻道 <#{channel_id}> 不存在於 {list_type.name}")
 
+    @app_commands.command(name="auto_response", description="設定頻道自動回覆")
+    @app_commands.check(check_admin_permissions)
+    async def auto_response_command(self, interaction: discord.Interaction, channel: discord.TextChannel, enabled: bool):
+        guild_id = str(interaction.guild_id)
+        config = self.load_config(guild_id)
+        channel_id = str(channel.id)
+        config["auto_response"][channel_id] = enabled
+        self.save_config(guild_id, config)
+        await interaction.response.send_message(f"已將頻道 <#{channel_id}> 自動回覆設定為：{enabled}")
+
+
     def is_allowed_channel(self, channel: discord.TextChannel, guild_id: str):
         config = self.load_config(guild_id)
         channel_id = str(channel.id)
         mode = config.get("mode", "unrestricted")
+        auto_response_enabled = config["auto_response"].get(channel_id, False)
 
         if mode == "unrestricted":
-            return True
+            return True, auto_response_enabled
         elif mode == "whitelist":
-            return channel_id in config.get("whitelist", [])
+            return channel_id in config.get("whitelist", []), auto_response_enabled
         elif mode == "blacklist":
-            return channel_id not in config.get("blacklist", [])
-        return False
+            return channel_id not in config.get("blacklist", []), auto_response_enabled
+        return False, False
 
 async def setup(bot):
     await bot.add_cog(ChannelManager(bot))

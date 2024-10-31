@@ -98,25 +98,28 @@ class PigPig(commands.Bot):
             self.dialogue_history[channel_id] = []
 
         guild_id = str(message.guild.id)
+        
+        prompt = message.content.replace(f"<@{self.user.id}>","")
+        self.dialogue_history[channel_id].append({"role": "user", "content": prompt})
+        
         channel_manager = self.get_cog('ChannelManager')
         if channel_manager:
-            if not channel_manager.is_allowed_channel(message.channel, guild_id):
+            is_allowed, auto_response_enabled = channel_manager.is_allowed_channel(message.channel, guild_id)
+            if not is_allowed:
                 return
             
-        prompt = message.content.replace(f"<@{self.user.id}>","")
         
-        self.dialogue_history[channel_id].append({"role": "user", "content": prompt})
         # 實現生成回應的邏輯
-        if self.user.id in message.raw_mentions and not message.mention_everyone:
+        if (self.user.id in message.raw_mentions and not message.mention_everyone) or auto_response_enabled:
             # 發送初始訊息
             global global_model, global_tokenizer
-    
+
             model, tokenizer = get_model_and_tokenizer()
             if model is None or tokenizer is None:
                 await message.reply("豬腦休息中")
                 self.save_dialogue_history()
                 return
-            
+
             message_to_edit = await message.reply("思考中...")
             try:
                 execute_action = await self.action_handler.choose_act(prompt, message, message_to_edit)
