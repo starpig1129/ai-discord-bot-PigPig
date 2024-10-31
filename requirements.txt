@@ -28,3 +28,7 @@ beautifulsoup4==4.12.3
 selenium==4.22.0
 decord
 pdf2image
+opencc
+google-generativeai
+langchain_huggingface
+hp5py
