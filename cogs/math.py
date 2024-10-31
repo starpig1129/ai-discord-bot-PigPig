@@ -23,12 +23,15 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import sympy
-import re
+from sympy.parsing.sympy_parser import (
+    parse_expr,
+    standard_transformations,
+    implicit_multiplication_application,
+)
 
 class MathCalculatorCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.dangerous_functions = ["exec", "eval", "system", "import", "open"]
 
     @app_commands.command(name="calculate", description="計算數學表達式")
     @app_commands.describe(expression="要計算的數學表達式")
@@ -37,32 +40,104 @@ class MathCalculatorCog(commands.Cog):
         result = await self.calculate_math(expression)
         await interaction.followup.send(result)
 
-    async def calculate_math(self, expression: str ,message_to_edit=None) -> str:
+    async def calculate_math(self, expression: str, message_to_edit=None) -> str:
         if message_to_edit is not None:
-            await message_to_edit.edit(content='123...')
+            await message_to_edit.edit(content='計算中...')
         try:
-            # Sanitize input
-            expression = self.sanitize_input(expression)
-            # Convert to sympy expression
-            sympy_expr = sympy.sympify(expression)
-            # Calculate and return result
-            result = sympy.N(sympy_expr)
-            print(f'計算結果: {expression}={result}')
-            return f'計算結果: {expression}={result}'
-        except sympy.SympifyError as e:
-            print(f"無法計算: {str(e)}")
-            return f"無法計算: {str(sympy_expr)}"
-        except Exception as e:
-            print(f"無法計算: {str(e)}")
-            return f"計算錯誤: {str(sympy_expr)}"
+            # 限制表達式長度，防止過長的輸入
+            if len(expression) > 200:
+                return "錯誤：表達式過長，請縮短後再試。"
 
-    def sanitize_input(self, expression):
-        # Remove dangerous functions
-        for func in self.dangerous_functions:
-            expression = expression.replace(func, "")
-        # Remove potentially harmful characters (adjust as needed)
-        expression = re.sub(r"[^0-9a-zA-Z+\-*/(). ]", "", expression)
-        return expression
+            # 定義允許的數學函數和常數
+            allowed_functions = {
+                # 基本和高等數學函數
+                'sin': sympy.sin,
+                'cos': sympy.cos,
+                'tan': sympy.tan,
+                'cot': sympy.cot,
+                'sec': sympy.sec,
+                'csc': sympy.csc,
+                'asin': sympy.asin,
+                'acos': sympy.acos,
+                'atan': sympy.atan,
+                'acot': sympy.acot,
+                'sinh': sympy.sinh,
+                'cosh': sympy.cosh,
+                'tanh': sympy.tanh,
+                'coth': sympy.coth,
+                'asinh': sympy.asinh,
+                'acosh': sympy.acosh,
+                'atanh': sympy.atanh,
+                'ln': sympy.ln,
+                'log': sympy.log,
+                'exp': sympy.exp,
+                'sqrt': sympy.sqrt,
+                'Abs': sympy.Abs,
+                'floor': sympy.floor,
+                'ceiling': sympy.ceiling,
+                'factorial': sympy.factorial,
+                'gamma': sympy.gamma,
+                'zeta': sympy.zeta,
+                'erf': sympy.erf,
+                # 常數
+                'pi': sympy.pi,
+                'E': sympy.E,
+                'e': sympy.E,
+                'I': sympy.I,  # 虛數單位
+            }
+
+            # 添加必要的基礎類型到 local_dict
+            basic_types = {
+                'Integer': sympy.Integer,
+                'Float': sympy.Float,
+                'Rational': sympy.Rational,
+            }
+
+            # 合併允許的函數和基礎類型
+            local_dict = {**allowed_functions, **basic_types}
+
+            # 定義解析轉換規則，支持隱式乘法等
+            transformations = (
+                standard_transformations +
+                (implicit_multiplication_application,)
+            )
+
+            # 安全地解析表達式
+            sympy_expr = parse_expr(
+                expression,
+                transformations=transformations,
+                evaluate=True,
+                local_dict=local_dict,
+                global_dict={},  # 禁用 global_dict
+            )
+
+            # 檢查解析結果是否包含未定義的函數
+            from sympy.core.function import UndefinedFunction
+            if sympy_expr.has(UndefinedFunction):
+                return "錯誤：表達式包含未定義的函數。"
+
+            # 檢查解析結果是否包含不安全的類型
+            unsafe_types = (sympy.Symbol, sympy.Function)
+            if sympy_expr.has(*unsafe_types):
+                return "錯誤：表達式包含不支持的元素。"
+
+            # 計算結果，設定精度為 15 位小數
+            result = sympy.N(sympy_expr, 15)
+
+            # 格式化結果，去除多餘的小數點和零
+            result_str = str(result)
+            if '.' in result_str:
+                result_str = result_str.rstrip('0').rstrip('.')
+
+            print(f'計算結果: {expression} = {result_str}')
+            return f'計算結果: {expression} = {result_str}'
+        except Exception as e:
+            print(f"計算錯誤: {str(e)}")
+            return "計算錯誤：無法解析或計算該表達式。"
 
 async def setup(bot):
     await bot.add_cog(MathCalculatorCog(bot))
+
+
+
+
