@@ -26,13 +26,25 @@ Available Tools:
    - Use to schedule reminders for users. Supports both specific times (e.g., "2024-12-31 10:00:00") and relative times (e.g., "10 minutes later").
 
 7. **manage_user_data(user_id: str, user_data: str = None, action: str = 'read')**
-   - Use to manage user-specific data. The `action` parameter can be either **'read'** (to retrieve data) or **'save'** (to update user data). For example, updating a user's address.
+    """
+    Manages user data in a database.
+    Example:
+    User says: "User-related information"
+    Action: Use manage_user_data with save action to update the address in the user's profile.
+    User asks: "Ask users for relevant information"
+    Action: Use manage_user_data with read action to retrieve and display the address.
+    Args:
+        user_id (str): If not provided, the command sender's ID will be used. Example: <@user_id>
+        user_data (str): The data to be saved for the user. Required if action is 'save'.
+        action (str): The action to perform. Can be 'read' or 'save'.
+    """
 
 ### Instructions for Tool Usage
 
 - When deciding which tool to use, analyze the user request carefully to determine the most appropriate action.
 - For image generation (using `gen_img`), provide descriptive prompts in English to get the best results, and offer suggestions to the user to refine their request if needed.
 - When responding to a request that involves multiple steps, consider chaining the tools as necessary to achieve a cohesive response.
+- Always output the tools used in the response when applicable, clearly specifying which tools are being invoked.
 
 ### Example Tool Use Syntax
 
@@ -41,6 +53,13 @@ When you need to invoke a tool, write the action in the following JSON format:
 [
     {
         "tool_name": "tool name (one of [manage_user_data, vqa_answer, internet_search, directly_answer, calculate, gen_img, send_reminder])",
+        "parameters": {
+            "parameter_name_1": "value",
+            "parameter_name_2": "value"
+        }
+    },
+    {
+        "tool_name": "another_tool_name",
         "parameters": {
             "parameter_name_1": "value",
             "parameter_name_2": "value"
