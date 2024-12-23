@@ -29,41 +29,134 @@ class MusicControlView(View):
         super().__init__(timeout=None)
         self.guild = interaction.guild
         self.cog = cog
+        self.current_position = 0
+        self.progress_message = None
+        self.update_task = None
 
-    @discord.ui.button(emoji='▶️', style=discord.ButtonStyle.gray)
-    async def resume(self, interaction: discord.Interaction, button: Button):
+    def create_progress_bar(self, current, total, length=20):
+        filled = int(length * current / total)
+        bar = "▰" * filled + "▱" * (length - filled)
+        minutes_current, seconds_current = divmod(current, 60)
+        minutes_total, seconds_total = divmod(total, 60)
+        return f"`{minutes_current:02d}:{seconds_current:02d} {bar} {minutes_total:02d}:{seconds_total:02d}`"
+
+    async def update_progress(self, interaction, duration):
+        try:
+            while True:
+                if not self.guild.voice_client or not self.guild.voice_client.is_playing():
+                    break
+                
+                self.current_position += 1
+                if self.current_position > duration:
+                    break
+                    
+                progress_bar = self.create_progress_bar(self.current_position, duration)
+                if self.progress_message:
+                    await self.progress_message.edit(content=progress_bar)
+                
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.error(f"Progress update error: {e}")
+
+    @discord.ui.button(emoji='⏮️', style=discord.ButtonStyle.gray)
+    async def previous(self, interaction: discord.Interaction, button: Button):
         voice_client = self.guild.voice_client
-        if voice_client and voice_client.is_paused():
-            voice_client.resume()
-            await interaction.response.send_message(f"▶️ | {interaction.user} 繼續了音樂！")
+        if voice_client:
+            # 重置當前歌曲
+            voice_client.stop()
+            # 將當前歌曲重新加入隊列前端
+            if hasattr(self.cog, 'current_song') and self.cog.current_song:
+                queue = guild_queues.get(self.guild.id)
+                if queue:
+                    new_queue = asyncio.Queue()
+                    await new_queue.put(self.cog.current_song)
+                    while not queue.empty():
+                        item = await queue.get()
+                        await new_queue.put(item)
+                    guild_queues[self.guild.id] = new_queue
+            await interaction.response.send_message(f"⏮️ | {interaction.user} 返回上一首！")
         else:
             embed = discord.Embed(title="❌ | 沒有正在播放的音樂！", color=discord.Color.red())
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(emoji='⏸️', style=discord.ButtonStyle.gray)
-    async def pause(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(emoji='⏯️', style=discord.ButtonStyle.gray)
+    async def toggle_playback(self, interaction: discord.Interaction, button: Button):
         voice_client = self.guild.voice_client
-        if voice_client and voice_client.is_playing():
-            voice_client.pause()
-            await interaction.response.send_message(f"⏸️ | {interaction.user} 暫停了音樂！")
+        if voice_client:
+            if voice_client.is_playing():
+                voice_client.pause()
+                await interaction.response.send_message(f"⏸️ | {interaction.user} 暫停了音樂！")
+            elif voice_client.is_paused():
+                voice_client.resume()
+                await interaction.response.send_message(f"▶️ | {interaction.user} 繼續了音樂！")
+            else:
+                embed = discord.Embed(title="❌ | 沒有正在播放的音樂！", color=discord.Color.red())
+                await interaction.response.send_message(embed=embed, ephemeral=True)
         else:
             embed = discord.Embed(title="❌ | 沒有正在播放的音樂！", color=discord.Color.red())
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(emoji='⏩', style=discord.ButtonStyle.gray)
+    @discord.ui.button(emoji='⏭️', style=discord.ButtonStyle.gray)
     async def skip(self, interaction: discord.Interaction, button: Button):
         voice_client = self.guild.voice_client
         if voice_client:
             voice_client.stop()
-            await interaction.response.send_message(f"⏩ | {interaction.user} 跳過了音樂！")
+            await interaction.response.send_message(f"⏭️ | {interaction.user} 跳過了音樂！")
         else:
             embed = discord.Embed(title="❌ | 沒有正在播放的音樂！", color=discord.Color.red())
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @discord.ui.button(emoji='⏹️', style=discord.ButtonStyle.red)
+    async def stop(self, interaction: discord.Interaction, button: Button):
+        voice_client = self.guild.voice_client
+        if voice_client:
+            # 清空播放隊列
+            queue = guild_queues.get(self.guild.id)
+            if queue:
+                while not queue.empty():
+                    await queue.get()
+            # 停止播放
+            voice_client.stop()
+            await voice_client.disconnect()
+            await interaction.response.send_message(f"⏹️ | {interaction.user} 停止了播放！")
+        else:
+            embed = discord.Embed(title="❌ | 沒有正在播放的音樂！", color=discord.Color.red())
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(emoji='📜', style=discord.ButtonStyle.gray)
+    async def show_queue(self, interaction: discord.Interaction, button: Button):
+        queue = guild_queues.get(self.guild.id)
+        if not queue or queue.empty():
+            embed = discord.Embed(title="📜 播放清單", description="目前沒有歌曲在播放清單中", color=discord.Color.blue())
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # 複製隊列內容而不消耗原隊列
+        queue_copy = []
+        temp_queue = asyncio.Queue()
+        while not queue.empty():
+            item = await queue.get()
+            queue_copy.append(item)
+            await temp_queue.put(item)
+        guild_queues[self.guild.id] = temp_queue
+
+        # 創建播放清單embed
+        embed = discord.Embed(title="📜 播放清單", color=discord.Color.blue())
+        for i, item in enumerate(queue_copy, 1):
+            minutes, seconds = divmod(item["duration"], 60)
+            embed.add_field(
+                name=f"{i}. {item['title']}", 
+                value=f"由 {item['requester'].name} 添加 | {minutes:02d}:{seconds:02d}",
+                inline=False
+            )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 class YTMusic(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.limit = 1800 # 時長<30min
+        self.limit = 1800  # 時長<30min
+        self.current_song = None  # 保存當前播放的歌曲信息
 
     @app_commands.command(name="play", description="播放影片(網址或關鍵字)")
     async def play(self, interaction: discord.Interaction, query: str = ""):
@@ -168,6 +261,13 @@ class YTMusic(commands.Cog):
             item = await queue.get()
             file_path = item["file_path"]
             try:
+                # 保存當前播放的歌曲信息
+                self.current_song = item
+                
+                # 創建控制視圖
+                view = MusicControlView(interaction, self)
+                
+                # 開始播放
                 voice_client.play(
                     FFmpegPCMAudio(file_path),
                     after=lambda e: self.bot.loop.create_task(self.handle_after_play(interaction, file_path))
@@ -183,13 +283,30 @@ class YTMusic(commands.Cog):
                 minutes, seconds = divmod(duration, 60)
                 requester = item["requester"]
                 user_avatar = item["user_avatar"]
-                embed = discord.Embed(title=f"📀 | 正在播放音樂", description=f"**[{title}]({url})**", color=discord.Color.blue())
-                embed.add_field(name="上傳頻道：", value=f"> {author}", inline=True)
-                embed.add_field(name="播放時長：", value=f"> {minutes:02}:{seconds:02}", inline=True)
-                embed.add_field(name="觀看次數：", value=f"> {int(views):,}", inline=False)
+                # 創建更豐富的 embed
+                embed = discord.Embed(
+                    title="🎵 正在播放",
+                    description=f"**[{title}]({url})**",
+                    color=discord.Color.blue()
+                )
+                embed.add_field(name="👤 上傳頻道", value=author, inline=True)
+                embed.add_field(name="⏱️ 播放時長", value=f"{minutes:02d}:{seconds:02d}", inline=True)
+                embed.add_field(name="👀 觀看次數", value=f"{int(views):,}", inline=True)
                 embed.set_thumbnail(url=thumbnail)
-                embed.set_footer(text=requester, icon_url=user_avatar)  
+                embed.set_footer(text=f"由 {requester.name} 添加", icon_url=user_avatar)
+                
+                # 發送 embed 和控制視圖
                 await interaction.followup.send(embed=embed, view=view)
+                
+                # 發送並更新進度條
+                progress_message = await interaction.followup.send(view.create_progress_bar(0, duration))
+                view.progress_message = progress_message
+                view.current_position = 0
+                
+                # 開始更新進度
+                if view.update_task:
+                    view.update_task.cancel()
+                view.update_task = self.bot.loop.create_task(view.update_progress(interaction, duration))
             except Exception as e:
                 logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 播放音樂時出錯： {e}")
                 embed = discord.Embed(title=f"❌ | 播放音樂時出錯", color=discord.Color.red())
