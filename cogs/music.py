@@ -7,6 +7,8 @@ from discord.ext import commands
 from pytubefix import YouTube
 from discord import app_commands
 import logging as logger
+from youtube_search import YoutubeSearch
+import random
 
 # 定義每個伺服器的播放清單
 guild_queues = {}
@@ -63,8 +65,8 @@ class YTMusic(commands.Cog):
         self.bot = bot
         self.limit = 1800 # 時長<30min
 
-    @app_commands.command(name="play", description="播放影片(網址)")
-    async def play(self, interaction: discord.Interaction, url: str = ""):
+    @app_commands.command(name="play", description="播放影片(網址或關鍵字)")
+    async def play(self, interaction: discord.Interaction, query: str = ""):
         
         # 檢查使用者是否已在語音頻道
         if interaction.user.voice:
@@ -76,10 +78,29 @@ class YTMusic(commands.Cog):
             await interaction.response.send_message(embed=embed)
             return
 
-        # 如果有提供 URL，將音樂加入播放清單
-        if url:
-            logger.info(f"[音樂] 伺服器 ID： {interaction.guild.id}, 使用者名稱： {interaction.user.name}, 使用者輸入： {url}")
-            is_valid = await self.add_to_queue(interaction, url)
+        # 如果有提供查詢，將音樂加入播放清單
+        if query:
+            logger.info(f"[音樂] 伺服器 ID： {interaction.guild.id}, 使用者名稱： {interaction.user.name}, 使用者輸入： {query}")
+            # 檢查是否為URL
+            if "youtube.com" in query or "youtu.be" in query:
+                is_valid = await self.add_to_queue(interaction, query)
+            else:
+                # 使用關鍵字搜尋
+                try:
+                    results = YoutubeSearch(query, max_results=5).to_dict()
+                    if not results:
+                        embed = discord.Embed(title="❌ | 未找到相關影片", color=discord.Color.red())
+                        await interaction.response.send_message(embed=embed)
+                        return
+                    
+                    selected_result = random.choice(results)
+                    video_url = f"https://www.youtube.com{selected_result['url_suffix']}"
+                    is_valid = await self.add_to_queue(interaction, video_url)
+                except Exception as e:
+                    logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 搜尋失敗： {e}")
+                    embed = discord.Embed(title="❌ | 搜尋失敗", color=discord.Color.red())
+                    await interaction.response.send_message(embed=embed)
+                    return
             if is_valid == False:
                 return
         
