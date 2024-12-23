@@ -2,7 +2,7 @@ import os
 import asyncio
 import discord
 from discord import FFmpegPCMAudio
-from discord.ui import Button, View
+from discord.ui import Button, View, Select
 from discord.ext import commands
 from pytubefix import YouTube
 from discord import app_commands
@@ -87,15 +87,28 @@ class YTMusic(commands.Cog):
             else:
                 # 使用關鍵字搜尋
                 try:
-                    results = YoutubeSearch(query, max_results=5).to_dict()
+                    results = YoutubeSearch(query, max_results=10).to_dict()
                     if not results:
                         embed = discord.Embed(title="❌ | 未找到相關影片", color=discord.Color.red())
                         await interaction.response.send_message(embed=embed)
                         return
                     
-                    selected_result = random.choice(results)
-                    video_url = f"https://www.youtube.com{selected_result['url_suffix']}"
-                    is_valid = await self.add_to_queue(interaction, video_url)
+                    # 創建選擇菜單
+                    view = SongSelectView(self, results, interaction)
+                    
+                    # 創建包含搜尋結果的embed
+                    embed = discord.Embed(title="🔍 | YouTube搜尋結果", description="請選擇要播放的歌曲：", color=discord.Color.blue())
+                    for i, result in enumerate(results, 1):
+                        duration = result.get('duration', 'N/A')
+                        embed.add_field(
+                            name=f"{i}. {result['title']}", 
+                            value=f"頻道: {result['channel']}\n時長: {duration}", 
+                            inline=False
+                        )
+                    
+                    await interaction.response.send_message(embed=embed, view=view)
+                    return
+                    
                 except Exception as e:
                     logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 搜尋失敗： {e}")
                     embed = discord.Embed(title="❌ | 搜尋失敗", color=discord.Color.red())
@@ -217,6 +230,49 @@ class YTMusic(commands.Cog):
             if guild_id in guild_queues:
                 guild_queues[guild_id] = asyncio.Queue()
 
+
+class SongSelectView(View):
+    def __init__(self, cog, results, original_interaction):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.results = results
+        self.original_interaction = original_interaction
+        
+        # 創建選擇菜單
+        options = []
+        for i, result in enumerate(results, 1):
+            options.append(discord.SelectOption(
+                label=f"{i}. {result['title'][:80]}", # Discord限制選項標籤最多100字符
+                description=f"{result['channel']} | {result.get('duration', 'N/A')}",
+                value=str(i-1)
+            ))
+            
+        select = Select(
+            placeholder="選擇要播放的歌曲...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+        select.callback = self.select_callback
+        self.add_item(select)
+    
+    async def select_callback(self, interaction: discord.Interaction):
+        # 獲取選擇的歌曲
+        selected_index = int(interaction.data['values'][0])
+        selected_result = self.results[selected_index]
+        video_url = f"https://www.youtube.com{selected_result['url_suffix']}"
+        
+        # 添加到播放佇列
+        is_valid = await self.cog.add_to_queue(interaction, video_url)
+        if is_valid:
+            # 如果佇列是空的且沒有正在播放，開始播放
+            voice_client = interaction.guild.voice_client
+            if voice_client and not voice_client.is_playing():
+                await self.cog.play_next(self.original_interaction)
+        
+        # 禁用選擇菜單
+        self.disable_all_items()
+        await interaction.response.edit_message(view=self)
 
 async def setup(bot):
     await bot.add_cog(YTMusic(bot))
