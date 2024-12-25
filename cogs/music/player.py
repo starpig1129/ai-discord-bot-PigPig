@@ -23,42 +23,57 @@ from .queue import (
 from .youtube import YouTubeManager
 from .ui.controls import MusicControlView
 from .ui.song_select import SongSelectView
-
+from .ui.progress import ProgressDisplay
 class YTMusic(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.youtube = YouTubeManager()
         self.current_song = None
         self.current_message = None
-
-    async def play_from_position(self, interaction: discord.Interaction, position: int):
-        """從指定位置開始播放當前歌曲"""
-        if not self.current_song:
+        
+    async def update_player_ui(self, interaction, item, view=None):
+        """更新播放器UI"""
+        if not self.current_message:
             return
             
-        voice_client = interaction.guild.voice_client
-        if not voice_client:
-            return
-            
-        file_path = self.current_song["file_path"]
-        if not os.path.exists(file_path):
-            return
-            
-        # 重新開始播放
-        voice_client.play(
-            FFmpegPCMAudio(file_path),
-            after=lambda e: self.bot.loop.create_task(self.handle_after_play(interaction, file_path))
+        embed = discord.Embed(
+            title="🎵 正在播放",
+            description=f"**[{item['title']}]({item['url']})**",
+            color=discord.Color.blue()
         )
         
-        # 更新進度條位置
-        try:
-            for component in interaction.message.components:
-                for child in component.children:
-                    if isinstance(child, discord.ui.Select):
-                        child.placeholder = f"目前位置: {position//60:02d}:{position%60:02d}"
-            await interaction.message.edit(view=interaction.message.view)
-        except Exception as e:
-            logger.error(f"更新進度條位置失敗: {e}")
+        minutes, seconds = divmod(item['duration'], 60)
+        embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
+        embed.add_field(name="⏱️ 播放時長", value=f"{minutes:02d}:{seconds:02d}", inline=True)
+        embed.add_field(name="👀 觀看次數", value=f"{int(item['views']):,}", inline=True)
+        progress_bar = ProgressDisplay.create_progress_bar(0, item['duration'])
+        embed.add_field(name="🎵 播放進度", value=progress_bar, inline=False)
+        embed.add_field(name="📜 播放清單", value="清單為空", inline=False)
+        
+        thumbnail = self.youtube.get_thumbnail_url(item['video_id'])
+        embed.set_thumbnail(url=thumbnail)
+        embed.set_footer(text=f"由 {item['requester'].name} 添加", icon_url=item['user_avatar'])
+        
+        if not view:
+            view = MusicControlView(interaction, self)
+            
+        await self.current_message.edit(embed=embed, view=view)
+        
+        # 設置視圖的訊息和 embed
+        view.message = self.current_message
+        view.current_embed = embed
+        view.current_position = 0
+        
+        # 取消舊的更新任務
+        if hasattr(self, '_current_view') and self._current_view and self._current_view.update_task:
+            self._current_view.update_task.cancel()
+            await asyncio.sleep(0.1)  # 等待任務完全取消
+            
+        # 保存新的視圖引用
+        self._current_view = view
+        
+        # 開始更新進度
+        view.update_task = self.bot.loop.create_task(view.update_progress(item['duration']))
 
     @app_commands.command(name="mode", description="設置播放模式 (不循環/清單循環/單曲循環)")
     async def mode(self, interaction: discord.Interaction, mode: str):
@@ -145,12 +160,20 @@ class YTMusic(commands.Cog):
                         set_guild_playlist(interaction.guild.id, remaining_songs)
                         logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 已保存 {len(remaining_songs)} 首歌曲到播放清單")
                         
-                        # 如果隊列為空，立即添加下一首歌曲
-                        if queue_size == 0:
-                            next_song = get_next_playlist_songs(interaction.guild.id, count=1)
-                            if next_song:
-                                await queue.put(next_song[0])
-                                logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 已立即添加下一首播放清單歌曲")
+                        # 如果隊列為空或未滿，立即添加更多歌曲
+                        remaining_space = 5 - queue_size
+                        if remaining_space > 0:
+                            next_songs = await get_next_playlist_songs(
+                                interaction.guild.id,
+                                count=remaining_space,
+                                youtube_manager=self.youtube,
+                                folder=folder,
+                                interaction=interaction
+                            )
+                            if next_songs:
+                                for song in next_songs:
+                                    await queue.put(song)
+                                logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 已立即添加 {len(next_songs)} 首播放清單歌曲")
                     
                     # 創建嵌入訊息顯示已加入的歌曲
                     description = "\n".join([f"🎵 {info['title']}" for info in added_songs])
@@ -257,79 +280,55 @@ class YTMusic(commands.Cog):
             
         play_mode = get_play_mode(guild_id)
         
-        # 處理單曲循環
-        if play_mode == PlayMode.LOOP_SINGLE and not force_new and self.current_song:
+        # 處理播放模式
+        if not force_new and play_mode == PlayMode.LOOP_SINGLE and self.current_song:
+            # 單曲循環：重新創建音頻源
             item = self.current_song
             file_path = item["file_path"]
-        # 處理其他模式
-        elif not queue.empty():
-            # 如果啟用隨機播放，重新排序隊列
-            if is_shuffle_enabled(guild_id):
-                queue_copy, new_queue = await copy_queue(guild_id, shuffle=True)
-                guild_queues[guild_id] = new_queue
+            if not os.path.exists(file_path):
+                await self.play_next(interaction, force_new=True)
+                return
             
-            item = await queue.get()
-            file_path = item["file_path"]
             try:
-                # 保存當前播放的歌曲信息
-                self.current_song = item
+                # 確保語音客戶端準備就緒
+                if voice_client.is_playing():
+                    voice_client.stop()
+                    await asyncio.sleep(0.2)  # 短暫延遲等待停止完成
                 
-                # 開始播放
+                # 等待確保完全停止
+                while voice_client.is_playing():
+                    await asyncio.sleep(0.1)
+                
+                await asyncio.sleep(0.3)  # 額外延遲確保穩定
+                
+                # 取消舊的更新任務
+                if hasattr(self, '_current_view') and self._current_view and self._current_view.update_task:
+                    self._current_view.update_task.cancel()
+                    await asyncio.sleep(0.1)  # 等待任務完全取消
+                
+                # 創建新的控制視圖並重置進度
+                view = MusicControlView(interaction, self)
+                self._current_view = view
+                
+                if self.current_message:
+                    await self.update_player_ui(interaction, item, view)
+                
+                # 直接重新播放當前歌曲
                 voice_client.play(
                     FFmpegPCMAudio(file_path),
-                    after=lambda e: self.bot.loop.create_task(self.handle_after_play(interaction, file_path))
+                    after=lambda e: asyncio.run_coroutine_threadsafe(
+                        self.handle_after_play(interaction, file_path),
+                        self.bot.loop
+                    )
                 )
-                
-                # 創建或更新 embed
-                embed = discord.Embed(
-                    title="🎵 正在播放",
-                    description=f"**[{item['title']}]({item['url']})**",
-                    color=discord.Color.blue()
-                )
-                
-                minutes, seconds = divmod(item['duration'], 60)
-                embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
-                embed.add_field(name="⏱️ 播放時長", value=f"{minutes:02d}:{seconds:02d}", inline=True)
-                embed.add_field(name="👀 觀看次數", value=f"{int(item['views']):,}", inline=True)
-                embed.add_field(name="🎵 播放進度", value=f"00:00 ▱▱▱▱▱▱▱▱▱▱ {minutes:02d}:{seconds:02d}", inline=False)
-                embed.add_field(name="📜 播放清單", value="清單為空", inline=False)
-                
-                thumbnail = self.youtube.get_thumbnail_url(item['video_id'])
-                embed.set_thumbnail(url=thumbnail)
-                embed.set_footer(text=f"由 {item['requester'].name} 添加", icon_url=item['user_avatar'])
-                
-                # 創建新的控制視圖並添加進度條選擇器
-                view = MusicControlView(interaction, self)
-                view.add_progress_select()
-                
-                # 如果已有播放訊息，則更新它
-                if self.current_message:
-                    await self.current_message.edit(embed=embed, view=view)
-                    message = self.current_message
-                else:
-                    # 否則發送新訊息
-                    message = await interaction.followup.send(embed=embed, view=view)
-                    self.current_message = message
-                
-                # 設置視圖的訊息和 embed
-                view.message = message
-                view.current_embed = embed
-                view.current_position = 0
-                
-                # 開始更新進度
-                if view.update_task:
-                    view.update_task.cancel()
-                view.update_task = self.bot.loop.create_task(view.update_progress(item['duration']))
-                
+                return
             except Exception as e:
-                logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 播放音樂時出錯： {e}")
-                embed = discord.Embed(title=f"❌ | 播放音樂時出錯", color=discord.Color.red())
-                await interaction.followup.send(embed=embed)
-                await self.play_next(interaction, force_new=True)  # 嘗試播放下一首
-        else:
-            # 處理清單循環
-            if play_mode == PlayMode.LOOP_QUEUE and self.current_song:
-                # 重新加入所有歌曲到隊列
+                logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 單曲循環播放時出錯： {e}")
+                await self.play_next(interaction, force_new=True)
+                return
+        elif not queue.empty() or (play_mode == PlayMode.LOOP_QUEUE and self.current_song):
+            # 如果隊列為空但是循環模式，重新添加所有歌曲
+            if queue.empty() and play_mode == PlayMode.LOOP_QUEUE:
                 queue_copy, _ = await copy_queue(guild_id)
                 if queue_copy:
                     # 如果啟用隨機播放，打亂順序
@@ -337,9 +336,85 @@ class YTMusic(commands.Cog):
                         random.shuffle(queue_copy)
                     for song in queue_copy:
                         await queue.put(song)
-                    await self.play_next(interaction)
-                    return
-            
+            # 獲取下一首歌曲
+            if not play_mode == PlayMode.LOOP_SINGLE or force_new:
+                # 如果啟用隨機播放，重新排序整個隊列
+                if is_shuffle_enabled(guild_id):
+                    queue_copy, new_queue = await copy_queue(guild_id, shuffle=True)
+                    guild_queues[guild_id] = new_queue
+                
+                item = await queue.get()
+                file_path = item["file_path"]
+                self.current_song = item
+            try:
+                # 保存當前播放的歌曲信息
+                self.current_song = item
+                
+                # 確保語音客戶端準備就緒
+                if voice_client.is_playing():
+                    voice_client.stop()
+                    await asyncio.sleep(0.2)  # 短暫延遲等待停止完成
+                
+                # 等待確保完全停止
+                while voice_client.is_playing():
+                    await asyncio.sleep(0.1)
+                
+                await asyncio.sleep(0.3)  # 額外延遲確保穩定
+                
+                # 開始播放
+                voice_client.play(
+                    FFmpegPCMAudio(file_path),
+                    after=lambda e: asyncio.run_coroutine_threadsafe(
+                        self.handle_after_play(interaction, file_path),
+                        self.bot.loop
+                    )
+                )
+                
+                # 創建新的控制視圖
+                view = MusicControlView(interaction, self)
+                
+                # 如果已有播放訊息，則更新它
+                if self.current_message:
+                    await self.update_player_ui(interaction, item, view)
+                else:
+                    # 創建初始embed
+                    embed = discord.Embed(
+                        title="🎵 正在播放",
+                        description=f"**[{item['title']}]({item['url']})**",
+                        color=discord.Color.blue()
+                    )
+                    minutes, seconds = divmod(item['duration'], 60)
+                    embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
+                    embed.add_field(name="⏱️ 播放時長", value=f"{minutes:02d}:{seconds:02d}", inline=True)
+                    embed.add_field(name="👀 觀看次數", value=f"{int(item['views']):,}", inline=True)
+                    progress_bar = ProgressDisplay.create_progress_bar(0, item['duration'])
+                    embed.add_field(name="🎵 播放進度", value=progress_bar, inline=False)
+                    embed.add_field(name="📜 播放清單", value="清單為空", inline=False)
+                    thumbnail = self.youtube.get_thumbnail_url(item['video_id'])
+                    embed.set_thumbnail(url=thumbnail)
+                    embed.set_footer(text=f"由 {item['requester'].name} 添加", icon_url=item['user_avatar'])
+                    
+                    # 發送新訊息
+                    message = await interaction.followup.send(embed=embed, view=view)
+                    self.current_message = message
+                    
+                    # 設置視圖的訊息和 embed
+                    view.message = message
+                    view.current_embed = embed
+                    view.current_position = 0
+                    
+                    # 開始更新進度
+                    if view.update_task:
+                        view.update_task.cancel()
+                    view.update_task = self.bot.loop.create_task(view.update_progress(item['duration']))
+                
+            except Exception as e:
+                logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 播放音樂時出錯： {e}")
+                embed = discord.Embed(title=f"❌ | 播放音樂時出錯", color=discord.Color.red())
+                await interaction.followup.send(embed=embed)
+                await self.play_next(interaction, force_new=True)  # 嘗試播放下一首
+        else:
+            # 播放清單已空
             embed = discord.Embed(title="🌟 | 播放清單已播放完畢！", color=discord.Color.blue())
             await interaction.followup.send(embed=embed)
             self.current_message = None
@@ -347,6 +422,17 @@ class YTMusic(commands.Cog):
     async def handle_after_play(self, interaction, file_path):
         guild_id = interaction.guild.id
         queue = guild_queues.get(guild_id)
+
+        # 只在非單曲循環模式下刪除檔案
+        play_mode = get_play_mode(guild_id)
+        if play_mode != PlayMode.LOOP_SINGLE:
+            try:
+                if os.path.exists(file_path):
+                    await asyncio.sleep(1)
+                    os.remove(file_path)
+                    logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案成功！")
+            except Exception as e:
+                logger.warning(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案失敗： {e}")
 
         # 檢查隊列中的歌曲數量
         queue_size = 0
@@ -357,27 +443,86 @@ class YTMusic(commands.Cog):
                 queue_copy.append(item)
                 queue_size += 1
 
-        # 重新將歌曲放回隊列
-        for item in queue_copy:
-            await queue.put(item)
+            # 重新將歌曲放回隊列
+            for item in queue_copy:
+                await queue.put(item)
 
-        # 如果隊列未滿且有更多播放清單歌曲，添加到隊列
-        if queue_size < 5 and has_playlist_songs(guild_id):
-            songs_to_add = min(5 - queue_size, 5)
-            next_songs = get_next_playlist_songs(guild_id, count=songs_to_add)
+            # 如果隊列未滿且有更多播放清單歌曲，添加到隊列
+            if queue_size < 5 and has_playlist_songs(guild_id):
+                remaining_space = 5 - queue_size
+                _, folder = get_guild_queue_and_folder(guild_id)
+                next_songs = await get_next_playlist_songs(
+                    guild_id,
+                    count=remaining_space,
+                    youtube_manager=self.youtube,
+                    folder=folder,
+                    interaction=interaction
+                )
+                if next_songs:
+                    for song in next_songs:
+                        await queue.put(song)
+                        queue_size += 1
+                    logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 已添加 {len(next_songs)} 首播放清單歌曲")
+
+        # 如果隊列為空且有播放清單歌曲，直接添加下一首
+        elif has_playlist_songs(guild_id):
+            _, folder = get_guild_queue_and_folder(guild_id)
+            next_songs = await get_next_playlist_songs(
+                guild_id,
+                count=1,
+                youtube_manager=self.youtube,
+                folder=folder,
+                interaction=interaction
+            )
             if next_songs:
-                for song in next_songs:
-                    await queue.put(song)
-                logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 已添加 {len(next_songs)} 首播放清單歌曲")
+                await queue.put(next_songs[0])
+                queue_size = 1
+                logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 已添加下一首播放清單歌曲")
 
-        try:
-            if os.path.exists(file_path):
-                await asyncio.sleep(1)
-                os.remove(file_path)
-                logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案成功！")
-        except Exception as e:
-            logger.warning(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案失敗： {e}")
-
+        # 檢查播放模式並處理下一首歌曲
+        play_mode = get_play_mode(guild_id)
+        if play_mode == PlayMode.LOOP_SINGLE and self.current_song:
+            # 在單曲循環模式下，直接重新播放當前歌曲
+            voice_client = interaction.guild.voice_client
+            if voice_client and voice_client.is_connected():
+                try:
+                    # 確保語音客戶端準備就緒
+                    if voice_client.is_playing():
+                        voice_client.stop()
+                        await asyncio.sleep(0.2)  # 短暫延遲等待停止完成
+                    
+                    # 等待確保完全停止
+                    while voice_client.is_playing():
+                        await asyncio.sleep(0.1)
+                    
+                    await asyncio.sleep(0.3)  # 額外延遲確保穩定
+                    
+                    # 取消舊的更新任務
+                    if hasattr(self, '_current_view') and self._current_view and self._current_view.update_task:
+                        self._current_view.update_task.cancel()
+                        await asyncio.sleep(0.1)  # 等待任務完全取消
+                    
+                    # 創建新的控制視圖並重置進度
+                    view = MusicControlView(interaction, self)
+                    self._current_view = view
+                    
+                    if self.current_message:
+                        await self.update_player_ui(interaction, self.current_song, view)
+                    
+                    # 開始播放
+                    voice_client.play(
+                        FFmpegPCMAudio(file_path),
+                        after=lambda e: asyncio.run_coroutine_threadsafe(
+                            self.handle_after_play(interaction, file_path),
+                            self.bot.loop
+                        )
+                    )
+                    return
+                except Exception as e:
+                    logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 單曲循環重播時出錯： {e}")
+                    logger.error(str(e))  # 記錄詳細錯誤信息
+        
+        # 非單曲循環模式或重播失敗時，播放下一首
         await self.play_next(interaction)
 
     @commands.Cog.listener()

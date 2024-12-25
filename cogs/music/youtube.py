@@ -23,11 +23,36 @@ class YouTubeManager:
             playlist = Playlist(url)
             video_infos = []
             
-            for video_url in playlist.video_urls:
+            # 只下載前5首歌曲，其他的等待後續下載
+            for video_url in playlist.video_urls[:5]:
                 video_info, error = await self.download_audio(video_url, folder, interaction)
                 if video_info:
                     video_infos.append(video_info)
+                    
+            # 保存剩餘歌曲的URL
+            remaining_urls = playlist.video_urls[5:]
+            remaining_infos = []
             
+            # 獲取剩餘歌曲的基本信息（不下載）
+            for video_url in remaining_urls:
+                try:
+                    yt = YouTube(video_url)
+                    video_info = {
+                        "url": video_url,
+                        "title": yt.title,
+                        "duration": yt.length,
+                        "video_id": yt.video_id,
+                        "author": yt.author,
+                        "views": yt.views,
+                        "requester": interaction.user,
+                        "user_avatar": interaction.user.avatar.url
+                    }
+                    remaining_infos.append(video_info)
+                except Exception as e:
+                    logger.error(f"[音樂] 獲取影片信息失敗: {e}")
+                    continue
+            
+            video_infos.extend(remaining_infos)
             return video_infos, None
             
         except Exception as e:
