@@ -2,7 +2,14 @@ import discord
 import asyncio
 import logging as logger
 from .progress import ProgressSelect
-from ..queue import guild_queues
+from ..queue import (
+    guild_queues,
+    PlayMode,
+    get_play_mode,
+    set_play_mode,
+    is_shuffle_enabled,
+    toggle_shuffle
+)
 
 class MusicControlView(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, cog):
@@ -120,6 +127,49 @@ class MusicControlView(discord.ui.View):
             await interaction.response.defer()
         else:
             await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
+
+    @discord.ui.button(emoji='🔄', style=discord.ButtonStyle.gray)
+    async def toggle_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """切換播放模式"""
+        guild_id = self.guild.id
+        current_mode = get_play_mode(guild_id)
+        
+        # 循環切換模式
+        mode_order = [PlayMode.NO_LOOP, PlayMode.LOOP_QUEUE, PlayMode.LOOP_SINGLE]
+        current_index = mode_order.index(current_mode)
+        next_mode = mode_order[(current_index + 1) % len(mode_order)]
+        
+        set_play_mode(guild_id, next_mode)
+        
+        # 更新按鈕樣式
+        mode_emojis = {
+            PlayMode.NO_LOOP: '➡️',
+            PlayMode.LOOP_QUEUE: '🔁',
+            PlayMode.LOOP_SINGLE: '🔂'
+        }
+        button.emoji = mode_emojis[next_mode]
+        
+        mode_names = {
+            PlayMode.NO_LOOP: "不循環",
+            PlayMode.LOOP_QUEUE: "清單循環",
+            PlayMode.LOOP_SINGLE: "單曲循環"
+        }
+        
+        await self.update_embed(interaction, f"🔄 {interaction.user.name} 將播放模式設為 {mode_names[next_mode]}")
+        await interaction.response.defer()
+
+    @discord.ui.button(emoji='🔀', style=discord.ButtonStyle.gray)
+    async def toggle_shuffle(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """切換隨機播放"""
+        guild_id = self.guild.id
+        is_shuffle = toggle_shuffle(guild_id)
+        
+        # 更新按鈕樣式
+        button.style = discord.ButtonStyle.green if is_shuffle else discord.ButtonStyle.gray
+        
+        status = "開啟" if is_shuffle else "關閉"
+        await self.update_embed(interaction, f"🔀 {interaction.user.name} {status}隨機播放")
+        await interaction.response.defer()
 
     @discord.ui.button(emoji='📜', style=discord.ButtonStyle.gray)
     async def show_queue(self, interaction: discord.Interaction, button: discord.ui.Button):

@@ -1,7 +1,8 @@
 import os
 import logging as logger
-from pytubefix import YouTube
+from pytubefix import YouTube, Playlist
 from youtube_search import YoutubeSearch
+import random
 
 class YouTubeManager:
     def __init__(self, time_limit=1800):  # 30分鐘限制
@@ -15,6 +16,23 @@ class YouTubeManager:
         except Exception as e:
             logger.error(f"YouTube搜尋失敗: {e}")
             return []
+
+    async def download_playlist(self, url, folder, interaction):
+        """下載YouTube播放清單的音訊"""
+        try:
+            playlist = Playlist(url)
+            video_infos = []
+            
+            for video_url in playlist.video_urls:
+                video_info, error = await self.download_audio(video_url, folder, interaction)
+                if video_info:
+                    video_infos.append(video_info)
+            
+            return video_infos, None
+            
+        except Exception as e:
+            logger.error(f"[音樂] 播放清單下載失敗: {e}")
+            return None, "播放清單下載失敗"
 
     async def download_audio(self, url, folder, interaction):
         """下載YouTube影片的音訊"""

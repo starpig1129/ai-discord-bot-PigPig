@@ -1,12 +1,22 @@
 import os
 import asyncio
+import random
 import discord
 from discord import FFmpegPCMAudio
 from discord.ext import commands
 from discord import app_commands
 import logging as logger
 
-from .queue import get_guild_queue_and_folder, guild_queues
+from .queue import (
+    get_guild_queue_and_folder,
+    guild_queues,
+    PlayMode,
+    get_play_mode,
+    set_play_mode,
+    is_shuffle_enabled,
+    toggle_shuffle,
+    copy_queue
+)
 from .youtube import YouTubeManager
 from .ui.controls import MusicControlView
 from .ui.song_select import SongSelectView
@@ -47,8 +57,38 @@ class YTMusic(commands.Cog):
         except Exception as e:
             logger.error(f"更新進度條位置失敗: {e}")
 
+    @app_commands.command(name="mode", description="設置播放模式 (不循環/清單循環/單曲循環)")
+    async def mode(self, interaction: discord.Interaction, mode: str):
+        """播放模式命令"""
+        if mode not in ["no_loop", "loop_queue", "loop_single"]:
+            embed = discord.Embed(
+                title="❌ | 無效的播放模式", 
+                description="可用模式: no_loop (不循環), loop_queue (清單循環), loop_single (單曲循環)", 
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+            
+        set_play_mode(interaction.guild.id, mode)
+        mode_names = {
+            "no_loop": "不循環",
+            "loop_queue": "清單循環",
+            "loop_single": "單曲循環"
+        }
+        embed = discord.Embed(title=f"✅ | 已設置播放模式為: {mode_names[mode]}", color=discord.Color.blue())
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="shuffle", description="切換隨機播放")
+    async def shuffle(self, interaction: discord.Interaction):
+        """隨機播放命令"""
+        is_shuffle = toggle_shuffle(interaction.guild.id)
+        status = "開啟" if is_shuffle else "關閉"
+        embed = discord.Embed(title=f"✅ | 已{status}隨機播放", color=discord.Color.blue())
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="play", description="播放影片(網址或關鍵字)")
     async def play(self, interaction: discord.Interaction, query: str = ""):
+        """播放音樂命令"""
         # 檢查使用者是否已在語音頻道
         if interaction.user.voice:
             channel = interaction.user.voice.channel
@@ -67,7 +107,27 @@ class YTMusic(commands.Cog):
             
             # 檢查是否為URL
             if "youtube.com" in query or "youtu.be" in query:
-                is_valid = await self.add_to_queue(interaction, query, is_deferred=True)
+                # 檢查是否為播放清單
+                if "playlist" in query:
+                    queue, folder = get_guild_queue_and_folder(interaction.guild.id)
+                    video_infos, error = await self.youtube.download_playlist(query, folder, interaction)
+                    if error:
+                        embed = discord.Embed(title=f"❌ | {error}", color=discord.Color.red())
+                        await interaction.followup.send(embed=embed)
+                        return
+                    
+                    # 將所有歌曲加入隊列
+                    for video_info in video_infos:
+                        await queue.put(video_info)
+                    
+                    embed = discord.Embed(
+                        title=f"✅ | 已添加播放清單: {len(video_infos)} 首歌曲",
+                        color=discord.Color.blue()
+                    )
+                    await interaction.followup.send(embed=embed)
+                    is_valid = True
+                else:
+                    is_valid = await self.add_to_queue(interaction, query, is_deferred=True)
             else:
                 # 使用關鍵字搜尋
                 results = await self.youtube.search_videos(query)
@@ -126,7 +186,7 @@ class YTMusic(commands.Cog):
             await interaction.response.send_message(embed=embed)
         return True
 
-    async def play_next(self, interaction):
+    async def play_next(self, interaction, force_new=False):
         guild_id = interaction.guild.id
         queue, _ = get_guild_queue_and_folder(guild_id)
 
@@ -134,7 +194,19 @@ class YTMusic(commands.Cog):
         if not voice_client or not voice_client.is_connected():
             return
             
-        if not queue.empty():
+        play_mode = get_play_mode(guild_id)
+        
+        # 處理單曲循環
+        if play_mode == PlayMode.LOOP_SINGLE and not force_new and self.current_song:
+            item = self.current_song
+            file_path = item["file_path"]
+        # 處理其他模式
+        elif not queue.empty():
+            # 如果啟用隨機播放，重新排序隊列
+            if is_shuffle_enabled(guild_id):
+                queue_copy, new_queue = await copy_queue(guild_id, shuffle=True)
+                guild_queues[guild_id] = new_queue
+            
             item = await queue.get()
             file_path = item["file_path"]
             try:
@@ -192,8 +264,21 @@ class YTMusic(commands.Cog):
                 logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 播放音樂時出錯： {e}")
                 embed = discord.Embed(title=f"❌ | 播放音樂時出錯", color=discord.Color.red())
                 await interaction.followup.send(embed=embed)
-                await self.play_next(interaction)  # 嘗試播放下一首
+                await self.play_next(interaction, force_new=True)  # 嘗試播放下一首
         else:
+            # 處理清單循環
+            if play_mode == PlayMode.LOOP_QUEUE and self.current_song:
+                # 重新加入所有歌曲到隊列
+                queue_copy, _ = await copy_queue(guild_id)
+                if queue_copy:
+                    # 如果啟用隨機播放，打亂順序
+                    if is_shuffle_enabled(guild_id):
+                        random.shuffle(queue_copy)
+                    for song in queue_copy:
+                        await queue.put(song)
+                    await self.play_next(interaction)
+                    return
+            
             embed = discord.Embed(title="🌟 | 播放清單已播放完畢！", color=discord.Color.blue())
             await interaction.followup.send(embed=embed)
             self.current_message = None
