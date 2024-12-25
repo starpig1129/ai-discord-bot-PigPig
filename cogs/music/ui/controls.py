@@ -30,9 +30,18 @@ class MusicControlView(discord.ui.View):
 
     async def update_progress(self, duration):
         try:
+            update_interval = 5  # 每5秒更新一次UI
+            last_update_time = 0
+            
             while True:
                 if not self.guild.voice_client or not self.guild.voice_client.is_playing():
                     break
+                
+                current_time = asyncio.get_event_loop().time()
+                if current_time - last_update_time < update_interval:
+                    await asyncio.sleep(1)
+                    self.current_position += 1
+                    continue
                 
                 self.current_position += 1
                 if self.current_position > duration:
@@ -42,8 +51,9 @@ class MusicControlView(discord.ui.View):
                     progress_bar = self.create_progress_bar(self.current_position, duration)
                     self.current_embed.set_field_at(3, name="🎵 播放進度", value=progress_bar, inline=False)
                     await self.message.edit(embed=self.current_embed)
+                    last_update_time = current_time
                 
-                await asyncio.sleep(1)
+                await asyncio.sleep(update_interval)
         except Exception as e:
             logger.error(f"Progress update error: {e}")
 

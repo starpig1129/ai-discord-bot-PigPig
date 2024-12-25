@@ -15,7 +15,10 @@ from .queue import (
     set_play_mode,
     is_shuffle_enabled,
     toggle_shuffle,
-    copy_queue
+    copy_queue,
+    set_guild_playlist,
+    get_next_playlist_songs,
+    has_playlist_songs
 )
 from .youtube import YouTubeManager
 from .ui.controls import MusicControlView
@@ -116,12 +119,44 @@ class YTMusic(commands.Cog):
                         await interaction.followup.send(embed=embed)
                         return
                     
-                    # 將所有歌曲加入隊列
-                    for video_info in video_infos:
+                    # 檢查隊列中的歌曲數量
+                    queue_size = 0
+                    queue_copy = []
+                    while not queue.empty():
+                        item = await queue.get()
+                        queue_copy.append(item)
+                        queue_size += 1
+                    
+                    # 重新將歌曲放回隊列
+                    for item in queue_copy:
+                        await queue.put(item)
+                    
+                    # 計算需要添加的歌曲數量
+                    songs_to_add = min(5 - queue_size, len(video_infos))
+                    
+                    # 將歌曲加入隊列
+                    added_songs = video_infos[:songs_to_add]
+                    for video_info in added_songs:
                         await queue.put(video_info)
                     
+                    # 保存剩餘歌曲到播放清單，並確保它們按順序添加
+                    remaining_songs = video_infos[songs_to_add:]
+                    if remaining_songs:
+                        set_guild_playlist(interaction.guild.id, remaining_songs)
+                        logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 已保存 {len(remaining_songs)} 首歌曲到播放清單")
+                        
+                        # 如果隊列為空，立即添加下一首歌曲
+                        if queue_size == 0:
+                            next_song = get_next_playlist_songs(interaction.guild.id, count=1)
+                            if next_song:
+                                await queue.put(next_song[0])
+                                logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 已立即添加下一首播放清單歌曲")
+                    
+                    # 創建嵌入訊息顯示已加入的歌曲
+                    description = "\n".join([f"🎵 {info['title']}" for info in added_songs])
                     embed = discord.Embed(
-                        title=f"✅ | 已添加播放清單: {len(video_infos)} 首歌曲",
+                        title=f"✅ | 已添加 {len(added_songs)} 首歌曲到播放清單 (共 {len(video_infos)} 首)",
+                        description=description,
                         color=discord.Color.blue()
                     )
                     await interaction.followup.send(embed=embed)
@@ -139,15 +174,16 @@ class YTMusic(commands.Cog):
                 # 創建選擇菜單
                 view = SongSelectView(self, results, interaction)
                 
-                # 創建包含搜尋結果的embed
-                embed = discord.Embed(title="🔍 | YouTube搜尋結果", description="請選擇要播放的歌曲：", color=discord.Color.blue())
-                for i, result in enumerate(results, 1):
-                    duration = result.get('duration', 'N/A')
-                    embed.add_field(
-                        name=f"{i}. {result['title']}", 
-                        value=f"頻道: {result['channel']}\n時長: {duration}", 
-                        inline=False
-                    )
+                # 創建簡潔的搜尋結果embed
+                description = "請選擇要播放的歌曲：\n\n" + "\n".join([
+                    f"{i}. {result['title']} ({result.get('duration', 'N/A')})"
+                    for i, result in enumerate(results, 1)
+                ])
+                embed = discord.Embed(
+                    title="🔍 | YouTube搜尋結果",
+                    description=description,
+                    color=discord.Color.blue()
+                )
                 
                 await interaction.followup.send(embed=embed, view=view)
                 return
@@ -163,6 +199,31 @@ class YTMusic(commands.Cog):
     async def add_to_queue(self, interaction, url, is_deferred=False):
         guild_id = interaction.guild.id
         queue, folder = get_guild_queue_and_folder(guild_id)
+
+        # 檢查隊列中的歌曲數量
+        queue_size = 0
+        queue_copy = []
+        while not queue.empty():
+            item = await queue.get()
+            queue_copy.append(item)
+            queue_size += 1
+        
+        # 重新將歌曲放回隊列
+        for item in queue_copy:
+            await queue.put(item)
+
+        # 如果隊列已滿，則不添加新歌曲
+        if queue_size >= 5:
+            embed = discord.Embed(
+                title="❌ | 播放清單已滿",
+                description="請等待當前歌曲播放完畢後再添加新歌曲",
+                color=discord.Color.red()
+            )
+            if is_deferred:
+                await interaction.followup.send(embed=embed)
+            else:
+                await interaction.response.send_message(embed=embed)
+            return False
 
         # 下載並獲取影片資訊
         video_info, error = await self.youtube.download_audio(url, folder, interaction)
@@ -284,6 +345,31 @@ class YTMusic(commands.Cog):
             self.current_message = None
 
     async def handle_after_play(self, interaction, file_path):
+        guild_id = interaction.guild.id
+        queue = guild_queues.get(guild_id)
+
+        # 檢查隊列中的歌曲數量
+        queue_size = 0
+        queue_copy = []
+        if queue:
+            while not queue.empty():
+                item = await queue.get()
+                queue_copy.append(item)
+                queue_size += 1
+
+        # 重新將歌曲放回隊列
+        for item in queue_copy:
+            await queue.put(item)
+
+        # 如果隊列未滿且有更多播放清單歌曲，添加到隊列
+        if queue_size < 5 and has_playlist_songs(guild_id):
+            songs_to_add = min(5 - queue_size, 5)
+            next_songs = get_next_playlist_songs(guild_id, count=songs_to_add)
+            if next_songs:
+                for song in next_songs:
+                    await queue.put(song)
+                logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 已添加 {len(next_songs)} 首播放清單歌曲")
+
         try:
             if os.path.exists(file_path):
                 await asyncio.sleep(1)
@@ -291,6 +377,7 @@ class YTMusic(commands.Cog):
                 logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案成功！")
         except Exception as e:
             logger.warning(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案失敗： {e}")
+
         await self.play_next(interaction)
 
     @commands.Cog.listener()

@@ -3,9 +3,10 @@ import asyncio
 import random
 import logging as logger
 
-# 定義每個伺服器的播放清單和設置
+# 定義每個伺服器的播放清單、設置和播放清單追蹤
 guild_queues = {}
 guild_settings = {}
+guild_playlists = {}  # 用於追蹤播放清單的剩餘歌曲
 
 class PlayMode:
     NO_LOOP = "no_loop"
@@ -39,6 +40,25 @@ def clear_guild_queue(guild_id):
     if guild_id in guild_settings:
         guild_settings[guild_id]["play_mode"] = PlayMode.NO_LOOP
         guild_settings[guild_id]["shuffle"] = False
+    if guild_id in guild_playlists:
+        guild_playlists[guild_id] = []
+
+def set_guild_playlist(guild_id, video_infos):
+    """設置伺服器的播放清單"""
+    guild_playlists[guild_id] = video_infos
+
+def get_next_playlist_songs(guild_id, count=1):
+    """獲取播放清單中的下一首歌曲"""
+    if guild_id not in guild_playlists:
+        return []
+    
+    songs = guild_playlists[guild_id][:count]
+    guild_playlists[guild_id] = guild_playlists[guild_id][count:]
+    return songs
+
+def has_playlist_songs(guild_id):
+    """檢查是否還有播放清單歌曲"""
+    return guild_id in guild_playlists and len(guild_playlists[guild_id]) > 0
 
 def toggle_shuffle(guild_id):
     """切換隨機播放狀態"""
