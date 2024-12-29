@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import json
-from gpt.gpt_response_gen import generate_response
+from gpt.gemini_api import generate_response
 from gpt.sendmessage import gpt_message
 from gpt.vqa import vqa_answer
 from datetime import datetime
