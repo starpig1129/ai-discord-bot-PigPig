@@ -126,7 +126,7 @@ class YTMusic(commands.Cog):
             # 檢查是否為URL
             if "youtube.com" in query or "youtu.be" in query:
                 # 檢查是否為播放清單
-                if "playlist" in query:
+                if "list" in query:
                     queue, folder = get_guild_queue_and_folder(interaction.guild.id)
                     video_infos, error = await self.youtube.download_playlist(query, folder, interaction)
                     if error:
