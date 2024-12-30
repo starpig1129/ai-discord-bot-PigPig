@@ -26,7 +26,7 @@ class ProgressDisplay:
         minutes_total, seconds_total = divmod(total, 60)
         
         # Format with emojis and better spacing
-        return f"`{minutes_current:02d}:{seconds_current:02d}` ┃{bar}┃ `{minutes_total:02d}:{seconds_total:02d}`"
+        return f"`{int(minutes_current):02d}:{int(seconds_current):02d}` ┃{bar}┃ `{int(minutes_total):02d}:{int(seconds_total):02d}`"
 
     @staticmethod
     def format_timestamp(seconds):
@@ -39,4 +39,4 @@ class ProgressDisplay:
             str: Formatted timestamp
         """
         minutes, seconds = divmod(seconds, 60)
-        return f"{minutes:02d}:{seconds:02d}"
+        return f"{int(minutes):02d}:{int(seconds):02d}"

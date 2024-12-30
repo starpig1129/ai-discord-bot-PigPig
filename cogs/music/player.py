@@ -44,7 +44,7 @@ class YTMusic(commands.Cog):
         
         minutes, seconds = divmod(item['duration'], 60)
         embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
-        embed.add_field(name="⏱️ 播放時長", value=f"{minutes:02d}:{seconds:02d}", inline=True)
+        embed.add_field(name="⏱️ 播放時長", value=f"{int(minutes):02d}:{int(seconds):02d}", inline=True)
         # Handle views count safely
         try:
             views = int(float(item.get('views', 0)))
@@ -422,7 +422,7 @@ class YTMusic(commands.Cog):
                     )
                     minutes, seconds = divmod(item['duration'], 60)
                     embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
-                    embed.add_field(name="⏱️ 播放時長", value=f"{minutes:02d}:{seconds:02d}", inline=True)
+                    embed.add_field(name="⏱️ 播放時長", value=f"{int(minutes):02d}:{int(seconds):02d}", inline=True)
                     # Ensure views is properly converted to integer
                     views = int(float(item['views'])) if item['views'] else 0
                     embed.add_field(name="👀 觀看次數", value=f"{views:,}", inline=True)
