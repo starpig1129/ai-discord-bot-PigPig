@@ -130,7 +130,7 @@ class YouTubeManager:
             os.makedirs(folder, exist_ok=True)
             
             # Use mp3 extension directly since we're converting to mp3
-            output_template = os.path.join(folder, '%(id)s.mp3')
+            output_template = os.path.join(folder, '%(id)s')
             
             ydl_opts = {
                 'format': 'bestaudio/best',
