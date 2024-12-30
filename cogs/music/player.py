@@ -45,7 +45,13 @@ class YTMusic(commands.Cog):
         minutes, seconds = divmod(item['duration'], 60)
         embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
         embed.add_field(name="⏱️ 播放時長", value=f"{minutes:02d}:{seconds:02d}", inline=True)
-        embed.add_field(name="👀 觀看次數", value=f"{int(item['views']):,}", inline=True)
+        # Handle views count safely
+        try:
+            views = int(float(item.get('views', 0)))
+            views_str = f"{views:,}"
+        except (ValueError, TypeError):
+            views_str = "N/A"
+        embed.add_field(name="👀 觀看次數", value=views_str, inline=True)
         progress_bar = ProgressDisplay.create_progress_bar(0, item['duration'])
         embed.add_field(name="🎵 播放進度", value=progress_bar, inline=False)
         embed.add_field(name="📜 播放清單", value="清單為空", inline=False)
@@ -248,8 +254,15 @@ class YTMusic(commands.Cog):
                 await interaction.response.send_message(embed=embed)
             return False
 
-        # 下載並獲取影片資訊
-        video_info, error = await self.youtube.download_audio(url, folder, interaction)
+        # 檢查是否需要立即下載（隊列為空時）
+        should_download = queue_size == 0
+        
+        if should_download:
+            # 下載並獲取影片資訊
+            video_info, error = await self.youtube.download_audio(url, folder, interaction)
+        else:
+            # 只獲取影片資訊，不下載
+            video_info, error = await self.youtube.get_video_info_without_download(url, interaction)
         
         if error:
             embed = discord.Embed(title=f"❌ | {error}", color=discord.Color.red())
@@ -269,6 +282,24 @@ class YTMusic(commands.Cog):
         else:
             await interaction.response.send_message(embed=embed)
         return True
+
+    async def download_next_song(self, interaction, item):
+        """下載下一首歌曲"""
+        if not item or item.get('file_path'):  # 如果已經有檔案路徑，表示已下載
+            return item
+            
+        guild_id = interaction.guild.id
+        _, folder = get_guild_queue_and_folder(guild_id)
+        
+        # 下載歌曲
+        downloaded_info, error = await self.youtube.download_audio(item['url'], folder, interaction)
+        if error:
+            logger.error(f"[音樂] 伺服器 ID： {guild_id}, 下載下一首歌曲失敗： {error}")
+            return None
+            
+        # 更新檔案路徑
+        item['file_path'] = downloaded_info['file_path']
+        return item
 
     async def play_next(self, interaction, force_new=False):
         guild_id = interaction.guild.id
@@ -336,7 +367,7 @@ class YTMusic(commands.Cog):
                         random.shuffle(queue_copy)
                     for song in queue_copy:
                         await queue.put(song)
-            # 獲取下一首歌曲
+            # 獲取並下載下一首歌曲
             if not play_mode == PlayMode.LOOP_SINGLE or force_new:
                 # 如果啟用隨機播放，重新排序整個隊列
                 if is_shuffle_enabled(guild_id):
@@ -344,6 +375,12 @@ class YTMusic(commands.Cog):
                     guild_queues[guild_id] = new_queue
                 
                 item = await queue.get()
+                # 下載歌曲
+                item = await self.download_next_song(interaction, item)
+                if not item:
+                    await self.play_next(interaction, force_new=True)
+                    return
+                    
                 file_path = item["file_path"]
                 self.current_song = item
             try:
@@ -386,7 +423,9 @@ class YTMusic(commands.Cog):
                     minutes, seconds = divmod(item['duration'], 60)
                     embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
                     embed.add_field(name="⏱️ 播放時長", value=f"{minutes:02d}:{seconds:02d}", inline=True)
-                    embed.add_field(name="👀 觀看次數", value=f"{int(item['views']):,}", inline=True)
+                    # Ensure views is properly converted to integer
+                    views = int(float(item['views'])) if item['views'] else 0
+                    embed.add_field(name="👀 觀看次數", value=f"{views:,}", inline=True)
                     progress_bar = ProgressDisplay.create_progress_bar(0, item['duration'])
                     embed.add_field(name="🎵 播放進度", value=progress_bar, inline=False)
                     embed.add_field(name="📜 播放清單", value="清單為空", inline=False)
@@ -418,6 +457,31 @@ class YTMusic(commands.Cog):
             embed = discord.Embed(title="🌟 | 播放清單已播放完畢！", color=discord.Color.blue())
             await interaction.followup.send(embed=embed)
             self.current_message = None
+
+    async def download_next_in_queue(self, interaction):
+        """下載隊列中的下一首歌曲"""
+        guild_id = interaction.guild.id
+        queue = guild_queues.get(guild_id)
+        if not queue:
+            return
+            
+        # 檢查隊列中的下一首歌曲
+        next_song = None
+        queue_copy = []
+        
+        while not queue.empty():
+            item = await queue.get()
+            if not next_song and not item.get('file_path'):
+                next_song = item
+            queue_copy.append(item)
+            
+        # 重新將歌曲放回隊列
+        for item in queue_copy:
+            await queue.put(item)
+            
+        # 如果找到未下載的下一首歌曲，進行下載
+        if next_song:
+            await self.download_next_song(interaction, next_song)
 
     async def handle_after_play(self, interaction, file_path):
         guild_id = interaction.guild.id
@@ -464,8 +528,11 @@ class YTMusic(commands.Cog):
                         queue_size += 1
                     logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 已添加 {len(next_songs)} 首播放清單歌曲")
 
-        # 如果隊列為空且有播放清單歌曲，直接添加下一首
-        elif has_playlist_songs(guild_id):
+        # 下載隊列中的下一首歌曲
+        await self.download_next_in_queue(interaction)
+        
+        # 如果隊列為空且有播放清單歌曲，添加並下載下一首
+        if queue_size == 0 and has_playlist_songs(guild_id):
             _, folder = get_guild_queue_and_folder(guild_id)
             next_songs = await get_next_playlist_songs(
                 guild_id,

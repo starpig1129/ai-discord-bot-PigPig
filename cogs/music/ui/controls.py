@@ -279,15 +279,15 @@ class MusicControlView(discord.ui.View):
             
             # 添加當前播放的歌曲
             if current_song:
-                minutes, seconds = divmod(current_song["duration"], 60)
-                queue_text += f"▶️ 正在播放: {current_song['title']} | {minutes:02d}:{seconds:02d}\n\n"
+                minutes, seconds = divmod(float(current_song["duration"]), 60)
+                queue_text += f"▶️ 正在播放: {current_song['title']} | {int(minutes):02d}:{int(seconds):02d}\n\n"
             
             # 添加隊列中的歌曲
             if queue_items:
                 queue_text += "待播放歌曲:\n"
                 for i, item in enumerate(queue_items, 1):
-                    minutes, seconds = divmod(item["duration"], 60)
-                    queue_text += f"{i}. {item['title']} | {minutes:02d}:{seconds:02d}\n"
+                    minutes, seconds = divmod(float(item["duration"]), 60)
+                    queue_text += f"{i}. {item['title']} | {int(minutes):02d}:{int(seconds):02d}\n"
             
             if not queue_text:
                 queue_text = "清單為空"

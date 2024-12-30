@@ -27,10 +27,11 @@ def get_guild_queue_and_folder(guild_id):
     if guild_id not in guild_queues:
         guild_queues[guild_id] = asyncio.Queue()
 
-    # 為每個伺服器設定獨立的下載資料夾
-    guild_folder = f"./temp/music/{guild_id}"
-    if not os.path.exists(guild_folder):
-        os.makedirs(guild_folder)
+    # 為每個伺服器設定獨立的下載資料夾，使用絕對路徑
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    guild_folder = os.path.join(base_dir, "temp", "music", str(guild_id))
+    # 遞迴創建目錄，確保所有父目錄都存在
+    os.makedirs(guild_folder, exist_ok=True)
     return guild_queues[guild_id], guild_folder
 
 def clear_guild_queue(guild_id):
