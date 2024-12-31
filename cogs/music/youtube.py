@@ -5,10 +5,13 @@ import asyncio
 import yt_dlp
 from youtube_search import YoutubeSearch
 
-def check_ffmpeg():
+async def check_ffmpeg():
     """檢查 FFmpeg 是否可用且能正常運作"""
     try:
-        subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+        # 使用 asyncio.to_thread 非同步執行 FFmpeg 檢查
+        await asyncio.to_thread(
+            lambda: subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+        )
         return True
     except (subprocess.SubprocessError, FileNotFoundError):
         logger.error("FFmpeg 無法使用或運作異常")
@@ -17,13 +20,22 @@ def check_ffmpeg():
 class YouTubeManager:
     def __init__(self, time_limit=1800):  # 30 分鐘限制
         self.time_limit = time_limit
-        if not check_ffmpeg():
+        
+    @classmethod
+    async def create(cls, time_limit=1800):
+        """Create and initialize a new YouTubeManager instance"""
+        if not await check_ffmpeg():
             raise RuntimeError("系統需要 FFmpeg，但目前無法使用")
+        manager = cls(time_limit)
+        return manager
 
     async def search_videos(self, query, max_results=10):
         """搜尋 YouTube 影片"""
         try:
-            results = YoutubeSearch(query, max_results=max_results).to_dict()
+            # 使用 asyncio.to_thread 非同步執行搜尋
+            results = await asyncio.to_thread(
+                lambda: YoutubeSearch(query, max_results=max_results).to_dict()
+            )
             return results if results else []
         except Exception as e:
             logger.error(f"YouTube 搜尋失敗: {e}")
@@ -32,8 +44,8 @@ class YouTubeManager:
     async def download_playlist(self, url, folder, interaction):
         """下載 YouTube 播放清單的音訊"""
         try:
-            # 確保下載資料夾存在
-            os.makedirs(folder, exist_ok=True)
+            # 非同步確保下載資料夾存在
+            await asyncio.to_thread(os.makedirs, folder, exist_ok=True)
             
             # 因為要轉成 mp3 格式，所以直接使用 mp3 副檔名
             output_template = os.path.join(folder, '%(id)s.mp3')
@@ -53,26 +65,27 @@ class YouTubeManager:
                 'force_generic_extractor': False
             }
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(url, download=False)
-                if 'entries' not in info_dict:
-                    logger.error("[音樂] 無法取得播放清單資訊")
-                    return None, "無法取得播放清單資訊"
+            # 使用 asyncio.to_thread 非同步執行 yt-dlp 資訊提取
+            async def extract_info():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return await asyncio.to_thread(ydl.extract_info, url, download=False)
+            
+            info_dict = await extract_info()
+            if 'entries' not in info_dict:
+                logger.error("[音樂] 無法取得播放清單資訊")
+                return None, "無法取得播放清單資訊"
 
-                video_infos = []
-                remaining_infos = []
+            video_infos = []
+            remaining_infos = []
+            
+            # 使用 asyncio.gather 同時處理第一首歌曲的下載和其他歌曲的資訊獲取
+            if info_dict['entries']:
+                first_entry = info_dict['entries'][0]
+                video_url = first_entry['url']
                 
-                # 僅下載播放清單中的第一首歌曲
-                if info_dict['entries']:
-                    first_entry = info_dict['entries'][0]
-                    video_url = first_entry['url']
-                    video_info, error = await self.download_audio(video_url, folder, interaction)
-                    if video_info:
-                        video_infos.append(video_info)
-
-                # 只取得其他歌曲的基本資訊（不下載）
-                for entry in info_dict['entries'][1:]:
-                    video_info = {
+                # 準備其他歌曲的資訊
+                other_songs_info = [
+                    {
                         "url": entry['url'],
                         "title": entry.get('title', '未知標題'),
                         "duration": entry.get('duration', 0),
@@ -83,10 +96,19 @@ class YouTubeManager:
                         "user_avatar": interaction.user.avatar.url,
                         "file_path": None  # 尚未下載
                     }
-                    remaining_infos.append(video_info)
+                    for entry in info_dict['entries'][1:]
+                ]
+                
+                # 同時執行下載和資訊處理
+                first_song_download = self.download_audio(video_url, folder, interaction)
+                first_song_info, error = await first_song_download
+                
+                if first_song_info:
+                    video_infos.append(first_song_info)
+                remaining_infos.extend(other_songs_info)
 
-                video_infos.extend(remaining_infos)
-                return video_infos, None
+            video_infos.extend(remaining_infos)
+            return video_infos, None
 
         except Exception as e:
             logger.error(f"[音樂] 播放清單下載失敗: {e}")
@@ -110,28 +132,32 @@ class YouTubeManager:
                 'force_generic_extractor': False
             }
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(url, download=False)
+            # 使用 asyncio.to_thread 非同步執行 yt-dlp 資訊提取
+            async def extract_info():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return await asyncio.to_thread(ydl.extract_info, url, download=False)
+            
+            info_dict = await extract_info()
 
-                # 檢查影片時長是否超過限制
-                if info_dict.get('duration', 0) > self.time_limit:
-                    logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
-                    return None, "影片時長過長！超過 30 分鐘"
+            # 檢查影片時長是否超過限制
+            if info_dict.get('duration', 0) > self.time_limit:
+                logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
+                return None, "影片時長過長！超過 30 分鐘"
 
-                # 回傳影片資訊
-                video_info = {
-                    "file_path": None,  # 尚未下載
-                    "title": info_dict.get('title', '未知標題'),
-                    "url": url,
-                    "duration": info_dict.get('duration', 0),
-                    "video_id": info_dict.get('id', '未知ID'),
-                    "author": info_dict.get('uploader', '未知上傳者'),
-                    "views": info_dict.get('view_count', 0),
-                    "requester": interaction.user,
-                    "user_avatar": interaction.user.avatar.url
-                }
+            # 回傳影片資訊
+            video_info = {
+                "file_path": None,  # 尚未下載
+                "title": info_dict.get('title', '未知標題'),
+                "url": url,
+                "duration": info_dict.get('duration', 0),
+                "video_id": info_dict.get('id', '未知ID'),
+                "author": info_dict.get('uploader', '未知上傳者'),
+                "views": info_dict.get('view_count', 0),
+                "requester": interaction.user,
+                "user_avatar": interaction.user.avatar.url
+            }
 
-                return video_info, None
+            return video_info, None
 
         except Exception as e:
             logger.error(f"[音樂] 取得影片資訊失敗: {e}")
@@ -140,20 +166,20 @@ class YouTubeManager:
     async def download_audio(self, url, folder, interaction):
         """下載 YouTube 影片的音訊"""
         try:
-            # 確保下載資料夾存在
-            os.makedirs(folder, exist_ok=True)
+            # 非同步確保下載資料夾存在
+            await asyncio.to_thread(os.makedirs, folder, exist_ok=True)
             
             # 因為要轉成 mp3 格式，所以直接使用 mp3 副檔名
             output_template = os.path.join(folder, '%(id)s')
             
-            # 檢查輸出資料夾是否可寫入
-            if not os.access(folder, os.W_OK):
+            # 非同步檢查輸出資料夾是否可寫入
+            if not await asyncio.to_thread(os.access, folder, os.W_OK):
                 logger.error(f"無法寫入下載目錄: {folder}")
                 return None, "無法寫入下載目錄"
 
-            # 檢查可用磁碟空間（至少需要 100MB）
+            # 非同步檢查可用磁碟空間
             try:
-                statvfs = os.statvfs(folder)
+                statvfs = await asyncio.to_thread(os.statvfs, folder)
                 available_space = statvfs.f_frsize * statvfs.f_bavail
                 if available_space < 100 * 1024 * 1024:  # 100MB
                     logger.error(f"磁碟空間不足: {folder}")
@@ -208,14 +234,19 @@ class YouTubeManager:
 
             logger.info(f"[音樂] 開始下載 (伺服器 ID: {interaction.guild.id}): {url} 到 {folder}")
 
+            # 使用 asyncio.to_thread 非同步執行 yt-dlp 資訊提取
+            async def extract_info():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return await asyncio.to_thread(ydl.extract_info, url, download=False)
+            
+            info_dict = await extract_info()
+
+            # 檢查影片時長是否超過限制
+            if info_dict.get('duration', 0) > self.time_limit:
+                logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
+                return None, "影片時長過長！超過 30 分鐘"
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(url, download=False)
-
-                # 檢查影片時長是否超過限制
-                if info_dict.get('duration', 0) > self.time_limit:
-                    logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
-                    return None, "影片時長過長！超過 30 分鐘"
-
                 try:
                     # 執行下載音訊
                     logger.info(f"[音樂] 正在開始下載 (伺服器 ID: {interaction.guild.id}): {url}")
@@ -225,7 +256,8 @@ class YouTubeManager:
                     retry_count = 0
                     while retry_count < max_retries:
                         try:
-                            ydl.download([url])
+                            # 非同步執行下載
+                            await asyncio.to_thread(ydl.download, [url])
                             logger.info(f"[音樂] 下載完成 (伺服器 ID: {interaction.guild.id}): {url}")
                             break
                         except Exception as download_error:
@@ -235,49 +267,59 @@ class YouTubeManager:
                             logger.warning(f"[音樂] 下載失敗，嘗試重新下載 {retry_count}/{max_retries} 次: {str(download_error)}")
                             await asyncio.sleep(2)  # 重試前先停頓數秒
                     
-                    # 驗證輸出檔案是否存在且不為空
+                    # 非同步驗證輸出檔案
                     file_path = os.path.join(folder, f"{info_dict['id']}.mp3")
-                    if not os.path.exists(file_path):
+                    exists = await asyncio.to_thread(os.path.exists, file_path)
+                    if not exists:
                         raise Exception("輸出檔案不存在")
-                    if os.path.getsize(file_path) == 0:
+                    
+                    size = await asyncio.to_thread(os.path.getsize, file_path)
+                    if size == 0:
                         raise Exception("輸出檔案為空")
 
-                    # 驗證此檔案是否為有效的 MP3
+                    # 非同步驗證 MP3 格式
                     try:
-                        subprocess.run(['ffmpeg', '-v', 'error', '-i', file_path, '-f', 'null', '-'],
-                                       check=True, capture_output=True)
+                        await asyncio.to_thread(
+                            lambda: subprocess.run(
+                                ['ffmpeg', '-v', 'error', '-i', file_path, '-f', 'null', '-'],
+                                check=True, capture_output=True
+                            )
+                        )
                     except subprocess.CalledProcessError as e:
                         raise Exception(f"檔案不是有效的 MP3 格式: {e.stderr.decode()}")
+
+                    # 回傳影片資訊
+                    video_info = {
+                        "file_path": file_path,
+                        "title": info_dict.get('title', '未知標題'),
+                        "url": url,
+                        "duration": info_dict.get('duration', 0),
+                        "video_id": info_dict.get('id', '未知ID'),
+                        "author": info_dict.get('uploader', '未知上傳者'),
+                        "views": info_dict.get('view_count', 0),
+                        "requester": interaction.user,
+                        "user_avatar": interaction.user.avatar.url
+                    }
+
+                    return video_info, None
+
                 except Exception as e:
                     logger.error(f"[音樂] 下載過程發生錯誤: {str(e)}")
                     # 如果只下載到部分檔案，嘗試進行清理
                     try:
                         partial_file = os.path.join(folder, f"{info_dict['id']}")
-                        if os.path.exists(partial_file):
-                            os.remove(partial_file)
-                        if os.path.exists(f"{partial_file}.mp3"):
-                            os.remove(f"{partial_file}.mp3")
+                        # 非同步清理檔案
+                        async def clean_file(path):
+                            if await asyncio.to_thread(os.path.exists, path):
+                                await asyncio.to_thread(os.remove, path)
+                        
+                        await asyncio.gather(
+                            clean_file(partial_file),
+                            clean_file(f"{partial_file}.mp3")
+                        )
                     except Exception as cleanup_error:
                         logger.error(f"[音樂] 無法清理部分下載檔案: {str(cleanup_error)}")
                     raise
-
-                # 由於已經轉為 mp3，直接使用 mp3 副檔名
-                file_path = os.path.join(folder, f"{info_dict['id']}.mp3")
-
-                # 回傳影片資訊
-                video_info = {
-                    "file_path": file_path,
-                    "title": info_dict.get('title', '未知標題'),
-                    "url": url,
-                    "duration": info_dict.get('duration', 0),
-                    "video_id": info_dict.get('id', '未知ID'),
-                    "author": info_dict.get('uploader', '未知上傳者'),
-                    "views": info_dict.get('view_count', 0),
-                    "requester": interaction.user,
-                    "user_avatar": interaction.user.avatar.url
-                }
-
-                return video_info, None
 
         except Exception as e:
             logger.error(f"[音樂] 下載失敗: {e}")

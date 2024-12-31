@@ -29,11 +29,15 @@ from .ui.progress import ProgressDisplay
 class YTMusic(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.youtube = YouTubeManager()
+        self.youtube = None  # Will be initialized in setup_hook
         self.current_song = None
         self.current_message = None
-        self.current_audio = None  # Store FFmpegPCMAudio instance for reuse
-        self._executor = ThreadPoolExecutor(max_workers=3)  # For CPU-bound tasks
+        self.current_audio = None
+        self._executor = ThreadPoolExecutor(max_workers=3)
+
+    async def setup_hook(self):
+        """Initialize async components"""
+        self.youtube = await YouTubeManager.create()
         
     async def update_player_ui(self, interaction, item, view=None):
         """更新播放器UI"""
