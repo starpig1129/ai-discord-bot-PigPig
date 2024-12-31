@@ -1,11 +1,13 @@
 import os
 import asyncio
 import random
+import functools
 import discord
 from discord import FFmpegPCMAudio
 from discord.ext import commands
 from discord import app_commands
 import logging as logger
+from concurrent.futures import ThreadPoolExecutor
 
 from .queue import (
     get_guild_queue_and_folder,
@@ -30,6 +32,8 @@ class YTMusic(commands.Cog):
         self.youtube = YouTubeManager()
         self.current_song = None
         self.current_message = None
+        self.current_audio = None  # Store FFmpegPCMAudio instance for reuse
+        self._executor = ThreadPoolExecutor(max_workers=3)  # For CPU-bound tasks
         
     async def update_player_ui(self, interaction, item, view=None):
         """更新播放器UI"""
@@ -70,16 +74,17 @@ class YTMusic(commands.Cog):
         view.current_embed = embed
         view.current_position = 0
         
-        # 取消舊的更新任務
+        # 取消舊的更新任務並等待取消完成
         if hasattr(self, '_current_view') and self._current_view and self._current_view.update_task:
             self._current_view.update_task.cancel()
-            await asyncio.sleep(0.1)  # 等待任務完全取消
-            
-        # 保存新的視圖引用
+            try:
+                await asyncio.wait_for(self._current_view.update_task, timeout=0.1)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
+
+        # 保存新的視圖引用並啟動更新任務
         self._current_view = view
-        
-        # 開始更新進度
-        view.update_task = self.bot.loop.create_task(view.update_progress(item['duration']))
+        view.update_task = asyncio.create_task(view.update_progress(item['duration']))
 
     @app_commands.command(name="mode", description="設置播放模式 (不循環/清單循環/單曲循環)")
     async def mode(self, interaction: discord.Interaction, mode: str):
@@ -140,25 +145,16 @@ class YTMusic(commands.Cog):
                         await interaction.followup.send(embed=embed)
                         return
                     
-                    # 檢查隊列中的歌曲數量
-                    queue_size = 0
-                    queue_copy = []
-                    while not queue.empty():
-                        item = await queue.get()
-                        queue_copy.append(item)
-                        queue_size += 1
-                    
-                    # 重新將歌曲放回隊列
-                    for item in queue_copy:
-                        await queue.put(item)
+                    # 使用queue.qsize()直接獲取隊列大小
+                    queue_size = queue.qsize()
                     
                     # 計算需要添加的歌曲數量
                     songs_to_add = min(5 - queue_size, len(video_infos))
                     
-                    # 將歌曲加入隊列
+                    # 使用put_nowait優化隊列操作
                     added_songs = video_infos[:songs_to_add]
                     for video_info in added_songs:
-                        await queue.put(video_info)
+                        queue.put_nowait(video_info)
                     
                     # 保存剩餘歌曲到播放清單，並確保它們按順序添加
                     remaining_songs = video_infos[songs_to_add:]
@@ -177,9 +173,11 @@ class YTMusic(commands.Cog):
                                 interaction=interaction
                             )
                             if next_songs:
+                                # 使用put_nowait優化隊列操作
                                 for song in next_songs:
-                                    await queue.put(song)
-                                logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 已立即添加 {len(next_songs)} 首播放清單歌曲")
+                                    queue.put_nowait(song)
+                                if logger.getLogger().isEnabledFor(logger.DEBUG):
+                                    logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 已立即添加 {len(next_songs)} 首播放清單歌曲")
                     
                     # 創建嵌入訊息顯示已加入的歌曲
                     description = "\n".join([f"🎵 {info['title']}" for info in added_songs])
@@ -229,17 +227,8 @@ class YTMusic(commands.Cog):
         guild_id = interaction.guild.id
         queue, folder = get_guild_queue_and_folder(guild_id)
 
-        # 檢查隊列中的歌曲數量
-        queue_size = 0
-        queue_copy = []
-        while not queue.empty():
-            item = await queue.get()
-            queue_copy.append(item)
-            queue_size += 1
-        
-        # 重新將歌曲放回隊列
-        for item in queue_copy:
-            await queue.put(item)
+        # 使用queue.qsize()直接獲取隊列大小
+        queue_size = queue.qsize()
 
         # 如果隊列已滿，則不添加新歌曲
         if queue_size >= 5:
@@ -272,8 +261,8 @@ class YTMusic(commands.Cog):
                 await interaction.response.send_message(embed=embed)
             return False
 
-        # 將檔案資訊加入佇列
-        await queue.put(video_info)
+        # 使用put_nowait優化隊列操作
+        queue.put_nowait(video_info)
 
         logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 使用者名稱： {interaction.user.name}, 成功將 {video_info['title']} 添加到播放清單")
         embed = discord.Embed(title=f"✅ | 已添加到播放清單： {video_info['title']}", color=discord.Color.blue())
@@ -321,21 +310,25 @@ class YTMusic(commands.Cog):
                 return
             
             try:
-                # 確保語音客戶端準備就緒
+                # 優化停止播放的等待邏輯
                 if voice_client.is_playing():
                     voice_client.stop()
-                    await asyncio.sleep(0.2)  # 短暫延遲等待停止完成
+                    try:
+                        # 使用wait_for來等待播放停止，最多等待0.5秒
+                        async def wait_for_stop():
+                            while voice_client.is_playing():
+                                await asyncio.sleep(0.1)
+                        await asyncio.wait_for(wait_for_stop(), timeout=0.5)
+                    except asyncio.TimeoutError:
+                        pass  # 如果超時，繼續執行
                 
-                # 等待確保完全停止
-                while voice_client.is_playing():
-                    await asyncio.sleep(0.1)
-                
-                await asyncio.sleep(0.3)  # 額外延遲確保穩定
-                
-                # 取消舊的更新任務
+                # 取消舊的更新任務並等待取消完成
                 if hasattr(self, '_current_view') and self._current_view and self._current_view.update_task:
                     self._current_view.update_task.cancel()
-                    await asyncio.sleep(0.1)  # 等待任務完全取消
+                    try:
+                        await asyncio.wait_for(self._current_view.update_task, timeout=0.1)
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        pass
                 
                 # 創建新的控制視圖並重置進度
                 view = MusicControlView(interaction, self)
@@ -344,9 +337,16 @@ class YTMusic(commands.Cog):
                 if self.current_message:
                     await self.update_player_ui(interaction, item, view)
                 
-                # 直接重新播放當前歌曲
+                # 重用或創建新的FFmpegPCMAudio實例
+                if self.current_audio:
+                    audio_source = self.current_audio
+                else:
+                    audio_source = FFmpegPCMAudio(file_path)
+                    self.current_audio = audio_source
+
+                # 開始播放
                 voice_client.play(
-                    FFmpegPCMAudio(file_path),
+                    audio_source,
                     after=lambda e: asyncio.run_coroutine_threadsafe(
                         self.handle_after_play(interaction, file_path),
                         self.bot.loop
@@ -362,11 +362,12 @@ class YTMusic(commands.Cog):
             if queue.empty() and play_mode == PlayMode.LOOP_QUEUE:
                 queue_copy, _ = await copy_queue(guild_id)
                 if queue_copy:
-                    # 如果啟用隨機播放，打亂順序
+                    # 使用非阻塞方式打亂順序
                     if is_shuffle_enabled(guild_id):
-                        random.shuffle(queue_copy)
+                        await asyncio.to_thread(random.shuffle, queue_copy)
+                    # 使用put_nowait優化隊列操作
                     for song in queue_copy:
-                        await queue.put(song)
+                        queue.put_nowait(song)
             # 獲取並下載下一首歌曲
             if not play_mode == PlayMode.LOOP_SINGLE or force_new:
                 # 如果啟用隨機播放，重新排序整個隊列
@@ -387,20 +388,25 @@ class YTMusic(commands.Cog):
                 # 保存當前播放的歌曲信息
                 self.current_song = item
                 
-                # 確保語音客戶端準備就緒
+                # 優化停止播放的等待邏輯
                 if voice_client.is_playing():
                     voice_client.stop()
-                    await asyncio.sleep(0.2)  # 短暫延遲等待停止完成
+                    # 使用單一等待而不是多次sleep
+                    for _ in range(5):  # 最多等待0.5秒
+                        if not voice_client.is_playing():
+                            break
+                        await asyncio.sleep(0.1)
                 
-                # 等待確保完全停止
-                while voice_client.is_playing():
-                    await asyncio.sleep(0.1)
-                
-                await asyncio.sleep(0.3)  # 額外延遲確保穩定
-                
+                # 創建或重用音頻源
+                if play_mode == PlayMode.LOOP_SINGLE and self.current_audio:
+                    audio_source = self.current_audio
+                else:
+                    audio_source = FFmpegPCMAudio(file_path)
+                    self.current_audio = audio_source
+
                 # 開始播放
                 voice_client.play(
-                    FFmpegPCMAudio(file_path),
+                    audio_source,
                     after=lambda e: asyncio.run_coroutine_threadsafe(
                         self.handle_after_play(interaction, file_path),
                         self.bot.loop
@@ -445,7 +451,11 @@ class YTMusic(commands.Cog):
                     # 開始更新進度
                     if view.update_task:
                         view.update_task.cancel()
-                    view.update_task = self.bot.loop.create_task(view.update_progress(item['duration']))
+                        try:
+                            await asyncio.wait_for(view.update_task, timeout=0.1)
+                        except (asyncio.TimeoutError, asyncio.CancelledError):
+                            pass
+                    view.update_task = asyncio.create_task(view.update_progress(item['duration']))
                 
             except Exception as e:
                 logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 播放音樂時出錯： {e}")
@@ -459,29 +469,29 @@ class YTMusic(commands.Cog):
             self.current_message = None
 
     async def download_next_in_queue(self, interaction):
-        """下載隊列中的下一首歌曲"""
+        """下載隊列中的下一首歌曲 - 優化版本"""
         guild_id = interaction.guild.id
         queue = guild_queues.get(guild_id)
-        if not queue:
+        if not queue or queue.empty():
             return
-            
-        # 檢查隊列中的下一首歌曲
-        next_song = None
-        queue_copy = []
-        
-        while not queue.empty():
-            item = await queue.get()
-            if not next_song and not item.get('file_path'):
-                next_song = item
-            queue_copy.append(item)
-            
-        # 重新將歌曲放回隊列
-        for item in queue_copy:
-            await queue.put(item)
-            
-        # 如果找到未下載的下一首歌曲，進行下載
-        if next_song:
-            await self.download_next_song(interaction, next_song)
+
+        # 使用queue._queue直接訪問內部隊列以避免修改隊列內容
+        try:
+            next_song = queue._queue[0]  # 直接查看下一首歌曲而不移除它
+            if not next_song.get('file_path'):
+                await self.download_next_song(interaction, next_song)
+        except (IndexError, AttributeError):
+            pass
+
+    async def delete_file(self, guild_id: int, file_path: str):
+        """Non-blocking file deletion using asyncio.to_thread"""
+        try:
+            if os.path.exists(file_path):
+                await asyncio.to_thread(os.remove, file_path)
+                if logger.getLogger().isEnabledFor(logger.DEBUG):
+                    logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 刪除檔案成功！")
+        except Exception as e:
+            logger.warning(f"[音樂] 伺服器 ID： {guild_id}, 刪除檔案失敗： {e}")
 
     async def handle_after_play(self, interaction, file_path):
         guild_id = interaction.guild.id
@@ -490,29 +500,13 @@ class YTMusic(commands.Cog):
         # 只在非單曲循環模式下刪除檔案
         play_mode = get_play_mode(guild_id)
         if play_mode != PlayMode.LOOP_SINGLE:
-            try:
-                if os.path.exists(file_path):
-                    await asyncio.sleep(1)
-                    os.remove(file_path)
-                    logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案成功！")
-            except Exception as e:
-                logger.warning(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案失敗： {e}")
+            asyncio.create_task(self.delete_file(guild_id, file_path))
 
-        # 檢查隊列中的歌曲數量
-        queue_size = 0
-        queue_copy = []
-        if queue:
-            while not queue.empty():
-                item = await queue.get()
-                queue_copy.append(item)
-                queue_size += 1
+        # 使用queue.qsize()直接獲取隊列大小
+        queue_size = queue.qsize() if queue else 0
 
-            # 重新將歌曲放回隊列
-            for item in queue_copy:
-                await queue.put(item)
-
-            # 如果隊列未滿且有更多播放清單歌曲，添加到隊列
-            if queue_size < 5 and has_playlist_songs(guild_id):
+        # 如果隊列未滿且有更多播放清單歌曲，添加到隊列
+        if queue_size < 5 and has_playlist_songs(guild_id):
                 remaining_space = 5 - queue_size
                 _, folder = get_guild_queue_and_folder(guild_id)
                 next_songs = await get_next_playlist_songs(
@@ -523,10 +517,12 @@ class YTMusic(commands.Cog):
                     interaction=interaction
                 )
                 if next_songs:
+                    # 使用put_nowait優化隊列操作
                     for song in next_songs:
-                        await queue.put(song)
+                        queue.put_nowait(song)
                         queue_size += 1
-                    logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 已添加 {len(next_songs)} 首播放清單歌曲")
+                    if logger.getLogger().isEnabledFor(logger.DEBUG):
+                        logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 已添加 {len(next_songs)} 首播放清單歌曲")
 
         # 下載隊列中的下一首歌曲
         await self.download_next_in_queue(interaction)
@@ -542,9 +538,10 @@ class YTMusic(commands.Cog):
                 interaction=interaction
             )
             if next_songs:
-                await queue.put(next_songs[0])
+                queue.put_nowait(next_songs[0])
                 queue_size = 1
-                logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 已添加下一首播放清單歌曲")
+                if logger.getLogger().isEnabledFor(logger.DEBUG):
+                    logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 已添加下一首播放清單歌曲")
 
         # 檢查播放模式並處理下一首歌曲
         play_mode = get_play_mode(guild_id)
@@ -553,21 +550,22 @@ class YTMusic(commands.Cog):
             voice_client = interaction.guild.voice_client
             if voice_client and voice_client.is_connected():
                 try:
-                    # 確保語音客戶端準備就緒
+                    # 優化停止播放的等待邏輯
                     if voice_client.is_playing():
                         voice_client.stop()
-                        await asyncio.sleep(0.2)  # 短暫延遲等待停止完成
+                        # 使用單一等待而不是多次sleep
+                        for _ in range(5):  # 最多等待0.5秒
+                            if not voice_client.is_playing():
+                                break
+                            await asyncio.sleep(0.1)
                     
-                    # 等待確保完全停止
-                    while voice_client.is_playing():
-                        await asyncio.sleep(0.1)
-                    
-                    await asyncio.sleep(0.3)  # 額外延遲確保穩定
-                    
-                    # 取消舊的更新任務
+                    # 取消舊的更新任務並等待取消完成
                     if hasattr(self, '_current_view') and self._current_view and self._current_view.update_task:
                         self._current_view.update_task.cancel()
-                        await asyncio.sleep(0.1)  # 等待任務完全取消
+                        try:
+                            await asyncio.wait_for(self._current_view.update_task, timeout=0.1)
+                        except (asyncio.TimeoutError, asyncio.CancelledError):
+                            pass
                     
                     # 創建新的控制視圖並重置進度
                     view = MusicControlView(interaction, self)
@@ -576,9 +574,16 @@ class YTMusic(commands.Cog):
                     if self.current_message:
                         await self.update_player_ui(interaction, self.current_song, view)
                     
+                    # 創建或重用音頻源
+                    if play_mode == PlayMode.LOOP_SINGLE and self.current_audio:
+                        audio_source = self.current_audio
+                    else:
+                        audio_source = FFmpegPCMAudio(file_path)
+                        self.current_audio = audio_source
+
                     # 開始播放
                     voice_client.play(
-                        FFmpegPCMAudio(file_path),
+                        audio_source,
                         after=lambda e: asyncio.run_coroutine_threadsafe(
                             self.handle_after_play(interaction, file_path),
                             self.bot.loop
@@ -598,16 +603,17 @@ class YTMusic(commands.Cog):
         if member.bot and before.channel is not None and after.channel is None:
             guild_id = member.guild.id
             _, folder = get_guild_queue_and_folder(guild_id)
-            logger.info(f"[音樂] 伺服器 ID： {member.guild.id}, 離開語音頻道")
-            await asyncio.sleep(2)
-            # 刪除所有音檔
-            for file in os.listdir(folder):
-                file_path = os.path.join(folder, file)
-                try:
-                    os.remove(file_path)
-                    logger.debug(f"[音樂] 伺服器 ID： {member.guild.id}, 刪除檔案成功！")
-                except Exception as e:
-                    logger.warning(f"[音樂] 伺服器 ID： {member.guild.id}, 刪除檔案失敗： {e}")
+            if logger.getLogger().isEnabledFor(logger.INFO):
+                logger.info(f"[音樂] 伺服器 ID： {member.guild.id}, 離開語音頻道")
+
+            # 使用非阻塞方式刪除檔案
+            async def delete_files():
+                for file in os.listdir(folder):
+                    file_path = os.path.join(folder, file)
+                    await self.delete_file(guild_id, file_path)
+
+            # 創建非阻塞任務
+            asyncio.create_task(delete_files())
             
             # 清空播放隊列
             if guild_id in guild_queues:
