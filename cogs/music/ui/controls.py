@@ -31,8 +31,10 @@ class MusicControlView(discord.ui.View):
                 return
                 
             self._is_updating = True
-            update_interval = 1
+            update_interval = 5  # Reduce update frequency to every 5 seconds
             last_update = 0
+            message_refresh_interval = 600  # Refresh message every 10 minutes
+            last_message_refresh = asyncio.get_event_loop().time()
             
             try:
                 while True:
@@ -44,18 +46,45 @@ class MusicControlView(discord.ui.View):
                         break
                         
                     current_time = asyncio.get_event_loop().time()
+                    
+                    # Check if we need to refresh the message to avoid token expiration
+                    if current_time - last_message_refresh >= message_refresh_interval:
+                        try:
+                            # Create a new message and delete the old one
+                            new_message = await self.message.channel.send(embed=self.current_embed, view=self)
+                            await self.message.delete()
+                            self.message = new_message
+                            last_message_refresh = current_time
+                        except Exception as e:
+                            logger.error(f"刷新訊息失敗: {e}")
+                            break  # Stop updating if we can't refresh the message
+                    
+                    # Update progress bar
                     if current_time - last_update >= update_interval:
                         if self.current_embed and self.message:
-                            # 使用新的進度條顯示
-                            progress_bar = ProgressDisplay.create_progress_bar(self.current_position, duration)
-                            self.current_embed.set_field_at(3, name="🎵 播放進度", value=progress_bar, inline=False)
-                            
-                            # 更新訊息
                             try:
+                                progress_bar = ProgressDisplay.create_progress_bar(self.current_position, duration)
+                                self.current_embed.set_field_at(3, name="🎵 播放進度", value=progress_bar, inline=False)
+                                
                                 await self.message.edit(embed=self.current_embed, view=self)
                                 last_update = current_time
                             except discord.errors.HTTPException as e:
-                                logger.error(f"更新進度條位置失敗: {e}")
+                                if e.code == 50027:  # Invalid Webhook Token
+                                    try:
+                                        # Create a new message if token is expired
+                                        new_message = await self.message.channel.send(embed=self.current_embed, view=self)
+                                        try:
+                                            await self.message.delete()
+                                        except discord.errors.NotFound:
+                                            pass  # Message already deleted
+                                        self.message = new_message
+                                        last_update = current_time
+                                        logger.info("Successfully recreated message in update_progress due to expired webhook token")
+                                    except Exception as inner_e:
+                                        logger.error(f"Failed to recreate message in update_progress: {inner_e}")
+                                        break  # Stop updating if we can't recreate the message
+                                else:
+                                    logger.error(f"更新進度條位置失敗: {e}")
                     
                     await asyncio.sleep(1)
             finally:
@@ -70,7 +99,23 @@ class MusicControlView(discord.ui.View):
         if self.current_embed and self.message:
             self.current_embed.title = title
             self.current_embed.color = color
-            await self.message.edit(embed=self.current_embed)
+            try:
+                await self.message.edit(embed=self.current_embed)
+            except discord.errors.HTTPException as e:
+                if e.code == 50027:  # Invalid Webhook Token
+                    try:
+                        # Create a new message if token is expired
+                        new_message = await self.message.channel.send(embed=self.current_embed, view=self)
+                        try:
+                            await self.message.delete()
+                        except discord.errors.NotFound:
+                            pass  # Message already deleted
+                        self.message = new_message
+                        logger.info("Successfully recreated message in update_embed due to expired webhook token")
+                    except Exception as inner_e:
+                        logger.error(f"Failed to recreate message in update_embed: {inner_e}")
+                else:
+                    logger.error(f"Failed to update embed: {e}")
 
     @discord.ui.button(emoji='⏮️', style=discord.ButtonStyle.gray)
     async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -293,7 +338,23 @@ class MusicControlView(discord.ui.View):
                 queue_text = "清單為空"
             
             self.current_embed.set_field_at(4, name="📜 播放清單", value=queue_text, inline=False)
-            await self.message.edit(embed=self.current_embed)
+            try:
+                await self.message.edit(embed=self.current_embed)
+            except discord.errors.HTTPException as e:
+                if e.code == 50027:  # Invalid Webhook Token
+                    try:
+                        # Create a new message if token is expired
+                        new_message = await self.message.channel.send(embed=self.current_embed, view=self)
+                        try:
+                            await self.message.delete()
+                        except discord.errors.NotFound:
+                            pass  # Message already deleted
+                        self.message = new_message
+                        logger.info("Successfully recreated message in show_queue due to expired webhook token")
+                    except Exception as inner_e:
+                        logger.error(f"Failed to recreate message in show_queue: {inner_e}")
+                else:
+                    logger.error(f"Failed to update queue display: {e}")
             await interaction.response.defer()
         else:
             await interaction.response.send_message("無法更新播放清單", ephemeral=True)

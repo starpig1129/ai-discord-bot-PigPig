@@ -47,7 +47,26 @@ class SongSelectView(discord.ui.View):
             # 禁用選擇菜單
             for child in self.children:
                 child.disabled = True
-            await interaction.message.edit(view=self)
+            try:
+                await interaction.message.edit(view=self)
+            except discord.errors.HTTPException as e:
+                if e.code == 50027:  # Invalid Webhook Token
+                    try:
+                        # Create a new message if token is expired
+                        new_message = await interaction.message.channel.send(view=self)
+                        try:
+                            await interaction.message.delete()
+                        except discord.errors.NotFound:
+                            pass  # Message already deleted
+                        logger.info("Successfully recreated message in song select due to expired webhook token")
+                    except Exception as inner_e:
+                        logger.error(f"Failed to recreate message in song select: {inner_e}")
+                else:
+                    logger.error(f"Failed to update song select view: {e}")
         except Exception as e:
             logger.error(f"選擇歌曲時出錯: {e}")
-            await interaction.response.send_message("❌ 選擇歌曲時出錯", ephemeral=True)
+            try:
+                await interaction.response.send_message("❌ 選擇歌曲時出錯", ephemeral=True)
+            except discord.errors.HTTPException:
+                # If we can't send the error message through the interaction, try sending it directly
+                await interaction.channel.send("❌ 選擇歌曲時出錯")

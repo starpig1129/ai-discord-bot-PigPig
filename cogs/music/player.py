@@ -41,54 +41,81 @@ class YTMusic(commands.Cog):
         
     async def update_player_ui(self, interaction, item, view=None):
         """更新播放器UI"""
-        if not self.current_message:
-            return
-            
-        embed = discord.Embed(
-            title="🎵 正在播放",
-            description=f"**[{item['title']}]({item['url']})**",
-            color=discord.Color.blue()
-        )
-        
-        minutes, seconds = divmod(item['duration'], 60)
-        embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
-        embed.add_field(name="⏱️ 播放時長", value=f"{int(minutes):02d}:{int(seconds):02d}", inline=True)
-        # Handle views count safely
         try:
-            views = int(float(item.get('views', 0)))
-            views_str = f"{views:,}"
-        except (ValueError, TypeError):
-            views_str = "N/A"
-        embed.add_field(name="👀 觀看次數", value=views_str, inline=True)
-        progress_bar = ProgressDisplay.create_progress_bar(0, item['duration'])
-        embed.add_field(name="🎵 播放進度", value=progress_bar, inline=False)
-        embed.add_field(name="📜 播放清單", value="清單為空", inline=False)
-        
-        thumbnail = self.youtube.get_thumbnail_url(item['video_id'])
-        embed.set_thumbnail(url=thumbnail)
-        embed.set_footer(text=f"由 {item['requester'].name} 添加", icon_url=item['user_avatar'])
-        
-        if not view:
-            view = MusicControlView(interaction, self)
+            embed = discord.Embed(
+                title="🎵 正在播放",
+                description=f"**[{item['title']}]({item['url']})**",
+                color=discord.Color.blue()
+            )
             
-        await self.current_message.edit(embed=embed, view=view)
-        
-        # 設置視圖的訊息和 embed
-        view.message = self.current_message
-        view.current_embed = embed
-        view.current_position = 0
-        
-        # 取消舊的更新任務並等待取消完成
-        if hasattr(self, '_current_view') and self._current_view and self._current_view.update_task:
-            self._current_view.update_task.cancel()
+            minutes, seconds = divmod(item['duration'], 60)
+            embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
+            embed.add_field(name="⏱️ 播放時長", value=f"{int(minutes):02d}:{int(seconds):02d}", inline=True)
+            # Handle views count safely
             try:
-                await asyncio.wait_for(self._current_view.update_task, timeout=0.1)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                pass
+                views = int(float(item.get('views', 0)))
+                views_str = f"{views:,}"
+            except (ValueError, TypeError):
+                views_str = "N/A"
+            embed.add_field(name="👀 觀看次數", value=views_str, inline=True)
+            progress_bar = ProgressDisplay.create_progress_bar(0, item['duration'])
+            embed.add_field(name="🎵 播放進度", value=progress_bar, inline=False)
+            embed.add_field(name="📜 播放清單", value="清單為空", inline=False)
+            
+            thumbnail = self.youtube.get_thumbnail_url(item['video_id'])
+            embed.set_thumbnail(url=thumbnail)
+            embed.set_footer(text=f"由 {item['requester'].name} 添加", icon_url=item['user_avatar'])
+            
+            if not view:
+                view = MusicControlView(interaction, self)
 
-        # 保存新的視圖引用並啟動更新任務
-        self._current_view = view
-        view.update_task = asyncio.create_task(view.update_progress(item['duration']))
+            # If we have an existing message, try to edit it
+            if self.current_message:
+                try:
+                    await self.current_message.edit(embed=embed, view=view)
+                except discord.errors.HTTPException as e:
+                    if e.code == 50027:  # Invalid Webhook Token
+                        try:
+                            # Create a new message if token is expired
+                            new_message = await self.current_message.channel.send(embed=embed, view=view)
+                            try:
+                                await self.current_message.delete()
+                            except discord.errors.NotFound:
+                                pass  # Message already deleted
+                            self.current_message = new_message
+                            logger.info("Successfully recreated message due to expired webhook token")
+                        except Exception as inner_e:
+                            logger.error(f"Failed to recreate message: {inner_e}")
+                            return
+                    else:
+                        logger.error(f"更新播放器UI失敗: {e}")
+                        return  # Don't proceed if we can't update the UI
+            else:
+                # Create new message if none exists
+                self.current_message = await interaction.followup.send(embed=embed, view=view)
+            
+            # 設置視圖的訊息和 embed
+            view.message = self.current_message
+            view.current_embed = embed
+            view.current_position = 0
+            
+            # 取消舊的更新任務並等待取消完成
+            if hasattr(self, '_current_view') and self._current_view and self._current_view.update_task:
+                self._current_view.update_task.cancel()
+                try:
+                    await asyncio.wait_for(self._current_view.update_task, timeout=0.1)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pass
+
+            # 保存新的視圖引用並啟動更新任務
+            self._current_view = view
+            view.update_task = asyncio.create_task(view.update_progress(item['duration']))
+            
+        except Exception as e:
+            logger.error(f"更新播放器UI失敗: {e}")
+            # If UI update fails, ensure music playback continues
+            if interaction.guild.voice_client and not interaction.guild.voice_client.is_playing():
+                await self.play_next(interaction, force_new=True)
 
     @app_commands.command(name="mode", description="設置播放模式 (不循環/清單循環/單曲循環)")
     async def mode(self, interaction: discord.Interaction, mode: str):
