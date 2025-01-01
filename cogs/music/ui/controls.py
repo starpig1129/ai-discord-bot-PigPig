@@ -2,23 +2,12 @@ import discord
 import asyncio
 import logging as logger
 from .progress import ProgressDisplay
-from ..queue import (
-    guild_queues,
-    PlayMode,
-    get_play_mode,
-    set_play_mode,
-    is_shuffle_enabled,
-    toggle_shuffle,
-    get_guild_queue_and_folder,
-    has_playlist_songs,
-    get_next_playlist_songs
-)
 
 class MusicControlView(discord.ui.View):
-    def __init__(self, interaction: discord.Interaction, cog):
+    def __init__(self, interaction: discord.Interaction, player):
         super().__init__(timeout=None)
         self.guild = interaction.guild
-        self.cog = cog
+        self.player = player
         self.current_position = 0
         self.message = None
         self.update_task = None
@@ -26,12 +15,11 @@ class MusicControlView(discord.ui.View):
 
     async def update_progress(self, duration):
         try:
-            # 確保只有一個更新任務在運行
             if hasattr(self, '_is_updating') and self._is_updating:
                 return
                 
             self._is_updating = True
-            update_interval = 5  # Reduce update frequency to every 5 seconds
+            update_interval = 5  # Update every 5 seconds
             last_update = 0
             message_refresh_interval = 600  # Refresh message every 10 minutes
             last_message_refresh = asyncio.get_event_loop().time()
@@ -47,17 +35,16 @@ class MusicControlView(discord.ui.View):
                         
                     current_time = asyncio.get_event_loop().time()
                     
-                    # Check if we need to refresh the message to avoid token expiration
+                    # Refresh message periodically
                     if current_time - last_message_refresh >= message_refresh_interval:
                         try:
-                            # Create a new message and delete the old one
                             new_message = await self.message.channel.send(embed=self.current_embed, view=self)
                             await self.message.delete()
                             self.message = new_message
                             last_message_refresh = current_time
                         except Exception as e:
                             logger.error(f"刷新訊息失敗: {e}")
-                            break  # Stop updating if we can't refresh the message
+                            break
                     
                     # Update progress bar
                     if current_time - last_update >= update_interval:
@@ -71,25 +58,23 @@ class MusicControlView(discord.ui.View):
                             except discord.errors.HTTPException as e:
                                 if e.code == 50027:  # Invalid Webhook Token
                                     try:
-                                        # Create a new message if token is expired
                                         new_message = await self.message.channel.send(embed=self.current_embed, view=self)
                                         try:
                                             await self.message.delete()
                                         except discord.errors.NotFound:
-                                            pass  # Message already deleted
+                                            pass
                                         self.message = new_message
                                         last_update = current_time
-                                        logger.info("Successfully recreated message in update_progress due to expired webhook token")
+                                        logger.info("Successfully recreated message in update_progress")
                                     except Exception as inner_e:
                                         logger.error(f"Failed to recreate message in update_progress: {inner_e}")
-                                        break  # Stop updating if we can't recreate the message
+                                        break
                                 else:
                                     logger.error(f"更新進度條位置失敗: {e}")
                     
                     await asyncio.sleep(1)
             finally:
                 self._is_updating = False
-                # 確保任務被正確取消時清理狀態
                 if hasattr(self, 'update_task'):
                     self.update_task = None
         except Exception as e:
@@ -104,14 +89,13 @@ class MusicControlView(discord.ui.View):
             except discord.errors.HTTPException as e:
                 if e.code == 50027:  # Invalid Webhook Token
                     try:
-                        # Create a new message if token is expired
                         new_message = await self.message.channel.send(embed=self.current_embed, view=self)
                         try:
                             await self.message.delete()
                         except discord.errors.NotFound:
-                            pass  # Message already deleted
+                            pass
                         self.message = new_message
-                        logger.info("Successfully recreated message in update_embed due to expired webhook token")
+                        logger.info("Successfully recreated message in update_embed")
                     except Exception as inner_e:
                         logger.error(f"Failed to recreate message in update_embed: {inner_e}")
                 else:
@@ -124,43 +108,37 @@ class MusicControlView(discord.ui.View):
             await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
             return
 
-        # 獲取當前播放的歌曲和隊列
-        current_song = self.cog.current_song
-        queue = guild_queues.get(self.guild.id)
+        state = self.player.state_manager.get_state(self.guild.id)
+        queue = self.player.queue_manager.get_queue(self.guild.id)
         if not queue:
             await interaction.response.send_message("❌ 沒有可播放的歌曲！", ephemeral=True)
             return
 
-        # 複製隊列內容
+        # Copy queue items
         queue_items = []
         temp_queue = asyncio.Queue()
         while not queue.empty():
             item = await queue.get()
             queue_items.append(item)
 
-        # 重新組織隊列順序
+        # Reorganize queue
         new_queue = asyncio.Queue()
-        if current_song:
-            await new_queue.put(current_song)  # 將當前歌曲放到最前面
+        if state.current_song:
+            await new_queue.put(state.current_song)
         for item in queue_items:
             await new_queue.put(item)
 
-        # 取消並清理更新任務
+        # Cancel update task
         if self.update_task:
             self.update_task.cancel()
             self.update_task = None
             self._is_updating = False
             
-        # 更新隊列並停止當前播放
-        guild_queues[self.guild.id] = new_queue
+        # Update queue and stop current playback
+        self.player.queue_manager.get_queue_state(self.guild.id).queue = new_queue
         voice_client.stop()
         
-        # 更新UI
         await self.update_embed(interaction, f"⏮️ {interaction.user.name} 返回上一首")
-        
-        # 清理視圖引用，讓新的視圖可以正確初始化
-        if hasattr(self.cog, '_current_view'):
-            self.cog._current_view = None
         await interaction.response.defer()
 
     @discord.ui.button(emoji='⏯️', style=discord.ButtonStyle.gray)
@@ -170,7 +148,6 @@ class MusicControlView(discord.ui.View):
             if voice_client.is_playing():
                 voice_client.pause()
                 await self.update_embed(interaction, f"⏸️ {interaction.user.name} 暫停了音樂")
-                # 取消並清理更新任務
                 if self.update_task:
                     self.update_task.cancel()
                     self.update_task = None
@@ -178,15 +155,14 @@ class MusicControlView(discord.ui.View):
             elif voice_client.is_paused():
                 voice_client.resume()
                 await self.update_embed(interaction, f"▶️ {interaction.user.name} 繼續了音樂")
-                # 確保沒有運行中的任務
                 if self.update_task:
                     self.update_task.cancel()
                     self.update_task = None
                     self._is_updating = False
-                # 重新啟動進度更新
-                if hasattr(self.cog, 'current_song'):
-                    self.update_task = self.cog.bot.loop.create_task(
-                        self.update_progress(self.cog.current_song["duration"])
+                state = self.player.state_manager.get_state(self.guild.id)
+                if state.current_song:
+                    self.update_task = asyncio.create_task(
+                        self.update_progress(state.current_song["duration"])
                     )
             await interaction.response.defer()
         else:
@@ -199,61 +175,43 @@ class MusicControlView(discord.ui.View):
             await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
             return
 
-        # 檢查是否有下一首歌曲
-        queue = guild_queues.get(self.guild.id)
+        queue = self.player.queue_manager.get_queue(self.guild.id)
         if not queue or queue.empty():
-            # 檢查是否有播放清單中的歌曲可以添加
-            if has_playlist_songs(self.guild.id):
-                _, folder = get_guild_queue_and_folder(self.guild.id)
-                next_songs = await get_next_playlist_songs(
+            if self.player.queue_manager.has_playlist_songs(self.guild.id):
+                _, folder = self.player._get_guild_folder(self.guild.id)
+                next_songs = await self.player.queue_manager.get_next_playlist_songs(
                     self.guild.id,
-                    count=1,
-                    youtube_manager=self.cog.youtube,
-                    folder=folder,
-                    interaction=interaction
+                    count=1
                 )
                 if next_songs:
-                    await queue.put(next_songs[0])
-                    logger.debug(f"[音樂] 伺服器 ID： {self.guild.id}, 已添加下一首播放清單歌曲")
+                    await self.player.queue_manager.add_to_queue(self.guild.id, next_songs[0])
 
-        # 取消並清理更新任務
         if self.update_task:
             self.update_task.cancel()
             self.update_task = None
             self._is_updating = False
             
-        # 停止當前播放，觸發播放下一首
         voice_client.stop()
         await self.update_embed(interaction, f"⏭️ {interaction.user.name} 跳過了音樂")
-        
-        # 清理視圖引用，讓新的視圖可以正確初始化
-        if hasattr(self.cog, '_current_view'):
-            self.cog._current_view = None
         await interaction.response.defer()
 
     @discord.ui.button(emoji='⏹️', style=discord.ButtonStyle.red)
     async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
         voice_client = self.guild.voice_client
         if voice_client:
-            # 清空播放隊列
-            queue = guild_queues.get(self.guild.id)
+            queue = self.player.queue_manager.get_queue(self.guild.id)
             if queue:
                 while not queue.empty():
                     await queue.get()
-            # 取消並清理更新任務
+                    
             if self.update_task:
                 self.update_task.cancel()
                 self.update_task = None
                 self._is_updating = False
             
-            # 停止播放
             voice_client.stop()
             await voice_client.disconnect()
             await self.update_embed(interaction, f"⏹️ {interaction.user.name} 停止了播放", discord.Color.red())
-            
-            # 清理視圖引用
-            if hasattr(self.cog, '_current_view'):
-                self.cog._current_view = None
             await interaction.response.defer()
         else:
             await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
@@ -262,27 +220,25 @@ class MusicControlView(discord.ui.View):
     async def toggle_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
         """切換播放模式"""
         guild_id = self.guild.id
-        current_mode = get_play_mode(guild_id)
+        current_mode = self.player.queue_manager.get_play_mode(guild_id)
         
-        # 循環切換模式
-        mode_order = [PlayMode.NO_LOOP, PlayMode.LOOP_QUEUE, PlayMode.LOOP_SINGLE]
-        current_index = mode_order.index(current_mode)
+        mode_order = ["no_loop", "loop_queue", "loop_single"]
+        current_index = mode_order.index(current_mode.value)
         next_mode = mode_order[(current_index + 1) % len(mode_order)]
         
-        set_play_mode(guild_id, next_mode)
+        self.player.queue_manager.set_play_mode(guild_id, next_mode)
         
-        # 更新按鈕樣式
         mode_emojis = {
-            PlayMode.NO_LOOP: '➡️',
-            PlayMode.LOOP_QUEUE: '🔁',
-            PlayMode.LOOP_SINGLE: '🔂'
+            "no_loop": '➡️',
+            "loop_queue": '🔁',
+            "loop_single": '🔂'
         }
         button.emoji = mode_emojis[next_mode]
         
         mode_names = {
-            PlayMode.NO_LOOP: "不循環",
-            PlayMode.LOOP_QUEUE: "清單循環",
-            PlayMode.LOOP_SINGLE: "單曲循環"
+            "no_loop": "不循環",
+            "loop_queue": "清單循環",
+            "loop_single": "單曲循環"
         }
         
         await self.update_embed(interaction, f"🔄 {interaction.user.name} 將播放模式設為 {mode_names[next_mode]}")
@@ -292,9 +248,8 @@ class MusicControlView(discord.ui.View):
     async def toggle_shuffle(self, interaction: discord.Interaction, button: discord.ui.Button):
         """切換隨機播放"""
         guild_id = self.guild.id
-        is_shuffle = toggle_shuffle(guild_id)
+        is_shuffle = self.player.queue_manager.toggle_shuffle(guild_id)
         
-        # 更新按鈕樣式
         button.style = discord.ButtonStyle.green if is_shuffle else discord.ButtonStyle.gray
         
         status = "開啟" if is_shuffle else "關閉"
@@ -303,31 +258,26 @@ class MusicControlView(discord.ui.View):
 
     @discord.ui.button(emoji='📜', style=discord.ButtonStyle.gray)
     async def show_queue(self, interaction: discord.Interaction, button: discord.ui.Button):
-        queue = guild_queues.get(self.guild.id)
+        guild_id = self.guild.id
+        queue = self.player.queue_manager.get_queue(guild_id)
+        state = self.player.state_manager.get_state(guild_id)
         
-        # 獲取當前播放的歌曲和隊列中的歌曲
-        current_song = self.cog.current_song
         queue_items = []
-        
         if queue:
-            # 複製隊列內容而不消耗原隊列
             temp_queue = asyncio.Queue()
             while not queue.empty():
                 item = await queue.get()
                 queue_items.append(item)
                 await temp_queue.put(item)
-            guild_queues[self.guild.id] = temp_queue
+            self.player.queue_manager.get_queue_state(guild_id).queue = temp_queue
 
-        # 更新播放清單到當前 embed
         if self.current_embed and self.message:
             queue_text = ""
             
-            # 添加當前播放的歌曲
-            if current_song:
-                minutes, seconds = divmod(float(current_song["duration"]), 60)
-                queue_text += f"▶️ 正在播放: {current_song['title']} | {int(minutes):02d}:{int(seconds):02d}\n\n"
+            if state.current_song:
+                minutes, seconds = divmod(float(state.current_song["duration"]), 60)
+                queue_text += f"▶️ 正在播放: {state.current_song['title']} | {int(minutes):02d}:{int(seconds):02d}\n\n"
             
-            # 添加隊列中的歌曲
             if queue_items:
                 queue_text += "待播放歌曲:\n"
                 for i, item in enumerate(queue_items, 1):
@@ -343,14 +293,13 @@ class MusicControlView(discord.ui.View):
             except discord.errors.HTTPException as e:
                 if e.code == 50027:  # Invalid Webhook Token
                     try:
-                        # Create a new message if token is expired
                         new_message = await self.message.channel.send(embed=self.current_embed, view=self)
                         try:
                             await self.message.delete()
                         except discord.errors.NotFound:
-                            pass  # Message already deleted
+                            pass
                         self.message = new_message
-                        logger.info("Successfully recreated message in show_queue due to expired webhook token")
+                        logger.info("Successfully recreated message in show_queue")
                     except Exception as inner_e:
                         logger.error(f"Failed to recreate message in show_queue: {inner_e}")
                 else:

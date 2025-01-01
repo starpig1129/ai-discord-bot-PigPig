@@ -2,71 +2,99 @@ import discord
 import logging as logger
 
 class SongSelectView(discord.ui.View):
-    def __init__(self, cog, results, original_interaction):
+    def __init__(self, player, results, interaction):
         super().__init__(timeout=60)
-        self.cog = cog
+        self.player = player
         self.results = results
-        self.original_interaction = original_interaction
+        self.original_interaction = interaction
         
-        # 創建選擇菜單
+        # Add select menu for songs
+        self.add_item(SongSelectMenu(self.results))
+        
+    async def on_timeout(self):
+        """Handle view timeout"""
+        try:
+            await self.original_interaction.edit_original_response(view=None)
+        except:
+            pass
+
+class SongSelectMenu(discord.ui.Select):
+    def __init__(self, results):
         options = []
-        for i, result in enumerate(results, 1):
+        for i, result in enumerate(results[:5], 1):  # Limit to 5 choices
+            duration = result.get('duration', 'N/A')
             options.append(discord.SelectOption(
-                label=f"{i}. {result['title'][:80]}", # Discord限制選項標籤最多100字符
-                description=f"{result['channel']} | {result.get('duration', 'N/A')}",
+                label=f"{i}. {result['title'][:80]}",  # Truncate long titles
+                description=f"Duration: {duration}",
                 value=str(i-1)
             ))
             
-        select = discord.ui.Select(
-            placeholder="選擇要播放的歌曲...",
-            options=options,
+        super().__init__(
+            placeholder="選擇要播放的歌曲",
             min_values=1,
-            max_values=1
+            max_values=1,
+            options=options
         )
-        select.callback = self.select_callback
-        self.add_item(select)
-    
-    async def select_callback(self, interaction: discord.Interaction):
+        self.results = results
+
+    async def callback(self, interaction: discord.Interaction):
+        """Handle song selection"""
         try:
-            # 獲取選擇的歌曲
-            selected_index = int(interaction.data['values'][0])
-            selected_result = self.results[selected_index]
-            video_url = f"https://www.youtube.com{selected_result['url_suffix']}"
+            selected_index = int(self.values[0])
+            selected_song = self.results[selected_index]
             
-            # 先回應互動
-            await interaction.response.defer()
+            # Get the view instance that contains this select menu
+            view = self.view
+            if not view:
+                return
+                
+            # Disable the select menu to prevent multiple selections
+            self.disabled = True
+            await interaction.response.edit_message(view=view)
             
-            # 添加到播放佇列
-            is_valid = await self.cog.add_to_queue(interaction, video_url, is_deferred=True)
-            if is_valid:
-                # 如果佇列是空的且沒有正在播放，開始播放
-                voice_client = interaction.guild.voice_client
-                if voice_client and not voice_client.is_playing():
-                    await self.cog.play_next(self.original_interaction)
+            # Add song to queue
+            guild_id = interaction.guild.id
+            queue = view.player.queue_manager.get_queue(guild_id)
             
-            # 禁用選擇菜單
-            for child in self.children:
-                child.disabled = True
-            try:
-                await interaction.message.edit(view=self)
-            except discord.errors.HTTPException as e:
-                if e.code == 50027:  # Invalid Webhook Token
-                    try:
-                        # Create a new message if token is expired
-                        new_message = await interaction.message.channel.send(view=self)
-                        try:
-                            await interaction.message.delete()
-                        except discord.errors.NotFound:
-                            pass  # Message already deleted
-                        logger.info("Successfully recreated message in song select due to expired webhook token")
-                    except Exception as inner_e:
-                        logger.error(f"Failed to recreate message in song select: {inner_e}")
-                else:
-                    logger.error(f"Failed to update song select view: {e}")
+            if queue.qsize() >= 5:
+                embed = discord.Embed(
+                    title="❌ | 播放清單已滿",
+                    description="請等待當前歌曲播放完畢後再添加新歌曲",
+                    color=discord.Color.red()
+                )
+                await interaction.followup.send(embed=embed)
+                return
+                
+            _, folder = view.player._get_guild_folder(guild_id)
+            should_download = queue.qsize() == 0
+            
+            if should_download:
+                video_info, error = await view.player.youtube.download_audio(
+                    selected_song['url'], 
+                    folder, 
+                    interaction
+                )
+            else:
+                video_info, error = await view.player.youtube.get_video_info_without_download(
+                    selected_song['url'], 
+                    interaction
+                )
+                
+            if error:
+                embed = discord.Embed(title=f"❌ | {error}", color=discord.Color.red())
+                await interaction.followup.send(embed=embed)
+                return
+                
+            await view.player.queue_manager.add_to_queue(guild_id, video_info)
+            embed = discord.Embed(title=f"✅ | 已添加到播放清單： {video_info['title']}", color=discord.Color.blue())
+            await interaction.followup.send(embed=embed)
+            
+            # Start playing if not already playing
+            voice_client = interaction.guild.voice_client
+            if voice_client and not voice_client.is_playing():
+                await view.player.play_next(interaction)
+                
         except Exception as e:
-            logger.error(f"選擇歌曲時出錯: {e}")
-            try:
-                await interaction.response.send_message("❌ 選擇歌曲時出錯", ephemeral=True)
-            except discord.errors.HTTPException:
-                # If we can't send the error message through the interaction, try sending it directly
-                await interaction.channel.send("❌ 選擇歌曲時出錯")
+            logger.error(f"Song selection error: {e}")
+            embed = discord.Embed(title="❌ | 選擇歌曲時發生錯誤", color=discord.Color.red())
+            await interaction.followup.send(embed=embed)
