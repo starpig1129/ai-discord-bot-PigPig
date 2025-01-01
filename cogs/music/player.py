@@ -188,21 +188,38 @@ class YTMusic(commands.Cog):
             state = self.state_manager.get_state(interaction.guild.id)
             state.ui_messages.append(message)
             return
-            
+        
+        # Format durations properly
+        formatted_results = []
+        for i, result in enumerate(results, 1):
+            duration_secs = result.get('duration', 0)
+            minutes, seconds = divmod(duration_secs, 60)
+            duration_str = f"{int(minutes):02d}:{int(seconds):02d}"
+            formatted_results.append(f"{i}. {result['title']} ({duration_str})")
+
         view = SongSelectView(self, results, interaction)
-        description = "請選擇要播放的歌曲：\n\n" + "\n".join([
-            f"{i}. {result['title']} ({result.get('duration', 'N/A')})"
-            for i, result in enumerate(results, 1)
-        ])
+        description = "請選擇要播放的歌曲：\n\n" + "\n".join(formatted_results)
         embed = discord.Embed(
             title="🔍 | YouTube搜尋結果",
             description=description,
             color=discord.Color.blue()
         )
-        message = await interaction.followup.send(embed=embed, view=view)
-        # Track search results message
+        
+        # Get state for message tracking
         state = self.state_manager.get_state(interaction.guild.id)
-        state.ui_messages.append(message)
+        
+        try:
+            message = await interaction.followup.send(embed=embed, view=view)
+        except discord.errors.HTTPException as e:
+            if e.code == 50027:  # Invalid Webhook Token
+                message = await interaction.channel.send(embed=embed, view=view)
+            else:
+                logger.error(f"Failed to send search results: {e}")
+                raise
+        
+        # Track search results message
+        if message:
+            state.ui_messages.append(message)
 
     async def play_next(self, interaction: discord.Interaction, force_new: bool = False):
         """Play the next song in queue"""

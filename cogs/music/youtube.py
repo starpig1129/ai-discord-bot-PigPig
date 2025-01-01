@@ -36,6 +36,28 @@ class YouTubeManager:
             results = await asyncio.to_thread(
                 lambda: YoutubeSearch(query, max_results=max_results).to_dict()
             )
+            
+            # Add complete URL and ensure all required fields
+            for result in results:
+                result['url'] = f"https://youtube.com/watch?v={result['id']}"
+                result['video_id'] = result['id']  # Ensure video_id is set
+                result['author'] = result.get('channel', '未知上傳者')  # Map channel to author
+                result['views'] = result.get('views', '0')  # Ensure views exists
+                # Convert duration string (e.g. "3:21") to seconds
+                if 'duration' in result:
+                    try:
+                        parts = result['duration'].split(':')
+                        if len(parts) == 2:  # MM:SS
+                            result['duration'] = int(parts[0]) * 60 + int(parts[1])
+                        elif len(parts) == 3:  # HH:MM:SS
+                            result['duration'] = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                        else:
+                            result['duration'] = 0
+                    except (ValueError, IndexError):
+                        result['duration'] = 0
+                else:
+                    result['duration'] = 0
+                
             return results if results else []
         except Exception as e:
             logger.error(f"YouTube 搜尋失敗: {e}")
