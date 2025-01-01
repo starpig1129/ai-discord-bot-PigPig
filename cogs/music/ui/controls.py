@@ -12,6 +12,18 @@ class MusicControlView(discord.ui.View):
         self.message = None
         self.update_task = None
         self.current_embed = None
+        
+        # Set initial mode button emoji
+        mode_emojis = {
+            "no_loop": '➡️',
+            "loop_queue": '🔁',
+            "loop_single": '🔂'
+        }
+        current_mode = self.player.queue_manager.get_play_mode(self.guild.id).value
+        for child in self.children:
+            if isinstance(child, discord.ui.Button) and child.emoji == '🔄':
+                child.emoji = discord.PartialEmoji.from_str(mode_emojis[current_mode])
+                break
 
     async def update_progress(self, duration):
         try:
@@ -250,14 +262,18 @@ class MusicControlView(discord.ui.View):
             "loop_queue": '🔁',
             "loop_single": '🔂'
         }
-        button.emoji = mode_emojis[next_mode]
         
         mode_names = {
             "no_loop": "不循環",
             "loop_queue": "清單循環",
             "loop_single": "單曲循環"
         }
+
+        # Update button emoji
+        button.emoji = discord.PartialEmoji.from_str(mode_emojis[next_mode])
         
+        # Update message with new view state
+        await self.message.edit(view=self)
         await self.update_embed(interaction, f"🔄 {interaction.user.name} 將播放模式設為 {mode_names[next_mode]}")
         await interaction.response.defer()
 
