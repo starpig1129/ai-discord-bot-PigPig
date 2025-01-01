@@ -62,6 +62,9 @@ class UIManager:
             view.current_embed = embed
             view.current_position = 0
             
+            # Update button states now that message is set
+            await view.update_button_state()
+            
             # Handle update task
             if self._current_view and self._current_view.update_task:
                 await self._cancel_update_task()

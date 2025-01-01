@@ -13,17 +13,48 @@ class MusicControlView(discord.ui.View):
         self.update_task = None
         self.current_embed = None
         
-        # Set initial mode button emoji
-        mode_emojis = {
-            "no_loop": '➡️',
-            "loop_queue": '🔁',
-            "loop_single": '🔂'
-        }
-        current_mode = self.player.queue_manager.get_play_mode(self.guild.id).value
+        # Initialize button states without updating message
+        asyncio.create_task(self.update_button_state(update_message=False))
+
+    async def update_button_state(self, update_message: bool = True):
+        """Update button states based on current playback and mode status"""
+        voice_client = self.guild.voice_client
+        guild_id = self.guild.id
+        
+        # Update button states
         for child in self.children:
-            if isinstance(child, discord.ui.Button) and child.emoji == '🔄':
-                child.emoji = discord.PartialEmoji.from_str(mode_emojis[current_mode])
-                break
+            if isinstance(child, discord.ui.Button):
+                # Play/Pause button
+                if child.custom_id == "toggle_playback":
+                    if voice_client and voice_client.is_playing():
+                        child.emoji = discord.PartialEmoji.from_str('⏸️')
+                    elif voice_client and voice_client.is_paused():
+                        child.emoji = discord.PartialEmoji.from_str('▶️')
+                    else:
+                        child.emoji = discord.PartialEmoji.from_str('⏯️')
+                
+                # Loop mode button
+                elif child.custom_id == "toggle_mode":
+                    mode_emojis = {
+                        "no_loop": '➡️',
+                        "loop_queue": '🔁',
+                        "loop_single": '🔂'
+                    }
+                    current_mode = self.player.queue_manager.get_play_mode(guild_id).value
+                    child.emoji = discord.PartialEmoji.from_str(mode_emojis[current_mode])
+                
+                # Shuffle button
+                elif child.custom_id == "toggle_shuffle":
+                    is_shuffle = self.player.queue_manager.get_queue_state(guild_id).shuffle_enabled
+                    child.style = discord.ButtonStyle.green if is_shuffle else discord.ButtonStyle.gray
+                    child.emoji = discord.PartialEmoji.from_str('🔀')
+        
+        # Only update message if requested and message exists
+        if update_message and self.message:
+            try:
+                await self.message.edit(view=self)
+            except Exception as e:
+                logger.error(f"Failed to update button state: {e}")
 
     async def update_progress(self, duration):
         try:
@@ -31,6 +62,8 @@ class MusicControlView(discord.ui.View):
                 return
                 
             self._is_updating = True
+            # Update button state when starting progress tracking
+            await self.update_button_state()
             update_interval = 5  # Update every 5 seconds
             last_update = 0
             message_refresh_interval = 600  # Refresh message every 10 minutes
@@ -39,10 +72,12 @@ class MusicControlView(discord.ui.View):
             try:
                 while True:
                     if not self.guild.voice_client or not self.guild.voice_client.is_playing():
+                        await self.update_button_state()  # Update button state when playback stops
                         break
                         
                     self.current_position += 1
                     if self.current_position > duration:
+                        await self.update_button_state()  # Update button state when song ends
                         break
                         
                     current_time = asyncio.get_event_loop().time()
@@ -91,6 +126,10 @@ class MusicControlView(discord.ui.View):
                     self.update_task = None
         except Exception as e:
             logger.error(f"Progress update error: {e}")
+            try:
+                await self.update_button_state()
+            except Exception as view_error:
+                logger.error(f"Failed to update button state after error: {view_error}")
 
     async def update_embed(self, interaction: discord.Interaction, title: str, color: discord.Color = discord.Color.blue()):
         """Update the embed with error handling and message recreation"""
@@ -130,7 +169,7 @@ class MusicControlView(discord.ui.View):
         if new_message:
             self.message = new_message
 
-    @discord.ui.button(emoji='⏮️', style=discord.ButtonStyle.gray)
+    @discord.ui.button(emoji='⏮️', style=discord.ButtonStyle.gray, custom_id="previous")
     async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
         voice_client = self.guild.voice_client
         if not voice_client:
@@ -165,24 +204,42 @@ class MusicControlView(discord.ui.View):
             
         # Update queue and stop current playback
         self.player.queue_manager.get_queue_state(self.guild.id).queue = new_queue
+        
+        # 在停止播放前先更新按鈕狀態
+        await self.update_button_state()
         voice_client.stop()
         
+        # 等待一小段時間確保狀態已更新
+        await asyncio.sleep(0.5)
+        
+        # 再次更新按鈕狀態以確保顯示正確
+        await self.update_button_state()
         await self.update_embed(interaction, f"⏮️ {interaction.user.name} 返回上一首")
         await interaction.response.defer()
 
-    @discord.ui.button(emoji='⏯️', style=discord.ButtonStyle.gray)
+    @discord.ui.button(emoji='⏯️', style=discord.ButtonStyle.gray, custom_id="toggle_playback")
     async def toggle_playback(self, interaction: discord.Interaction, button: discord.ui.Button):
         voice_client = self.guild.voice_client
         if voice_client:
             if voice_client.is_playing():
+                # 在暫停前先更新按鈕狀態
+                await self.update_button_state()
                 voice_client.pause()
+                # 等待一小段時間確保狀態已更新
+                await asyncio.sleep(0.1)
+                await self.update_button_state()
                 await self.update_embed(interaction, f"⏸️ {interaction.user.name} 暫停了音樂")
                 if self.update_task:
                     self.update_task.cancel()
                     self.update_task = None
                     self._is_updating = False
             elif voice_client.is_paused():
+                # 在繼續播放前先更新按鈕狀態
+                await self.update_button_state()
                 voice_client.resume()
+                # 等待一小段時間確保狀態已更新
+                await asyncio.sleep(0.1)
+                await self.update_button_state()
                 await self.update_embed(interaction, f"▶️ {interaction.user.name} 繼續了音樂")
                 if self.update_task:
                     self.update_task.cancel()
@@ -197,7 +254,7 @@ class MusicControlView(discord.ui.View):
         else:
             await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
 
-    @discord.ui.button(emoji='⏭️', style=discord.ButtonStyle.gray)
+    @discord.ui.button(emoji='⏭️', style=discord.ButtonStyle.gray, custom_id="skip")
     async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
         voice_client = self.guild.voice_client
         if not voice_client:
@@ -220,11 +277,19 @@ class MusicControlView(discord.ui.View):
             self.update_task = None
             self._is_updating = False
             
+        # 在停止播放前先更新按鈕狀態
+        await self.update_button_state()
         voice_client.stop()
+        
+        # 等待一小段時間確保狀態已更新
+        await asyncio.sleep(0.5)
+        
+        # 再次更新按鈕狀態以確保顯示正確
+        await self.update_button_state()
         await self.update_embed(interaction, f"⏭️ {interaction.user.name} 跳過了音樂")
         await interaction.response.defer()
 
-    @discord.ui.button(emoji='⏹️', style=discord.ButtonStyle.red)
+    @discord.ui.button(emoji='⏹️', style=discord.ButtonStyle.red, custom_id="stop")
     async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
         voice_client = self.guild.voice_client
         if voice_client:
@@ -238,14 +303,23 @@ class MusicControlView(discord.ui.View):
                 self.update_task = None
                 self._is_updating = False
             
+            # 在停止播放前先更新按鈕狀態
+            await self.update_button_state()
             voice_client.stop()
+            
+            # 等待一小段時間確保狀態已更新
+            await asyncio.sleep(0.1)
+            
             await voice_client.disconnect()
+            
+            # 再次更新按鈕狀態以確保顯示正確
+            await self.update_button_state()
             await self.update_embed(interaction, f"⏹️ {interaction.user.name} 停止了播放", discord.Color.red())
             await interaction.response.defer()
         else:
             await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
 
-    @discord.ui.button(emoji='🔄', style=discord.ButtonStyle.gray)
+    @discord.ui.button(emoji='🔄', style=discord.ButtonStyle.gray, custom_id="toggle_mode")
     async def toggle_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
         """切換播放模式"""
         guild_id = self.guild.id
@@ -269,27 +343,22 @@ class MusicControlView(discord.ui.View):
             "loop_single": "單曲循環"
         }
 
-        # Update button emoji
-        button.emoji = discord.PartialEmoji.from_str(mode_emojis[next_mode])
-        
-        # Update message with new view state
-        await self.message.edit(view=self)
+        await self.update_button_state()
         await self.update_embed(interaction, f"🔄 {interaction.user.name} 將播放模式設為 {mode_names[next_mode]}")
         await interaction.response.defer()
 
-    @discord.ui.button(emoji='🔀', style=discord.ButtonStyle.gray)
+    @discord.ui.button(emoji='🔀', style=discord.ButtonStyle.gray, custom_id="toggle_shuffle")
     async def toggle_shuffle(self, interaction: discord.Interaction, button: discord.ui.Button):
         """切換隨機播放"""
         guild_id = self.guild.id
         is_shuffle = self.player.queue_manager.toggle_shuffle(guild_id)
         
-        button.style = discord.ButtonStyle.green if is_shuffle else discord.ButtonStyle.gray
-        
         status = "開啟" if is_shuffle else "關閉"
+        await self.update_button_state()
         await self.update_embed(interaction, f"🔀 {interaction.user.name} {status}隨機播放")
         await interaction.response.defer()
 
-    @discord.ui.button(emoji='📜', style=discord.ButtonStyle.gray)
+    @discord.ui.button(emoji='📜', style=discord.ButtonStyle.gray, custom_id="show_queue")
     async def show_queue(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild_id = self.guild.id
         queue = self.player.queue_manager.get_queue(guild_id)
