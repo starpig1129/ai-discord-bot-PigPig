@@ -16,30 +16,46 @@ class UIManager:
             embed = self._create_player_embed(item, youtube_manager)
             view = MusicControlView(interaction, player)  # Pass the player instance
             
+            # First try to use the existing message if available
             if current_message:
                 try:
-                    # Try to edit existing message
                     await current_message.edit(embed=embed, view=view)
                     message = current_message
-                except (discord.errors.HTTPException, discord.errors.NotFound):
-                    # If edit fails, send a new message in the same channel
+                except (discord.errors.HTTPException, discord.errors.NotFound, discord.errors.Forbidden):
+                    current_message = None  # Mark as unavailable for retry
+            
+            # If no current message or edit failed, try to send a new message
+            if not current_message:
+                # Try multiple methods to send the message
+                message = None
+                errors = []
+                
+                # Method 1: Try interaction followup
+                if not message:
                     try:
-                        message = await current_message.channel.send(embed=embed, view=view)
-                        # Try to delete old message, ignore if fails
-                        try:
-                            await current_message.delete()
-                        except (discord.errors.NotFound, discord.errors.Forbidden):
-                            pass
+                        message = await interaction.followup.send(embed=embed, view=view)
                     except Exception as e:
-                        logger.error(f"Failed to send new message: {e}")
-                        raise
-            else:
-                try:
-                    # Try followup first
-                    message = await interaction.followup.send(embed=embed, view=view)
-                except discord.errors.HTTPException:
-                    # If followup fails, send in channel
-                    message = await interaction.channel.send(embed=embed, view=view)
+                        errors.append(f"Followup failed: {str(e)}")
+                
+                # Method 2: Try interaction channel
+                if not message and interaction.channel:
+                    try:
+                        message = await interaction.channel.send(embed=embed, view=view)
+                    except Exception as e:
+                        errors.append(f"Channel send failed: {str(e)}")
+                
+                # If all methods failed, log errors and raise the last exception
+                if not message:
+                    error_msg = "All UI update methods failed:\n" + "\n".join(errors)
+                    logger.error(error_msg)
+                    raise RuntimeError(error_msg)
+                
+                # Try to clean up old message if it exists
+                if current_message:
+                    try:
+                        await current_message.delete()
+                    except:
+                        pass  # Ignore cleanup failures
             
             # Setup view properties
             view.message = message

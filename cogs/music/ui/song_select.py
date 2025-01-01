@@ -15,8 +15,23 @@ class SongSelectView(discord.ui.View):
         """Handle view timeout"""
         try:
             await self.original_interaction.edit_original_response(view=None)
-        except:
-            pass
+        except discord.errors.HTTPException as e:
+            if e.code == 50027:  # Invalid Webhook Token
+                # Try to send a new message in the same channel
+                try:
+                    channel = self.original_interaction.channel
+                    if channel:
+                        embed = discord.Embed(
+                            title="⌛ | 選擇歌曲時間已過期",
+                            color=discord.Color.red()
+                        )
+                        await channel.send(embed=embed)
+                except Exception as inner_e:
+                    logger.error(f"Failed to send timeout message: {inner_e}")
+            else:
+                logger.error(f"Failed to handle timeout: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in timeout handler: {e}")
 
 class SongSelectMenu(discord.ui.Select):
     def __init__(self, results):
@@ -48,9 +63,24 @@ class SongSelectMenu(discord.ui.Select):
             if not view:
                 return
                 
-            # Disable the select menu to prevent multiple selections
+            # Disable the select menu and handle potential webhook errors
             self.disabled = True
-            await interaction.response.edit_message(view=view)
+            try:
+                await interaction.response.edit_message(view=view)
+            except discord.errors.HTTPException as e:
+                if e.code == 50027:  # Invalid Webhook Token
+                    try:
+                        # Try to send a new message
+                        embed = discord.Embed(
+                            title="✅ | 已選擇歌曲",
+                            description="請稍候，正在處理您的選擇...",
+                            color=discord.Color.blue()
+                        )
+                        await interaction.channel.send(embed=embed)
+                    except Exception as inner_e:
+                        logger.error(f"Failed to send selection message: {inner_e}")
+                else:
+                    raise
             
             # Add song to queue
             guild_id = interaction.guild.id
@@ -86,8 +116,18 @@ class SongSelectMenu(discord.ui.Select):
                 return
                 
             await view.player.queue_manager.add_to_queue(guild_id, video_info)
-            embed = discord.Embed(title=f"✅ | 已添加到播放清單： {video_info['title']}", color=discord.Color.blue())
-            await interaction.followup.send(embed=embed)
+            try:
+                embed = discord.Embed(title=f"✅ | 已添加到播放清單： {video_info['title']}", color=discord.Color.blue())
+                await interaction.followup.send(embed=embed)
+            except discord.errors.HTTPException as e:
+                if e.code == 50027:  # Invalid Webhook Token
+                    try:
+                        # Try to send directly to channel
+                        await interaction.channel.send(embed=embed)
+                    except Exception as inner_e:
+                        logger.error(f"Failed to send queue addition message: {inner_e}")
+                else:
+                    raise
             
             # Start playing if not already playing
             voice_client = interaction.guild.voice_client

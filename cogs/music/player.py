@@ -308,6 +308,7 @@ class YTMusic(commands.Cog):
     async def _handle_after_play(self, interaction: discord.Interaction, file_path: str):
         """Handle cleanup after song finishes playing"""
         guild_id = interaction.guild.id
+        channel = interaction.channel
         
         try:
             # Clean up file if not in single loop mode
@@ -325,26 +326,84 @@ class YTMusic(commands.Cog):
                 for song in next_songs:
                     await self.queue_manager.add_to_queue(guild_id, song)
             
-            # Play next song
-            try:
-                await self.play_next(interaction)
-            except discord.errors.HTTPException as e:
-                if e.code == 50027:  # Invalid Webhook Token
-                    # Create a new interaction response in the same channel
-                    channel = interaction.channel
+            # Create a new interaction-like object for UI updates
+            if channel:
+                class DummyInteraction:
+                    def __init__(self, channel, guild, original_interaction):
+                        self.channel = channel
+                        self.guild = guild
+                        # Create a complete user copy with all required attributes
+                        class DummyUser:
+                            def __init__(self, original_user):
+                                self.name = original_user.name
+                                self.display_name = original_user.display_name
+                                self.id = original_user.id
+                                self.mention = original_user.mention
+                                self.display_avatar = original_user.display_avatar
+                                self.avatar = type('Avatar', (), {'url': original_user.display_avatar.url})()
+                            
+                            def __getattr__(self, name):
+                                # Forward any other attribute access to the original user
+                                return getattr(original_interaction.user, name)
+                                
+                        self.user = DummyUser(original_interaction.user)
+                        # Create a followup object with proper send method
+                        class DummyFollowup:
+                            def __init__(self, channel):
+                                self._channel = channel
+                            
+                            async def send(self, *args, **kwargs):
+                                try:
+                                    return await self._channel.send(*args, **kwargs)
+                                except Exception as e:
+                                    logger.error(f"[音樂] 發送訊息失敗： {str(e)}")
+                                    raise
+                                    
+                        self.followup = DummyFollowup(channel)
+                        # Copy additional required attributes
+                        self.application_id = original_interaction.application_id
+                        self.id = original_interaction.id
+                        
+                new_interaction = DummyInteraction(channel, interaction.guild, interaction)
+                
+                # Play next song with new interaction object
+                try:
+                    # Try to play next song
+                    await self.play_next(new_interaction)
+                except Exception as e:
+                    logger.error(f"[音樂] 播放下一首歌曲時出錯： {str(e)}")
                     if channel:
-                        embed = discord.Embed(title="🎵 | 正在播放下一首歌曲...", color=discord.Color.blue())
-                        await channel.send(embed=embed)
-                        await self.play_next(interaction, force_new=True)
-                else:
-                    raise
+                        try:
+                            # Send error message using channel.send directly
+                            embed = discord.Embed(
+                                title="❌ | 播放音樂時發生錯誤",
+                                description="正在嘗試播放下一首歌曲...",
+                                color=discord.Color.red()
+                            )
+                            await channel.send(embed=embed)
+                            
+                            # Try to stop current playback if any
+                            voice_client = interaction.guild.voice_client
+                            if voice_client and voice_client.is_connected() and voice_client.is_playing():
+                                voice_client.stop()
+                            
+                            # Try one more time with force_new
+                            await self.play_next(new_interaction, force_new=True)
+                        except Exception as retry_error:
+                            logger.error(f"[音樂] 重試播放失敗： {str(retry_error)}")
+                            try:
+                                # Send final error message
+                                embed = discord.Embed(
+                                    title="❌ | 播放失敗",
+                                    description="請使用 /play 重新播放",
+                                    color=discord.Color.red()
+                                )
+                                await channel.send(embed=embed)
+                            except Exception as final_error:
+                                logger.error(f"[音樂] 發送錯誤訊息失敗： {str(final_error)}")
+            
         except Exception as e:
-            logger.error(f"[音樂] 處理播放完成時出錯： {e}")
-            # Try to continue playing if possible
-            try:
-                await self.play_next(interaction, force_new=True)
-            except:
-                pass
+            logger.error(f"[音樂] 處理播放完成時出錯： {str(e)}")
 
     def _get_guild_folder(self, guild_id: int) -> tuple:
         """Get guild queue and folder"""

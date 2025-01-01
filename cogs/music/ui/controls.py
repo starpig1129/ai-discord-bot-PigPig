@@ -81,25 +81,42 @@ class MusicControlView(discord.ui.View):
             logger.error(f"Progress update error: {e}")
 
     async def update_embed(self, interaction: discord.Interaction, title: str, color: discord.Color = discord.Color.blue()):
-        if self.current_embed and self.message:
-            self.current_embed.title = title
-            self.current_embed.color = color
+        """Update the embed with error handling and message recreation"""
+        if not (self.current_embed and self.message):
+            return
+
+        self.current_embed.title = title
+        self.current_embed.color = color
+
+        async def try_edit_or_recreate(message, embed, view):
             try:
-                await self.message.edit(embed=self.current_embed)
+                await message.edit(embed=embed)
+                return message
             except discord.errors.HTTPException as e:
                 if e.code == 50027:  # Invalid Webhook Token
                     try:
-                        new_message = await self.message.channel.send(embed=self.current_embed, view=self)
+                        # Create new message
+                        new_message = await message.channel.send(embed=embed, view=view)
+                        # Try to delete old message
                         try:
-                            await self.message.delete()
-                        except discord.errors.NotFound:
+                            await message.delete()
+                        except (discord.errors.NotFound, discord.errors.Forbidden):
                             pass
-                        self.message = new_message
-                        logger.info("Successfully recreated message in update_embed")
+                        logger.info("Successfully recreated message")
+                        return new_message
                     except Exception as inner_e:
-                        logger.error(f"Failed to recreate message in update_embed: {inner_e}")
+                        logger.error(f"Failed to recreate message: {inner_e}")
+                        return None
                 else:
                     logger.error(f"Failed to update embed: {e}")
+                    return None
+            except Exception as e:
+                logger.error(f"Unexpected error in update_embed: {e}")
+                return None
+
+        new_message = await try_edit_or_recreate(self.message, self.current_embed, self)
+        if new_message:
+            self.message = new_message
 
     @discord.ui.button(emoji='⏮️', style=discord.ButtonStyle.gray)
     async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -288,22 +305,8 @@ class MusicControlView(discord.ui.View):
                 queue_text = "清單為空"
             
             self.current_embed.set_field_at(4, name="📜 播放清單", value=queue_text, inline=False)
-            try:
-                await self.message.edit(embed=self.current_embed)
-            except discord.errors.HTTPException as e:
-                if e.code == 50027:  # Invalid Webhook Token
-                    try:
-                        new_message = await self.message.channel.send(embed=self.current_embed, view=self)
-                        try:
-                            await self.message.delete()
-                        except discord.errors.NotFound:
-                            pass
-                        self.message = new_message
-                        logger.info("Successfully recreated message in show_queue")
-                    except Exception as inner_e:
-                        logger.error(f"Failed to recreate message in show_queue: {inner_e}")
-                else:
-                    logger.error(f"Failed to update queue display: {e}")
+            # Use the common update_embed method which handles message recreation
+            await self.update_embed(interaction, self.current_embed.title, self.current_embed.color)
             await interaction.response.defer()
         else:
             await interaction.response.send_message("無法更新播放清單", ephemeral=True)
