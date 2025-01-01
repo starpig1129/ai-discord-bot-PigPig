@@ -5,6 +5,7 @@ from discord import app_commands
 import logging as logger
 from concurrent.futures import ThreadPoolExecutor
 
+from addons.settings import Settings
 from .youtube import YouTubeManager
 from .audio_manager import AudioManager
 from .state_manager import StateManager
@@ -17,6 +18,7 @@ class YTMusic(commands.Cog):
         self.bot = bot
         self.youtube = None  # Will be initialized in setup_hook
         self._executor = ThreadPoolExecutor(max_workers=3)
+        self.settings = Settings()
         
         # Initialize managers
         self.audio_manager = AudioManager()
@@ -408,7 +410,7 @@ class YTMusic(commands.Cog):
     def _get_guild_folder(self, guild_id: int) -> tuple:
         """Get guild queue and folder"""
         queue = self.queue_manager.get_queue(guild_id)
-        folder = f"./temp/music/{guild_id}"
+        folder = f"{self.settings.music_temp_base}/{guild_id}"
         return queue, folder
 
     @commands.Cog.listener()

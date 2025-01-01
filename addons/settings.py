@@ -12,6 +12,7 @@ class Settings:
         self.ipc_server: dict = settings.get("ipc_server", {})
         self.version: str = settings.get("version", "")
         self.mongodb_uri: str = settings.get("mongodb", "")
+        self.music_temp_base: str = settings.get("music_temp_base", "./temp/music")
 
 class TOKENS:
     def __init__(self) -> None:
