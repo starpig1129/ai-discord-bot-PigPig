@@ -7,6 +7,11 @@ class PlayerState:
     current_song: Optional[Dict[str, Any]] = None
     current_message: Optional[discord.Message] = None
     current_view: Optional[Any] = None
+    ui_messages: list[discord.Message] = None  # Track all UI messages
+    
+    def __post_init__(self):
+        if self.ui_messages is None:
+            self.ui_messages = []
     
 class StateManager:
     def __init__(self):

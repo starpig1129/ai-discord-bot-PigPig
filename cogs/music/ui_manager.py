@@ -16,16 +16,30 @@ class UIManager:
             embed = self._create_player_embed(item, youtube_manager)
             view = MusicControlView(interaction, player)  # Pass the player instance
             
+            # Get player state to track messages
+            state = player.state_manager.get_state(interaction.guild.id)
+            
+            # Clean up all old UI messages first
+            for old_message in state.ui_messages:
+                try:
+                    await old_message.delete()
+                except:
+                    pass  # Ignore cleanup failures
+            state.ui_messages.clear()
+            
             # First try to use the existing message if available
             if current_message:
                 try:
                     await current_message.edit(embed=embed, view=view)
                     message = current_message
+                    # Add current message to tracking if successful
+                    state.ui_messages.append(message)
                 except (discord.errors.HTTPException, discord.errors.NotFound, discord.errors.Forbidden):
                     current_message = None  # Mark as unavailable for retry
             
             # If no current message or edit failed, try to send a new message
             if not current_message:
+                
                 # Try multiple methods to send the message
                 message = None
                 errors = []
@@ -50,12 +64,8 @@ class UIManager:
                     logger.error(error_msg)
                     raise RuntimeError(error_msg)
                 
-                # Try to clean up old message if it exists
-                if current_message:
-                    try:
-                        await current_message.delete()
-                    except:
-                        pass  # Ignore cleanup failures
+                # Add new message to tracking list
+                state.ui_messages.append(message)
             
             # Setup view properties
             view.message = message
