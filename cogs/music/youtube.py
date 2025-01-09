@@ -46,11 +46,18 @@ class YouTubeManager:
                 # Convert duration string (e.g. "3:21") to seconds
                 if 'duration' in result:
                     try:
-                        parts = result['duration'].split(':')
-                        if len(parts) == 2:  # MM:SS
-                            result['duration'] = int(parts[0]) * 60 + int(parts[1])
-                        elif len(parts) == 3:  # HH:MM:SS
-                            result['duration'] = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                        # If duration is already an integer, use it directly
+                        if isinstance(result['duration'], int):
+                            pass
+                        # If it's a string, try to parse it
+                        elif isinstance(result['duration'], str):
+                            parts = result['duration'].split(':')
+                            if len(parts) == 2:  # MM:SS
+                                result['duration'] = int(parts[0]) * 60 + int(parts[1])
+                            elif len(parts) == 3:  # HH:MM:SS
+                                result['duration'] = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                            else:
+                                result['duration'] = 0
                         else:
                             result['duration'] = 0
                     except (ValueError, IndexError):

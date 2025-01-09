@@ -120,12 +120,19 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
                     else:
                         # 對於其他 API 的異步生成器
                         async def combined_gen():
-                            async for item in gen:
-                                yield item
-                        # 嘗試獲取第一個響應來檢測錯誤
+                            try:
+                                async for item in gen:
+                                    yield item
+                            except Exception as e:
+                                if isinstance(e, (GeminiError, OpenAIError, ClaudeError)):
+                                    raise
+                                raise ValueError(f"{model_name} 模型生成過程中發生錯誤: {str(e)}")
+                        
+                        # 創建生成器實例並測試第一個響應
                         gen_instance = combined_gen()
                         try:
-                            first_response = await gen_instance.__anext__()
+                            # 使用 anext() 替代 __anext__() 以提高可讀性
+                            first_response = await anext(gen_instance)
                             async def final_gen():
                                 yield first_response
                                 async for item in gen_instance:
