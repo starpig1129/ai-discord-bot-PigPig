@@ -5,6 +5,9 @@ from threading import Thread
 from queue import Queue
 import tiktoken
 
+class OpenAIError(Exception):
+    pass
+
 # Initialize OpenAI client
 tokens = TOKENS()
 client = OpenAI(api_key=tokens.openai_api_key)
@@ -41,18 +44,29 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
         messages.pop(1)
 
     async def run_generation():
-        stream = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            max_tokens=4096,
-            temperature=0.5,
-            top_p=0.9,
-            stream=True
-        )
+        try:
+            stream = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=4096,
+                temperature=0.5,
+                top_p=0.9,
+                stream=True
+            )
 
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            error_message = str(e)
+            if "invalid_api_key" in error_message.lower():
+                raise OpenAIError(f"OpenAI API 金鑰無效: {error_message}")
+            elif "rate_limit" in error_message.lower():
+                raise OpenAIError(f"OpenAI API 請求頻率超限: {error_message}")
+            elif "insufficient_quota" in error_message.lower():
+                raise OpenAIError(f"OpenAI API 配額不足: {error_message}")
+            else:
+                raise OpenAIError(f"OpenAI API 錯誤: {error_message}")
 
     thread = Thread()
     thread.start()

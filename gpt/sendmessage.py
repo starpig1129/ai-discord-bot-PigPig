@@ -24,10 +24,13 @@ import json
 import faiss
 import logging
 import opencc
-from gpt.gemini_api import generate_response
+from gpt.gpt_response_gen import generate_response, is_model_available
+from addons.settings import Settings
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.docstore.in_memory import InMemoryDocstore
+
+settings = Settings()
 system_prompt='''
                 You are an AI chatbot named 🐖🐖, created by 星豬<@597028717948043274>. Please follow these instructions:
                 1. Personality and Expression:
@@ -156,10 +159,18 @@ async def gpt_message(message_to_edit, message, prompt):
         responses = ""
         responsesall = ""
         message_result = ""
-        thread, streamer = await generate_response(prompt, system_prompt, history_dict)
+        thread, streamer = await generate_response(combined_prompt, system_prompt, history_dict)
         buffer_size = 40  # 設置緩衝區大小
         current_message = message_to_edit
         
+        # 記錄當前使用的模型
+        bot = message.guild.me._state._get_client()
+        logger = bot.get_logger_for_guild(message.guild.name)
+        for model_name in settings.model_priority:
+            if is_model_available(model_name):
+                logger.info(f"使用模型: {model_name}")
+                break
+    
         for response in streamer:
             print(response, end="", flush=True)
             responses += response
