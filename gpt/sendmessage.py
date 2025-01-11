@@ -210,7 +210,8 @@ async def gpt_message(message_to_edit, message, prompt):
         await message_to_edit.edit(content="抱歉，我不會講話了。")
         return None
     finally:
-        thread.join()
+        if thread is not None:  # 只在線程存在時調用 join
+            thread.join()
 # 在模塊加載時索引對話歷史並載入向量資料庫
 load_vector_store('./data/vector_store')
 load_and_index_dialogue_history('./data/dialogue_history.json')
