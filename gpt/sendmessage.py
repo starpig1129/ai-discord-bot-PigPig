@@ -24,6 +24,8 @@ import json
 import faiss
 import logging
 import opencc
+import asyncio
+
 from gpt.gpt_response_gen import generate_response, is_model_available
 from addons.settings import Settings
 from langchain_community.vectorstores import FAISS
@@ -171,7 +173,7 @@ async def gpt_message(message_to_edit, message, prompt):
                 logger.info(f"使用模型: {model_name}")
                 break
     
-        for response in streamer:
+        async for response in streamer:
             print(response, end="", flush=True)
             responses += response
             message_result += response
@@ -185,16 +187,24 @@ async def gpt_message(message_to_edit, message, prompt):
                 responsesall = responsesall.replace('<|eot_id|>', "")
                 await current_message.edit(content=converter.convert(responsesall))
                 responses = ""  # 清空 responses 變數
+                await asyncio.sleep(0)  # 允許其他協程執行
         
         # 處理剩餘的文本
-        responsesall = responsesall.replace('<|eot_id|>', "")
-        if len(responsesall+responses) > 1900:
-            current_message = await channel.send(responses)
-        else:
-            responsesall+=responses
+        try:
             responsesall = responsesall.replace('<|eot_id|>', "")
-            await current_message.edit(content=converter.convert(responsesall))
-        return message_result
+            if len(responsesall+responses) > 1900:
+                current_message = await channel.send(responses)
+            else:
+                responsesall += responses
+                responsesall = responsesall.replace('<|eot_id|>', "")
+                await current_message.edit(content=converter.convert(responsesall))
+            await asyncio.sleep(0)  # 確保最後的響應也能正確處理
+            return message_result
+        except Exception as e:
+            logging.error(f"處理最終響應時發生錯誤: {str(e)}")
+            if message_result:
+                return message_result
+            raise
     except Exception as e:
         logging.error(f"生成回應時發生錯誤: {e}")
         await message_to_edit.edit(content="抱歉，我不會講話了。")

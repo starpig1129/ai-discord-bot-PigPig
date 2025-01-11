@@ -45,18 +45,22 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
 
     async def run_generation():
         try:
-            stream = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                max_tokens=4096,
-                temperature=0.5,
-                top_p=0.9,
-                stream=True
+            stream = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=messages,
+                    max_tokens=4096,
+                    temperature=0.5,
+                    top_p=0.9,
+                    stream=True
+                )
             )
 
-            for chunk in stream:
+            async for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
                     yield chunk.choices[0].delta.content
+                    await asyncio.sleep(0)
         except Exception as e:
             error_message = str(e)
             if "invalid_api_key" in error_message.lower():
@@ -68,6 +72,5 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
             else:
                 raise OpenAIError(f"OpenAI API 錯誤: {error_message}")
 
-    thread = Thread()
-    thread.start()
-    return thread, run_generation()
+    # 不需要創建空的線程，因為 OpenAI 的流式處理已經是異步的
+    return None, run_generation()

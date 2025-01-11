@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 import logging
+import asyncio
 from threading import Thread
 from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
 import torch
@@ -73,9 +74,11 @@ async def local_generate(inst, system_prompt, dialogue_history=None, image_input
         top_p=0.9,
     )
     
-    thread = Thread(target=model.generate, kwargs=generation_kwargs)
-    thread.start()
-    return thread, streamer
+    # 創建一個有實際工作的線程
+    generation_thread = Thread(target=model.generate, kwargs=generation_kwargs)
+    generation_thread.daemon = True  # 設置為守護線程
+    generation_thread.start()
+    return generation_thread, streamer
 
 # 定義模型生成函數映射
 MODEL_GENERATORS = {
@@ -107,44 +110,72 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
                 generator = MODEL_GENERATORS[model_name]
                 thread, gen = await generator(inst, system_prompt, dialogue_history, image_input)
                 
-                # 嘗試獲取第一個響應來檢測錯誤
-                try:
-                    if isinstance(gen, TextIteratorStreamer):
-                        # 對於本地模型的 TextIteratorStreamer
-                        first_response = next(iter(gen))
-                        def combined_gen():
-                            yield first_response
-                            yield from gen
-                        logging.info(f"成功使用 {model_name} 模型生成回應")
-                        return thread, combined_gen()
-                    else:
-                        # 對於其他 API 的異步生成器
-                        async def combined_gen():
+                # 統一處理生成器回應
+                async def unified_gen():
+                    try:
+                        if isinstance(gen, TextIteratorStreamer):
+                            # 使用事件循環來處理同步迭代器
                             try:
-                                async for item in gen:
-                                    yield item
-                            except Exception as e:
-                                if isinstance(e, (GeminiError, OpenAIError, ClaudeError)):
-                                    raise
-                                raise ValueError(f"{model_name} 模型生成過程中發生錯誤: {str(e)}")
+                                loop = asyncio.get_running_loop()
+                            except RuntimeError:
+                                loop = asyncio.get_event_loop()
+                            iterator = iter(gen)
+                            while True:
+                                try:
+                                    # 在事件循環中執行同步操作
+                                    chunk = await loop.run_in_executor(None, lambda: next(iterator, None))
+                                    if chunk is None:
+                                        break
+                                    if chunk:
+                                        yield chunk
+                                except Exception as e:
+                                    logging.error(f"迭代 TextIteratorStreamer 時發生錯誤: {str(e)}")
+                                    raise ValueError(f"本地模型生成過程中發生錯誤: {str(e)}")
+                        else:
+                            async for chunk in gen:
+                                if chunk:
+                                    yield chunk
+                    except (GeminiError, OpenAIError, ClaudeError) as e:
+                        logging.error(f"API 錯誤: {str(e)}")
+                        raise
+                    except Exception as e:
+                        logging.error(f"生成過程錯誤: {str(e)}")
+                        raise ValueError(f"{model_name} 模型生成過程中發生錯誤: {str(e)}")
+
+                try:
+                    # 創建生成器實例並進行安全檢查
+                    gen_instance = unified_gen()
+                    try:
+                        # 獲取第一個響應
+                        first_response = await anext(gen_instance)
+                        if not first_response:
+                            raise ValueError(f"{model_name} 模型沒有生成有效回應")
                         
-                        # 創建生成器實例並測試第一個響應
-                        gen_instance = combined_gen()
-                        try:
-                            # 使用 anext() 替代 __anext__() 以提高可讀性
-                            first_response = await anext(gen_instance)
-                            async def final_gen():
-                                yield first_response
+                        async def final_gen():
+                            yield first_response
+                            try:
                                 async for item in gen_instance:
-                                    yield item
-                            logging.info(f"成功使用 {model_name} 模型生成回應")
-                            return thread, final_gen()
-                        except StopAsyncIteration:
-                            raise ValueError(f"{model_name} 模型沒有生成任何回應")
+                                    if item:
+                                        yield item
+                            except StopAsyncIteration:
+                                return
+                            
+                        logging.info(f"成功使用 {model_name} 模型生成回應")
+                        # thread 可能為 None，這是正常的
+                        return thread, final_gen()
+                    except StopAsyncIteration:
+                        raise ValueError(f"{model_name} 模型沒有生成有效回應")
                 except (GeminiError, OpenAIError, ClaudeError) as e:
                     last_error = e
-                    logging.error(f"使用 {model_name} 模型時發生錯誤: {str(e)}")
+                    logging.error(f"使用 {model_name} API 時發生錯誤: {str(e)}")
                     logging.info(f"嘗試切換到下一個可用模型")
+                    continue
+                except StopAsyncIteration:
+                    # 將 StopAsyncIteration 轉換為更具體的錯誤
+                    last_error = ValueError(f"{model_name} 模型沒有生成任何回應")
+                    logging.error(str(last_error))
+                    logging.info(f"嘗試切換到下一個可用模型")
+                    await asyncio.sleep(0)  # 讓出控制權給事件循環
                     continue
                 except Exception as e:
                     last_error = e

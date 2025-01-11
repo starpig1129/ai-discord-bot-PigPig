@@ -89,14 +89,20 @@ class ActionHandler:
         return execute_action
 
     async def get_action_list(self, prompt: str):
-        thread, streamer = await generate_response(prompt, self.system_prompt)
-        responses = ''.join([response for response in streamer])
-        thread.join()
-        
         try:
-            json_string = self.extract_json_from_response(responses)
+            thread, gen = await generate_response(prompt, self.system_prompt)
+            responses = []
+            async for chunk in gen:
+                responses.append(chunk)
+            thread.join()
+            
+            full_response = ''.join(responses)
+            json_string = self.extract_json_from_response(full_response)
             return json.loads(json_string) if json_string else self.get_default_action_list(prompt)
         except json.JSONDecodeError:
+            return self.get_default_action_list(prompt)
+        except Exception as e:
+            logging.error(f"獲取動作列表時發生錯誤: {str(e)}")
             return self.get_default_action_list(prompt)
 
     @staticmethod

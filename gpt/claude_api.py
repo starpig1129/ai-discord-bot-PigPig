@@ -36,8 +36,9 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
                 async for completion in response_stream:
                     if completion.stop_reason:
                         break
-                    chunk = completion.completion
-                    yield chunk
+                    if completion.completion:
+                        yield completion.completion
+                        await asyncio.sleep(0)
         except Exception as e:
             error_message = str(e)
             if "invalid_api_key" in error_message.lower():
@@ -51,6 +52,8 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
             else:
                 raise ClaudeError(f"Claude API 錯誤: {error_message}")
 
-    thread = Thread()
-    thread.start()
-    return thread, run_generation()
+    try:
+        # 不需要創建空的線程，因為 Claude API 已經是異步的
+        return None, run_generation()
+    except Exception as e:
+        raise ClaudeError(f"Claude API 初始化錯誤: {str(e)}")
