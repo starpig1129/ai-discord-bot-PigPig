@@ -22,7 +22,6 @@
 import json
 from gpt.gpt_response_gen import generate_response
 from gpt.sendmessage import gpt_message
-from gpt.vqa import vqa_answer
 from datetime import datetime
 import os
 import logging
@@ -34,7 +33,6 @@ class ActionHandler:
         self.tool_func_dict = {
             "internet_search": self.internet_search,
             "directly_answer": gpt_message,
-            "vqa_answer": vqa_answer,
             "calculate": self.calculate_math,
             "gen_img": self.generate_image,
             "schedule_management": self.schedule_management,
@@ -50,8 +48,11 @@ class ActionHandler:
     async def choose_act(self, prompt, message, message_to_edit):
         prompt = f"time:[{datetime.now().isoformat(timespec='seconds')}]{prompt}"
         
+        # 處理圖片附件
         if message.attachments:
-            prompt += "\nNote: The message contains image attachments. Consider using VQA (Visual Question Answering) or gen_img."
+            for attachment in message.attachments:
+                if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
+                    prompt += f"\nImage URL: {attachment.url}"
         
         action_list = await self.get_action_list(prompt)
         

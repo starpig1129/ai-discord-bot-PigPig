@@ -3,6 +3,10 @@ import os
 import asyncio
 from addons.settings import TOKENS
 from threading import Thread
+import math
+import numpy as np
+from PIL import Image
+from moviepy.editor import VideoFileClip
 
 # Initialize the Gemini model
 tokens = TOKENS()
@@ -12,16 +16,56 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 class GeminiError(Exception):
     pass
 
-async def generate_response(prompt, system_prompt, dialogue_history=None, image_input=None):
-    full_prompt = f"{system_prompt}\n{prompt}"
+def extract_video_frames(video_path, num_frames=5):
+    """從視頻中提取關鍵幀。
+    
+    Args:
+        video_path: 視頻文件路徑。
+        num_frames: 要提取的幀數量。
+        
+    Returns:
+        list: PIL Image 對象列表。
+    """
+    video = VideoFileClip(video_path)
+    duration = video.duration
+    frame_times = np.linspace(0, duration, num_frames + 2)[1:-1]  # 去除開頭和結尾
+    
+    frames = []
+    for t in frame_times:
+        frame = video.get_frame(t)
+        image = Image.fromarray(frame.astype(np.uint8))
+        frames.append(image)
+    
+    video.close()
+    return frames
+
+async def generate_response(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None):
+    full_prompt = f"{system_prompt}\n{inst}"
 
     if dialogue_history:
         history_content = "\n".join([f"{msg['role']}: {msg['content']}" for msg in dialogue_history])
-        full_prompt = f"{system_prompt}\n{history_content}\nUser: {prompt}"
+        full_prompt = f"{system_prompt}\n{history_content}\nUser: {inst}"
 
-    if image_input:
-        full_prompt += f"\nImage: {image_input}"
-
+    try:
+        if video_input:
+            # 從視頻中提取關鍵幀並分析
+            frames = extract_video_frames(video_input)
+            frame_descriptions = []
+            
+            for i, frame in enumerate(frames, 1):
+                frame_prompt = f"Analyzing frame {i} from video"
+                response = model.generate_content([frame_prompt, frame], stream=False)
+                if response.text:
+                    frame_descriptions.append(f"Frame {i}: {response.text}")
+            
+            # 將所有幀的描述添加到提示中
+            full_prompt += "\nVideo frame analysis:\n" + "\n".join(frame_descriptions)
+        elif audio_input:
+            full_prompt += f"\nAudio input is not supported by Gemini API"
+        elif image_input:
+            full_prompt += f"\nImage: {image_input}"
+    except Exception as e:
+        raise GeminiError(f"Gemini API 影像處理錯誤: {str(e)}")
     try:
         response_stream = model.generate_content(full_prompt,
                                               safety_settings='BLOCK_NONE',

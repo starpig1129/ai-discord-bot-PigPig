@@ -25,6 +25,10 @@ import faiss
 import logging
 import opencc
 import asyncio
+import re
+from PIL import Image
+import requests
+from io import BytesIO
 
 from gpt.gpt_response_gen import generate_response, is_model_available
 from addons.settings import Settings
@@ -146,6 +150,18 @@ async def gpt_message(message_to_edit, message, prompt):
     # 從向量資料庫尋找相關資料
     related_data = search_vector_database(prompt, channel_id)
     print(related_data)
+    
+    # 提取圖片 URL 並下載圖片
+    image_input = None
+    image_urls = re.findall(r'Image URL: (https?://\S+)', prompt)
+    if image_urls:
+        try:
+            response = requests.get(image_urls[0])
+            image_input = Image.open(BytesIO(response.content)).convert('RGB')
+            # 從 prompt 中移除圖片 URL
+            prompt = re.sub(r'Image URL: https?://\S+\n?', '', prompt)
+        except Exception as e:
+            logging.error(f"下載或處理圖片時發生錯誤: {str(e)}")
     # 讀取該訊息頻道最近的歷史紀錄
     history = []
     async for msg in channel.history(limit=5):
@@ -161,7 +177,7 @@ async def gpt_message(message_to_edit, message, prompt):
         responses = ""
         responsesall = ""
         message_result = ""
-        thread, streamer = await generate_response(combined_prompt, system_prompt, history_dict)
+        thread, streamer = await generate_response(prompt, system_prompt, history_dict, image_input=image_input)
         buffer_size = 40  # 設置緩衝區大小
         current_message = message_to_edit
         

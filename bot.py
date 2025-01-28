@@ -210,8 +210,7 @@ class PigPig(commands.Bot):
         try:
             model_management_cog = self.get_cog('ModelManagement')
             if model_management_cog:
-                await model_management_cog.reload_LLM()
-                await model_management_cog.reload_vqa_model()
+                await model_management_cog.reload_model()
         except Exception as e:
             print(e)
         # 將資料寫入 JSON 文件

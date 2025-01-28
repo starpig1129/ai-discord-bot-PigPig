@@ -3,14 +3,49 @@ from anthropic import AsyncAnthropic, HUMAN_PROMPT, AI_PROMPT
 import asyncio
 from threading import Thread
 from queue import Queue
+import numpy as np
+from PIL import Image
+import base64
+from io import BytesIO
+import math
+import numpy as np
+from PIL import Image
+from moviepy.editor import VideoFileClip
+import tempfile
+import librosa
+
 class ClaudeError(Exception):
     pass
 
-# Initialize Anthropic client
-tokens = TOKENS()
-async_anthropic = AsyncAnthropic(api_key=tokens.anthropic_api_key)
+def extract_video_frames(video_path, num_frames=5):
+    """從視頻中提取關鍵幀。
+    
+    Args:
+        video_path: 視頻文件路徑。
+        num_frames: 要提取的幀數量。
+        
+    Returns:
+        list: 包含 base64 編碼的圖像列表。
+    """
+    video = VideoFileClip(video_path)
+    duration = video.duration
+    frame_times = np.linspace(0, duration, num_frames + 2)[1:-1]  # 去除開頭和結尾
+    
+    frames = []
+    for t in frame_times:
+        frame = video.get_frame(t)
+        image = Image.fromarray(frame.astype(np.uint8))
+        
+        # 將圖像轉換為 base64
+        buffered = BytesIO()
+        image.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        frames.append(img_str)
+    
+    video.close()
+    return frames
 
-async def generate_response(inst, system_prompt, dialogue_history=None, image_input=None):
+async def generate_response(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None):
     messages = []
 
     if dialogue_history:
@@ -19,13 +54,20 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
             messages.append(f"{role} {msg['content']}")
     
     messages.append(f"{HUMAN_PROMPT}{system_prompt}{inst}")
-    if image_input:
+    if video_input:
+        # 從視頻中提取關鍵幀
+        frames = extract_video_frames(video_input)
+        for i, frame in enumerate(frames, 1):
+            messages.append(f"Frame {i} from video: <image>{frame}</image>")
+    elif audio_input:
+        messages.append(f"Audio input is not supported by Claude API")
+    elif image_input:
         messages.append(f"Image: {image_input}")
     full_prompt = "\n\n".join(messages)
 
     async def run_generation():
         try:
-            async with async_anthropic as client:
+            async with AsyncAnthropic as client:
                 response_stream = await client.completions.create(
                     model="claude-3-5-sonnet-20240620",
                     prompt=full_prompt,
