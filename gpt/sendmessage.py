@@ -47,7 +47,8 @@ system_prompt='''
                 2. Answering Principles:
                 - Prioritize using information obtained through tools or external resources to answer questions.
                 - If there's no relevant information, honestly state that you don't know.
-                - Clearly indicate the source of information in your answers (e.g., "According to the processed image/video/PDF...").
+                - Clearly indicate the source of information in your answers (e.g., "According to the processed image/video/PDF...")
+                - When referencing sources, use the format: [標題](<URL>)
 
                 3. Language Requirements:
                 - Always answer in Traditional Chinese.
@@ -60,6 +61,16 @@ system_prompt='''
                 5. Interaction:
                 - Encourage users to ask follow-up questions or request clarifications.
                 - Proactively provide relevant additional information or interesting facts when appropriate.
+
+                6. Discord Markdown Formatting:
+                - Use **bold** for emphasis
+                - Use *italics* for subtle emphasis 
+                - Use __underline__ for underlining
+                - Use ~~strikethrough~~ when needed
+                - Use `code blocks` for code snippets
+                - Use > for quotes
+                - Use # for headings
+                - Use [標題](<URL>) for references
 
                 Remember, your main goal is to provide accurate, helpful information while making the conversation enjoyable and interesting. Answer based on the information provided by the tools and incorporate your unique personality into your responses.
                 '''
@@ -149,7 +160,7 @@ async def gpt_message(message_to_edit, message, prompt):
     
     # 從向量資料庫尋找相關資料
     related_data = search_vector_database(prompt, channel_id)
-    print(related_data)
+    print(prompt)
     
     # 提取圖片 URL 並下載圖片
     image_input = None

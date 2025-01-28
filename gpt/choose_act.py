@@ -82,7 +82,7 @@ class ActionHandler:
                     logger.info(f"未知的工具函數: {tool_name}")
             
             integrated_results = "\n".join(final_results)
-            final_prompt = f'<<information:\n{integrated_results}\n{original_prompt}>>'
+            final_prompt = f'<<information:\n{integrated_results}>>\n{original_prompt}'
             gptresponses = await gpt_message(message_to_edit, message, final_prompt)
             dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
             logger.info(f'PigPig:{gptresponses}')
@@ -95,7 +95,6 @@ class ActionHandler:
             responses = []
             async for chunk in gen:
                 responses.append(chunk)
-            thread.join()
             
             full_response = ''.join(responses)
             json_string = self.extract_json_from_response(full_response)
