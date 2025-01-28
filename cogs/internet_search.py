@@ -31,6 +31,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from youtube_search import YoutubeSearch
 import random
 import os
@@ -86,21 +87,37 @@ class InternetSearchCog(commands.Cog):
 
     async def google_search(self, ctx, query, message_to_edit=None):
         chrome_options = self.get_chrome_options()
-        service = Service('./chromedriverlinux64/chromedriver')
+        service = Service(ChromeDriverManager().install())
         
         with webdriver.Chrome(options=chrome_options, service=service) as driver:
+            # Disable automation detection
+            driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+                'source': '''
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined
+                    });
+                '''
+            })
+            
             url = f"https://www.google.com/search?q={query}"
             driver.get(url)
+            time.sleep(random.uniform(1.5, 3.5))  # Human-like delay
             html = driver.page_source
 
         soup = BeautifulSoup(html, 'html.parser')
         search_results = soup.select('.g')
-        search = "\n\n".join([
-            f"{result.select_one('h3').text if result.select_one('h3') else 'No Title'}\n"
-            f"{result.select_one('.VwiC3b').text if result.select_one('.VwiC3b') else 'No Snippet'}"
-            for result in search_results[:8]
-        ])
-
+        # Extract and add links to search results
+        search_results_with_links = []
+        for result in search_results[:8]:
+            title = result.select_one('h3').text if result.select_one('h3') else 'No Title'
+            snippet = result.select_one('.VwiC3b').text if result.select_one('.VwiC3b') else 'No Snippet'
+            link = result.select_one('a')['href'] if result.select_one('a') else 'No Link'
+            search_results_with_links.append(f"{title}\n{snippet}\n{link}")
+        
+        search = "\n\n".join(search_results_with_links)
+        # Check for CAPTCHA
+        if "Our systems have detected unusual traffic" in html:
+            raise RuntimeError("Google blocked the request (CAPTCHA triggered)")
         return search
 
     async def send_img(self, ctx, query, message_to_edit):
@@ -158,10 +175,13 @@ class InternetSearchCog(commands.Cog):
     @staticmethod
     def get_chrome_options():
         chrome_options = Options()
-        chrome_options.add_argument("--disable-infobars")
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
         return chrome_options
 
     @staticmethod
