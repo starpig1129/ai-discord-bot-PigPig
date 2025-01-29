@@ -114,7 +114,6 @@ def save_vector_store(stores, path):
         for channel_id, store in stores.items():
             channel_path = f"{path}_{channel_id}"
             #faiss.write_index(store.index, channel_path)
-        logging.info(f"FAISS 索引已保存到 {path}")
     except Exception as e:
         logging.error(f"保存 FAISS 索引時發生錯誤: {e}")
         raise
@@ -155,32 +154,13 @@ def to_gpu(index):
 def to_cpu(index):
     return faiss.index_gpu_to_cpu(index)
 
-async def gpt_message(message_to_edit, message, prompt):
+async def gpt_message(message_to_edit, message, prompt,history_dict,image_data):
     channel = message.channel
     channel_id = str(channel.id)
     
     # 從向量資料庫尋找相關資料
     related_data = search_vector_database(prompt, channel_id)
     print(prompt)
-    
-    # 提取圖片 URL 並下載圖片
-    image_input = None
-    image_urls = re.findall(r'Image URL: (https?://\S+)', prompt)
-    if image_urls:
-        try:
-            response = requests.get(image_urls[0])
-            image_input = Image.open(BytesIO(response.content)).convert('RGB')
-            # 從 prompt 中移除圖片 URL
-            prompt = re.sub(r'Image URL: https?://\S+\n?', '', prompt)
-        except Exception as e:
-            logging.error(f"下載或處理圖片時發生錯誤: {str(e)}")
-    # 讀取該訊息頻道最近的歷史紀錄
-    history = []
-    async for msg in channel.history(limit=5):
-        history.append(msg)
-    history.reverse()
-    history = history[:-2]
-    history_dict = [{"role": "user" if msg.author != message.guild.me else "assistant", "content": msg.content} for msg in history]
     
     # 組合資料
     combined_prompt = f"information:<<{related_data}>>user: {prompt}"
@@ -189,7 +169,7 @@ async def gpt_message(message_to_edit, message, prompt):
         responses = ""
         responsesall = ""
         message_result = ""
-        thread, streamer = await generate_response(prompt, system_prompt, history_dict, image_input=image_input)
+        thread, streamer = await generate_response(prompt, system_prompt, history_dict, image_input=image_data)
         buffer_size = 40  # 設置緩衝區大小
         current_message = message_to_edit
         
@@ -202,7 +182,6 @@ async def gpt_message(message_to_edit, message, prompt):
                 break
     
         async for response in streamer:
-            print(response, end="", flush=True)
             responses += response
             message_result += response
             if len(responses) >= buffer_size:

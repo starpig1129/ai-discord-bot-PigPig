@@ -1,13 +1,10 @@
 import google.generativeai as genai
-import os
 import asyncio
 from addons.settings import TOKENS
-from threading import Thread
-import math
 import numpy as np
 from PIL import Image
 from moviepy.editor import VideoFileClip
-
+from gpt.vision_tool import image_to_base64
 # Initialize the Gemini model
 tokens = TOKENS()
 genai.configure(api_key=tokens.gemini_api_key)
@@ -47,6 +44,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
         full_prompt = f"{system_prompt}\n{history_content}\nUser: {inst}"
 
     try:
+        content_parts = []
         if video_input:
             # 從視頻中提取關鍵幀並分析
             frames = extract_video_frames(video_input)
@@ -63,11 +61,16 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
         elif audio_input:
             full_prompt += f"\nAudio input is not supported by Gemini API"
         elif image_input:
-            full_prompt += f"\nImage: {image_input}"
+            if isinstance(image_input, list):
+                # 處理多個圖片輸入
+                
+                for i, img in enumerate(image_input, 1):
+                    content_parts.append({'mime_type': 'image/jpeg', 'data': image_to_base64(img)})
     except Exception as e:
         raise GeminiError(f"Gemini API 影像處理錯誤: {str(e)}")
     try:
-        response_stream = model.generate_content(full_prompt,
+        content_parts.append(full_prompt)
+        response_stream = model.generate_content(content_parts,
                                               safety_settings='BLOCK_NONE',
                                               stream=True)
         

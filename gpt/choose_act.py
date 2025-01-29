@@ -22,6 +22,7 @@
 import json
 from gpt.gpt_response_gen import generate_response
 from gpt.sendmessage import gpt_message
+from gpt.vision_tool import process_attachment_data
 from datetime import datetime
 import os
 import logging
@@ -47,16 +48,40 @@ class ActionHandler:
 
     async def choose_act(self, prompt, message, message_to_edit):
         prompt = f"time:[{datetime.now().isoformat(timespec='seconds')}]{prompt}"
+        # 初始化變數
+        history = []
+        image_data = []
         
-        # 處理圖片附件
+        # 處理當前訊息的附件
         if message.attachments:
-            for attachment in message.attachments:
-                if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
-                    prompt += f"\nImage URL: {attachment.url}"
+            await message_to_edit.edit(content="我看看...")
+            current_image_data = await process_attachment_data(message)
+            if isinstance(current_image_data, list):
+                image_data.extend(current_image_data)
+            else:
+                prompt += f"\n{current_image_data}"  # 錯誤訊息
         
-        action_list = await self.get_action_list(prompt)
+        # 讀取歷史訊息
+        async for msg in message.channel.history(limit=5):
+            if msg.id != message.id:  # 跳過當前訊息
+                history.append(msg)
+                if msg.attachments:
+                    msg_image_data = await process_attachment_data(msg)
+                    if isinstance(msg_image_data, list):
+                        image_data.extend(msg_image_data)
+                    else:
+                        prompt += f"\n{msg_image_data}"  # 錯誤訊息
+        history.reverse()
+        history = history[:-2]  # 移除當前訊息與第一個使用者訊息(會由其他地方加入)
+        history_dict = [{"role": "user" if msg.author != message.guild.me else "assistant", "content": msg.content} for msg in history]
+        # 處理圖片附件
         
-        async def execute_action(message_to_edit, dialogue_history, channel_id, original_prompt,message):
+        action_list = await self.get_action_list(prompt,history_dict,image_data)
+        
+        async def execute_action(message_to_edit, dialogue_history, channel_id, original_prompt, message):
+            # 確保dialogue_history中有channel_id的初始化
+            if channel_id not in dialogue_history:
+                dialogue_history[channel_id] = []
             logger = self.bot.get_logger_for_guild(message_to_edit.guild.name)
             final_results = []
             logger.info(action_list)
@@ -83,15 +108,15 @@ class ActionHandler:
             
             integrated_results = "\n".join(final_results)
             final_prompt = f'<<information:\n{integrated_results}>>\n{original_prompt}'
-            gptresponses = await gpt_message(message_to_edit, message, final_prompt)
+            gptresponses = await gpt_message(message_to_edit, message, final_prompt,history_dict,image_data)
             dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
             logger.info(f'PigPig:{gptresponses}')
         
         return execute_action
 
-    async def get_action_list(self, prompt: str):
+    async def get_action_list(self, prompt: str, history_dict: list, image_data: list):
         try:
-            thread, gen = await generate_response(prompt, self.system_prompt)
+            thread, gen = await generate_response(prompt, self.system_prompt,history_dict,image_data)
             responses = []
             async for chunk in gen:
                 responses.append(chunk)
