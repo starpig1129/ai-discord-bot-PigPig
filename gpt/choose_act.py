@@ -80,7 +80,8 @@ class ActionHandler:
         history = history[:-2]  # 移除當前訊息與第一個使用者訊息(會由其他地方加入)
         history_dict = [{
             "role": "user" if msg.author != message.guild.me else "assistant",
-            "content": msg.content
+            "content": msg.content,
+            "user_id": str(msg.author.id) if msg.author != message.guild.me else str(message.guild.me.id)
         } for msg in history]
         
         action_list = await self._get_action_list(prompt, history_dict, 

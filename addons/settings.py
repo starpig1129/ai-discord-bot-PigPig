@@ -26,3 +26,4 @@ class TOKENS:
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY",None)
         self.openai_api_key = os.getenv("OPENAI_API_KEY",None)
         self.gemini_api_key = os.getenv("GEMINI_API_KEY",None)
+        self.tenor_api_key = os.getenv("TENOR_API_KEY",None)
