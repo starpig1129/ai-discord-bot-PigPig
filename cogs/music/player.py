@@ -1,54 +1,74 @@
-import os
 import asyncio
 import discord
-from discord import FFmpegPCMAudio
 from discord.ext import commands
 from discord import app_commands
 import logging as logger
+from concurrent.futures import ThreadPoolExecutor
 
-from .queue import get_guild_queue_and_folder, guild_queues
+from addons.settings import Settings
 from .youtube import YouTubeManager
-from .ui.controls import MusicControlView
+from .audio_manager import AudioManager
+from .state_manager import StateManager
+from .queue_manager import QueueManager, PlayMode
+from .ui_manager import UIManager
 from .ui.song_select import SongSelectView
 
 class YTMusic(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.youtube = YouTubeManager()
-        self.current_song = None
-        self.current_message = None
-
-    async def play_from_position(self, interaction: discord.Interaction, position: int):
-        """從指定位置開始播放當前歌曲"""
-        if not self.current_song:
-            return
-            
-        voice_client = interaction.guild.voice_client
-        if not voice_client:
-            return
-            
-        file_path = self.current_song["file_path"]
-        if not os.path.exists(file_path):
-            return
-            
-        # 重新開始播放
-        voice_client.play(
-            FFmpegPCMAudio(file_path),
-            after=lambda e: self.bot.loop.create_task(self.handle_after_play(interaction, file_path))
-        )
+        self.youtube = None  # Will be initialized in setup_hook
+        self._executor = ThreadPoolExecutor(max_workers=3)
+        self.settings = Settings()
         
-        # 更新進度條位置
-        try:
-            for component in interaction.message.components:
-                for child in component.children:
-                    if isinstance(child, discord.ui.Select):
-                        child.placeholder = f"目前位置: {position//60:02d}:{position%60:02d}"
-            await interaction.message.edit(view=interaction.message.view)
-        except Exception as e:
-            logger.error(f"更新進度條位置失敗: {e}")
+        # Initialize managers
+        self.audio_manager = AudioManager()
+        self.state_manager = StateManager()
+        self.queue_manager = QueueManager()
+        self.ui_manager = UIManager()
+
+    async def setup_hook(self):
+        """Initialize async components"""
+        self.youtube = await YouTubeManager.create()
+
+    @app_commands.command(name="mode", description="設置播放模式 (不循環/清單循環/單曲循環)")
+    async def mode(self, interaction: discord.Interaction, mode: str):
+        """播放模式命令"""
+        if mode not in ["no_loop", "loop_queue", "loop_single"]:
+            embed = discord.Embed(
+                title="❌ | 無效的播放模式", 
+                description="可用模式: no_loop (不循環), loop_queue (清單循環), loop_single (單曲循環)", 
+                color=discord.Color.red()
+            )
+            message = await interaction.response.send_message(embed=embed)
+            state = self.state_manager.get_state(interaction.guild.id)
+            state.ui_messages.append(message)
+            return
+            
+        self.queue_manager.set_play_mode(interaction.guild.id, mode)
+        mode_names = {
+            "no_loop": "不循環",
+            "loop_queue": "清單循環",
+            "loop_single": "單曲循環"
+        }
+        embed = discord.Embed(title=f"✅ | 已設置播放模式為: {mode_names[mode]}", color=discord.Color.blue())
+        message = await interaction.response.send_message(embed=embed)
+        state = self.state_manager.get_state(interaction.guild.id)
+        state.ui_messages.append(message)
+
+    @app_commands.command(name="shuffle", description="切換隨機播放")
+    async def shuffle(self, interaction: discord.Interaction):
+        """隨機播放命令"""
+        is_shuffle = self.queue_manager.toggle_shuffle(interaction.guild.id)
+        status = "開啟" if is_shuffle else "關閉"
+        embed = discord.Embed(title=f"✅ | 已{status}隨機播放", color=discord.Color.blue())
+        message = await interaction.response.send_message(embed=embed)
+        state = self.state_manager.get_state(interaction.guild.id)
+        state.ui_messages.append(message)
+
 
     @app_commands.command(name="play", description="播放影片(網址或關鍵字)")
     async def play(self, interaction: discord.Interaction, query: str = ""):
+        """播放音樂命令"""
         # 檢查使用者是否已在語音頻道
         if interaction.user.voice:
             channel = interaction.user.voice.channel
@@ -56,43 +76,27 @@ class YTMusic(commands.Cog):
                 await channel.connect()
         else:
             embed = discord.Embed(title="❌ | 請先加入語音頻道！", color=discord.Color.red())
-            await interaction.response.send_message(embed=embed)
+            message = await interaction.response.send_message(embed=embed)
+            state = self.state_manager.get_state(interaction.guild.id)
+            state.ui_messages.append(message)
             return
 
         # 如果有提供查詢，將音樂加入播放清單
         if query:
-            logger.info(f"[音樂] 伺服器 ID： {interaction.guild.id}, 使用者名稱： {interaction.user.name}, 使用者輸入： {query}")
-            
+            logger.info(f"[音樂] 伺服器 ID： {interaction.guild.name}, 使用者名稱： {interaction.user.name}, 使用者輸入： {query}")
             await interaction.response.defer()
             
             # 檢查是否為URL
             if "youtube.com" in query or "youtu.be" in query:
-                is_valid = await self.add_to_queue(interaction, query, is_deferred=True)
+                # 檢查是否為播放清單
+                if "list" in query:
+                    await self._handle_playlist(interaction, query)
+                else:
+                    is_valid = await self._handle_single_video(interaction, query)
+                    if not is_valid:
+                        return
             else:
-                # 使用關鍵字搜尋
-                results = await self.youtube.search_videos(query)
-                if not results:
-                    embed = discord.Embed(title="❌ | 未找到相關影片", color=discord.Color.red())
-                    await interaction.followup.send(embed=embed)
-                    return
-                
-                # 創建選擇菜單
-                view = SongSelectView(self, results, interaction)
-                
-                # 創建包含搜尋結果的embed
-                embed = discord.Embed(title="🔍 | YouTube搜尋結果", description="請選擇要播放的歌曲：", color=discord.Color.blue())
-                for i, result in enumerate(results, 1):
-                    duration = result.get('duration', 'N/A')
-                    embed.add_field(
-                        name=f"{i}. {result['title']}", 
-                        value=f"頻道: {result['channel']}\n時長: {duration}", 
-                        inline=False
-                    )
-                
-                await interaction.followup.send(embed=embed, view=view)
-                return
-                
-            if is_valid == False:
+                await self._handle_search(interaction, query)
                 return
         
         # 播放音樂
@@ -100,134 +104,386 @@ class YTMusic(commands.Cog):
         if not voice_client.is_playing():
             await self.play_next(interaction)
 
-    async def add_to_queue(self, interaction, url, is_deferred=False):
-        guild_id = interaction.guild.id
-        queue, folder = get_guild_queue_and_folder(guild_id)
-
-        # 下載並獲取影片資訊
-        video_info, error = await self.youtube.download_audio(url, folder, interaction)
+    async def _handle_playlist(self, interaction: discord.Interaction, url: str):
+        """Handle playlist URL"""
+        _, folder = self._get_guild_folder(interaction.guild.id)
+        video_infos, error = await self.youtube.download_playlist(url, folder, interaction)
         
         if error:
             embed = discord.Embed(title=f"❌ | {error}", color=discord.Color.red())
-            if is_deferred:
-                await interaction.followup.send(embed=embed)
-            else:
-                await interaction.response.send_message(embed=embed)
+            message = await interaction.followup.send(embed=embed)
+            # Track error message
+            state = self.state_manager.get_state(interaction.guild.id)
+            state.ui_messages.append(message)
+            return
+            
+        # Add initial songs to queue
+        queue_size = self.queue_manager.get_queue(interaction.guild.id).qsize()
+        songs_to_add = min(5 - queue_size, len(video_infos))
+        added_songs = video_infos[:songs_to_add]
+        
+        for video_info in added_songs:
+            await self.queue_manager.add_to_queue(interaction.guild.id, video_info)
+            
+        # Save remaining songs to playlist
+        remaining_songs = video_infos[songs_to_add:]
+        if remaining_songs:
+            self.queue_manager.set_playlist(interaction.guild.id, remaining_songs)
+            
+        # Create embed for added songs
+        description = "\n".join([f"🎵 {info['title']}" for info in added_songs])
+        embed = discord.Embed(
+            title=f"✅ | 已添加 {len(added_songs)} 首歌曲到播放清單 (共 {len(video_infos)} 首)",
+            description=description,
+            color=discord.Color.blue()
+        )
+        message = await interaction.followup.send(embed=embed)
+        # Track playlist message
+        state = self.state_manager.get_state(interaction.guild.id)
+        state.ui_messages.append(message)
+
+    async def _handle_single_video(self, interaction: discord.Interaction, url: str) -> bool:
+        """Handle single video URL"""
+        guild_id = interaction.guild.id
+        queue = self.queue_manager.get_queue(guild_id)
+        state = self.state_manager.get_state(guild_id)
+        
+        if queue.qsize() >= 5:
+            embed = discord.Embed(
+                title="❌ | 播放清單已滿",
+                description="請等待當前歌曲播放完畢後再添加新歌曲",
+                color=discord.Color.red()
+            )
+            message = await interaction.followup.send(embed=embed)
+            state.ui_messages.append(message)
             return False
-
-        # 將檔案資訊加入佇列
-        await queue.put(video_info)
-
-        logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 使用者名稱： {interaction.user.name}, 成功將 {video_info['title']} 添加到播放清單")
-        embed = discord.Embed(title=f"✅ | 已添加到播放清單： {video_info['title']}", color=discord.Color.blue())
-        if is_deferred:
-            await interaction.followup.send(embed=embed)
+            
+        _, folder = self._get_guild_folder(guild_id)
+        should_download = queue.qsize() == 0
+        
+        if should_download:
+            video_info, error = await self.youtube.download_audio(url, folder, interaction)
         else:
-            await interaction.response.send_message(embed=embed)
+            video_info, error = await self.youtube.get_video_info_without_download(url, interaction)
+            
+        if error:
+            embed = discord.Embed(title=f"❌ | {error}", color=discord.Color.red())
+            message = await interaction.followup.send(embed=embed)
+            state.ui_messages.append(message)
+            return False
+            
+        await self.queue_manager.add_to_queue(guild_id, video_info)
+        embed = discord.Embed(title=f"✅ | 已添加到播放清單： {video_info['title']}", color=discord.Color.blue())
+        message = await interaction.followup.send(embed=embed)
+        state.ui_messages.append(message)
         return True
 
-    async def play_next(self, interaction):
-        guild_id = interaction.guild.id
-        queue, _ = get_guild_queue_and_folder(guild_id)
+    async def _handle_search(self, interaction: discord.Interaction, query: str):
+        """Handle search query"""
+        results = await self.youtube.search_videos(query)
+        if not results:
+            embed = discord.Embed(title="❌ | 未找到相關影片", color=discord.Color.red())
+            message = await interaction.followup.send(embed=embed)
+            # Track error message
+            state = self.state_manager.get_state(interaction.guild.id)
+            state.ui_messages.append(message)
+            return
+        
+        # Format durations properly
+        formatted_results = []
+        for i, result in enumerate(results, 1):
+            duration_secs = result.get('duration', 0)
+            minutes, seconds = divmod(duration_secs, 60)
+            duration_str = f"{int(minutes):02d}:{int(seconds):02d}"
+            formatted_results.append(f"{i}. {result['title']} ({duration_str})")
 
+        view = SongSelectView(self, results, interaction)
+        description = "請選擇要播放的歌曲：\n\n" + "\n".join(formatted_results)
+        embed = discord.Embed(
+            title="🔍 | YouTube搜尋結果",
+            description=description,
+            color=discord.Color.blue()
+        )
+        
+        # Get state for message tracking
+        state = self.state_manager.get_state(interaction.guild.id)
+        
+        try:
+            message = await interaction.followup.send(embed=embed, view=view)
+        except discord.errors.HTTPException as e:
+            if e.code == 50027:  # Invalid Webhook Token
+                message = await interaction.channel.send(embed=embed, view=view)
+            else:
+                logger.error(f"Failed to send search results: {e}")
+                raise
+        
+        # Track search results message
+        if message:
+            state.ui_messages.append(message)
+
+    async def play_next(self, interaction: discord.Interaction, force_new: bool = False):
+        """Play the next song in queue"""
+        guild_id = interaction.guild.id
         voice_client = interaction.guild.voice_client
+        
         if not voice_client or not voice_client.is_connected():
             return
             
-        if not queue.empty():
-            item = await queue.get()
-            file_path = item["file_path"]
-            try:
-                # 保存當前播放的歌曲信息
-                self.current_song = item
-                
-                # 開始播放
-                voice_client.play(
-                    FFmpegPCMAudio(file_path),
-                    after=lambda e: self.bot.loop.create_task(self.handle_after_play(interaction, file_path))
-                )
-                
-                # 創建或更新 embed
-                embed = discord.Embed(
-                    title="🎵 正在播放",
-                    description=f"**[{item['title']}]({item['url']})**",
-                    color=discord.Color.blue()
-                )
-                
-                minutes, seconds = divmod(item['duration'], 60)
-                embed.add_field(name="👤 上傳頻道", value=item['author'], inline=True)
-                embed.add_field(name="⏱️ 播放時長", value=f"{minutes:02d}:{seconds:02d}", inline=True)
-                embed.add_field(name="👀 觀看次數", value=f"{int(item['views']):,}", inline=True)
-                embed.add_field(name="🎵 播放進度", value=f"00:00 ▱▱▱▱▱▱▱▱▱▱ {minutes:02d}:{seconds:02d}", inline=False)
-                embed.add_field(name="📜 播放清單", value="清單為空", inline=False)
-                
-                thumbnail = self.youtube.get_thumbnail_url(item['video_id'])
-                embed.set_thumbnail(url=thumbnail)
-                embed.set_footer(text=f"由 {item['requester'].name} 添加", icon_url=item['user_avatar'])
-                
-                # 創建新的控制視圖並添加進度條選擇器
-                view = MusicControlView(interaction, self)
-                view.add_progress_select()
-                
-                # 如果已有播放訊息，則更新它
-                if self.current_message:
-                    await self.current_message.edit(embed=embed, view=view)
-                    message = self.current_message
-                else:
-                    # 否則發送新訊息
-                    message = await interaction.followup.send(embed=embed, view=view)
-                    self.current_message = message
-                
-                # 設置視圖的訊息和 embed
-                view.message = message
-                view.current_embed = embed
-                view.current_position = 0
-                
-                # 開始更新進度
-                if view.update_task:
-                    view.update_task.cancel()
-                view.update_task = self.bot.loop.create_task(view.update_progress(item['duration']))
-                
-            except Exception as e:
-                logger.error(f"[音樂] 伺服器 ID： {interaction.guild.id}, 播放音樂時出錯： {e}")
-                embed = discord.Embed(title=f"❌ | 播放音樂時出錯", color=discord.Color.red())
-                await interaction.followup.send(embed=embed)
-                await self.play_next(interaction)  # 嘗試播放下一首
-        else:
-            embed = discord.Embed(title="🌟 | 播放清單已播放完畢！", color=discord.Color.blue())
-            await interaction.followup.send(embed=embed)
-            self.current_message = None
-
-    async def handle_after_play(self, interaction, file_path):
+        state = self.state_manager.get_state(guild_id)
+        play_mode = self.queue_manager.get_play_mode(guild_id)
+        
         try:
-            if os.path.exists(file_path):
-                await asyncio.sleep(1)
-                os.remove(file_path)
-                logger.debug(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案成功！")
+            # Handle single song loop
+            if not force_new and play_mode == PlayMode.LOOP_SINGLE and state.current_song:
+                await self._handle_single_loop(interaction, state, voice_client)
+                return
+                
+            # Get next song from queue
+            next_song = await self._get_next_song(interaction, guild_id, force_new)
+            if not next_song:
+                embed = discord.Embed(title="🌟 | 播放清單已播放完畢！", color=discord.Color.blue())
+                message = await interaction.followup.send(embed=embed)
+                state = self.state_manager.get_state(guild_id)
+                state.ui_messages.append(message)
+                self.state_manager.update_state(guild_id, current_message=None)
+                return
+                
+            # Update state and play song
+            self.state_manager.update_state(guild_id, current_song=next_song)
+            await self._play_song(interaction, next_song, voice_client)
+            
         except Exception as e:
-            logger.warning(f"[音樂] 伺服器 ID： {interaction.guild.id}, 刪除檔案失敗： {e}")
-        await self.play_next(interaction)
+            logger.error(f"[音樂] 伺服器 ID： {guild_id}, 播放音樂時出錯： {e}")
+            embed = discord.Embed(title=f"❌ | 播放音樂時出錯", color=discord.Color.red())
+            message = await interaction.followup.send(embed=embed)
+            state = self.state_manager.get_state(guild_id)
+            state.ui_messages.append(message)
+            await self.play_next(interaction, force_new=True)
+
+    async def _handle_single_loop(self, interaction: discord.Interaction, state, voice_client):
+        """Handle single song loop playback"""
+        try:
+            if voice_client.is_playing():
+                voice_client.stop()
+            
+            file_path = state.current_song["file_path"]
+            audio_source = self.audio_manager.create_audio_source(file_path)
+            
+            message = await self.ui_manager.update_player_ui(
+                interaction, 
+                state.current_song,
+                state.current_message,
+                self.youtube,
+                self
+            )
+            self.state_manager.update_state(interaction.guild.id, current_message=message)
+            
+            def after_callback(error):
+                if error:
+                    logger.error(f"[音樂] 播放時發生錯誤: {error}")
+                
+                # Get the event loop from the bot
+                loop = self.bot.loop
+                if loop and loop.is_running():
+                    # Schedule the coroutine on the bot's event loop
+                    loop.create_task(self._handle_after_play(interaction, file_path))
+                
+            voice_client.play(audio_source, after=after_callback)
+        except Exception as e:
+            logger.error(f"[音樂] 單曲循環播放時出錯： {e}")
+            await self.play_next(interaction, force_new=True)
+
+    async def _get_next_song(self, interaction: discord.Interaction, guild_id: int, force_new: bool):
+        """Get the next song to play"""
+        if force_new or self.queue_manager.get_play_mode(guild_id) != PlayMode.LOOP_SINGLE:
+            # Handle queue loop
+            if self.queue_manager.get_queue(guild_id).empty():
+                if self.queue_manager.get_play_mode(guild_id) == PlayMode.LOOP_QUEUE:
+                    await self._refill_queue(guild_id)
+                    
+            # Get and download next song
+            next_song = await self.queue_manager.get_next_item(guild_id)
+            if next_song:
+                _, folder = self._get_guild_folder(guild_id)
+                if not next_song.get('file_path'):
+                    downloaded_info, error = await self.youtube.download_audio(
+                        next_song['url'], 
+                        folder, 
+                        interaction
+                    )
+                    if error:
+                        return None
+                    next_song['file_path'] = downloaded_info['file_path']
+            return next_song
+        return None
+
+    async def _refill_queue(self, guild_id: int):
+        """Refill the queue with songs"""
+        queue_copy, new_queue = await self.queue_manager.copy_queue(
+            guild_id, 
+            shuffle=self.queue_manager.is_shuffle_enabled(guild_id)
+        )
+        if queue_copy:
+            self.queue_manager.get_queue_state(guild_id).queue = new_queue
+
+    async def _play_song(self, interaction: discord.Interaction, song: dict, voice_client):
+        """Play a song and update UI"""
+        if voice_client.is_playing():
+            voice_client.stop()
+            
+        audio_source = self.audio_manager.create_audio_source(song['file_path'])
+        message = await self.ui_manager.update_player_ui(
+            interaction,
+            song,
+            self.state_manager.get_state(interaction.guild.id).current_message,
+            self.youtube,
+            self
+        )
+        self.state_manager.update_state(interaction.guild.id, current_message=message)
+        
+        def after_callback(error):
+            if error:
+                logger.error(f"[音樂] 播放時發生錯誤: {error}")
+            
+            # Get the event loop from the bot
+            loop = self.bot.loop
+            if loop and loop.is_running():
+                # Schedule the coroutine on the bot's event loop
+                loop.create_task(self._handle_after_play(interaction, song['file_path']))
+            
+        voice_client.play(audio_source, after=after_callback)
+
+    async def _handle_after_play(self, interaction: discord.Interaction, file_path: str):
+        """Handle cleanup after song finishes playing"""
+        guild_id = interaction.guild.id
+        channel = interaction.channel
+        
+        try:
+            # Clean up file if not in single loop mode
+            if self.queue_manager.get_play_mode(guild_id) != PlayMode.LOOP_SINGLE:
+                await self.audio_manager.delete_file(guild_id, file_path)
+            
+            # Add more songs from playlist if needed
+            queue = self.queue_manager.get_queue(guild_id)
+            if queue.qsize() < 5 and self.queue_manager.has_playlist_songs(guild_id):
+                _, folder = self._get_guild_folder(guild_id)
+                next_songs = await self.queue_manager.get_next_playlist_songs(
+                    guild_id,
+                    count=5 - queue.qsize()
+                )
+                for song in next_songs:
+                    await self.queue_manager.add_to_queue(guild_id, song)
+            
+            # Create a new interaction-like object for UI updates
+            if channel:
+                class DummyInteraction:
+                    def __init__(self, channel, guild, original_interaction):
+                        self.channel = channel
+                        self.guild = guild
+                        # Create a complete user copy with all required attributes
+                        class DummyUser:
+                            def __init__(self, original_user):
+                                self.name = original_user.name
+                                self.display_name = original_user.display_name
+                                self.id = original_user.id
+                                self.mention = original_user.mention
+                                self.display_avatar = original_user.display_avatar
+                                self.avatar = type('Avatar', (), {'url': original_user.display_avatar.url})()
+                            
+                            def __getattr__(self, name):
+                                # Forward any other attribute access to the original user
+                                return getattr(original_interaction.user, name)
+                                
+                        self.user = DummyUser(original_interaction.user)
+                        # Create a followup object with proper send method
+                        class DummyFollowup:
+                            def __init__(self, channel):
+                                self._channel = channel
+                            
+                            async def send(self, *args, **kwargs):
+                                try:
+                                    return await self._channel.send(*args, **kwargs)
+                                except Exception as e:
+                                    logger.error(f"[音樂] 發送訊息失敗： {str(e)}")
+                                    raise
+                                    
+                        self.followup = DummyFollowup(channel)
+                        # Copy additional required attributes
+                        self.application_id = original_interaction.application_id
+                        self.id = original_interaction.id
+                        
+                new_interaction = DummyInteraction(channel, interaction.guild, interaction)
+                
+                # Play next song with new interaction object
+                try:
+                    # Try to play next song
+                    await self.play_next(new_interaction)
+                except Exception as e:
+                    logger.error(f"[音樂] 播放下一首歌曲時出錯： {str(e)}")
+                    if channel:
+                        try:
+                            # Send error message using channel.send directly
+                            embed = discord.Embed(
+                                title="❌ | 播放音樂時發生錯誤",
+                                description="正在嘗試播放下一首歌曲...",
+                                color=discord.Color.red()
+                            )
+                            message = await channel.send(embed=embed)
+                            state = self.state_manager.get_state(guild_id)
+                            state.ui_messages.append(message)
+                            
+                            # Try to stop current playback if any
+                            voice_client = interaction.guild.voice_client
+                            if voice_client and voice_client.is_connected() and voice_client.is_playing():
+                                voice_client.stop()
+                            
+                            # Try one more time with force_new
+                            await self.play_next(new_interaction, force_new=True)
+                        except Exception as retry_error:
+                            logger.error(f"[音樂] 重試播放失敗： {str(retry_error)}")
+                            try:
+                                # Send final error message
+                                embed = discord.Embed(
+                                    title="❌ | 播放失敗",
+                                    description="請使用 /play 重新播放",
+                                    color=discord.Color.red()
+                                )
+                                message = await channel.send(embed=embed)
+                                state = self.state_manager.get_state(guild_id)
+                                state.ui_messages.append(message)
+                            except Exception as final_error:
+                                logger.error(f"[音樂] 發送錯誤訊息失敗： {str(final_error)}")
+            
+        except Exception as e:
+            logger.error(f"[音樂] 處理播放完成時出錯： {str(e)}")
+
+    def _get_guild_folder(self, guild_id: int) -> tuple:
+        """Get guild queue and folder"""
+        queue = self.queue_manager.get_queue(guild_id)
+        folder = f"{self.settings.music_temp_base}/{guild_id}"
+        return queue, folder
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        # 偵測機器人離開語音頻道時，清理伺服器相關資料
+        """Handle bot leaving voice channel"""
         if member.bot and before.channel is not None and after.channel is None:
             guild_id = member.guild.id
-            _, folder = get_guild_queue_and_folder(guild_id)
-            logger.info(f"[音樂] 伺服器 ID： {member.guild.id}, 離開語音頻道")
-            await asyncio.sleep(2)
-            # 刪除所有音檔
-            for file in os.listdir(folder):
-                file_path = os.path.join(folder, file)
+            _, folder = self._get_guild_folder(guild_id)
+            
+            # Get state before cleanup
+            state = self.state_manager.get_state(guild_id)
+            
+            # Clean up UI messages
+            for message in state.ui_messages:
                 try:
-                    os.remove(file_path)
-                    logger.debug(f"[音樂] 伺服器 ID： {member.guild.id}, 刪除檔案成功！")
-                except Exception as e:
-                    logger.warning(f"[音樂] 伺服器 ID： {member.guild.id}, 刪除檔案失敗： {e}")
+                    await message.delete()
+                except:
+                    pass  # Ignore cleanup failures
             
-            # 清空播放隊列
-            if guild_id in guild_queues:
-                guild_queues[guild_id] = asyncio.Queue()
+            # Cleanup other resources
+            await self.audio_manager.cleanup_guild_files(guild_id, folder)
+            self.queue_manager.clear_guild_data(guild_id)
+            self.state_manager.clear_state(guild_id)
             
-            # 清除當前訊息引用
-            self.current_message = None
+            if logger.getLogger().isEnabledFor(logger.INFO):
+                logger.info(f"[音樂] 伺服器 ID： {member.guild.name}, 離開語音頻道")

@@ -1,48 +1,42 @@
 import discord
 
-class ProgressSelect(discord.ui.Select):
-    def __init__(self, duration, cog):
-        self.duration = duration
-        self.cog = cog
+class ProgressDisplay:
+    """A class to handle the display of music playback progress"""
+    
+    @staticmethod
+    def create_progress_bar(current, total, length=20):
+        """Create a more aesthetic progress bar
         
-        # 創建進度選項（10個刻度）
-        options = []
-        for i in range(11):
-            position = int(duration * i / 10)
-            minutes, seconds = divmod(position, 60)
-            options.append(
-                discord.SelectOption(
-                    label=f"{minutes:02d}:{seconds:02d}",
-                    value=str(position),
-                    description=f"跳轉至 {i*10}% 處"
-                )
-            )
+        Args:
+            current (int): Current position in seconds
+            total (int): Total duration in seconds
+            length (int): Length of the progress bar
             
-        super().__init__(
-            placeholder="拖曳調整進度...",
-            options=options,
-            min_values=1,
-            max_values=1
-        )
+        Returns:
+            str: Formatted progress bar with timestamps
+        """
+        filled = int(length * current / total)
+        # Using more aesthetic characters for the progress bar
+        bar = "━" * filled + "─" * (length - filled)
+        # Add a slider character at the current position
+        if filled < length:
+            bar = bar[:filled] + "⚪" + bar[filled+1:]
+        
+        minutes_current, seconds_current = divmod(current, 60)
+        minutes_total, seconds_total = divmod(total, 60)
+        
+        # Format with emojis and better spacing
+        return f"`{int(minutes_current):02d}:{int(seconds_current):02d}` ┃{bar}┃ `{int(minutes_total):02d}:{int(seconds_total):02d}`"
 
-    async def callback(self, interaction: discord.Interaction):
-        position = int(self.values[0])
-        voice_client = interaction.guild.voice_client
-        if voice_client and voice_client.is_playing():
-            voice_client.stop()
-            await self.cog.play_from_position(interaction, position)
+    @staticmethod
+    def format_timestamp(seconds):
+        """Format seconds into MM:SS format
+        
+        Args:
+            seconds (int): Time in seconds
             
-            # Get the view from the message
-            view = interaction.message.view
-            if view:
-                # 更新進度條位置
-                view.current_position = position
-                
-                # 重新啟動進度更新任務
-                if view.update_task:
-                    view.update_task.cancel()
-                view.update_task = self.cog.bot.loop.create_task(
-                    view.update_progress(self.duration)
-                )
-            
-            await interaction.response.defer()
+        Returns:
+            str: Formatted timestamp
+        """
+        minutes, seconds = divmod(seconds, 60)
+        return f"{int(minutes):02d}:{int(seconds):02d}"

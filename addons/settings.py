@@ -12,6 +12,8 @@ class Settings:
         self.ipc_server: dict = settings.get("ipc_server", {})
         self.version: str = settings.get("version", "")
         self.mongodb_uri: str = settings.get("mongodb", "")
+        self.music_temp_base: str = settings.get("music_temp_base", "./temp/music")
+        self.model_priority: list = settings.get("model_priority", ["gemini","local", "openai", "claude"])
 
 class TOKENS:
     def __init__(self) -> None:
@@ -24,3 +26,4 @@ class TOKENS:
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY",None)
         self.openai_api_key = os.getenv("OPENAI_API_KEY",None)
         self.gemini_api_key = os.getenv("GEMINI_API_KEY",None)
+        self.tenor_api_key = os.getenv("TENOR_API_KEY",None)

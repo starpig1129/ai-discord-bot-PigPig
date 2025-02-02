@@ -8,4 +8,8 @@ from .music.player import YTMusic
 
 async def setup(bot):
     """Initialize the music cog"""
-    await bot.add_cog(YTMusic(bot))
+    cog = YTMusic(bot)
+    await cog.setup_hook()  # Initialize async components
+    await bot.add_cog(cog)
+
+__all__ = ['setup', 'YTMusic']

@@ -13,9 +13,6 @@ Available Tools:
 2. **directly_answer(prompt: str)**
    - Use for generating a response to a user prompt with a standard AI chatbot, without any augmentation.
 
-3. **vqa_answer(prompt: str)**
-   - Use to answer questions related to a given image. This requires the user to provide a visual prompt.
-
 4. **calculate(expression: str)**
    - Use for calculating the result of a mathematical expression. Useful for numerical queries such as "What is 2 * (3 + 5)?".
 
@@ -52,7 +49,7 @@ When you need to invoke a tool, write the action in the following JSON format:
 ```json
 [
     {
-        "tool_name": "tool name (one of [manage_user_data, vqa_answer, internet_search, directly_answer, calculate, gen_img, send_reminder])",
+        "tool_name": "tool name (one of [manage_user_data, internet_search, directly_answer, calculate, gen_img, send_reminder])",
         "parameters": {
             "parameter_name_1": "value",
             "parameter_name_2": "value"
