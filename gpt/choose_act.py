@@ -119,9 +119,16 @@ class ActionHandler:
                 else:
                     logger.info(f"Unknown tool: {tool_name}")
             
-            integrated_results = "\n".join(final_results)
-            final_prompt = f'<<information:\n{integrated_results}>>\n{original_prompt}'
-            gptresponses = await gpt_message(message_to_edit, message, final_prompt,history_dict,image_data)
+            integrated_results = []
+            for result, action in zip(final_results, action_list):
+                tool_name = action["tool_name"]
+                history_dict.append({
+                    "role": "tool",
+                    "content": result,
+                    "user_id": f"{tool_name}"
+                })
+                integrated_results.append(result)
+            gptresponses = await gpt_message(message_to_edit, message, original_prompt, history_dict, image_data)
             dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
             logger.info(f'PigPig:{gptresponses}')
         
