@@ -10,7 +10,7 @@ import json
 import re
 import os
 
-from gpt.gpt_response_gen import generate_response
+from gpt.gpt_response_gen import generate_response, get_model_and_tokenizer
 
 class DiscordManagerAgent(commands.Cog):
     """Discord管理代理人系統。"""
@@ -332,11 +332,14 @@ class InstructionParser:
     async def parse(self, instruction: str) -> Optional[Dict[str, Any]]:
         """使用LLM解析自然語言指令。"""
         try:
+            # 獲取當前已加載的模型
+            model, tokenizer = get_model_and_tokenizer()
+            if model is None or tokenizer is None:
+                raise ValueError("模型尚未加載，請等待模型加載完成")
+
             thread, gen = await generate_response(
                 instruction,
                 self.system_prompt,
-                [],
-                None
             )
 
             response = ""
@@ -347,9 +350,14 @@ class InstructionParser:
             json_end = response.rfind("}") + 1
             if json_start != -1 and json_end != -1:
                 json_str = response[json_start:json_end]
-                return json.loads(json_str)
-            
-            return None
+                try:
+                    return json.loads(json_str)
+                except json.JSONDecodeError:
+                    logging.error(f"無法解析JSON回應: {json_str}")
+                    return None
+            else:
+                logging.error(f"回應中找不到有效的JSON: {response}")
+                return None
 
         except Exception as e:
             logging.error(f"解析指令時發生錯誤: {str(e)}")
