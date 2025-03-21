@@ -75,7 +75,7 @@ async def generate_response(prompt):
 4. Decide whether to use the basic model or the advanced model for the next reasoning step.
 
 Response Format:
-Use JSON with keys: 'title', 'content', 'next_action' (values: 'continue' or 'final_answer'), 'model_selection' (values: 'basic' or 'advanced')
+Use JSON with keys: 'title', 'content', 'next_action' (values: 'continue' or 'final_answer'), 'model_selection' (values:'advanced')
 
 Key Instructions:
 - Employ at least 5 distinct reasoning steps.

@@ -172,29 +172,29 @@ class DiscordManagerAgent(commands.Cog):
             
         elif action == "assign":
             role = await self._get_role(ctx, params["role_name"])
-            member = await self._get_member(ctx, params["member_name"])
+            member = await self._get_member(ctx, params["userid"])
             if role and member:
                 await member.add_roles(role)
-                return f"已將身分組 {role.name} 指派給 {member.name}"
+                return f"已將身分組 {role.name} 指派給 {member.mention}"
             return "找不到指定的身分組或成員"
 
     async def _handle_voice_operation(self, ctx, action, params):
         """處理語音頻道相關操作。"""
         if action == "move":
-            member = await self._get_member(ctx, params["member_name"])
+            member = await self._get_member(ctx, params["userid"])
             channel = await self._get_channel(ctx, params["channel_name"], 
                                            channel_type="voice")
             if member and channel:
                 await member.move_to(channel)
-                return f"已將 {member.name} 移動到 {channel.name}"
+                return f"已將 {member.mention} 移動到 {channel.name}"
             return "找不到指定的成員或語音頻道"
             
         elif action == "disconnect":
-            member = await self._get_member(ctx, params["member_name"])
+            member = await self._get_member(ctx, params["userid"])
             if member:
                 await member.move_to(None)
-                return f"已將 {member.name} 從語音頻道中斷連接"
-            return f"找不到成員 {params['member_name']}"
+                return f"已將 {member.mention} 從語音頻道中斷連接"
+            return f"找不到成員 {params['userid']}"
             
         elif action == "limit":
             channel = await self._get_channel(ctx, params["channel_name"], channel_type="voice")
@@ -257,9 +257,27 @@ class DiscordManagerAgent(commands.Cog):
         """獲取指定名稱的身分組。"""
         return discord.utils.get(ctx.guild.roles, name=name)
 
-    async def _get_member(self, ctx, name: str) -> Optional[discord.Member]:
-        """獲取指定名稱的成員。"""
-        return discord.utils.get(ctx.guild.members, name=name)
+    async def _get_member(self, ctx, user_identifier: str) -> Optional[discord.Member]:
+        """獲取指定成員。
+
+        Args:
+            ctx: Discord指令上下文
+            user_identifier: 使用者識別碼，可以是 ID 或 @ 提及格式
+
+        Returns:
+            Optional[discord.Member]: 找到的成員物件，若未找到則返回 None
+        """
+        # 處理 @ 提及格式
+        mention_match = re.match(r'<@!?(\d+)>', user_identifier)
+        if mention_match:
+            user_id = int(mention_match.group(1))
+            return ctx.guild.get_member(user_id)
+        
+        # 處理純數字 ID
+        if user_identifier.isdigit():
+            return ctx.guild.get_member(int(user_identifier))
+        
+        return None
 
     async def _get_category(self, ctx, name: str) -> Optional[discord.CategoryChannel]:
         """獲取指定名稱的分類。"""

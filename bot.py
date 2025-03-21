@@ -115,10 +115,10 @@ class PigPig(commands.Bot):
             global global_model, global_tokenizer
 
             model, tokenizer = get_model_and_tokenizer()
-            if model is None or tokenizer is None:
-                await message.reply("豬腦休息中")
-                self.save_dialogue_history()
-                return
+            # if model is None or tokenizer is None:
+            #     await message.reply("豬腦休息中")
+            #     self.save_dialogue_history()
+            #     return
 
             message_to_edit = await message.reply("思考中...")
             try:
@@ -209,8 +209,8 @@ class PigPig(commands.Bot):
             self.setup_logger_for_guild(guild.name)  # 設置每個伺服器的 logger
         try:
             model_management_cog = self.get_cog('ModelManagement')
-            if model_management_cog:
-                await model_management_cog.reload_model()
+            # if model_management_cog:
+            #     await model_management_cog.reload_model()
         except Exception as e:
             print(e)
         # 將資料寫入 JSON 文件
