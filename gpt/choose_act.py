@@ -208,7 +208,7 @@ class ActionHandler:
             if message.attachments:
                 for attachment in message.attachments:
                     if attachment.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                        async with self.bot.session.get(attachment.url) as response:
+                        async with image_gen_cog.session.get(attachment.url) as response:
                             image_data = await response.read()
                         img = Image.open(io.BytesIO(image_data))
                         input_images.append(img)
