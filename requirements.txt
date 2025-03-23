@@ -47,3 +47,4 @@ anthropic
 pytz
 yt_dlp
 youtube_search
+PyNaCl
