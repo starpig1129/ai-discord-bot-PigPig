@@ -14,7 +14,6 @@ class OpenAIError(Exception):
 
 # Initialize OpenAI client
 tokens = TOKENS()
-client = OpenAI(api_key=tokens.openai_api_key)
 
 # Initialize tokenizer
 tokenizer = tiktoken.encoding_for_model("gpt-4o-mini")
@@ -82,6 +81,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
 
     async def run_generation():
         try:
+            client = OpenAI(api_key=tokens.openai_api_key)
             stream = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: client.chat.completions.create(
