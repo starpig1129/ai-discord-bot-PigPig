@@ -125,7 +125,7 @@ class InternetSearchCog(commands.Cog):
 
         url = f"https://www.google.com.hk/search?q={query}&tbm=isch"
         chrome_options = self.get_chrome_options()
-        service = Service('./chromedriverlinux64/chromedriver')
+        service = Service(ChromeDriverManager().install())
 
         try:
             with webdriver.Chrome(options=chrome_options, service=service) as driver:

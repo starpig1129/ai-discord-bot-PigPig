@@ -7,7 +7,7 @@ from cogs.eat.train.train import Train
 from cogs.eat.embeds import eatEmbed
 import random
 from gpt.gpt_response_gen import generate_response
-map = GoogleMapCrawler('./chromedriverlinux64/chromedriver')
+map = GoogleMapCrawler()
 class EatWhatView(discord.ui.View):
     def __init__(self,result,predict:str,keyword:str, db: DB, record_id: int, discord_id:str):
         super().__init__()

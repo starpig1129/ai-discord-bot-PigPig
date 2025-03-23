@@ -7,18 +7,19 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import re
 
 # 定義一個用於從Google地圖爬取餐廳信息的類
 class GoogleMapCrawler:
-    def __init__(self, driver:str ='./chromedriverlinux64/chromedriver'):
+    def __init__(self):
         # 初始化Chrome WebDriver的選項
         chrome_options = Options()
         chrome_options.add_argument("--headless")  # 啟用無頭模式，不顯示瀏覽器界面
         chrome_options.add_argument("--disable-gpu")  # 禁用GPU加速
         chrome_options.add_argument("--incognito")  # 啟用無痕模式
-        s = Service(driver)  # 指定chromedriver的路徑
+        s = Service(ChromeDriverManager().install())
         self.webdriver = webdriver.Chrome(options=chrome_options, service=s)
     
     def search(self, keyword):
