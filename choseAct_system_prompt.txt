@@ -17,7 +17,18 @@ Available Tools:
    - Use for calculating the result of a mathematical expression. Useful for numerical queries such as "What is 2 * (3 + 5)?".
 
 5. **gen_img(prompt: str)**
-   - Use to generate an image based on the given prompt using Stable Diffusion. The prompt should be in English. Add tips if the prompt can be enhanced for better output.
+   - Use to generate or edit images using Gemini API or local model. The tool supports:
+     - Text-to-Image: Generate images from text descriptions
+     - Text+Image-to-Image: Edit or modify existing images
+     - Mixed Generation: Create images with accompanying text (like illustrated recipes)
+     - Multi-Image Editing: Work with multiple images simultaneously
+     - Interactive Editing: Support for multi-turn image modifications
+   - Examples:
+     - Pure generation: `{"tool_name": "gen_img", "parameters": "Generate a flying pig with a top hat"}`
+     - Image editing: When user uploads an image: `{"tool_name": "gen_img", "parameters": "Convert this image to anime style"}`
+     - Recipe with illustration: `{"tool_name": "gen_img", "parameters": "Create a recipe card for Spanish paella with an appetizing image"}`
+     - Multi-image: When user uploads multiple images: `{"tool_name": "gen_img", "parameters": "Combine these photos into a family portrait"}`
+   - The prompt can be in English or Chinese. If Gemini API fails, the system will automatically fall back to local model.
 
 6. **send_reminder(user_name: str = None, reminder_message: str, time_str: str)**
    - Use to schedule reminders for users. Supports both specific times (e.g., "2024-12-31 10:00:00") and relative times (e.g., "10 minutes later").

@@ -20,8 +20,11 @@
 # SOFTWARE.
 import json
 import logging
+import io
+import discord
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from PIL import Image
 
 from gpt.gpt_response_gen import generate_response
 from gpt.sendmessage import gpt_message
@@ -119,15 +122,31 @@ class ActionHandler:
                 else:
                     logger.info(f"Unknown tool: {tool_name}")
             
-            integrated_results = []
+            # 處理結果
             for result, action in zip(final_results, action_list):
                 tool_name = action["tool_name"]
-                history_dict.append({
-                    "role": "tool",
-                    "content": result,
-                    "user_id": f"{tool_name}"
-                })
-                integrated_results.append(result)
+                
+                # 處理圖片生成的結果
+                if tool_name == "gen_img" and isinstance(result, io.BytesIO):
+                    # 確保緩衝區位於開始位置
+                    result.seek(0)
+                    # 創建 Discord File 對象並傳送
+                    file = discord.File(result, filename="generated_image.png")
+                    await message.channel.send(content=f"生成的圖片：", file=file)
+                    history_dict.append({
+                        "role": "tool",
+                        "content": "已生成圖片",
+                        "user_id": f"{tool_name}"
+                    })
+                else:
+                    # 處理其他類型的結果
+                    history_dict.append({
+                        "role": "tool",
+                        "content": str(result),
+                        "user_id": f"{tool_name}"
+                    })
+            
+            # 生成 GPT 回應
             gptresponses = await gpt_message(message_to_edit, message, original_prompt, history_dict, image_data)
             dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
             logger.info(f'PigPig:{gptresponses}')
@@ -177,11 +196,68 @@ class ActionHandler:
                 if math_cog else "Math is disabled")
 
     async def generate_image(self, message_to_edit: Any, message: Any, 
-                           prompt: str, n_steps: int = 10) -> Optional[str]:
+                           prompt: str) -> Optional[str]:
+        """Generate or edit images using Gemini API or local model."""
         image_gen_cog = self.bot.get_cog("ImageGenerationCog")
-        return (await image_gen_cog.generate_image(
-            message.channel, prompt, n_steps, message_to_edit)
-            if image_gen_cog else "Image generation is disabled")
+        if not image_gen_cog:
+            return "Image generation is disabled"
+
+        try:
+            # 獲取圖片輸入（如果有）
+            input_images = []
+            if message.attachments:
+                for attachment in message.attachments:
+                    if attachment.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                        async with self.bot.session.get(attachment.url) as response:
+                            image_data = await response.read()
+                        img = Image.open(io.BytesIO(image_data))
+                        input_images.append(img)
+
+            # 獲取對話歷史
+            history = image_gen_cog._get_conversation_history(message.channel.id)
+            
+            # 嘗試使用 Gemini API
+            try:
+                image_buffer, response_text = await image_gen_cog.generate_with_gemini(prompt, input_images, history)
+                
+                # 更新對話歷史
+                image_gen_cog._update_conversation_history(message.channel.id, "user", prompt, input_images)
+                
+                content = "使用 Gemini API 的回應："
+                if response_text:
+                    content += f"\n{response_text}"
+                
+                if message_to_edit:
+                    await message_to_edit.edit(content=content)
+
+                if image_buffer:
+                    # 如果有圖片，添加到歷史記錄
+                    image_gen_cog._update_conversation_history(
+                        message.channel.id,
+                        "assistant",
+                        response_text if response_text else "已生成圖片",
+                        [image_buffer]
+                    )
+                    return image_buffer
+                elif response_text:
+                    return response_text
+
+            except Exception as e:
+                print(f"Gemini API 錯誤：{str(e)}")
+                
+            # 如果 Gemini 失敗，嘗試使用本地模型
+            if message_to_edit:
+                await message_to_edit.edit(content="切換到本地模型...")
+            
+            image = await image_gen_cog.generate_with_local_model(message.channel, prompt)
+            if image:
+                return image
+                
+            return "所有圖片生成方式都失敗了，請稍後再試。"
+            
+        except Exception as e:
+            print(f"圖片生成過程出現錯誤：{str(e)}")
+            return "生成圖片時發生錯誤。"
 
     async def schedule_management(self, message_to_edit: Any, message: Any, 
                                 action: str = "query", query_type: str = "next",
