@@ -11,5 +11,6 @@
         "enable": false
     },
     "version": "v1.2.0",
+    "mongodb": "mongodb://localhost:27017/",
     "music_temp_base": "./temp/music"
 }
