@@ -1,0 +1,136 @@
+{
+    "commands": {
+        "help": {
+            "name": "help",
+            "description": "Display all commands"
+        },
+        "set_language": {
+            "name": "set_language",
+            "description": "Set server display language",
+            "options": {
+                "language": "Choose language"
+            },
+            "responses": {
+                "success": "Server language has been set to: {language}",
+                "error": "Error occurred while setting language. Please try again later.",
+                "unsupported": "Unsupported language option."
+            }
+        },
+        "current_language": {
+            "name": "current_language",
+            "description": "Show current server language",
+            "responses": {
+                "current": "Current server language: {language}"
+            }
+        },
+        "cot_ai": {
+            "name": "cot_ai",
+            "description": "Use Chain of Thought reasoning (may take longer)",
+            "options": {
+                "prompt": "Prompt to process"
+            }
+        },
+        "calculate": {
+            "name": "calculate",
+            "description": "Calculate mathematical expression",
+            "options": {
+                "expression": "Mathematical expression to calculate"
+            }
+        },
+        "remind": {
+            "name": "remind",
+            "description": "Set a reminder",
+            "options": {
+                "time": "Reminder time (e.g., 10 minutes later, or 2023-12-31 20:00:00)",
+                "message": "Reminder message",
+                "user": "User to remind (optional, defaults to self)"
+            },
+            "responses": {
+                "received": "Reminder received",
+                "invalid_format": "Invalid time format. Please use '10 minutes later' or '2023-12-31 20:00:00' format.",
+                "future_time_required": "Reminder time must be in the future.",
+                "confirm_setup": "Reminder set: Will remind {user} in {duration} about: {message}",
+                "reminder_message": "{user} Reminder: {message}",
+                "reminder_sent": "Reminder sent to {user}",
+                "error_setting": "Error setting reminder: {error}"
+            }
+        },
+        "generate_image": {
+            "name": "generate_image",
+            "description": "Generate or edit images",
+            "options": {
+                "prompt": "Text prompt for generating or editing images"
+            },
+            "responses": {
+                "image_generated": "Image generated successfully",
+                "gemini_error": "Gemini API error: {error}",
+                "all_methods_failed": "All image generation methods failed. Please try again later.",
+                "general_error": "Error generating image: {error}",
+                "local_model_processing": "Processing with local model...",
+                "local_model_complete": "Local model generation complete!"
+            }
+        },
+        "internet_search": {
+            "name": "internet_search",
+            "description": "Perform internet search",
+            "options": {
+                "query": "Search query",
+                "search_type": "Type of search"
+            },
+            "choices": {
+                "general": "General search",
+                "image": "Image search",
+                "youtube": "YouTube search",
+                "url": "URL content",
+                "eat": "What to eat"
+            },
+            "responses": {
+                "searching": "Searching...",
+                "unknown_type": "Unknown search type: {type}",
+                "no_videos_found": "No videos found. Please try different keywords.",
+                "youtube_result": "YouTube Search Result:\nTitle: {title}\nChannel: {channel}\nViews: {views}\nLink: {url}",
+                "search_failed": "Search failed. Please try different keywords. Error: {error}"
+            }
+        },
+        "userdata": {
+            "name": "userdata",
+            "description": "Manage user data",
+            "options": {
+                "action": "Choose action (read/save)",
+                "user": "Target user",
+                "user_data": "User data to save"
+            },
+            "choices": {
+                "read": "Read",
+                "save": "Save"
+            },
+            "responses": {
+                "searching": "Searching user data...",
+                "updating": "Updating data...",
+                "data_found": "Data for user <@{user_id}>: {data}",
+                "data_not_found": "No data found for user <@{user_id}>.",
+                "data_updated": "Updated data for user <@{user_id}>: {data}",
+                "data_created": "Created data for user <@{user_id}>: {data}",
+                "invalid_action": "Invalid action. Please use 'read' or 'save'."
+            }
+        }
+    },
+    "errors": {
+        "permission_denied": "You don't have permission to perform this action.",
+        "command_failed": "Command execution failed: {error}",
+        "invalid_input": "Invalid input.",
+        "unknown_error": "An unknown error occurred. Please try again later."
+    },
+    "system": {
+        "chat_bot": {
+            "language": {
+                "answer_in": "Always answer in English",
+                "style": "Use casual English expressions and common idioms",
+                "references": "Use [Title](<URL>) format for references"
+            },
+            "responses": {
+                "processing": "Continuing output..."
+            }
+        }
+    }
+}

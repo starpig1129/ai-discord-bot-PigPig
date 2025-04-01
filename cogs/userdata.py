@@ -27,6 +27,9 @@ import discord
 from gpt.gpt_response_gen import generate_response
 from addons.settings import Settings
 
+from typing import Optional
+from .language_manager import LanguageManager
+
 class UserDataCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -34,6 +37,11 @@ class UserDataCog(commands.Cog):
         self.client = MongoClient(self.settings.mongodb_uri)
         self.db = self.client["user_data"]
         self.collection = self.db["users"]
+        self.lang_manager: Optional[LanguageManager] = None
+
+    async def cog_load(self):
+        """當 Cog 載入時初始化語言管理器"""
+        self.lang_manager = LanguageManager.get_instance(self.bot)
 
     @app_commands.command(name="userdata", description="管理用戶數據")
     @app_commands.choices(action=[
@@ -41,25 +49,59 @@ class UserDataCog(commands.Cog):
         app_commands.Choice(name="保存", value="save")
     ])
     async def userdata_command(self, interaction: discord.Interaction, action: str, user: discord.User = None, user_data: str = None):
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+
         await interaction.response.defer(thinking=True)
-        result = await self.manage_user_data(interaction, user or interaction.user, user_data, action)
+        guild_id = str(interaction.guild_id)
+        result = await self.manage_user_data(interaction, user or interaction.user, user_data, action, guild_id=guild_id)
         await interaction.followup.send(result)
 
-    async def manage_user_data(self, interaction, user: discord.User, user_data: str = None, action: str = 'read',message_to_edit: discord.Message = None):
+    async def manage_user_data(self, interaction, user: discord.User, user_data: str = None, action: str = 'read', message_to_edit: discord.Message = None, guild_id: str = None):
         user_id = str(user.id)
         if message_to_edit:
-            await message_to_edit.edit(content="翻翻豬腦...")
+            searching_message = self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "userdata",
+                "responses",
+                "searching"
+            )
+            await message_to_edit.edit(content=searching_message)
+
         if action == 'read':
             document = self.collection.find_one({"user_id": user_id})
             if document:      
                 data = document["user_data"]
-                return f"user <@{user_id}> 的資料：{data}"
+                return self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "userdata",
+                    "responses",
+                    "data_found",
+                    user_id=user_id,
+                    data=data
+                )
             else:
-                return f"沒有找到user <@{user_id}> 的資料。"
+                return self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "userdata",
+                    "responses",
+                    "data_not_found",
+                    user_id=user_id
+                )
 
         elif action == 'save':
             if message_to_edit:
-                await message_to_edit.edit(content="資料更新中...")
+                updating_message = self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "userdata",
+                    "responses",
+                    "updating"
+                )
+                await message_to_edit.edit(content=updating_message)
             document = self.collection.find_one({"user_id": user_id})
             if document:
                 existing_data = document["user_data"]
@@ -69,13 +111,35 @@ class UserDataCog(commands.Cog):
                 new_data = ''.join([response for response in streamer]).replace("<|eot_id|>","")
                 thread.join()
                 self.collection.update_one({"user_id": user_id}, {"$set": {"user_data": new_data}})
-                return f"已更新user <@{user_id}> 的資料：{new_data}"
+                return self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "userdata",
+                    "responses",
+                    "data_updated",
+                    user_id=user_id,
+                    data=new_data
+                )
             else:
                 self.collection.insert_one({"user_id": user_id, "user_data": user_data})
-                return f"已為user <@{user_id}> 創建資料：{user_data}"
+                return self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "userdata",
+                    "responses",
+                    "data_created",
+                    user_id=user_id,
+                    data=user_data
+                )
     
         else:
-            return "無效的操作。請使用 'read' 或 'save'。"
+            return self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "userdata",
+                "responses",
+                "invalid_action"
+            )
 
     async def manage_user_data_message(self, message, user_id=None, user_data=None, action='read',message_to_edit: discord.Message = None):
         if user_id == "<@user_id>" or user_id is None:

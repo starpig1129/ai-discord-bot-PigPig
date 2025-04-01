@@ -1,0 +1,136 @@
+{
+    "commands": {
+        "help": {
+            "name": "help",
+            "description": "显示所有指令"
+        },
+        "set_language": {
+            "name": "set_language",
+            "description": "设定服务器使用的语言",
+            "options": {
+                "language": "选择要使用的语言"
+            },
+            "responses": {
+                "success": "已将服务器语言设定为：{language}",
+                "error": "设定语言时发生错误，请稍后再试。",
+                "unsupported": "不支持的语言选项。"
+            }
+        },
+        "current_language": {
+            "name": "current_language",
+            "description": "显示目前服务器使用的语言",
+            "responses": {
+                "current": "目前服务器使用的语言为：{language}"
+            }
+        },
+        "cot_ai": {
+            "name": "cot_ai",
+            "description": "使用 Chain of Thought 推理（可能需要较长时间）",
+            "options": {
+                "prompt": "要处理的提示词"
+            }
+        },
+        "calculate": {
+            "name": "calculate",
+            "description": "计算数学表达式",
+            "options": {
+                "expression": "要计算的数学表达式"
+            }
+        },
+        "remind": {
+            "name": "remind",
+            "description": "设置一个提醒",
+            "options": {
+                "time": "提醒时间（例如：10分钟后，或 2023年12月31日20:00:00）",
+                "message": "提醒内容",
+                "user": "要提醒的用户（可选，默认为自己）"
+            },
+            "responses": {
+                "received": "收到提醒",
+                "invalid_format": "无效的时间格式。请使用 '10分钟后' 或 '2023年12月31日20:00:00' 格式。",
+                "future_time_required": "提醒时间必须在将来。",
+                "confirm_setup": "已设置提醒：将在 {duration} 后提醒 {user} {message}",
+                "reminder_message": "{user} 提醒：{message}",
+                "reminder_sent": "提醒已发送给 {user}",
+                "error_setting": "设置提醒时发生错误：{error}"
+            }
+        },
+        "generate_image": {
+            "name": "generate_image",
+            "description": "生成或编辑图片",
+            "options": {
+                "prompt": "用于生成或编辑图片的提示文字"
+            },
+            "responses": {
+                "image_generated": "已生成图片",
+                "gemini_error": "Gemini API 错误：{error}",
+                "all_methods_failed": "所有图片生成方式都失败了，请稍后再试。",
+                "general_error": "生成图片时发生错误：{error}",
+                "local_model_processing": "使用本地模型生成中...",
+                "local_model_complete": "本地模型完成生成！"
+            }
+        },
+        "internet_search": {
+            "name": "internet_search",
+            "description": "进行网络搜索",
+            "options": {
+                "query": "搜索关键字",
+                "search_type": "搜索类型"
+            },
+            "choices": {
+                "general": "一般搜索",
+                "image": "图片搜索",
+                "youtube": "YouTube搜索",
+                "url": "网址内容",
+                "eat": "吃什么"
+            },
+            "responses": {
+                "searching": "正在搜索中...",
+                "unknown_type": "未知的搜索类型：{type}",
+                "no_videos_found": "未找到相关视频，请尝试其他关键词。",
+                "youtube_result": "YouTube搜索结果：\n标题：{title}\n发布者：{channel}\n观看次数：{views}\n链接：{url}",
+                "search_failed": "搜索失败，请尝试其他关键词。错误：{error}"
+            }
+        },
+        "userdata": {
+            "name": "userdata",
+            "description": "管理用户数据",
+            "options": {
+                "action": "选择动作（读取/保存）",
+                "user": "目标用户",
+                "user_data": "要保存的用户数据"
+            },
+            "choices": {
+                "read": "读取",
+                "save": "保存"
+            },
+            "responses": {
+                "searching": "查询用户资料中...",
+                "updating": "资料更新中...",
+                "data_found": "用户 <@{user_id}> 的资料：{data}",
+                "data_not_found": "找不到用户 <@{user_id}> 的资料。",
+                "data_updated": "已更新用户 <@{user_id}> 的资料：{data}",
+                "data_created": "已为用户 <@{user_id}> 创建资料：{data}",
+                "invalid_action": "无效的操作。请使用 '读取' 或 '保存'。"
+            }
+        }
+    },
+    "errors": {
+        "permission_denied": "您没有权限执行此操作。",
+        "command_failed": "指令执行失败：{error}",
+        "invalid_input": "无效的输入。",
+        "unknown_error": "发生未知错误，请稍后再试。"
+    },
+    "system": {
+        "chat_bot": {
+            "language": {
+                "answer_in": "Always answer in Simplified Chinese",
+                "style": "Appropriately use Chinese expressions and internet slang",
+                "references": "使用 [标题](<URL>) 格式引用"
+            },
+            "responses": {
+                "processing": "继续输出中..."
+            }
+        }
+    }
+}

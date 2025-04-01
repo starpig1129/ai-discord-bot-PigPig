@@ -86,15 +86,57 @@ system_prompt='''
                 Remember: You're in a Discord chat environment - keep responses brief and engaging for casual conversations. Only provide detailed responses when specifically discussing technical or educational topics. Focus on the current message and avoid unnecessary references to past conversations.
                 '''
 
-def get_system_prompt(bot_id: str) -> str:
+def get_system_prompt(bot_id: str, message=None) -> str:
+    # 獲取語言管理器
+    default_lang = "zh_TW"
+    lang = default_lang
+    
+    try:
+        if message and message.guild:
+            bot = message.guild.me._state._get_client()
+            if lang_manager := bot.get_cog("LanguageManager"):
+                guild_id = str(message.guild.id)
+                lang = lang_manager.get_server_lang(guild_id)
+                try:
+                    # 從翻譯檔案獲取語言設定
+                    language_settings = lang_manager.translations[lang]["common"]["system"]["chat_bot"]["language"]
+
+                    # 替換系統提示中的語言相關設定
+                    modified_prompt = system_prompt.replace(
+                        "Always answer in Traditional Chinese",
+                        language_settings["answer_in"]
+                    ).replace(
+                        "Appropriately use Chinese idioms or playful expressions",
+                        language_settings["style"]
+                    ).replace(
+                        "使用 [標題](<URL>) 格式",
+                        language_settings["references"]
+                    )
+                    
+                    return modified_prompt.format(bot_id=bot_id)
+                except (KeyError, TypeError) as e:
+                    logging.warning(f"無法獲取語言設定，使用預設值：{e}")
+    except Exception as e:
+        logging.error(f"獲取語言設定時發生錯誤：{e}")
+
+    # 如果無法獲取語言設定，使用預設值
     return system_prompt.format(bot_id=bot_id)
 
 # 初始化 Hugging Face 嵌入模型
 hf_embeddings_model = "sentence-transformers/all-MiniLM-L6-v2"
 embeddings = HuggingFaceEmbeddings(model_name=hf_embeddings_model)
 
-# 創建一個轉換器，將簡體轉為台灣繁體
-converter = opencc.OpenCC('s2twp')  # s2twp 代表簡體轉台灣繁體（含台灣用語）
+# 創建繁簡轉換器字典
+converters = {
+    "zh_TW": opencc.OpenCC('s2twp'),  # 簡體轉台灣繁體
+    "zh_CN": opencc.OpenCC('tw2sp'),  # 繁體轉簡體
+    "en_US": None,  # 英文不需要轉換
+    "ja_JP": None   # 日文不需要轉換
+}
+
+def get_converter(lang: str) -> Optional[opencc.OpenCC]:
+    """根據語言獲取適當的轉換器"""
+    return converters.get(lang, converters["zh_TW"])
 
 # 創建一個字典來存儲每個頻道的向量存儲
 vector_stores = {}
@@ -228,7 +270,7 @@ async def gpt_message(
         responses = ""
         responsesall = ""
         message_result = ""
-        bot_system_prompt = get_system_prompt(str(message.guild.me.id))
+        bot_system_prompt = get_system_prompt(str(message.guild.me.id), message)
         thread, streamer = await generate_response(combined_prompt, bot_system_prompt, history_dict, image_input=image_data)
         buffer_size = 40  # 設置緩衝區大小
         current_message = message_to_edit
@@ -247,12 +289,39 @@ async def gpt_message(
             if len(responses) >= buffer_size:
                 # 檢查是否超過 2000 字符
                 if len(responsesall+responses) > 1900:
+                    # 獲取多語言提示
+                    processing_message = "繼續輸出中..."  # 預設值
+                    if message and message.guild:
+                        bot = message.guild.me._state._get_client()
+                        if lang_manager := bot.get_cog("LanguageManager"):
+                            guild_id = str(message.guild.id)
+                            processing_message = lang_manager.translate(
+                                guild_id,
+                                "system",
+                                "chat_bot",
+                                "responses",
+                                "processing"
+                            )
                     # 創建新消息
-                    current_message = await channel.send("繼續輸出中...")
+                    current_message = await channel.send(processing_message)
                     responsesall = ""
                 responsesall += responses
                 cleaned_response = responsesall.replace('<|eot_id|>', "")
-                converted_response = converter.convert(cleaned_response)
+                # 根據伺服器語言選擇轉換器
+                if message and message.guild:
+                    bot = message.guild.me._state._get_client()
+                    if lang_manager := bot.get_cog("LanguageManager"):
+                        guild_id = str(message.guild.id)
+                        lang = lang_manager.get_server_lang(guild_id)
+                        converter = get_converter(lang)
+                        if converter:
+                            converted_response = converter.convert(cleaned_response)
+                        else:
+                            converted_response = cleaned_response
+                    else:
+                        converted_response = cleaned_response
+                else:
+                    converted_response = cleaned_response
                 
                 # 保持原有的純文字回覆
                 await current_message.edit(content=converted_response)
@@ -270,11 +339,40 @@ async def gpt_message(
         try:
             if responses:  # 如果還有未處理的回應
                 if len(responsesall+responses) > 1900:
-                    current_message = await channel.send(converter.convert(responses))
+                    # 使用正確的語言轉換器
+                    if message and message.guild:
+                        bot = message.guild.me._state._get_client()
+                        if lang_manager := bot.get_cog("LanguageManager"):
+                            guild_id = str(message.guild.id)
+                            lang = lang_manager.get_server_lang(guild_id)
+                            converter = get_converter(lang)
+                            if converter:
+                                converted_text = converter.convert(responses)
+                            else:
+                                converted_text = responses
+                            current_message = await channel.send(converted_text)
+                        else:
+                            current_message = await channel.send(responses)
+                    else:
+                        current_message = await channel.send(responses)
                 else:
                     responsesall += responses
                     cleaned_response = responsesall.replace('<|eot_id|>', "")
-                    converted_response = converter.convert(cleaned_response)
+                    # 使用正確的語言轉換器
+                    if message and message.guild:
+                        bot = message.guild.me._state._get_client()
+                        if lang_manager := bot.get_cog("LanguageManager"):
+                            guild_id = str(message.guild.id)
+                            lang = lang_manager.get_server_lang(guild_id)
+                            converter = get_converter(lang)
+                            if converter:
+                                converted_response = converter.convert(cleaned_response)
+                            else:
+                                converted_response = cleaned_response
+                        else:
+                            converted_response = cleaned_response
+                    else:
+                        converted_response = cleaned_response
                     await current_message.edit(content=converted_response)
                     
                     # 處理最後回應中的GIF標籤

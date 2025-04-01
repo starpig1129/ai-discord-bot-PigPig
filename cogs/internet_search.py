@@ -45,12 +45,20 @@ from cogs.eat.providers.googlemap_crawler import GoogleMapCrawler
 from cogs.eat.train.train import Train
 from cogs.eat.views import EatWhatView
 
+from typing import Optional
+from .language_manager import LanguageManager
+
 class InternetSearchCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = DB()
         self.train = Train(db=self.db)
         self.map = GoogleMapCrawler()
+        self.lang_manager: Optional[LanguageManager] = None
+
+    async def cog_load(self):
+        """當 Cog 載入時初始化語言管理器"""
+        self.lang_manager = LanguageManager.get_instance(self.bot)
 
     @app_commands.command(name="internet_search", description="進行網絡搜索")
     @app_commands.choices(search_type=[
@@ -61,14 +69,25 @@ class InternetSearchCog(commands.Cog):
         app_commands.Choice(name="吃什麼", value="eat")
     ])
     async def search_command(self, interaction: discord.Interaction, query: str, search_type: str):
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+
         await interaction.response.defer(thinking=True)
-        result = await self.internet_search(interaction, query, search_type)
+        guild_id = str(interaction.guild_id)
+        result = await self.internet_search(interaction, query, search_type, guild_id=guild_id)
         if result is not None:
             await interaction.followup.send(result)
             
-    async def internet_search(self, ctx, query: str, search_type: str, message_to_edit: discord.Message = None):
+    async def internet_search(self, ctx, query: str, search_type: str, message_to_edit: discord.Message = None, guild_id: str = None):
         if message_to_edit:
-            await message_to_edit.edit(content="尋找中...")
+            searching_message = self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "internet_search",
+                "responses",
+                "searching"
+            )
+            await message_to_edit.edit(content=searching_message)
         
         search_functions = {
             "general": self.google_search,
@@ -83,7 +102,15 @@ class InternetSearchCog(commands.Cog):
             result = await search_func(ctx, query, message_to_edit)
             return result if isinstance(result, str) else None
         else:
-            return f"未知的搜索類型: {search_type}"
+            error_message = self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "internet_search",
+                "responses",
+                "unknown_type",
+                type=search_type
+            )
+            return error_message
 
     async def google_search(self, ctx, query, message_to_edit=None):
         chrome_options = self.get_chrome_options()
@@ -236,19 +263,36 @@ class InternetSearchCog(commands.Cog):
         try:
             results = YoutubeSearch(query, max_results=5).to_dict()
             if not results:
-                return "未找到相關影片，請嘗試其他關鍵詞。"
+                return self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "internet_search",
+                    "responses",
+                    "no_videos_found"
+                )
 
             selected_result = random.choice(results)
-            video_description = (
-                f"YoutubeSearch的結果：\n"
-                f"標題: {selected_result['title']}\n"
-                f"發布者: {selected_result['channel']}\n"
-                f"觀看次數: {selected_result['views']}\n"
-                f"連結: https://www.youtube.com{selected_result['url_suffix']}"
+            video_description = self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "internet_search",
+                "responses",
+                "youtube_result",
+                title=selected_result['title'],
+                channel=selected_result['channel'],
+                views=selected_result['views'],
+                url=f"https://www.youtube.com{selected_result['url_suffix']}"
             )
             return video_description
         except Exception as e:
-            return f"搜尋失敗，請換一下關鍵詞。錯誤：{str(e)}"
+            return self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "internet_search",
+                "responses",
+                "search_failed",
+                error=str(e)
+            )
 
     async def fetch_page_content(self, ctx, query=None, message_to_edit=None):
         url_regex = r'(https?://\S+)'

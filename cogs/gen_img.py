@@ -35,9 +35,14 @@ from typing import List, Optional, Dict
 from addons.settings import TOKENS
 from gpt.vision_tool import image_to_base64
 
+from typing import Optional
+from .language_manager import LanguageManager
+
 class ImageGenerationCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # 初始化語言管理器
+        self.lang_manager: Optional[LanguageManager] = None
         # 初始化 session
         self.session = aiohttp.ClientSession()
         # 初始化 Gemini API
@@ -52,6 +57,10 @@ class ImageGenerationCog(commands.Cog):
         
         # 存儲對話歷史
         self.conversation_history: Dict[int, List[Dict]] = {}
+
+    async def cog_load(self):
+        """當 Cog 載入時初始化語言管理器"""
+        self.lang_manager = LanguageManager.get_instance(self.bot)
 
     def _get_conversation_history(self, channel_id: int) -> List[Dict]:
         """獲取特定頻道的對話歷史"""
@@ -74,6 +83,10 @@ class ImageGenerationCog(commands.Cog):
     @app_commands.command(name="generate_image", description="生成或編輯圖片")
     @app_commands.describe(prompt="用於生成或編輯圖片的提示文字")
     async def generate_image_command(self, interaction: discord.Interaction, prompt: str):
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+
+        guild_id = str(interaction.guild_id)
         await interaction.response.defer(thinking=True)
         
         try:
@@ -106,10 +119,17 @@ class ImageGenerationCog(commands.Cog):
                 if image_buffer:
                     # 如果有圖片，添加到歷史記錄並發送
                     file = discord.File(image_buffer, filename="generated_image.png")
+                    success_message = self.lang_manager.translate(
+                        guild_id,
+                        "commands",
+                        "generate_image",
+                        "responses",
+                        "image_generated"
+                    )
                     self._update_conversation_history(
                         interaction.channel_id,
                         "assistant",
-                        response_text.strip() or "已生成圖片",
+                        response_text.strip() or success_message,
                         [image_buffer]
                     )
                     await interaction.followup.send(content="\n".join(content), file=file)
@@ -125,19 +145,42 @@ class ImageGenerationCog(commands.Cog):
                     await interaction.followup.send(content="\n".join(content))
                     return
             except Exception as e:
-                print(f"Gemini API 錯誤：{str(e)}")
+                error_message = self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "generate_image",
+                    "responses",
+                    "gemini_error",
+                    error=str(e)
+                )
+                print(error_message)
                 
             # 如果 Gemini 失敗，嘗試使用本地模型
-            image = await self.generate_with_local_model(interaction.channel, prompt)
+            image = await self.generate_with_local_model(interaction.channel, prompt, guild_id=guild_id)
             if image:
                 file = discord.File(image, filename="generated_image.png")
                 await interaction.followup.send(content="", file=file)
             else:
-                await interaction.followup.send("所有圖片生成方式都失敗了，請稍後再試。")
+                error_message = self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "generate_image",
+                    "responses",
+                    "all_methods_failed"
+                )
+                await interaction.followup.send(error_message)
                 
         except Exception as e:
+            error_message = self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "generate_image",
+                "responses",
+                "general_error",
+                error=str(e)
+            )
             print(f"圖片生成過程出現錯誤：{str(e)}")
-            await interaction.followup.send("生成圖片時發生錯誤。")
+            await interaction.followup.send(error_message)
 
     def _image_to_base64(self, image: Image.Image) -> str:
         """將 PIL Image 轉換為 base64 字符串"""
@@ -205,16 +248,30 @@ class ImageGenerationCog(commands.Cog):
             print(f"Gemini API 生成錯誤：{str(e)}")
             return None, None
 
-    async def generate_with_local_model(self, channel, prompt: str, n_steps: int = 10, message_to_edit: discord.Message = None):
+    async def generate_with_local_model(self, channel, prompt: str, n_steps: int = 10, message_to_edit: discord.Message = None, guild_id: str = None):
         """使用本地模型生成圖片"""
         try:
             if not hasattr(self, 'pipe') or self.pipe is None:
                 return None
                 
             if message_to_edit:
-                await message_to_edit.edit(content="使用本地模型生成中...")
+                processing_message = self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "generate_image",
+                    "responses",
+                    "local_model_processing"
+                )
+                await message_to_edit.edit(content=processing_message)
             else:
-                message = await channel.send("使用本地模型生成中...")
+                processing_message = self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "generate_image",
+                    "responses",
+                    "local_model_processing"
+                )
+                message = await channel.send(processing_message)
 
             # 檢查是否有附加圖片
             if channel.last_message and channel.last_message.attachments:
@@ -244,7 +301,14 @@ class ImageGenerationCog(commands.Cog):
             image_buffer.seek(0)
 
             if message_to_edit:
-                await message_to_edit.edit(content=f"本地模型完成生成！")
+                success_message = self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "generate_image",
+                    "responses",
+                    "local_model_complete"
+                )
+                await message_to_edit.edit(content=success_message)
             return image_buffer
 
         except Exception as e:

@@ -1,0 +1,129 @@
+{
+    "commands": {
+        "help": {
+            "name": "help",
+            "description": "全てのコマンドを表示"
+        },
+        "set_language": {
+            "name": "set_language",
+            "description": "サーバーの表示言語を設定",
+            "options": {
+                "language": "使用する言語を選択"
+            },
+            "responses": {
+                "success": "サーバーの言語を{language}に設定しました",
+                "error": "言語の設定中にエラーが発生しました。後でもう一度お試しください。",
+                "unsupported": "サポートされていない言語オプションです。"
+            }
+        },
+        "current_language": {
+            "name": "current_language",
+            "description": "現在のサーバー言語を表示",
+            "responses": {
+                "current": "現在のサーバー言語：{language}"
+            }
+        },
+        "cot_ai": {
+            "name": "cot_ai",
+            "description": "Chain of Thought推論を使用（時間がかかる場合があります）",
+            "options": {
+                "prompt": "処理するプロンプト"
+            }
+        },
+        "userdata": {
+            "name": "userdata",
+            "description": "ユーザーデータを管理",
+            "options": {
+                "action": "アクション選択（読み取り/保存）",
+                "user": "対象ユーザー",
+                "user_data": "保存するユーザーデータ"
+            },
+            "choices": {
+                "read": "読み取り",
+                "save": "保存"
+            },
+            "responses": {
+                "searching": "ユーザーデータを検索中...",
+                "updating": "データを更新中...",
+                "data_found": "ユーザー <@{user_id}> のデータ：{data}",
+                "data_not_found": "ユーザー <@{user_id}> のデータが見つかりません。",
+                "data_updated": "ユーザー <@{user_id}> のデータを更新しました：{data}",
+                "data_created": "ユーザー <@{user_id}> のデータを作成しました：{data}",
+                "invalid_action": "無効なアクションです。'読み取り'または'保存'を使用してください。"
+            }
+        },
+        "remind": {
+            "name": "remind",
+            "description": "リマインダーを設定",
+            "options": {
+                "time": "リマインド時間（例：10分後、または2023年12月31日20:00:00）",
+                "message": "リマインドメッセージ",
+                "user": "リマインドするユーザー（オプション、デフォルトは自分）"
+            },
+            "responses": {
+                "received": "リマインダーを受け付けました",
+                "invalid_format": "無効な時間形式です。'10分後'または'2023年12月31日20:00:00'の形式を使用してください。",
+                "future_time_required": "リマインド時間は未来の時間である必要があります。",
+                "confirm_setup": "リマインダーを設定しました：{duration}後に{user}に{message}を通知します",
+                "reminder_message": "{user} リマインド：{message}",
+                "reminder_sent": "{user}にリマインドを送信しました",
+                "error_setting": "リマインダーの設定中にエラーが発生しました：{error}"
+            }
+        },
+        "generate_image": {
+            "name": "generate_image",
+            "description": "画像を生成または編集",
+            "options": {
+                "prompt": "画像生成・編集用のプロンプト"
+            },
+            "responses": {
+                "image_generated": "画像を生成しました",
+                "gemini_error": "Gemini APIエラー：{error}",
+                "all_methods_failed": "すべての画像生成方法が失敗しました。後でもう一度お試しください。",
+                "general_error": "画像生成中にエラーが発生しました：{error}",
+                "local_model_processing": "ローカルモデルで処理中...",
+                "local_model_complete": "ローカルモデルの生成が完了しました！"
+            }
+        },
+        "internet_search": {
+            "name": "internet_search",
+            "description": "インターネット検索を実行",
+            "options": {
+                "query": "検索キーワード",
+                "search_type": "検索タイプ"
+            },
+            "choices": {
+                "general": "一般検索",
+                "image": "画像検索",
+                "youtube": "YouTube検索",
+                "url": "URLコンテンツ",
+                "eat": "食事の提案"
+            },
+            "responses": {
+                "searching": "検索中...",
+                "unknown_type": "不明な検索タイプ：{type}",
+                "no_videos_found": "関連動画が見つかりません。別のキーワードをお試しください。",
+                "youtube_result": "YouTube検索結果：\nタイトル：{title}\nチャンネル：{channel}\n再生回数：{views}\nリンク：{url}",
+                "search_failed": "検索に失敗しました。別のキーワードをお試しください。エラー：{error}"
+            }
+        }
+    },
+    "errors": {
+        "permission_denied": "この操作を実行する権限がありません。",
+        "command_failed": "コマンド実行に失敗しました：{error}",
+        "invalid_input": "無効な入力です。",
+        "unknown_error": "不明なエラーが発生しました。後でもう一度お試しください。"
+    },
+    "system": {
+        "chat_bot": {
+            "language": {
+                "answer_in": "Always answer in Japanese",
+                "style": "Use appropriate Japanese expressions and honorifics",
+                "references": "参照には [タイトル](<URL>) 形式を使用"
+            },
+            "responses": {
+                "processing": "出力を続けています..."
+            }
+        }
+    }
+}
