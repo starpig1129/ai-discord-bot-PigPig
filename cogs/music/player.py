@@ -4,6 +4,7 @@ from discord.ext import commands
 from discord import app_commands
 import logging as logger
 from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
 
 from addons.settings import Settings
 from .youtube import YouTubeManager
@@ -12,6 +13,7 @@ from .state_manager import StateManager
 from .queue_manager import QueueManager, PlayMode
 from .ui_manager import UIManager
 from .ui.song_select import SongSelectView
+from ..language_manager import LanguageManager # Import LanguageManager
 
 class YTMusic(commands.Cog):
     def __init__(self, bot):
@@ -25,32 +27,40 @@ class YTMusic(commands.Cog):
         self.state_manager = StateManager()
         self.queue_manager = QueueManager()
         self.ui_manager = UIManager()
+        self.lang_manager: Optional[LanguageManager] = None # Initialize lang_manager
 
     async def setup_hook(self):
-        """Initialize async components"""
+        """Initialize async components and LanguageManager"""
         self.youtube = await YouTubeManager.create()
+        # Ensure LanguageManager is loaded after bot setup
+        await asyncio.sleep(1) # Small delay to ensure bot is ready
+        self.lang_manager = self.bot.get_cog("LanguageManager")
+        if not self.lang_manager:
+            logger.error("LanguageManager cog not found!")
 
     @app_commands.command(name="mode", description="設置播放模式 (不循環/清單循環/單曲循環)")
-    async def mode(self, interaction: discord.Interaction, mode: str):
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="不循環", value="no_loop"),
+        app_commands.Choice(name="清單循環", value="loop_queue"),
+        app_commands.Choice(name="單曲循環", value="loop_single")
+    ])
+    async def mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
         """播放模式命令"""
-        if mode not in ["no_loop", "loop_queue", "loop_single"]:
-            embed = discord.Embed(
-                title="❌ | 無效的播放模式", 
-                description="可用模式: no_loop (不循環), loop_queue (清單循環), loop_single (單曲循環)", 
-                color=discord.Color.red()
-            )
-            message = await interaction.response.send_message(embed=embed)
-            state = self.state_manager.get_state(interaction.guild.id)
-            state.ui_messages.append(message)
-            return
-            
-        self.queue_manager.set_play_mode(interaction.guild.id, mode)
-        mode_names = {
-            "no_loop": "不循環",
-            "loop_queue": "清單循環",
-            "loop_single": "單曲循環"
-        }
-        embed = discord.Embed(title=f"✅ | 已設置播放模式為: {mode_names[mode]}", color=discord.Color.blue())
+        guild_id = str(interaction.guild.id)
+        if not self.lang_manager: # Ensure lang_manager is loaded
+             self.lang_manager = self.bot.get_cog("LanguageManager")
+             if not self.lang_manager:
+                 await interaction.response.send_message("Language manager not loaded.", ephemeral=True)
+                 return
+
+        # Localize choices (name is already localized by decorator, but value needs translation for response)
+        mode_value = mode.value
+        mode_name = self.lang_manager.translate(guild_id, "commands", "mode", "choices", mode_value)
+
+        self.queue_manager.set_play_mode(interaction.guild.id, mode_value)
+
+        title = self.lang_manager.translate(guild_id, "commands", "mode", "responses", "success", mode=mode_name)
+        embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
         message = await interaction.response.send_message(embed=embed)
         state = self.state_manager.get_state(interaction.guild.id)
         state.ui_messages.append(message)
@@ -58,9 +68,18 @@ class YTMusic(commands.Cog):
     @app_commands.command(name="shuffle", description="切換隨機播放")
     async def shuffle(self, interaction: discord.Interaction):
         """隨機播放命令"""
+        guild_id = str(interaction.guild.id)
+        if not self.lang_manager: # Ensure lang_manager is loaded
+             self.lang_manager = self.bot.get_cog("LanguageManager")
+             if not self.lang_manager:
+                 await interaction.response.send_message("Language manager not loaded.", ephemeral=True)
+                 return
+
         is_shuffle = self.queue_manager.toggle_shuffle(interaction.guild.id)
-        status = "開啟" if is_shuffle else "關閉"
-        embed = discord.Embed(title=f"✅ | 已{status}隨機播放", color=discord.Color.blue())
+        status_key = "enabled" if is_shuffle else "disabled"
+        status = self.lang_manager.translate(guild_id, "commands", "shuffle", "responses", status_key)
+        title = self.lang_manager.translate(guild_id, "commands", "shuffle", "responses", "success", status=status)
+        embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
         message = await interaction.response.send_message(embed=embed)
         state = self.state_manager.get_state(interaction.guild.id)
         state.ui_messages.append(message)
@@ -75,7 +94,14 @@ class YTMusic(commands.Cog):
             if interaction.guild.voice_client is None:
                 await channel.connect()
         else:
-            embed = discord.Embed(title="❌ | 請先加入語音頻道！", color=discord.Color.red())
+            guild_id = str(interaction.guild.id)
+            if not self.lang_manager: # Ensure lang_manager is loaded
+                 self.lang_manager = self.bot.get_cog("LanguageManager")
+                 if not self.lang_manager:
+                     await interaction.response.send_message("Language manager not loaded.", ephemeral=True)
+                     return
+            title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "no_voice_channel")
+            embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
             message = await interaction.response.send_message(embed=embed)
             state = self.state_manager.get_state(interaction.guild.id)
             state.ui_messages.append(message)
@@ -106,14 +132,16 @@ class YTMusic(commands.Cog):
 
     async def _handle_playlist(self, interaction: discord.Interaction, url: str):
         """Handle playlist URL"""
-        _, folder = self._get_guild_folder(interaction.guild.id)
+        guild_id = str(interaction.guild.id)
+        _, folder = self._get_guild_folder(guild_id)
         video_infos, error = await self.youtube.download_playlist(url, folder, interaction)
         
         if error:
-            embed = discord.Embed(title=f"❌ | {error}", color=discord.Color.red())
+            title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "playlist_download_failed", error=error)
+            embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
             message = await interaction.followup.send(embed=embed)
             # Track error message
-            state = self.state_manager.get_state(interaction.guild.id)
+            state = self.state_manager.get_state(guild_id)
             state.ui_messages.append(message)
             return
             
@@ -132,14 +160,15 @@ class YTMusic(commands.Cog):
             
         # Create embed for added songs
         description = "\n".join([f"🎵 {info['title']}" for info in added_songs])
+        title = self.lang_manager.translate(guild_id, "commands", "play", "responses", "playlist_added", count=len(added_songs), total=len(video_infos))
         embed = discord.Embed(
-            title=f"✅ | 已添加 {len(added_songs)} 首歌曲到播放清單 (共 {len(video_infos)} 首)",
+            title=f"✅ | {title}",
             description=description,
             color=discord.Color.blue()
         )
         message = await interaction.followup.send(embed=embed)
         # Track playlist message
-        state = self.state_manager.get_state(interaction.guild.id)
+        state = self.state_manager.get_state(guild_id)
         state.ui_messages.append(message)
 
     async def _handle_single_video(self, interaction: discord.Interaction, url: str) -> bool:
@@ -149,9 +178,11 @@ class YTMusic(commands.Cog):
         state = self.state_manager.get_state(guild_id)
         
         if queue.qsize() >= 5:
+            title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "queue_full_title")
+            desc = self.lang_manager.translate(guild_id, "commands", "play", "errors", "queue_full_desc")
             embed = discord.Embed(
-                title="❌ | 播放清單已滿",
-                description="請等待當前歌曲播放完畢後再添加新歌曲",
+                title=f"❌ | {title}",
+                description=desc,
                 color=discord.Color.red()
             )
             message = await interaction.followup.send(embed=embed)
@@ -167,13 +198,15 @@ class YTMusic(commands.Cog):
             video_info, error = await self.youtube.get_video_info_without_download(url, interaction)
             
         if error:
-            embed = discord.Embed(title=f"❌ | {error}", color=discord.Color.red())
+            title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "video_info_failed", error=error)
+            embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
             message = await interaction.followup.send(embed=embed)
             state.ui_messages.append(message)
             return False
             
         await self.queue_manager.add_to_queue(guild_id, video_info)
-        embed = discord.Embed(title=f"✅ | 已添加到播放清單： {video_info['title']}", color=discord.Color.blue())
+        title = self.lang_manager.translate(guild_id, "commands", "play", "responses.song_added", title=video_info['title'])
+        embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
         message = await interaction.followup.send(embed=embed)
         state.ui_messages.append(message)
         return True
@@ -181,11 +214,13 @@ class YTMusic(commands.Cog):
     async def _handle_search(self, interaction: discord.Interaction, query: str):
         """Handle search query"""
         results = await self.youtube.search_videos(query)
+        guild_id = str(interaction.guild.id)
         if not results:
-            embed = discord.Embed(title="❌ | 未找到相關影片", color=discord.Color.red())
+            title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "no_results")
+            embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
             message = await interaction.followup.send(embed=embed)
             # Track error message
-            state = self.state_manager.get_state(interaction.guild.id)
+            state = self.state_manager.get_state(guild_id)
             state.ui_messages.append(message)
             return
         
@@ -198,9 +233,11 @@ class YTMusic(commands.Cog):
             formatted_results.append(f"{i}. {result['title']} ({duration_str})")
 
         view = SongSelectView(self, results, interaction)
-        description = "請選擇要播放的歌曲：\n\n" + "\n".join(formatted_results)
+        desc_prefix = self.lang_manager.translate(guild_id, "commands", "play", "responses", "select_song")
+        description = f"{desc_prefix}\n\n" + "\n".join(formatted_results)
+        embed_title = self.lang_manager.translate(guild_id, "commands", "play", "responses", "search_results_title")
         embed = discord.Embed(
-            title="🔍 | YouTube搜尋結果",
+            title=f"🔍 | {embed_title}",
             description=description,
             color=discord.Color.blue()
         )
@@ -241,10 +278,20 @@ class YTMusic(commands.Cog):
             # Get next song from queue
             next_song = await self._get_next_song(interaction, guild_id, force_new)
             if not next_song:
-                embed = discord.Embed(title="🌟 | 播放清單已播放完畢！", color=discord.Color.blue())
-                message = await interaction.followup.send(embed=embed)
-                state = self.state_manager.get_state(guild_id)
-                state.ui_messages.append(message)
+                title = self.lang_manager.translate(guild_id, "commands", "play", "responses", "queue_finished")
+                embed = discord.Embed(title=f"🌟 | {title}", color=discord.Color.blue())
+                # Use followup if interaction is available, otherwise use channel.send
+                if hasattr(interaction, 'followup') and not interaction.response.is_done():
+                     message = await interaction.followup.send(embed=embed)
+                elif interaction.channel:
+                     message = await interaction.channel.send(embed=embed)
+                else: # Fallback if channel is not available either
+                     logger.warning("Cannot send queue finished message: no interaction followup or channel.")
+                     message = None
+
+                if message:
+                    state = self.state_manager.get_state(guild_id)
+                    state.ui_messages.append(message)
                 self.state_manager.update_state(guild_id, current_message=None)
                 return
                 
@@ -254,10 +301,18 @@ class YTMusic(commands.Cog):
             
         except Exception as e:
             logger.error(f"[音樂] 伺服器 ID： {guild_id}, 播放音樂時出錯： {e}")
-            embed = discord.Embed(title=f"❌ | 播放音樂時出錯", color=discord.Color.red())
-            message = await interaction.followup.send(embed=embed)
-            state = self.state_manager.get_state(guild_id)
-            state.ui_messages.append(message)
+            title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "playback_error")
+            embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
+            if hasattr(interaction, 'followup') and not interaction.response.is_done():
+                 message = await interaction.followup.send(embed=embed)
+            elif interaction.channel:
+                 message = await interaction.channel.send(embed=embed)
+            else:
+                 message = None
+
+            if message:
+                state = self.state_manager.get_state(guild_id)
+                state.ui_messages.append(message)
             await self.play_next(interaction, force_new=True)
 
     async def _handle_single_loop(self, interaction: discord.Interaction, state, voice_client):
@@ -423,9 +478,11 @@ class YTMusic(commands.Cog):
                     if channel:
                         try:
                             # Send error message using channel.send directly
+                            title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "playback_error")
+                            desc = self.lang_manager.translate(guild_id, "commands", "play", "errors", "attempting_next")
                             embed = discord.Embed(
-                                title="❌ | 播放音樂時發生錯誤",
-                                description="正在嘗試播放下一首歌曲...",
+                                title=f"❌ | {title}",
+                                description=desc,
                                 color=discord.Color.red()
                             )
                             message = await channel.send(embed=embed)
@@ -443,9 +500,11 @@ class YTMusic(commands.Cog):
                             logger.error(f"[音樂] 重試播放失敗： {str(retry_error)}")
                             try:
                                 # Send final error message
+                                title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "playback_failed_title")
+                                desc = self.lang_manager.translate(guild_id, "commands", "play", "errors", "playback_failed_desc")
                                 embed = discord.Embed(
-                                    title="❌ | 播放失敗",
-                                    description="請使用 /play 重新播放",
+                                    title=f"❌ | {title}",
+                                    description=desc,
                                     color=discord.Color.red()
                                 )
                                 message = await channel.send(embed=embed)

@@ -106,7 +106,12 @@ class LanguageManager(commands.Cog):
                     result = result.get(part, {})
             
             if subkey:
-                result = result.get(subkey, subkey)
+                if "." in subkey:
+                    # 處理複合路徑，例如 "responses.song_added"
+                    for part in subkey.split("."):
+                        result = result.get(part, {})
+                else:
+                    result = result.get(subkey, subkey)
             
             # 如果結果是字符串，嘗試進行格式化
             if isinstance(result, str):

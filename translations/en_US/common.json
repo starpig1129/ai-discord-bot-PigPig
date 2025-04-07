@@ -113,6 +113,53 @@
                 "data_created": "Created data for user <@{user_id}>: {data}",
                 "invalid_action": "Invalid action. Please use 'read' or 'save'."
             }
+        },
+        "mode": {
+            "name": "mode",
+            "description": "Set playback mode",
+            "choices": {
+                "no_loop": "No Loop",
+                "loop_queue": "Loop Queue",
+                "loop_single": "Loop Single"
+            },
+            "responses": {
+                "success": "Playback mode set to: {mode}"
+            }
+        },
+        "shuffle": {
+            "name": "shuffle",
+            "description": "Toggle shuffle playback",
+            "responses": {
+                "enabled": "enabled",
+                "disabled": "disabled",
+                "success": "Shuffle playback {status}"
+            }
+        },
+        "play": {
+            "name": "play",
+            "description": "Play a video (URL or keywords)",
+            "options": {
+                "query": "Video URL or search keywords"
+            },
+            "errors": {
+                "no_voice_channel": "Please join a voice channel first!",
+                "playlist_download_failed": "Error downloading playlist: {error}",
+                "queue_full_title": "Queue is full",
+                "queue_full_desc": "Please wait for the current songs to finish before adding more.",
+                "video_info_failed": "Error getting video info: {error}",
+                "no_results": "No related videos found.",
+                "playback_error": "Error during playback",
+                "attempting_next": "Attempting to play the next song...",
+                "playback_failed_title": "Playback failed",
+                "playback_failed_desc": "Please use /play to try again."
+            },
+            "responses": {
+                "playlist_added": "Added {count} songs to the queue (Total: {total})",
+                "song_added": "Added to queue: {title}",
+                "select_song": "Please select a song to play:",
+                "search_results_title": "YouTube Search Results",
+                "queue_finished": "Playlist finished!"
+            }
         }
     },
     "errors": {

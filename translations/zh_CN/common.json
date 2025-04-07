@@ -113,6 +113,53 @@
                 "data_created": "已为用户 <@{user_id}> 创建资料：{data}",
                 "invalid_action": "无效的操作。请使用 '读取' 或 '保存'。"
             }
+        },
+        "mode": {
+            "name": "mode",
+            "description": "设置播放模式",
+            "choices": {
+                "no_loop": "不循环",
+                "loop_queue": "列表循环",
+                "loop_single": "单曲循环"
+            },
+            "responses": {
+                "success": "已设置播放模式为：{mode}"
+            }
+        },
+        "shuffle": {
+            "name": "shuffle",
+            "description": "切换随机播放",
+            "responses": {
+                "enabled": "开启",
+                "disabled": "关闭",
+                "success": "已{status}随机播放"
+            }
+        },
+        "play": {
+            "name": "play",
+            "description": "播放视频(网址或关键字)",
+            "options": {
+                "query": "视频网址或搜索关键字"
+            },
+            "errors": {
+                "no_voice_channel": "请先加入语音频道！",
+                "playlist_download_failed": "下载播放列表时出错：{error}",
+                "queue_full_title": "播放列表已满",
+                "queue_full_desc": "请等待当前歌曲播放完毕后再添加新歌曲",
+                "video_info_failed": "获取视频信息时出错：{error}",
+                "no_results": "未找到相关视频",
+                "playback_error": "播放音乐时出错",
+                "attempting_next": "正在尝试播放下一首歌曲...",
+                "playback_failed_title": "播放失败",
+                "playback_failed_desc": "请使用 /play 重新播放"
+            },
+            "responses": {
+                "playlist_added": "已添加 {count} 首歌曲到播放列表 (共 {total} 首)",
+                "song_added": "已添加到播放列表：{title}",
+                "select_song": "请选择要播放的歌曲：",
+                "search_results_title": "YouTube搜索结果",
+                "queue_finished": "播放列表已播放完毕！"
+            }
         }
     },
     "errors": {

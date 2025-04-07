@@ -113,6 +113,53 @@
                 "data_created": "已為用戶 <@{user_id}> 創建資料：{data}",
                 "invalid_action": "無效的操作。請使用 '讀取' 或 '保存'。"
             }
+        },
+        "mode": {
+            "name": "mode",
+            "description": "設置播放模式",
+            "choices": {
+                "no_loop": "不循環",
+                "loop_queue": "清單循環",
+                "loop_single": "單曲循環"
+            },
+            "responses": {
+                "success": "已設置播放模式為：{mode}"
+            }
+        },
+        "shuffle": {
+            "name": "shuffle",
+            "description": "切換隨機播放",
+            "responses": {
+                "enabled": "開啟",
+                "disabled": "關閉",
+                "success": "已{status}隨機播放"
+            }
+        },
+        "play": {
+            "name": "play",
+            "description": "播放影片(網址或關鍵字)",
+            "options": {
+                "query": "影片網址或搜尋關鍵字"
+            },
+            "errors": {
+                "no_voice_channel": "請先加入語音頻道！",
+                "playlist_download_failed": "下載播放清單時出錯：{error}",
+                "queue_full_title": "播放清單已滿",
+                "queue_full_desc": "請等待當前歌曲播放完畢後再添加新歌曲",
+                "video_info_failed": "獲取影片資訊時出錯：{error}",
+                "no_results": "未找到相關影片",
+                "playback_error": "播放音樂時出錯",
+                "attempting_next": "正在嘗試播放下一首歌曲...",
+                "playback_failed_title": "播放失敗",
+                "playback_failed_desc": "請使用 /play 重新播放"
+            },
+            "responses": {
+                "playlist_added": "已添加 {count} 首歌曲到播放清單 (共 {total} 首)",
+                "song_added": "已添加到播放清單：{title}",
+                "select_song": "請選擇要播放的歌曲：",
+                "search_results_title": "YouTube搜尋結果",
+                "queue_finished": "播放清單已播放完畢！"
+            }
         }
     },
     "errors": {

@@ -106,6 +106,53 @@
                 "youtube_result": "YouTube検索結果：\nタイトル：{title}\nチャンネル：{channel}\n再生回数：{views}\nリンク：{url}",
                 "search_failed": "検索に失敗しました。別のキーワードをお試しください。エラー：{error}"
             }
+        },
+        "mode": {
+            "name": "mode",
+            "description": "再生モードを設定",
+            "choices": {
+                "no_loop": "ループなし",
+                "loop_queue": "キューをループ",
+                "loop_single": "単曲ループ"
+            },
+            "responses": {
+                "success": "再生モードを{mode}に設定しました"
+            }
+        },
+        "shuffle": {
+            "name": "shuffle",
+            "description": "シャッフル再生を切り替え",
+            "responses": {
+                "enabled": "有効",
+                "disabled": "無効",
+                "success": "シャッフル再生を{status}にしました"
+            }
+        },
+        "play": {
+            "name": "play",
+            "description": "動画を再生（URLまたはキーワード）",
+            "options": {
+                "query": "動画URLまたは検索キーワード"
+            },
+            "errors": {
+                "no_voice_channel": "まずボイスチャンネルに参加してください！",
+                "playlist_download_failed": "プレイリストのダウンロード中にエラーが発生しました：{error}",
+                "queue_full_title": "キューがいっぱいです",
+                "queue_full_desc": "現在の曲が終了するまでお待ちください。",
+                "video_info_failed": "動画情報の取得中にエラーが発生しました：{error}",
+                "no_results": "関連動画が見つかりませんでした。",
+                "playback_error": "再生中にエラーが発生しました",
+                "attempting_next": "次の曲を再生しようとしています...",
+                "playback_failed_title": "再生に失敗しました",
+                "playback_failed_desc": "/play を使用して再試行してください。"
+            },
+            "responses": {
+                "playlist_added": "キューに{count}曲を追加しました（合計：{total}曲）",
+                "song_added": "キューに追加しました：{title}",
+                "select_song": "再生する曲を選択してください：",
+                "search_results_title": "YouTube検索結果",
+                "queue_finished": "プレイリストの再生が完了しました！"
+            }
         }
     },
     "errors": {
