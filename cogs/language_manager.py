@@ -12,6 +12,9 @@ class LanguageManager(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.config_dir = "data/serverconfig"
+        # 確保配置目錄存在
+        os.makedirs(self.config_dir, exist_ok=True)
+        
         self.logger = logging.getLogger(__name__)
         self.default_lang = "zh_TW"  # 預設使用繁體中文
         self.supported_languages = {
@@ -135,28 +138,34 @@ class LanguageManager(commands.Cog):
             "ja_JP": "日本語"
         }.items()
     ])
-    @commands.has_permissions(administrator=True)
     async def set_language(self, interaction: discord.Interaction, language: str):
         """設定伺服器的顯示語言"""
+        # 檢查使用者是否有管理員權限
+        if not interaction.user.guild_permissions.administrator:
+            error_message = self.translate(
+                str(interaction.guild_id),
+                "errors",
+                "permission_denied"
+            )
+            await interaction.response.send_message(error_message)
+            return
+        
         guild_id = str(interaction.guild_id)
         
         if language not in self.supported_languages:
             await interaction.response.send_message(
-                "不支援的語言選項。",
-                ephemeral=True
+                self.translate(guild_id, "commands", "set_language", "responses", "unsupported")
             )
             return
 
         if self.save_server_lang(guild_id, language):
             lang_name = self.supported_languages[language]
             await interaction.response.send_message(
-                f"已將伺服器語言設定為：{lang_name}",
-                ephemeral=True
+                self.translate(guild_id, "commands", "set_language", "responses", "success", language=lang_name)
             )
         else:
             await interaction.response.send_message(
-                "設定語言時發生錯誤，請稍後再試。",
-                ephemeral=True
+                self.translate(guild_id, "commands", "set_language", "responses", "error")
             )
 
     @app_commands.command(
@@ -170,8 +179,14 @@ class LanguageManager(commands.Cog):
         lang_name = self.supported_languages.get(current_lang, current_lang)
         
         await interaction.response.send_message(
-            f"目前伺服器使用的語言為：{lang_name}",
-            ephemeral=True
+            self.translate(
+                guild_id,
+                "commands",
+                "current_language",
+                "responses",
+                "current",
+                language=lang_name
+            )
         )
 
     @staticmethod

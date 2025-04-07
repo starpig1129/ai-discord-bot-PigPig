@@ -44,9 +44,14 @@ from cogs.eat.embeds import eatEmbed
 from cogs.eat.providers.googlemap_crawler import GoogleMapCrawler
 from cogs.eat.train.train import Train
 from cogs.eat.views import EatWhatView
+import concurrent.futures
+import asyncio
 
 from typing import Optional
 from .language_manager import LanguageManager
+
+def install_driver():
+    return ChromeDriverManager().install()
 
 class InternetSearchCog(commands.Cog):
     def __init__(self, bot):
@@ -99,8 +104,16 @@ class InternetSearchCog(commands.Cog):
         
         search_func = search_functions.get(search_type)
         if search_func:
+            if not guild_id and isinstance(ctx, discord.Interaction):
+                guild_id = str(ctx.guild_id)
+            elif not guild_id and hasattr(ctx, 'guild'):
+                guild_id = str(ctx.guild.id)
+                
             result = await search_func(ctx, query, message_to_edit)
-            return result if isinstance(result, str) else None
+            
+            if isinstance(result, str):
+                return result
+            return None
         else:
             error_message = self.lang_manager.translate(
                 guild_id,
@@ -113,8 +126,21 @@ class InternetSearchCog(commands.Cog):
             return error_message
 
     async def google_search(self, ctx, query, message_to_edit=None):
+        guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
         chrome_options = self.get_chrome_options()
-        service = Service(ChromeDriverManager().install())
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(install_driver)
+                driver_path = await asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    lambda: future.result(timeout=10)
+                )
+                service = Service(driver_path)
+        except (concurrent.futures.TimeoutError, Exception) as e:
+            print(f"ChromeDriverManager timed out or failed: {e}, falling back to local driver")
+            chrome_driver_path = './chromedriverlinux64/chromedriver'
+            service = Service(executable_path=chrome_driver_path)
         
         with webdriver.Chrome(options=chrome_options, service=service) as driver:
             # Disable automation detection
@@ -152,7 +178,19 @@ class InternetSearchCog(commands.Cog):
 
         url = f"https://www.google.com.hk/search?q={query}&tbm=isch"
         chrome_options = self.get_chrome_options()
-        service = Service(ChromeDriverManager().install())
+        
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(install_driver)
+                driver_path = await asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    lambda: future.result(timeout=10)
+                )
+                service = Service(driver_path)
+        except (concurrent.futures.TimeoutError, Exception) as e:
+            print(f"ChromeDriverManager timed out or failed: {e}, falling back to local driver")
+            chrome_driver_path = './chromedriverlinux64/chromedriver'
+            service = Service(executable_path=chrome_driver_path)
 
         try:
             with webdriver.Chrome(options=chrome_options, service=service) as driver:
@@ -261,6 +299,7 @@ class InternetSearchCog(commands.Cog):
 
     async def youtube_search(self, ctx, query, message_to_edit=None):
         try:
+            guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
             results = YoutubeSearch(query, max_results=5).to_dict()
             if not results:
                 return self.lang_manager.translate(

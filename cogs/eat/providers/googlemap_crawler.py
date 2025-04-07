@@ -10,6 +10,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import re
+import concurrent.futures
+import asyncio
 
 # 定義一個用於從Google地圖爬取餐廳信息的類
 class GoogleMapCrawler:
@@ -19,7 +21,20 @@ class GoogleMapCrawler:
         chrome_options.add_argument("--headless")  # 啟用無頭模式，不顯示瀏覽器界面
         chrome_options.add_argument("--disable-gpu")  # 禁用GPU加速
         chrome_options.add_argument("--incognito")  # 啟用無痕模式
-        s = Service(ChromeDriverManager().install())
+        
+        def install_driver():
+            return ChromeDriverManager().install()
+        
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(install_driver)
+                driver_path = future.result(timeout=10)  # 10秒超時
+                s = Service(driver_path)
+        except (concurrent.futures.TimeoutError, Exception) as e:
+            print(f"ChromeDriverManager timed out or failed: {e}, falling back to local driver")
+            chrome_driver_path = './chromedriverlinux64/chromedriver'
+            s = Service(executable_path=chrome_driver_path)
+            
         self.webdriver = webdriver.Chrome(options=chrome_options, service=s)
     
     def search(self, keyword):
