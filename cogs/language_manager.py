@@ -82,50 +82,60 @@ class LanguageManager(commands.Cog):
             self.logger.error(f"保存語言設定時出錯: {str(e)}")
             return False
 
-    def translate(self, guild_id: str, category: str, key: str, subkey: Optional[str] = None, **kwargs) -> str:
+    def translate(self, guild_id: str, *args, **kwargs) -> str:
         """翻譯指定的文字
 
         Args:
             guild_id: 伺服器ID
-            category: 翻譯類別 (例如: 'commands', 'errors')
-            key: 翻譯鍵值 (例如: 'help', 'set_language')
-            subkey: 子鍵值 (例如: 'name', 'description')
+            *args: 翻譯路徑，可以是多個部分（例如："commands", "play", "errors", "queue_full"）
             **kwargs: 格式化參數
 
         Returns:
             str: 翻譯後的文字
         """
-        lang = self.get_server_lang(str(guild_id))
-        translations = self.translations.get(lang, {}).get('common', {})
-        
         try:
-            # 根據提供的路徑獲取翻譯
+            lang = self.get_server_lang(str(guild_id))
+            translations = self.translations.get(lang, {}).get('common', {})
+            
+            self.logger.debug(f"Translating with lang={lang}, args={args}, kwargs={kwargs}")
+            
+            # 從參數構建翻譯路徑
             result = translations
-            for part in [category, key]:
-                if part:
-                    result = result.get(part, {})
+            path = []
             
-            if subkey:
-                if "." in subkey:
-                    # 處理複合路徑，例如 "responses.song_added"
-                    for part in subkey.split("."):
-                        result = result.get(part, {})
+            for part in args:
+                if not part:
+                    continue
+                    
+                if '/' in part:
+                    # 處理包含路徑分隔符的部分
+                    subparts = part.split('/')
+                    path.extend(subparts)
                 else:
-                    result = result.get(subkey, subkey)
+                    path.append(part)
             
-            # 如果結果是字符串，嘗試進行格式化
+            # 沿著路徑獲取翻譯
+            for part in path:
+                if not isinstance(result, dict):
+                    self.logger.warning(f"無法繼續遍歷路徑 {'/'.join(path)}, 當前結果不是字典: {result}")
+                    return path[-1]
+                result = result.get(part, {})
+            
+            # 如果結果是字符串，進行格式化
             if isinstance(result, str):
                 try:
                     return result.format(**kwargs)
-                except KeyError:
+                except KeyError as e:
+                    self.logger.error(f"格式化翻譯時出錯，缺少參數: {e}")
                     return result
             
-            # 如果找不到翻譯，返回原始鍵值
-            return key
+            # 如果找不到翻譯，返回最後一個路徑部分
+            self.logger.warning(f"未找到翻譯: {'/'.join(path)}")
+            return path[-1] if path else "TRANSLATION_NOT_FOUND"
             
         except Exception as e:
             self.logger.error(f"翻譯文字時出錯: {str(e)}")
-            return key
+            return args[-1] if args else "TRANSLATION_ERROR"
 
     @app_commands.command(
         name="set_language",

@@ -160,7 +160,7 @@ class YTMusic(commands.Cog):
             
         # Create embed for added songs
         description = "\n".join([f"🎵 {info['title']}" for info in added_songs])
-        title = self.lang_manager.translate(guild_id, "commands", "play", "responses", "playlist_added", count=len(added_songs), total=len(video_infos))
+        title = self.lang_manager.translate(guild_id, "commands", "play", "responses/playlist_added", count=len(added_songs), total=len(video_infos))
         embed = discord.Embed(
             title=f"✅ | {title}",
             description=description,
@@ -435,6 +435,14 @@ class YTMusic(commands.Cog):
                     def __init__(self, channel, guild, original_interaction):
                         self.channel = channel
                         self.guild = guild
+                        # Add response attribute
+                        class DummyResponse:
+                            def __init__(self):
+                                self.is_done = lambda: True
+                            async def send_message(self, *args, **kwargs):
+                                return await channel.send(*args, **kwargs)
+                        
+                        self.response = DummyResponse()
                         # Create a complete user copy with all required attributes
                         class DummyUser:
                             def __init__(self, original_user):
