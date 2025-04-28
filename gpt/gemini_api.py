@@ -8,7 +8,7 @@ from gpt.vision_tool import image_to_base64
 # Initialize the Gemini model
 tokens = TOKENS()
 genai.configure(api_key=tokens.gemini_api_key)
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-2.5-flash-preview-04-17")
 
 class GeminiError(Exception):
     pass
