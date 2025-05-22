@@ -1,4 +1,5 @@
-import google.generativeai as genai
+from google import genai
+from google.genai.types import Tool, GenerateContentConfig, GoogleSearch
 import asyncio
 from addons.settings import TOKENS
 import numpy as np
@@ -7,9 +8,12 @@ from moviepy.editor import VideoFileClip
 from gpt.vision_tool import image_to_base64
 # Initialize the Gemini model
 tokens = TOKENS()
-genai.configure(api_key=tokens.gemini_api_key)
-model = genai.GenerativeModel("gemini-2.5-flash-preview-04-17")
+client = genai.Client(api_key=tokens.gemini_api_key)
+model_id = "gemini-2.0-flash"
 
+google_search_tool = Tool(
+    google_search = GoogleSearch()
+)
 class GeminiError(Exception):
     pass
 
@@ -52,7 +56,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
             
             for i, frame in enumerate(frames, 1):
                 frame_prompt = f"Analyzing frame {i} from video"
-                response = model.generate_content([frame_prompt, frame], stream=False)
+                response = client.models.generate_content([frame_prompt, frame], stream=False)
                 if response.text:
                     frame_descriptions.append(f"Frame {i}: {response.text}")
             
@@ -70,15 +74,21 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
         raise GeminiError(f"Gemini API 影像處理錯誤: {str(e)}")
     try:
         content_parts.append(full_prompt)
-        response_stream = model.generate_content(content_parts,
-                                              safety_settings='BLOCK_NONE',
-                                              stream=True)
+
+        response_stream = client.models.generate_content(
+        model=model_id,
+        contents=content_parts,
+        config=GenerateContentConfig(
+            tools=[google_search_tool],
+            response_modalities=["TEXT"],
+            )
+        )
         
         async def async_generator():
             try:
                 # 使用事件循環來處理同步迭代器
                 loop = asyncio.get_event_loop()
-                iterator = iter(response_stream)
+                iterator = iter(response_stream.candidates[0].content.parts)
                 while True:
                     try:
                         # 使用 lambda 來安全地獲取下一個值
