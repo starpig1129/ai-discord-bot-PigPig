@@ -75,7 +75,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
     try:
         content_parts.append(full_prompt)
 
-        response_stream = client.models.generate_content(
+        response_stream = client.models.generate_content_stream(
         model=model_id,
         contents=content_parts,
         config=GenerateContentConfig(
@@ -88,7 +88,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
             try:
                 # 使用事件循環來處理同步迭代器
                 loop = asyncio.get_event_loop()
-                iterator = iter(response_stream.candidates[0].content.parts)
+                iterator = response_stream
                 while True:
                     try:
                         # 使用 lambda 來安全地獲取下一個值
