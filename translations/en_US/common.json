@@ -28,6 +28,15 @@
             "description": "Use Chain of Thought reasoning (may take longer)",
             "options": {
                 "prompt": "Prompt to process"
+            },
+            "responses": {
+                "processing": "Processing your request...",
+                "error": "Error: {error}",
+                "thinking": "🤔 Thinking...",
+                "step_header": "**Step {step}:**",
+                "final_answer": "**Final Answer:**",
+                "thinking_time": "Thinking time: {time}",
+                "total_time": "Total thinking time: {time}"
             }
         },
         "calculate": {
@@ -35,6 +44,14 @@
             "description": "Calculate mathematical expression",
             "options": {
                 "expression": "Mathematical expression to calculate"
+            },
+            "responses": {
+                "processing": "Calculating...",
+                "result": "Result: {expression} = {result}",
+                "error_too_long": "Error: Expression is too long. Please shorten it and try again.",
+                "error_undefined_function": "Error: Expression contains undefined functions.",
+                "error_unsupported_elements": "Error: Expression contains unsupported elements.",
+                "error_general": "Calculation error: Unable to parse or calculate the expression."
             }
         },
         "remind": {
@@ -53,6 +70,21 @@
                 "reminder_message": "{user} Reminder: {message}",
                 "reminder_sent": "Reminder sent to {user}",
                 "error_setting": "Error setting reminder: {error}"
+            },
+            "time_units": {
+                "years": "years",
+                "months": "months",
+                "weeks": "weeks",
+                "days": "days",
+                "hours": "hours",
+                "minutes": "minutes",
+                "seconds": "seconds"
+            },
+            "time_patterns": {
+                "seconds_later": "{value} seconds later",
+                "minutes_later": "{value} minutes later",
+                "hours_later": "{value} hours later",
+                "days_later": "{value} days later"
             }
         },
         "generate_image": {
@@ -68,6 +100,13 @@
                 "general_error": "Error generating image: {error}",
                 "local_model_processing": "Processing with local model...",
                 "local_model_complete": "Local model generation complete!"
+            },
+            "errors": {
+                "generation_error": "Image generation process error: {error}",
+                "local_model_error": "Local model generation error: {error}",
+                "image_processing_error": "Image processing error: {error}",
+                "api_error": "API request error: {error}",
+                "gemini_generation_error": "Gemini API generation error: {error}"
             }
         },
         "internet_search": {
@@ -86,10 +125,25 @@
             },
             "responses": {
                 "searching": "Searching...",
+                "processing": "Processing search results...",
+                "completed": "Search completed",
                 "unknown_type": "Unknown search type: {type}",
                 "no_videos_found": "No videos found. Please try different keywords.",
                 "youtube_result": "YouTube Search Result:\nTitle: {title}\nChannel: {channel}\nViews: {views}\nLink: {url}",
                 "search_failed": "Search failed. Please try different keywords. Error: {error}"
+            },
+            "errors": {
+                "search_failed": "Search failed: {error}",
+                "no_valid_url": "No valid URL found",
+                "no_valid_content": "Failed to fetch any valid content",
+                "processing_error": "Error occurred while processing search results: {error}",
+                "network_error": "Network connection error: {error}",
+                "timeout_error": "Search request timed out",
+                "invalid_query": "Invalid search query",
+                "image_download_failed": "Image download failed",
+                "image_element_not_found": "Unable to find image elements or redirect URL elements",
+                "eat_no_food": "No such food available",
+                "eat_system_error": "I wanted to recommend {keyword}, but sorry the system encountered an error: {error}"
             }
         },
         "userdata": {
@@ -160,10 +214,145 @@
                 "search_results_title": "YouTube Search Results",
                 "queue_finished": "Playlist finished!"
             }
+        },
+        "set_channel_mode": {
+            "name": "set_channel_mode",
+            "description": "Set channel response mode",
+            "choices": {
+                "unrestricted": "Unrestricted",
+                "whitelist": "Whitelist",
+                "blacklist": "Blacklist"
+            },
+            "responses": {
+                "success": "Channel response mode set to: {mode}"
+            }
+        },
+        "add_channel": {
+            "name": "add_channel",
+            "description": "Add channel to whitelist or blacklist",
+            "choices": {
+                "whitelist": "Whitelist",
+                "blacklist": "Blacklist"
+            },
+            "responses": {
+                "success": "Added channel {channel} to {list_type}",
+                "already_exists": "Channel {channel} already exists in {list_type}"
+            }
+        },
+        "remove_channel": {
+            "name": "remove_channel",
+            "description": "Remove channel from whitelist or blacklist",
+            "choices": {
+                "whitelist": "Whitelist",
+                "blacklist": "Blacklist"
+            },
+            "responses": {
+                "success": "Removed channel {channel} from {list_type}",
+                "not_found": "Channel {channel} not found in {list_type}"
+            }
+        },
+        "auto_response": {
+            "name": "auto_response",
+            "description": "Set channel auto response",
+            "responses": {
+                "success": "Set channel {channel} auto response to: {enabled}"
+            }
+        },
+        "search_gif": {
+            "name": "search_gif",
+            "description": "Search for GIF",
+            "options": {
+                "query": "Search query"
+            },
+            "responses": {
+                "not_found": "No relevant GIF found.",
+                "searching": "Searching for GIF..."
+            }
+        },
+        "upload_schedule": {
+            "name": "upload_schedule",
+            "description": "Upload schedule YAML file",
+            "responses": {
+                "success": "Schedule uploaded successfully!",
+                "error": "Error uploading schedule: {error}"
+            }
+        },
+        "query_schedule": {
+            "name": "query_schedule",
+            "description": "Query schedule",
+            "choices": {
+                "query_type": {
+                    "full": "Full schedule",
+                    "specific_time": "Specific time",
+                    "next": "Next event"
+                },
+                "day": {
+                    "Monday": "Monday",
+                    "Tuesday": "Tuesday",
+                    "Wednesday": "Wednesday",
+                    "Thursday": "Thursday",
+                    "Friday": "Friday",
+                    "Saturday": "Saturday",
+                    "Sunday": "Sunday"
+                },
+                "weekdays": {
+                    "Monday": "Monday",
+                    "Tuesday": "Tuesday",
+                    "Wednesday": "Wednesday",
+                    "Thursday": "Thursday",
+                    "Friday": "Friday",
+                    "Saturday": "Saturday",
+                    "Sunday": "Sunday"
+                }
+            },
+            "responses": {
+                "success": "Query completed",
+                "error": "Error querying schedule: {error}",
+                "no_schedule": "Your schedule not found. Please use `/upload_schedule` command to upload your schedule.",
+                "user_not_found": "User not found.",
+                "channel_not_found": "Channel not found.",
+                "permission_denied": "You or the queried user don't have permission to view this channel.",
+                "invalid_time_format": "Invalid time format. Please use YYYY-MM-DD HH:MM:SS format.",
+                "invalid_query_type": "Invalid query type."
+            }
+        },
+        "update_schedule": {
+            "name": "update_schedule",
+            "description": "Update or create schedule",
+            "responses": {
+                "success": "Schedule updated or created successfully!",
+                "error": "Error updating or creating schedule: {error}"
+            }
+        },
+        "show_template": {
+            "name": "show_template",
+            "description": "Show schedule template"
+        },
+        "model_management": {
+            "name": "model_management",
+            "description": "Manage AI models (Developer only)",
+            "choices": {
+                "action": {
+                    "unload": "Unload Model",
+                    "load": "Load Model"
+                }
+            },
+            "responses": {
+                "model_unloaded": "Model has been unloaded.",
+                "model_loaded": "Model has been loaded.",
+                "operation_completed": "Operation completed.",
+                "error": "An error occurred while executing the operation: {error}",
+                "model_already_unloaded": "Model is already unloaded or not yet loaded."
+            }
         }
     },
+    "general": {
+        "no_description": "No description",
+        "help_title": "Command Help",
+        "help_description": "Display detailed information about all available commands"
+    },
     "errors": {
-        "permission_denied": "You don't have permission to perform this action.",
+        "permission_denied": "You don't have permission to perform this action. This command is restricted to administrators only.",
         "command_failed": "Command execution failed: {error}",
         "invalid_input": "Invalid input.",
         "unknown_error": "An unknown error occurred. Please try again later."
@@ -177,6 +366,180 @@
             },
             "responses": {
                 "processing": "Continuing output..."
+            }
+        },
+        "cot_ai": {
+            "description": "Chain of Thought Reasoning AI System",
+            "prompts": {
+                "system_prompt": "You are an expert AI assistant with advanced reasoning capabilities. Your task is to provide detailed, step-by-step explanations of your thought process. For each step:\n\n1. Provide a clear, concise title describing the current reasoning phase.\n2. Elaborate on your thought process in the content section.\n3. Decide whether to continue reasoning or provide a final answer.\n4. Decide whether to use the basic model or the advanced model for the next reasoning step.\n\nResponse Format:\nUse JSON with keys: 'title', 'content', 'next_action' (values: 'continue' or 'final_answer'), 'model_selection' (values:'advanced')\n\nKey Instructions:\n- Employ at least 5 distinct reasoning steps.\n- Acknowledge your limitations as an AI and explicitly state what you can and cannot do.\n- Actively explore and evaluate alternative answers or approaches.\n- Critically assess your own reasoning; identify potential flaws or biases.\n- When re-examining, employ a fundamentally different approach or perspective.\n- Utilize at least 3 diverse methods to derive or verify your answer.\n- Incorporate relevant domain knowledge and best practices in your reasoning.\n- Quantify certainty levels for each step and the final conclusion when applicable.\n- Consider potential edge cases or exceptions to your reasoning.\n- Provide clear justifications for eliminating alternative hypotheses.",
+                "user_prompt_template": "Please analyze this question using step-by-step reasoning: {question}"
+            },
+            "errors": {
+                "api_error": "API request error: {error}",
+                "parsing_error": "Response parsing error: {error}",
+                "general_error": "Error occurred while processing request: {error}",
+                "model_not_available": "Model not available: {error}",
+                "json_decode_error": "JSON decode error: {error}"
+            }
+        },
+        "language_manager": {
+            "description": "Language Management System",
+            "supported_languages": {
+                "zh_TW": "Traditional Chinese",
+                "zh_CN": "Simplified Chinese",
+                "en_US": "English",
+                "ja_JP": "Japanese"
+            },
+            "logs": {
+                "directory_not_found": "Language directory not found: {directory}",
+                "translation_load_error": "Error loading translation file {file_path}: {error}",
+                "config_read_error": "Error reading language config: {error}",
+                "config_save_error": "Error saving language config: {error}",
+                "path_traversal_error": "Unable to continue traversing path {path}, current result is not a dictionary: {result}",
+                "format_error": "Error formatting translation, missing parameters: {error}",
+                "translation_not_found": "Translation not found: {path}",
+                "translation_error": "Error translating text: {error}"
+            }
+        },
+        "gif_tools": {
+            "description": "GIF search and management tool",
+            "logs": {
+                "searching_gif": "Searching GIF: {query}",
+                "found_gif": "Found GIF: {url}",
+                "api_error": "Tenor API response error: {status_code}",
+                "search_error": "GIF search error: {error}",
+                "get_url_error": "Error occurred while getting GIF URL: {error}",
+                "empty_query_warning": "Empty search query"
+            }
+        },
+        "schedule": {
+            "description": "Schedule management system",
+            "format": {
+                "full_schedule_title": "**Full Schedule:**",
+                "empty_schedule": "Schedule is empty.",
+                "day_header": "**{day}:**",
+                "no_events": "No events.",
+                "time_column": "Time",
+                "description_column": "Description",
+                "specific_time_title": "**Events at {time}:**",
+                "no_events_found": "No events found at that time.",
+                "next_event": "Next event: {time} - {description}",
+                "no_next_event": "No next event found."
+            },
+            "errors": {
+                "yaml_parse_error": "YAML file parsing error: {error}"
+            }
+        },
+        "model_management": {
+            "description": "AI Model Management System",
+            "status": {
+                "processing": "Processing model operation...",
+                "loading": "Loading model...",
+                "unloading": "Unloading model...",
+                "completed": "Model operation completed"
+            },
+            "errors": {
+                "permission_denied": "You don't have permission to perform this action. Developer access only.",
+                "model_not_found": "The specified model could not be found.",
+                "operation_failed": "Model operation failed: {error}"
+            },
+            "userdata": {
+                "description": "User Data Management System",
+                "status": {
+                    "processing": "Analyzing user data...",
+                    "completed": "User data analysis completed",
+                    "updating": "Updating user data...",
+                    "searching": "Searching user data..."
+                },
+                "errors": {
+                    "no_data": "No user data found",
+                    "analysis_failed": "Data analysis failed: {error}",
+                    "update_failed": "Failed to update user data: {error}",
+                    "ai_processing_failed": "AI processing error occurred while handling user data: {error}",
+                    "database_error": "Database operation error: {error}",
+                    "invalid_user": "Invalid user ID",
+                    "permission_denied": "You don't have permission to access this user's data"
+                },
+                "logs": {
+                    "data_retrieved": "Retrieved data for user {user_id}",
+                    "data_updated": "Updated data for user {user_id}",
+                    "data_created": "Created new data for user {user_id}",
+                    "ai_processing": "Using AI to process user data update",
+                    "operation_completed": "User data operation completed"
+                }
+            }
+        },
+        "internet_search": {
+            "description": "Internet Search System",
+            "logs": {
+                "search_started": "Search started: {query}",
+                "results_found": "Found {count} search results",
+                "processing_url": "Processing URL: {url}",
+                "content_extracted": "Content extracted, length: {length} characters",
+                "image_search_started": "Image search started: {query}",
+                "eat_search_started": "Food recommendation search started: {keyword}"
+            }
+        },
+        "remind": {
+            "description": "Reminder System",
+            "time_format": {
+                "full_format": "{years}{months}{weeks}{days}{hours}{minutes}{seconds}",
+                "year_format": "{value} years",
+                "month_format": "{value} months",
+                "week_format": "{value} weeks",
+                "day_format": "{value} days",
+                "hour_format": "{value} hours",
+                "minute_format": "{value} minutes",
+                "second_format": "{value} seconds"
+            },
+            "errors": {
+                "parse_error": "Time parsing error: {error}",
+                "reminder_failed": "Failed to set reminder: {error}",
+                "invalid_time_unit": "Invalid time unit: {unit}",
+                "time_out_of_range": "Time is out of valid range"
+            },
+            "logs": {
+                "reminder_set": "Set reminder for user {user_id}: in {duration}",
+                "reminder_triggered": "Reminder triggered: user {user_id}",
+                "parse_success": "Successfully parsed time: {time_str} -> {parsed_time}",
+                "parse_failed": "Time parsing failed: {time_str}"
+            }
+        },
+        "music": {
+            "player": {
+                "now_playing": "🎵 Now Playing",
+                "uploader": "👤 Channel",
+                "duration": "⏱️ Duration",
+                "views": "👀 Views",
+                "progress": "🎵 Progress",
+                "queue": "📜 Queue",
+                "queue_empty": "Queue is empty",
+                "added_by": "Added by {user}"
+            },
+            "controls": {
+                "no_music": "❌ No music is currently playing!",
+                "no_songs": "❌ No songs available to play!",
+                "previous": "⏮️ {user} went back to previous song",
+                "paused": "⏸️ {user} paused the music",
+                "resumed": "▶️ {user} resumed the music",
+                "skipped": "⏭️ {user} skipped the music",
+                "stopped": "⏹️ {user} stopped playback",
+                "mode_changed": "🔄 {user} set play mode to {mode}",
+                "shuffle_toggled": "🔀 {user} {status} shuffle",
+                "now_playing_prefix": "▶️ Now Playing:",
+                "queue_songs": "Queued Songs:",
+                "update_failed": "Failed to update playlist"
+            },
+            "select": {
+                "timeout": "⌛ | Song selection timed out",
+                "duration_label": "Duration: {duration}",
+                "placeholder": "Select a song to play",
+                "queue_full": "❌ | Queue is full",
+                "wait_message": "Please wait for the current song to finish before adding new songs",
+                "processing": "⏳ | Processing",
+                "processing_desc": "Processing your selection, please wait...",
+                "added": "✅ | Added to queue: {title}",
+                "error": "❌ | Error occurred while selecting song"
             }
         }
     }

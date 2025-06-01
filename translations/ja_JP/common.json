@@ -28,6 +28,30 @@
             "description": "Chain of Thought推論を使用（時間がかかる場合があります）",
             "options": {
                 "prompt": "処理するプロンプト"
+            },
+            "responses": {
+                "processing": "リクエストを処理中です...",
+                "error": "エラー：{error}",
+                "thinking": "🤔 考え中...",
+                "step_header": "**ステップ {step}：**",
+                "final_answer": "**最終回答：**",
+                "thinking_time": "思考時間：{time}",
+                "total_time": "総思考時間：{time}"
+            }
+        },
+        "calculate": {
+            "name": "calculate",
+            "description": "数式を計算",
+            "options": {
+                "expression": "計算する数式"
+            },
+            "responses": {
+                "processing": "計算中...",
+                "result": "計算結果: {expression} = {result}",
+                "error_too_long": "エラー：式が長すぎます。短くしてから再試行してください。",
+                "error_undefined_function": "エラー：式に未定義の関数が含まれています。",
+                "error_unsupported_elements": "エラー：式にサポートされていない要素が含まれています。",
+                "error_general": "計算エラー：式を解析または計算できませんでした。"
             }
         },
         "userdata": {
@@ -68,6 +92,21 @@
                 "reminder_message": "{user} リマインド：{message}",
                 "reminder_sent": "{user}にリマインドを送信しました",
                 "error_setting": "リマインダーの設定中にエラーが発生しました：{error}"
+            },
+            "time_units": {
+                "years": "年",
+                "months": "月",
+                "weeks": "週間",
+                "days": "日",
+                "hours": "時間",
+                "minutes": "分",
+                "seconds": "秒"
+            },
+            "time_patterns": {
+                "seconds_later": "{value}秒後",
+                "minutes_later": "{value}分後",
+                "hours_later": "{value}時間後",
+                "days_later": "{value}日後"
             }
         },
         "generate_image": {
@@ -83,6 +122,13 @@
                 "general_error": "画像生成中にエラーが発生しました：{error}",
                 "local_model_processing": "ローカルモデルで処理中...",
                 "local_model_complete": "ローカルモデルの生成が完了しました！"
+            },
+            "errors": {
+                "generation_error": "画像生成プロセスでエラーが発生しました：{error}",
+                "local_model_error": "ローカルモデル生成エラー：{error}",
+                "image_processing_error": "画像処理エラー：{error}",
+                "api_error": "APIリクエストエラー：{error}",
+                "gemini_generation_error": "Gemini API生成エラー：{error}"
             }
         },
         "internet_search": {
@@ -101,10 +147,25 @@
             },
             "responses": {
                 "searching": "検索中...",
+                "processing": "検索結果を処理中...",
+                "completed": "検索完了",
                 "unknown_type": "不明な検索タイプ：{type}",
                 "no_videos_found": "関連動画が見つかりません。別のキーワードをお試しください。",
                 "youtube_result": "YouTube検索結果：\nタイトル：{title}\nチャンネル：{channel}\n再生回数：{views}\nリンク：{url}",
                 "search_failed": "検索に失敗しました。別のキーワードをお試しください。エラー：{error}"
+            },
+            "errors": {
+                "search_failed": "検索に失敗しました：{error}",
+                "no_valid_url": "有効なURLが見つかりません",
+                "no_valid_content": "有効なコンテンツを取得できませんでした",
+                "processing_error": "検索結果の処理中にエラーが発生しました：{error}",
+                "network_error": "ネットワーク接続エラー：{error}",
+                "timeout_error": "検索リクエストがタイムアウトしました",
+                "invalid_query": "無効な検索クエリ",
+                "image_download_failed": "画像のダウンロードに失敗しました",
+                "image_element_not_found": "画像要素またはリダイレクトURL要素が見つかりません",
+                "eat_no_food": "そのような食べ物はありません",
+                "eat_system_error": "{keyword}をおすすめしたかったのですが、申し訳ございませんシステムエラーが発生しました：{error}"
             }
         },
         "mode": {
@@ -153,10 +214,145 @@
                 "search_results_title": "YouTube検索結果",
                 "queue_finished": "プレイリストの再生が完了しました！"
             }
+        },
+        "set_channel_mode": {
+            "name": "set_channel_mode",
+            "description": "チャンネル応答モードを設定",
+            "choices": {
+                "unrestricted": "無制限",
+                "whitelist": "ホワイトリスト",
+                "blacklist": "ブラックリスト"
+            },
+            "responses": {
+                "success": "チャンネル応答モードを{mode}に設定しました"
+            }
+        },
+        "add_channel": {
+            "name": "add_channel",
+            "description": "ホワイトリストまたはブラックリストにチャンネルを追加",
+            "choices": {
+                "whitelist": "ホワイトリスト",
+                "blacklist": "ブラックリスト"
+            },
+            "responses": {
+                "success": "チャンネル {channel} を {list_type} に追加しました",
+                "already_exists": "チャンネル {channel} は既に {list_type} に存在します"
+            }
+        },
+        "remove_channel": {
+            "name": "remove_channel",
+            "description": "ホワイトリストまたはブラックリストからチャンネルを削除",
+            "choices": {
+                "whitelist": "ホワイトリスト",
+                "blacklist": "ブラックリスト"
+            },
+            "responses": {
+                "success": "チャンネル {channel} を {list_type} から削除しました",
+                "not_found": "チャンネル {channel} は {list_type} に見つかりません"
+            }
+        },
+        "auto_response": {
+            "name": "auto_response",
+            "description": "チャンネル自動応答を設定",
+            "responses": {
+                "success": "チャンネル {channel} の自動応答を {enabled} に設定しました"
+            }
+        },
+        "search_gif": {
+            "name": "search_gif",
+            "description": "GIF を検索",
+            "options": {
+                "query": "検索キーワード"
+            },
+            "responses": {
+                "not_found": "関連する GIF が見つかりませんでした。",
+                "searching": "GIF を検索中..."
+            }
+        },
+        "upload_schedule": {
+            "name": "upload_schedule",
+            "description": "スケジュールYAMLファイルをアップロード",
+            "responses": {
+                "success": "スケジュールが正常にアップロードされました！",
+                "error": "スケジュールのアップロード中にエラーが発生しました：{error}"
+            }
+        },
+        "query_schedule": {
+            "name": "query_schedule",
+            "description": "スケジュールを照会",
+            "choices": {
+                "query_type": {
+                    "full": "完全なスケジュール",
+                    "specific_time": "特定の時間",
+                    "next": "次の予定"
+                },
+                "day": {
+                    "Monday": "月曜日",
+                    "Tuesday": "火曜日",
+                    "Wednesday": "水曜日",
+                    "Thursday": "木曜日",
+                    "Friday": "金曜日",
+                    "Saturday": "土曜日",
+                    "Sunday": "日曜日"
+                },
+                "weekdays": {
+                    "Monday": "月曜日",
+                    "Tuesday": "火曜日",
+                    "Wednesday": "水曜日",
+                    "Thursday": "木曜日",
+                    "Friday": "金曜日",
+                    "Saturday": "土曜日",
+                    "Sunday": "日曜日"
+                }
+            },
+            "responses": {
+                "success": "照会完了",
+                "error": "スケジュール照会中にエラーが発生しました：{error}",
+                "no_schedule": "あなたのスケジュールが見つかりません。`/upload_schedule` コマンドを使用してスケジュールをアップロードしてください。",
+                "user_not_found": "ユーザーが見つかりません。",
+                "channel_not_found": "チャンネルが見つかりません。",
+                "permission_denied": "あなたまたは照会されたユーザーはこのチャンネルを表示する権限がありません。",
+                "invalid_time_format": "無効な時間形式です。YYYY-MM-DD HH:MM:SS 形式を使用してください。",
+                "invalid_query_type": "無効な照会タイプです。"
+            }
+        },
+        "update_schedule": {
+            "name": "update_schedule",
+            "description": "スケジュールを更新または作成",
+            "responses": {
+                "success": "スケジュールが正常に更新または作成されました！",
+                "error": "スケジュールの更新または作成中にエラーが発生しました：{error}"
+            }
+        },
+        "show_template": {
+            "name": "show_template",
+            "description": "スケジュールテンプレートを表示"
+        },
+        "model_management": {
+            "name": "model_management",
+            "description": "AIモデルを管理（開発者専用）",
+            "choices": {
+                "action": {
+                    "unload": "モデルのアンロード",
+                    "load": "モデルのロード"
+                }
+            },
+            "responses": {
+                "model_unloaded": "モデルがアンロードされました。",
+                "model_loaded": "モデルがロードされました。",
+                "operation_completed": "操作が完了しました。",
+                "error": "操作の実行中にエラーが発生しました：{error}",
+                "model_already_unloaded": "モデルは既にアンロードされているか、まだロードされていません。"
+            }
         }
     },
+    "general": {
+        "no_description": "説明なし",
+        "help_title": "コマンドヘルプ",
+        "help_description": "利用可能なすべてのコマンドの詳細情報を表示"
+    },
     "errors": {
-        "permission_denied": "この操作を実行する権限がありません。",
+        "permission_denied": "この操作を実行する権限がありません。このコマンドは管理者のみ使用できます。",
         "command_failed": "コマンド実行に失敗しました：{error}",
         "invalid_input": "無効な入力です。",
         "unknown_error": "不明なエラーが発生しました。後でもう一度お試しください。"
@@ -170,6 +366,180 @@
             },
             "responses": {
                 "processing": "出力を続けています..."
+            }
+        },
+        "cot_ai": {
+            "description": "思考連鎖推論AIシステム",
+            "prompts": {
+                "system_prompt": "あなたは高度な推論能力を持つ専門のAIアシスタントです。あなたのタスクは、思考プロセスの詳細なステップバイステップの説明を提供することです。各ステップにおいて：\n\n1. 現在の推論段階を説明する明確で簡潔なタイトルを提供してください。\n2. 内容セクションであなたの思考プロセスを詳しく説明してください。\n3. 推論を続けるか、最終回答を提供するかを決定してください。\n4. 次の推論ステップで基本モデルまたは高度モデルのどちらを使用するかを決定してください。\n\n回答形式：\nJSON形式を使用し、以下のキーを含めてください：'title'、'content'、'next_action'（値：'continue' または 'final_answer'）、'model_selection'（値：'advanced'）\n\n重要な指示：\n- 少なくとも5つの異なる推論ステップを使用してください。\n- AIとしての制限を認識し、何ができて何ができないかを明確に述べてください。\n- 代替的な答えやアプローチを積極的に探索し評価してください。\n- あなた自身の推論を批判的に評価し、潜在的な欠陥やバイアスを特定してください。\n- 再検討時には、根本的に異なるアプローチや視点を採用してください。\n- 答えを導出または検証するために少なくとも3つの多様な方法を利用してください。\n- 推論に関連する領域知識とベストプラクティスを組み込んでください。\n- 適用可能な場合は、各ステップと最終結論の確実性レベルを定量化してください。\n- 推論の潜在的なエッジケースや例外を考慮してください。\n- 代替仮説を排除するための明確な根拠を提供してください。",
+                "user_prompt_template": "この問題をステップバイステップの推論を使用して分析してください：{question}"
+            },
+            "errors": {
+                "api_error": "APIリクエストエラー：{error}",
+                "parsing_error": "レスポンス解析エラー：{error}",
+                "general_error": "リクエスト処理中にエラーが発生しました：{error}",
+                "model_not_available": "モデルが利用できません：{error}",
+                "json_decode_error": "JSONデコードエラー：{error}"
+            }
+        },
+        "language_manager": {
+            "description": "言語管理システム",
+            "supported_languages": {
+                "zh_TW": "繁体字中国語",
+                "zh_CN": "簡体字中国語",
+                "en_US": "英語",
+                "ja_JP": "日本語"
+            },
+            "logs": {
+                "directory_not_found": "言語ディレクトリが見つかりません：{directory}",
+                "translation_load_error": "翻訳ファイル {file_path} の読み込みエラー：{error}",
+                "config_read_error": "言語設定の読み取りエラー：{error}",
+                "config_save_error": "言語設定の保存エラー：{error}",
+                "path_traversal_error": "パス {path} の走査を続行できません、現在の結果は辞書ではありません：{result}",
+                "format_error": "翻訳のフォーマットエラー、パラメータが不足しています：{error}",
+                "translation_not_found": "翻訳が見つかりません：{path}",
+                "translation_error": "テキストの翻訳エラー：{error}"
+            }
+        },
+        "gif_tools": {
+            "description": "GIF 検索・管理ツール",
+            "logs": {
+                "searching_gif": "GIF を検索中：{query}",
+                "found_gif": "GIF が見つかりました：{url}",
+                "api_error": "Tenor API レスポンスエラー：{status_code}",
+                "search_error": "GIF 検索エラー：{error}",
+                "get_url_error": "GIF URL の取得中にエラーが発生しました：{error}",
+                "empty_query_warning": "空の検索キーワード"
+            }
+        },
+        "schedule": {
+            "description": "スケジュール管理システム",
+            "format": {
+                "full_schedule_title": "**完全なスケジュール:**",
+                "empty_schedule": "スケジュールは空です。",
+                "day_header": "**{day}:**",
+                "no_events": "予定がありません。",
+                "time_column": "時間",
+                "description_column": "説明",
+                "specific_time_title": "**{time} の予定:**",
+                "no_events_found": "その時間に予定が見つかりませんでした。",
+                "next_event": "次の予定：{time} - {description}",
+                "no_next_event": "次の予定が見つかりませんでした。"
+            },
+            "errors": {
+                "yaml_parse_error": "YAMLファイル解析エラー：{error}"
+            }
+        },
+        "model_management": {
+            "description": "AI モデル管理システム",
+            "status": {
+                "processing": "モデル操作を処理中...",
+                "loading": "モデルをロード中...",
+                "unloading": "モデルをアンロード中...",
+                "completed": "モデル操作が完了しました"
+            },
+            "errors": {
+                "permission_denied": "この操作を実行する権限がありません。開発者のみアクセス可能です。",
+                "model_not_found": "指定されたモデルが見つかりませんでした。",
+                "operation_failed": "モデル操作に失敗しました：{error}"
+            },
+            "userdata": {
+                "description": "ユーザーデータ管理システム",
+                "status": {
+                    "processing": "ユーザーデータを分析中...",
+                    "completed": "ユーザーデータ分析が完了しました",
+                    "updating": "ユーザーデータを更新中...",
+                    "searching": "ユーザーデータを検索中..."
+                },
+                "errors": {
+                    "no_data": "ユーザーデータが見つかりません",
+                    "analysis_failed": "データ分析に失敗しました：{error}",
+                    "update_failed": "ユーザーデータの更新に失敗しました：{error}",
+                    "ai_processing_failed": "ユーザーデータの AI 処理中にエラーが発生しました：{error}",
+                    "database_error": "データベース操作エラー：{error}",
+                    "invalid_user": "無効なユーザー ID です",
+                    "permission_denied": "このユーザーのデータにアクセスする権限がありません"
+                },
+                "logs": {
+                    "data_retrieved": "ユーザー {user_id} のデータを取得しました",
+                    "data_updated": "ユーザー {user_id} のデータを更新しました",
+                    "data_created": "ユーザー {user_id} の新しいデータを作成しました",
+                    "ai_processing": "AI を使用してユーザーデータの更新を処理中です",
+                    "operation_completed": "ユーザーデータ操作が完了しました"
+                }
+            }
+        },
+        "internet_search": {
+            "description": "インターネット検索システム",
+            "logs": {
+                "search_started": "検索開始：{query}",
+                "results_found": "{count} 件の検索結果が見つかりました",
+                "processing_url": "URL を処理中：{url}",
+                "content_extracted": "コンテンツを抽出しました、長さ：{length} 文字",
+                "image_search_started": "画像検索開始：{query}",
+                "eat_search_started": "グルメ推薦検索開始：{keyword}"
+            }
+        },
+        "remind": {
+            "description": "リマインダーシステム",
+            "time_format": {
+                "full_format": "{years}{months}{weeks}{days}{hours}{minutes}{seconds}",
+                "year_format": "{value}年",
+                "month_format": "{value}月",
+                "week_format": "{value}週間",
+                "day_format": "{value}日",
+                "hour_format": "{value}時間",
+                "minute_format": "{value}分",
+                "second_format": "{value}秒"
+            },
+            "errors": {
+                "parse_error": "時間解析エラー：{error}",
+                "reminder_failed": "リマインダー設定に失敗しました：{error}",
+                "invalid_time_unit": "無効な時間単位：{unit}",
+                "time_out_of_range": "時間が有効範囲外です"
+            },
+            "logs": {
+                "reminder_set": "ユーザー {user_id} にリマインダーを設定しました：{duration} 後",
+                "reminder_triggered": "リマインダーが発動されました：ユーザー {user_id}",
+                "parse_success": "時間の解析に成功しました：{time_str} -> {parsed_time}",
+                "parse_failed": "時間の解析に失敗しました：{time_str}"
+            }
+        },
+        "music": {
+            "player": {
+                "now_playing": "🎵 再生中",
+                "uploader": "👤 チャンネル",
+                "duration": "⏱️ 再生時間",
+                "views": "👀 視聴回数",
+                "progress": "🎵 進行状況",
+                "queue": "📜 再生リスト",
+                "queue_empty": "リストが空です",
+                "added_by": "{user} によって追加"
+            },
+            "controls": {
+                "no_music": "❌ 現在再生中の音楽がありません！",
+                "no_songs": "❌ 再生可能な楽曲がありません！",
+                "previous": "⏮️ {user} が前の曲に戻りました",
+                "paused": "⏸️ {user} が音楽を一時停止しました",
+                "resumed": "▶️ {user} が音楽を再開しました",
+                "skipped": "⏭️ {user} が音楽をスキップしました",
+                "stopped": "⏹️ {user} が再生を停止しました",
+                "mode_changed": "🔄 {user} が再生モードを {mode} に設定しました",
+                "shuffle_toggled": "🔀 {user} がシャッフル再生を{status}しました",
+                "now_playing_prefix": "▶️ 再生中:",
+                "queue_songs": "再生待ちの楽曲:",
+                "update_failed": "再生リストの更新に失敗しました"
+            },
+            "select": {
+                "timeout": "⌛ | 楽曲選択の時間が切れました",
+                "duration_label": "再生時間: {duration}",
+                "placeholder": "再生する楽曲を選択してください",
+                "queue_full": "❌ | 再生リストが満杯です",
+                "wait_message": "現在の楽曲の再生が終了してから新しい楽曲を追加してください",
+                "processing": "⏳ | 処理中",
+                "processing_desc": "選択を処理しています。しばらくお待ちください...",
+                "added": "✅ | 再生リストに追加されました: {title}",
+                "error": "❌ | 楽曲選択中にエラーが発生しました"
             }
         }
     }

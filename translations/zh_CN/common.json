@@ -28,6 +28,15 @@
             "description": "使用 Chain of Thought 推理（可能需要较长时间）",
             "options": {
                 "prompt": "要处理的提示词"
+            },
+            "responses": {
+                "processing": "正在处理您的请求...",
+                "error": "错误：{error}",
+                "thinking": "🤔 思考中...",
+                "step_header": "**步骤 {step}：**",
+                "final_answer": "**最终答案：**",
+                "thinking_time": "思考时间：{time}",
+                "total_time": "总思考时间：{time}"
             }
         },
         "calculate": {
@@ -35,6 +44,14 @@
             "description": "计算数学表达式",
             "options": {
                 "expression": "要计算的数学表达式"
+            },
+            "responses": {
+                "processing": "计算中...",
+                "result": "计算结果: {expression} = {result}",
+                "error_too_long": "错误：表达式过长，请缩短后再试。",
+                "error_undefined_function": "错误：表达式包含未定义的函数。",
+                "error_unsupported_elements": "错误：表达式包含不支持的元素。",
+                "error_general": "计算错误：无法解析或计算该表达式。"
             }
         },
         "remind": {
@@ -53,6 +70,21 @@
                 "reminder_message": "{user} 提醒：{message}",
                 "reminder_sent": "提醒已发送给 {user}",
                 "error_setting": "设置提醒时发生错误：{error}"
+            },
+            "time_units": {
+                "years": "年",
+                "months": "月",
+                "weeks": "周",
+                "days": "天",
+                "hours": "小时",
+                "minutes": "分钟",
+                "seconds": "秒"
+            },
+            "time_patterns": {
+                "seconds_later": "{value}秒后",
+                "minutes_later": "{value}分钟后",
+                "hours_later": "{value}小时后",
+                "days_later": "{value}天后"
             }
         },
         "generate_image": {
@@ -68,6 +100,13 @@
                 "general_error": "生成图片时发生错误：{error}",
                 "local_model_processing": "使用本地模型生成中...",
                 "local_model_complete": "本地模型完成生成！"
+            },
+            "errors": {
+                "generation_error": "图片生成过程出现错误：{error}",
+                "local_model_error": "本地模型生成错误：{error}",
+                "image_processing_error": "图片处理错误：{error}",
+                "api_error": "API 请求错误：{error}",
+                "gemini_generation_error": "Gemini API 生成错误：{error}"
             }
         },
         "internet_search": {
@@ -86,10 +125,25 @@
             },
             "responses": {
                 "searching": "正在搜索中...",
+                "processing": "正在处理搜索结果...",
+                "completed": "搜索完成",
                 "unknown_type": "未知的搜索类型：{type}",
                 "no_videos_found": "未找到相关视频，请尝试其他关键词。",
                 "youtube_result": "YouTube搜索结果：\n标题：{title}\n发布者：{channel}\n观看次数：{views}\n链接：{url}",
                 "search_failed": "搜索失败，请尝试其他关键词。错误：{error}"
+            },
+            "errors": {
+                "search_failed": "搜索失败：{error}",
+                "no_valid_url": "未找到有效的URL",
+                "no_valid_content": "未能抓取到任何有效内容",
+                "processing_error": "处理搜索结果时发生错误：{error}",
+                "network_error": "网络连接错误：{error}",
+                "timeout_error": "搜索请求超时",
+                "invalid_query": "无效的搜索查询",
+                "image_download_failed": "图片下载失败",
+                "image_element_not_found": "无法找到图片元素或跳转URL元素",
+                "eat_no_food": "没有这种食物哦",
+                "eat_system_error": "原本想推荐你吃 {keyword}，但很抱歉系统出错了QQ: {error}"
             }
         },
         "userdata": {
@@ -160,10 +214,145 @@
                 "search_results_title": "YouTube搜索结果",
                 "queue_finished": "播放列表已播放完毕！"
             }
+        },
+        "set_channel_mode": {
+            "name": "set_channel_mode",
+            "description": "设定频道响应模式",
+            "choices": {
+                "unrestricted": "无限制",
+                "whitelist": "白名单",
+                "blacklist": "黑名单"
+            },
+            "responses": {
+                "success": "已将频道响应模式设定为：{mode}"
+            }
+        },
+        "add_channel": {
+            "name": "add_channel",
+            "description": "新增频道到白名单或黑名单",
+            "choices": {
+                "whitelist": "白名单",
+                "blacklist": "黑名单"
+            },
+            "responses": {
+                "success": "已将频道 {channel} 新增到 {list_type}",
+                "already_exists": "频道 {channel} 已存在于 {list_type}"
+            }
+        },
+        "remove_channel": {
+            "name": "remove_channel",
+            "description": "移除频道从白名单或黑名单",
+            "choices": {
+                "whitelist": "白名单",
+                "blacklist": "黑名单"
+            },
+            "responses": {
+                "success": "已将频道 {channel} 移除从 {list_type}",
+                "not_found": "频道 {channel} 不存在于 {list_type}"
+            }
+        },
+        "auto_response": {
+            "name": "auto_response",
+            "description": "设定频道自动回复",
+            "responses": {
+                "success": "已将频道 {channel} 自动回复设定为：{enabled}"
+            }
+        },
+        "search_gif": {
+            "name": "search_gif",
+            "description": "搜索 GIF",
+            "options": {
+                "query": "搜索关键词"
+            },
+            "responses": {
+                "not_found": "找不到相关的 GIF。",
+                "searching": "正在搜索 GIF..."
+            }
+        },
+        "upload_schedule": {
+            "name": "upload_schedule",
+            "description": "上传日程表YAML文件",
+            "responses": {
+                "success": "日程表已成功上传！",
+                "error": "上传日程表时发生错误：{error}"
+            }
+        },
+        "query_schedule": {
+            "name": "query_schedule",
+            "description": "查询日程表",
+            "choices": {
+                "query_type": {
+                    "full": "完整日程表",
+                    "specific_time": "特定时间",
+                    "next": "下一个日程"
+                },
+                "day": {
+                    "Monday": "星期一",
+                    "Tuesday": "星期二",
+                    "Wednesday": "星期三",
+                    "Thursday": "星期四",
+                    "Friday": "星期五",
+                    "Saturday": "星期六",
+                    "Sunday": "星期日"
+                },
+                "weekdays": {
+                    "Monday": "星期一",
+                    "Tuesday": "星期二",
+                    "Wednesday": "星期三",
+                    "Thursday": "星期四",
+                    "Friday": "星期五",
+                    "Saturday": "星期六",
+                    "Sunday": "星期日"
+                }
+            },
+            "responses": {
+                "success": "查询完成",
+                "error": "查询日程表时发生错误：{error}",
+                "no_schedule": "找不到您的日程表。请使用 `/upload_schedule` 命令上传日程表。",
+                "user_not_found": "找不到该用户。",
+                "channel_not_found": "找不到频道。",
+                "permission_denied": "您或被查询者无权限查看此频道。",
+                "invalid_time_format": "无效的时间格式。请使用 YYYY-MM-DD HH:MM:SS 格式。",
+                "invalid_query_type": "无效的查询类型。"
+            }
+        },
+        "update_schedule": {
+            "name": "update_schedule",
+            "description": "更新或创建日程表",
+            "responses": {
+                "success": "日程表已成功更新或创建！",
+                "error": "更新或创建日程表时发生错误：{error}"
+            }
+        },
+        "show_template": {
+            "name": "show_template",
+            "description": "显示日程表模板"
+        },
+        "model_management": {
+            "name": "model_management",
+            "description": "管理AI模型（开发者专用）",
+            "choices": {
+                "action": {
+                    "unload": "卸载模型",
+                    "load": "加载模型"
+                }
+            },
+            "responses": {
+                "model_unloaded": "模型已卸载。",
+                "model_loaded": "模型已加载。",
+                "operation_completed": "操作已完成。",
+                "error": "执行操作时发生错误：{error}",
+                "model_already_unloaded": "模型已经卸载或尚未加载。"
+            }
         }
     },
+    "general": {
+        "no_description": "无描述",
+        "help_title": "指令帮助",
+        "help_description": "显示所有可用指令的详细信息"
+    },
     "errors": {
-        "permission_denied": "您没有权限执行此操作。",
+        "permission_denied": "您没有权限执行此操作，仅限管理员使用此命令。",
         "command_failed": "指令执行失败：{error}",
         "invalid_input": "无效的输入。",
         "unknown_error": "发生未知错误，请稍后再试。"
@@ -177,6 +366,180 @@
             },
             "responses": {
                 "processing": "继续输出中..."
+            }
+        },
+        "cot_ai": {
+            "description": "思维链推理 AI 系统",
+            "prompts": {
+                "system_prompt": "您是一位具有高级推理能力的专业 AI 助手。您的任务是提供详细的逐步思考过程说明。对于每个步骤：\n\n1. 提供清楚、简洁的标题来描述当前推理阶段。\n2. 在内容部分详细阐述您的思考过程。\n3. 决定是否继续推理或提供最终答案。\n4. 决定下一个推理步骤使用基础模型还是高级模型。\n\n回应格式：\n使用 JSON 格式，包含以下键值：'title'、'content'、'next_action'（值：'continue' 或 'final_answer'）、'model_selection'（值：'advanced'）\n\n关键指示：\n- 至少使用 5 个不同的推理步骤。\n- 承认您作为 AI 的限制，明确说明您能做什么和不能做什么。\n- 积极探索和评估替代答案或方法。\n- 批判性地评估您自己的推理；识别潜在的缺陷或偏见。\n- 重新检视时，采用根本不同的方法或观点。\n- 使用至少 3 种不同的方法来得出或验证您的答案。\n- 在推理中融入相关的领域知识和最佳实践。\n- 在适用时量化每个步骤和最终结论的确定性水平。\n- 考虑推理的潜在边缘情况或例外。\n- 为排除替代假设提供清楚的理由。",
+                "user_prompt_template": "请使用逐步推理来分析这个问题：{question}"
+            },
+            "errors": {
+                "api_error": "API 请求错误：{error}",
+                "parsing_error": "响应解析错误：{error}",
+                "general_error": "处理请求时发生错误：{error}",
+                "model_not_available": "模型不可用：{error}",
+                "json_decode_error": "JSON 解码错误：{error}"
+            }
+        },
+        "language_manager": {
+            "description": "语言管理系统",
+            "supported_languages": {
+                "zh_TW": "繁体中文",
+                "zh_CN": "简体中文",
+                "en_US": "English",
+                "ja_JP": "日本語"
+            },
+            "logs": {
+                "directory_not_found": "找不到语言目录：{directory}",
+                "translation_load_error": "加载翻译文件时出错 {file_path}: {error}",
+                "config_read_error": "读取语言设置时出错: {error}",
+                "config_save_error": "保存语言设置时出错: {error}",
+                "path_traversal_error": "无法继续遍历路径 {path}, 当前结果不是字典: {result}",
+                "format_error": "格式化翻译时出错，缺少参数: {error}",
+                "translation_not_found": "未找到翻译: {path}",
+                "translation_error": "翻译文本时出错: {error}"
+            }
+        },
+        "gif_tools": {
+            "description": "GIF 搜索与管理工具",
+            "logs": {
+                "searching_gif": "搜索 GIF: {query}",
+                "found_gif": "找到 GIF: {url}",
+                "api_error": "Tenor API 响应错误: {status_code}",
+                "search_error": "GIF 搜索错误: {error}",
+                "get_url_error": "获取 GIF URL 时发生错误: {error}",
+                "empty_query_warning": "空的搜索关键词"
+            }
+        },
+        "schedule": {
+            "description": "日程管理系统",
+            "format": {
+                "full_schedule_title": "**完整日程表:**",
+                "empty_schedule": "日程表是空的。",
+                "day_header": "**{day}:**",
+                "no_events": "没有日程。",
+                "time_column": "时间",
+                "description_column": "说明",
+                "specific_time_title": "**{time} 的日程:**",
+                "no_events_found": "没有找到该时间的日程。",
+                "next_event": "下一个日程：{time} - {description}",
+                "no_next_event": "没有找到下一个日程。"
+            },
+            "errors": {
+                "yaml_parse_error": "YAML文件解析错误：{error}"
+            }
+        },
+        "model_management": {
+            "description": "AI 模型管理系统",
+            "status": {
+                "processing": "正在处理模型操作...",
+                "loading": "正在加载模型...",
+                "unloading": "正在卸载模型...",
+                "completed": "模型操作完成"
+            },
+            "errors": {
+                "permission_denied": "您没有权限执行此操作，仅限开发者使用。",
+                "model_not_found": "找不到指定的模型。",
+                "operation_failed": "模型操作失败：{error}"
+            },
+            "userdata": {
+                "description": "用户数据管理系统",
+                "status": {
+                    "processing": "正在分析用户数据...",
+                    "completed": "用户数据分析完成",
+                    "updating": "正在更新用户数据...",
+                    "searching": "正在查询用户数据..."
+                },
+                "errors": {
+                    "no_data": "找不到用户数据",
+                    "analysis_failed": "数据分析失败：{error}",
+                    "update_failed": "更新用户数据失败：{error}",
+                    "ai_processing_failed": "AI 处理用户数据时发生错误：{error}",
+                    "database_error": "数据库操作错误：{error}",
+                    "invalid_user": "无效的用户 ID",
+                    "permission_denied": "您没有权限访问此用户的数据"
+                },
+                "logs": {
+                    "data_retrieved": "已检索用户 {user_id} 的数据",
+                    "data_updated": "已更新用户 {user_id} 的数据",
+                    "data_created": "已为用户 {user_id} 创建新数据",
+                    "ai_processing": "正在使用 AI 处理用户数据更新",
+                    "operation_completed": "用户数据操作完成"
+                }
+            }
+        },
+        "internet_search": {
+            "description": "网络搜索系统",
+            "logs": {
+                "search_started": "开始搜索：{query}",
+                "results_found": "找到 {count} 个搜索结果",
+                "processing_url": "正在处理 URL：{url}",
+                "content_extracted": "已提取内容，长度：{length} 字符",
+                "image_search_started": "开始图片搜索：{query}",
+                "eat_search_started": "开始美食推荐搜索：{keyword}"
+            }
+        },
+        "remind": {
+            "description": "提醒系统",
+            "time_format": {
+                "full_format": "{years}{months}{weeks}{days}{hours}{minutes}{seconds}",
+                "year_format": "{value}年",
+                "month_format": "{value}月",
+                "week_format": "{value}周",
+                "day_format": "{value}天",
+                "hour_format": "{value}小时",
+                "minute_format": "{value}分钟",
+                "second_format": "{value}秒"
+            },
+            "errors": {
+                "parse_error": "时间解析错误：{error}",
+                "reminder_failed": "设定提醒失败：{error}",
+                "invalid_time_unit": "无效的时间单位：{unit}",
+                "time_out_of_range": "时间超出有效范围"
+            },
+            "logs": {
+                "reminder_set": "已为用户 {user_id} 设定提醒：{duration} 后",
+                "reminder_triggered": "提醒已触发：用户 {user_id}",
+                "parse_success": "成功解析时间：{time_str} -> {parsed_time}",
+                "parse_failed": "时间解析失败：{time_str}"
+            }
+        },
+        "music": {
+            "player": {
+                "now_playing": "🎵 正在播放",
+                "uploader": "👤 上传频道",
+                "duration": "⏱️ 播放时长",
+                "views": "👀 观看次数",
+                "progress": "🎵 播放进度",
+                "queue": "📜 播放列表",
+                "queue_empty": "列表为空",
+                "added_by": "由 {user} 添加"
+            },
+            "controls": {
+                "no_music": "❌ 没有正在播放的音乐！",
+                "no_songs": "❌ 没有可播放的歌曲！",
+                "previous": "⏮️ {user} 返回上一首",
+                "paused": "⏸️ {user} 暂停了音乐",
+                "resumed": "▶️ {user} 继续了音乐",
+                "skipped": "⏭️ {user} 跳过了音乐",
+                "stopped": "⏹️ {user} 停止了播放",
+                "mode_changed": "🔄 {user} 将播放模式设为 {mode}",
+                "shuffle_toggled": "🔀 {user} {status}随机播放",
+                "now_playing_prefix": "▶️ 正在播放:",
+                "queue_songs": "待播放歌曲:",
+                "update_failed": "无法更新播放列表"
+            },
+            "select": {
+                "timeout": "⌛ | 选择歌曲时间已过期",
+                "duration_label": "时长: {duration}",
+                "placeholder": "选择要播放的歌曲",
+                "queue_full": "❌ | 播放列表已满",
+                "wait_message": "请等待当前歌曲播放完毕后再添加新歌曲",
+                "processing": "⏳ | 处理中",
+                "processing_desc": "正在处理您的选择，请稍候...",
+                "added": "✅ | 已添加到播放列表： {title}",
+                "error": "❌ | 选择歌曲时发生错误"
             }
         }
     }

@@ -9,6 +9,8 @@ import google.generativeai as genai
 from transformers import TextIteratorStreamer
 from gpt.gpt_response_gen import get_model_and_tokenizer
 from addons.settings import TOKENS
+from typing import Optional
+from .language_manager import LanguageManager
 
 def extract_json_from_response(response:str):
     match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
@@ -66,42 +68,11 @@ def call_gemini_model(messages):
         generated_text += new_text.text
     return generated_text
 
-async def generate_response(prompt):
-    system_prompt = """You are an expert AI assistant with advanced reasoning capabilities. Your task is to provide detailed, step-by-step explanations of your thought process. For each step:
-
-1. Provide a clear, concise title describing the current reasoning phase.
-2. Elaborate on your thought process in the content section.
-3. Decide whether to continue reasoning or provide a final answer.
-4. Decide whether to use the basic model or the advanced model for the next reasoning step.
-
-Response Format:
-Use JSON with keys: 'title', 'content', 'next_action' (values: 'continue' or 'final_answer'), 'model_selection' (values:'advanced')
-
-Key Instructions:
-- Employ at least 5 distinct reasoning steps.
-- Acknowledge your limitations as an AI and explicitly state what you can and cannot do.
-- Actively explore and evaluate alternative answers or approaches.
-- Critically assess your own reasoning; identify potential flaws or biases.
-- When re-examining, employ a fundamentally different approach or perspective.
-- Utilize at least 3 diverse methods to derive or verify your answer.
-- Incorporate relevant domain knowledge and best practices in your reasoning.
-- Quantify certainty levels for each step and the final conclusion when applicable.
-- Consider potential edge cases or exceptions to your reasoning.
-- Provide clear justifications for eliminating alternative hypotheses.
-
-Example of a valid JSON response:
-```json
-{
-    "title": "Initial Problem Analysis",
-    "content": "To approach this problem effectively, I'll first break down the given information into key components. This involves identifying...[detailed explanation]... By structuring the problem this way, we can systematically address each aspect.",
-    "next_action": "continue",
-    "model_selection": "advanced"
-}```
-"""
+async def generate_response(prompt, system_prompt, user_prompt):
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": prompt},
+        {"role": "user", "content": user_prompt},
         {
             "role": "assistant",
             "content": "Thank you! I will now think step by step following my instructions, starting at the beginning after decomposing the problem."
@@ -166,7 +137,7 @@ Example of a valid JSON response:
     # Prepare for final answer
     messages.append({
         "role": "user",
-        "content": "Please provide the final answer based on your reasoning above and answer in Traditional Chinese."
+        "content": "Please provide the final answer based on your reasoning above."
     })
 
     start_time = time.time()
@@ -205,6 +176,59 @@ Example of a valid JSON response:
 class CoTCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.lang_manager: Optional[LanguageManager] = None
+
+    async def cog_load(self):
+        """當 Cog 載入時初始化語言管理器"""
+        self.lang_manager = LanguageManager.get_instance(self.bot)
+
+    def get_system_prompt(self, guild_id: str) -> str:
+        """根據伺服器語言設定獲取適當的系統提示"""
+        if not self.lang_manager:
+            return """You are an expert AI assistant with advanced reasoning capabilities. Your task is to provide detailed, step-by-step explanations of your thought process. For each step:
+
+1. Provide a clear, concise title describing the current reasoning phase.
+2. Elaborate on your thought process in the content section.
+3. Decide whether to continue reasoning or provide a final answer.
+4. Decide whether to use the basic model or the advanced model for the next reasoning step.
+
+Response Format:
+Use JSON with keys: 'title', 'content', 'next_action' (values: 'continue' or 'final_answer'), 'model_selection' (values:'advanced')
+
+Key Instructions:
+- Employ at least 5 distinct reasoning steps.
+- Acknowledge your limitations as an AI and explicitly state what you can and cannot do.
+- Actively explore and evaluate alternative answers or approaches.
+- Critically assess your own reasoning; identify potential flaws or biases.
+- When re-examining, employ a fundamentally different approach or perspective.
+- Utilize at least 3 diverse methods to derive or verify your answer.
+- Incorporate relevant domain knowledge and best practices in your reasoning.
+- Quantify certainty levels for each step and the final conclusion when applicable.
+- Consider potential edge cases or exceptions to your reasoning.
+- Provide clear justifications for eliminating alternative hypotheses."""
+        
+        return self.lang_manager.translate(
+            guild_id, "system", "cot_ai", "prompts", "system_prompt"
+        )
+
+    def get_user_prompt(self, question: str, guild_id: str) -> str:
+        """根據伺服器語言設定格式化用戶提示"""
+        if not self.lang_manager:
+            return f"Please analyze this question using step-by-step reasoning: {question}"
+        
+        return self.lang_manager.translate(
+            guild_id, "system", "cot_ai", "prompts", "user_prompt_template",
+            question=question
+        )
+
+    def get_error_message(self, error_type: str, guild_id: str, error: str) -> str:
+        """根據語言設定獲取錯誤訊息"""
+        if not self.lang_manager:
+            return f"Error occurred while processing request: {error}"
+        
+        return self.lang_manager.translate(
+            guild_id, "system", "cot_ai", "errors", error_type, error=error
+        )
 
     @app_commands.command(
         name="cot_ai",
@@ -221,17 +245,40 @@ class CoTCommands(commands.Cog):
         """
         This command uses Chain of Thought reasoning to answer a prompt.
         """
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+        
+        guild_id = str(interaction.guild_id)
         MAX_MESSAGE_LENGTH = 1900  # 最大訊息字數限制
 
-        await interaction.response.send_message("Processing your request...")
+        # 獲取翻譯的處理中訊息
+        processing_msg = self.lang_manager.translate(
+            guild_id, "commands", "cot_ai", "responses", "processing"
+        ) if self.lang_manager else "Processing your request..."
+        
+        await interaction.response.send_message(processing_msg)
+        
         try:
-            async for steps, total_thinking_time in generate_response(prompt):
+            # 獲取適當語言的系統提示和用戶提示
+            system_prompt = self.get_system_prompt(guild_id)
+            user_prompt = self.get_user_prompt(prompt, guild_id)
+            
+            async for steps, total_thinking_time in generate_response(prompt, system_prompt, user_prompt):
                 response_text = ""
                 for title, content, thinking_time in steps:
-                    response_text += f"**{title}**(思考時間:{thinking_time})\n"
+                    # 獲取翻譯的思考時間格式
+                    thinking_time_text = self.lang_manager.translate(
+                        guild_id, "commands", "cot_ai", "responses", "thinking_time", time=f"{thinking_time:.2f}s"
+                    ) if self.lang_manager else f"思考時間：{thinking_time:.2f}s"
+                    
+                    response_text += f"**{title}**({thinking_time_text})\n"
 
                 # 如果是最終答案，額外發送訊息
-                if title == "Final Answer":
+                final_answer_text = self.lang_manager.translate(
+                    guild_id, "commands", "cot_ai", "responses", "final_answer"
+                ) if self.lang_manager else "**最終答案：**"
+                
+                if title == final_answer_text or "Final Answer" in title:
                     # 如果文字超過字數限制，進行分段發送
                     if len(content) > MAX_MESSAGE_LENGTH:
                         # 分段發送
@@ -258,8 +305,15 @@ class CoTCommands(commands.Cog):
                         # 不超過限制，直接更新
                         await interaction.edit_original_response(content=response_text)
 
+        except json.JSONDecodeError as e:
+            error_msg = self.get_error_message("json_decode_error", guild_id, str(e))
+            await interaction.edit_original_response(content=error_msg)
+        except ValueError as e:
+            error_msg = self.get_error_message("model_not_available", guild_id, str(e))
+            await interaction.edit_original_response(content=error_msg)
         except Exception as e:
-            await interaction.edit_original_response(content=f"Error: {e}")
+            error_msg = self.get_error_message("general_error", guild_id, str(e))
+            await interaction.edit_original_response(content=error_msg)
 
 
 

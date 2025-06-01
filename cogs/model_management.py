@@ -29,12 +29,20 @@ import os
 from dotenv import load_dotenv
 from gpt.gpt_response_gen import get_model_and_tokenizer, set_model_and_tokenizer
 import gc
+from typing import Optional
+from .language_manager import LanguageManager
+
 load_dotenv()
 
 class ModelManagement(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.lang_manager: Optional[LanguageManager] = None
         print("ModelManagement Cog initialized.")
+
+    async def cog_load(self):
+        """當 Cog 載入時初始化語言管理器"""
+        self.lang_manager = LanguageManager.get_instance(self.bot)
 
     @staticmethod
     def check_user(user_id: int) -> bool:
@@ -42,53 +50,101 @@ class ModelManagement(commands.Cog):
         print(f"Checking permissions for user_id: {user_id}")
         return user_id in [597028717948043274]  # 用戶ID
 
-    @app_commands.command(name="developer_only", description="開發者專用")
+    @app_commands.command(name="model_management", description="管理AI模型（開發者專用）")
     @app_commands.check(lambda interaction: ModelManagement.check_user(interaction.user.id))
     @app_commands.choices(
         action=[
-            app_commands.Choice(name="卸載模型", value="unload_model"),
-            app_commands.Choice(name="加載模型", value="load_model")
+            app_commands.Choice(name="卸載模型", value="unload"),
+            app_commands.Choice(name="載入模型", value="load")
         ]
     )
-    async def developer_only(self, interaction: discord.Interaction, action: app_commands.Choice[str]):
-        print(f"Developer-only command invoked by user: {interaction.user.id}, action: {action.value}")
-        actions = {
-            "unload_model": self.unload_model,
-            "load_model": self.load_model,
-        }
+    async def model_management_command(self, interaction: discord.Interaction, action: app_commands.Choice[str]):
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
         
-        if action.value not in actions:
-            print(f"Invalid action received: {action.value}")
-            await interaction.response.send_message(f"Invalid action: {action.value}")
-            return
+        guild_id = str(interaction.guild_id)
+        
+        print(f"Developer-only command invoked by user: {interaction.user.id}, action: {action.value}")
+        
+        # 處理中訊息
+        processing_msg = self.lang_manager.translate(
+            guild_id, "system", "model_management", "status", "processing"
+        ) if self.lang_manager else "正在處理模型操作..."
+        
+        await interaction.response.send_message(processing_msg)
+        
+        try:
+            result = await self.execute_model_operation(action.value, guild_id)
+            await interaction.edit_original_response(content=result)
+        except Exception as e:
+            error_msg = self.lang_manager.translate(
+                guild_id, "commands", "model_management", "responses", "error", error=str(e)
+            ) if self.lang_manager else f"執行操作時發生錯誤：{e}"
+            await interaction.edit_original_response(content=error_msg)
 
-        await interaction.response.defer()
-        await actions[action.value](interaction)
-
-    async def unload_model(self, interaction: discord.Interaction):
-        print("Attempting to unload model.")
-        model, tokenizer = get_model_and_tokenizer()
-        if model is not None:
-            print("Unloading model and tokenizer.")
-            set_model_and_tokenizer(None, None)
-            del model
-            del tokenizer
-            gc.collect()
-            torch.cuda.empty_cache()
-            set_model_and_tokenizer(None, None)
-            await interaction.followup.send("模型已卸載。")
-            print("Model successfully unloaded.")
-        else:
-            await interaction.followup.send("模型已經卸載或尚未加載。")
-            print("No model to unload or model already unloaded.")
-
-    async def load_model(self, interaction: discord.Interaction):
-        print("Attempting to load model.")
-        await self.reload_model()
-        await interaction.followup.send("模型已加載。")
-        print("Model successfully loaded.")
+    async def execute_model_operation(self, action: str, guild_id: str) -> str:
+        """執行模型操作並返回翻譯後的結果訊息"""
+        try:
+            if action == "unload":
+                # 卸載模型邏輯
+                status_msg = self.lang_manager.translate(
+                    guild_id, "system", "model_management", "status", "unloading"
+                ) if self.lang_manager else "正在卸載模型..."
+                print("Attempting to unload model.")
+                
+                model, tokenizer = get_model_and_tokenizer()
+                if model is not None:
+                    print("Unloading model and tokenizer.")
+                    set_model_and_tokenizer(None, None)
+                    del model
+                    del tokenizer
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    set_model_and_tokenizer(None, None)
+                    
+                    result_msg = self.lang_manager.translate(
+                        guild_id, "commands", "model_management", "responses", "model_unloaded"
+                    ) if self.lang_manager else "模型已卸載。"
+                    print("Model successfully unloaded.")
+                    return result_msg
+                else:
+                    result_msg = self.lang_manager.translate(
+                        guild_id, "commands", "model_management", "responses", "model_already_unloaded"
+                    ) if self.lang_manager else "模型已經卸載或尚未載入。"
+                    print("No model to unload or model already unloaded.")
+                    return result_msg
+                    
+            elif action == "load":
+                # 載入模型邏輯
+                status_msg = self.lang_manager.translate(
+                    guild_id, "system", "model_management", "status", "loading"
+                ) if self.lang_manager else "正在載入模型..."
+                print("Attempting to load model.")
+                
+                await self.reload_model()
+                
+                result_msg = self.lang_manager.translate(
+                    guild_id, "commands", "model_management", "responses", "model_loaded"
+                ) if self.lang_manager else "模型已載入。"
+                print("Model successfully loaded.")
+                return result_msg
+                
+            else:
+                # 未知操作
+                print(f"Invalid action received: {action}")
+                completed_msg = self.lang_manager.translate(
+                    guild_id, "commands", "model_management", "responses", "operation_completed"
+                ) if self.lang_manager else "操作已完成。"
+                return completed_msg
+                
+        except Exception as e:
+            error_msg = self.lang_manager.translate(
+                guild_id, "system", "model_management", "errors", "operation_failed", error=str(e)
+            ) if self.lang_manager else f"模型操作失敗：{e}"
+            raise Exception(error_msg)
 
     async def reload_model(self):
+        """重新載入模型"""
         model_name = os.getenv("MODEL_NAME", "openbmb/MiniCPM-o-2_6")
         print(f"Loading model with name: {model_name}")
         
@@ -110,6 +166,37 @@ class ModelManagement(commands.Cog):
         
         set_model_and_tokenizer(model, tokenizer)
         print("Model and tokenizer set.")
+
+    @model_management_command.error
+    async def model_management_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """處理開發者專用命令的錯誤"""
+        if isinstance(error, app_commands.CheckFailure):
+            if not self.lang_manager:
+                self.lang_manager = LanguageManager.get_instance(self.bot)
+            
+            guild_id = str(interaction.guild_id)
+            error_msg = self.lang_manager.translate(
+                guild_id, "system", "model_management", "errors", "permission_denied"
+            ) if self.lang_manager else "您沒有權限執行此操作，僅限開發者使用。"
+            
+            if interaction.response.is_done():
+                await interaction.followup.send(error_msg, ephemeral=True)
+            else:
+                await interaction.response.send_message(error_msg, ephemeral=True)
+        else:
+            # 處理其他錯誤
+            if not self.lang_manager:
+                self.lang_manager = LanguageManager.get_instance(self.bot)
+            
+            guild_id = str(interaction.guild_id)
+            error_msg = self.lang_manager.translate(
+                guild_id, "system", "model_management", "errors", "operation_failed", error=str(error)
+            ) if self.lang_manager else f"模型操作失敗：{error}"
+            
+            if interaction.response.is_done():
+                await interaction.followup.send(error_msg, ephemeral=True)
+            else:
+                await interaction.response.send_message(error_msg, ephemeral=True)
 
 async def setup(bot):
     print("Setting up ModelManagement Cog.")

@@ -28,25 +28,45 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
     implicit_multiplication_application,
 )
+from typing import Optional
+from .language_manager import LanguageManager
 
 class MathCalculatorCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.lang_manager: Optional[LanguageManager] = None
+
+    async def cog_load(self):
+        """當 Cog 載入時初始化語言管理器"""
+        self.lang_manager = LanguageManager.get_instance(self.bot)
 
     @app_commands.command(name="calculate", description="計算數學表達式")
     @app_commands.describe(expression="要計算的數學表達式")
     async def calculate_command(self, interaction: discord.Interaction, expression: str):
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+        
         await interaction.response.defer(thinking=True)
-        result = await self.calculate_math(expression)
+        guild_id = str(interaction.guild_id) if interaction.guild_id else None
+        result = await self.calculate_math(expression, guild_id=guild_id)
         await interaction.followup.send(result)
 
-    async def calculate_math(self, expression: str, message_to_edit=None) -> str:
+    async def calculate_math(self, expression: str, message_to_edit=None, guild_id: Optional[str] = None) -> str:
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+        
         if message_to_edit is not None:
-            await message_to_edit.edit(content='計算中...')
+            processing_message = self.lang_manager.translate(
+                guild_id, "commands", "calculate", "responses", "processing"
+            ) if self.lang_manager else "計算中..."
+            await message_to_edit.edit(content=processing_message)
         try:
             # 限制表達式長度，防止過長的輸入
             if len(expression) > 200:
-                return "錯誤：表達式過長，請縮短後再試。"
+                error_message = self.lang_manager.translate(
+                    guild_id, "commands", "calculate", "responses", "error_too_long"
+                ) if self.lang_manager else "錯誤：表達式過長，請縮短後再試。"
+                return error_message
 
             # 定義允許的數學函數和常數
             allowed_functions = {
@@ -114,12 +134,18 @@ class MathCalculatorCog(commands.Cog):
             # 檢查解析結果是否包含未定義的函數
             from sympy.core.function import UndefinedFunction
             if sympy_expr.has(UndefinedFunction):
-                return "錯誤：表達式包含未定義的函數。"
+                error_message = self.lang_manager.translate(
+                    guild_id, "commands", "calculate", "responses", "error_undefined_function"
+                ) if self.lang_manager else "錯誤：表達式包含未定義的函數。"
+                return error_message
 
             # 檢查解析結果是否包含不安全的類型
             unsafe_types = (sympy.Symbol, sympy.Function)
             if sympy_expr.has(*unsafe_types):
-                return "錯誤：表達式包含不支持的元素。"
+                error_message = self.lang_manager.translate(
+                    guild_id, "commands", "calculate", "responses", "error_unsupported_elements"
+                ) if self.lang_manager else "錯誤：表達式包含不支持的元素。"
+                return error_message
 
             # 計算結果，設定精度為 15 位小數
             result = sympy.N(sympy_expr, 15)
@@ -130,10 +156,20 @@ class MathCalculatorCog(commands.Cog):
                 result_str = result_str.rstrip('0').rstrip('.')
 
             print(f'計算結果: {expression} = {result_str}')
-            return f'計算結果: {expression} = {result_str}'
+            
+            # 使用翻譯系統格式化結果訊息
+            result_message = self.lang_manager.translate(
+                guild_id, "commands", "calculate", "responses", "result",
+                expression=expression, result=result_str
+            ) if self.lang_manager else f'計算結果: {expression} = {result_str}'
+            
+            return result_message
         except Exception as e:
             print(f"計算錯誤: {str(e)}")
-            return "計算錯誤：無法解析或計算該表達式。"
+            error_message = self.lang_manager.translate(
+                guild_id, "commands", "calculate", "responses", "error_general"
+            ) if self.lang_manager else "計算錯誤：無法解析或計算該表達式。"
+            return error_message
 
 async def setup(bot):
     await bot.add_cog(MathCalculatorCog(bot))

@@ -1,5 +1,7 @@
 import discord
 import logging as logger
+from typing import Optional
+from cogs.language_manager import LanguageManager
 
 class SongSelectView(discord.ui.View):
     def __init__(self, player, results, interaction):
@@ -7,9 +9,45 @@ class SongSelectView(discord.ui.View):
         self.player = player
         self.results = results
         self.original_interaction = interaction
+        self.lang_manager: Optional[LanguageManager] = None
         
         # Add select menu for songs
-        self.add_item(SongSelectMenu(self.results))
+        self.add_item(SongSelectMenu(self.results, self))
+        
+    def _get_lang_manager(self):
+        """Get language manager instance"""
+        if not self.lang_manager and hasattr(self.player, 'bot') and self.player.bot:
+            self.lang_manager = self.player.bot.get_cog("LanguageManager")
+        return self.lang_manager
+        
+    def _translate_music(self, *path, **kwargs) -> str:
+        """音樂模組專用翻譯方法"""
+        lang_manager = self._get_lang_manager()
+        if not lang_manager:
+            return self._get_fallback_text(path[-1], **kwargs)
+        
+        guild_id = str(self.original_interaction.guild.id) if self.original_interaction.guild else "0"
+        return lang_manager.translate(guild_id, "system", "music", *path, **kwargs)
+        
+    def _get_fallback_text(self, key: str, **kwargs) -> str:
+        """備用文字機制"""
+        fallback_texts = {
+            "timeout": "⌛ | 選擇歌曲時間已過期",
+            "duration_label": "時長: {duration}",
+            "placeholder": "選擇要播放的歌曲",
+            "queue_full": "❌ | 播放清單已滿",
+            "wait_message": "請等待當前歌曲播放完畢後再添加新歌曲",
+            "processing": "⏳ | 處理中",
+            "processing_desc": "正在處理您的選擇，請稍候...",
+            "added": "✅ | 已添加到播放清單： {title}",
+            "error": "❌ | 選擇歌曲時發生錯誤"
+        }
+        
+        text = fallback_texts.get(key, key)
+        try:
+            return text.format(**kwargs)
+        except (KeyError, ValueError):
+            return text
         
     async def on_timeout(self):
         """Handle view timeout"""
@@ -22,7 +60,7 @@ class SongSelectView(discord.ui.View):
                     channel = self.original_interaction.channel
                     if channel:
                         embed = discord.Embed(
-                            title="⌛ | 選擇歌曲時間已過期",
+                            title=self._translate_music("select", "timeout"),
                             color=discord.Color.red()
                         )
                         await channel.send(embed=embed)
@@ -34,7 +72,8 @@ class SongSelectView(discord.ui.View):
             logger.error(f"Unexpected error in timeout handler: {e}")
 
 class SongSelectMenu(discord.ui.Select):
-    def __init__(self, results):
+    def __init__(self, results, view):
+        self.view_parent = view  # 儲存父 view 以存取翻譯方法
         options = []
         for i, result in enumerate(results[:5], 1):  # Limit to 5 choices
             # Format duration from seconds to MM:SS
@@ -42,15 +81,19 @@ class SongSelectMenu(discord.ui.Select):
             minutes, seconds = divmod(duration_secs, 60)
             duration_str = f"{int(minutes):02d}:{int(seconds):02d}"
             
+            # Get translated duration label
+            duration_label = view._translate_music("select", "duration_label", duration=duration_str)
+            
             # Create select option with formatted duration
             options.append(discord.SelectOption(
                 label=f"{i}. {result['title'][:80]}",  # Truncate long titles
-                description=f"時長: {duration_str}",
+                description=duration_label,
                 value=str(i-1)
             ))
             
+        placeholder_text = view._translate_music("select", "placeholder")
         super().__init__(
-            placeholder="選擇要播放的歌曲",
+            placeholder=placeholder_text,
             min_values=1,
             max_values=1,
             options=options
@@ -99,8 +142,8 @@ class SongSelectMenu(discord.ui.Select):
             
             if queue.qsize() >= 5:
                 embed = discord.Embed(
-                    title="❌ | 播放清單已滿",
-                    description="請等待當前歌曲播放完畢後再添加新歌曲",
+                    title=self.view_parent._translate_music("select", "queue_full"),
+                    description=self.view_parent._translate_music("select", "wait_message"),
                     color=discord.Color.red()
                 )
                 await interaction.followup.send(embed=embed)
@@ -108,8 +151,8 @@ class SongSelectMenu(discord.ui.Select):
                 
             # Send processing message
             processing_embed = discord.Embed(
-                title="⏳ | 處理中",
-                description="正在處理您的選擇，請稍候...",
+                title=self.view_parent._translate_music("select", "processing"),
+                description=self.view_parent._translate_music("select", "processing_desc"),
                 color=discord.Color.blue()
             )
             await interaction.followup.send(embed=processing_embed)
@@ -136,7 +179,8 @@ class SongSelectMenu(discord.ui.Select):
                 
             await view.player.queue_manager.add_to_queue(guild_id, video_info)
             try:
-                embed = discord.Embed(title=f"✅ | 已添加到播放清單： {video_info['title']}", color=discord.Color.blue())
+                success_message = self.view_parent._translate_music("select", "added", title=video_info['title'])
+                embed = discord.Embed(title=success_message, color=discord.Color.blue())
                 await interaction.followup.send(embed=embed)
             except discord.errors.HTTPException as e:
                 if e.code == 50027:  # Invalid Webhook Token
@@ -156,7 +200,8 @@ class SongSelectMenu(discord.ui.Select):
         except Exception as e:
             logger.error(f"Song selection error: {e}")
             try:
-                error_embed = discord.Embed(title="❌ | 選擇歌曲時發生錯誤", color=discord.Color.red())
+                error_message = self.view_parent._translate_music("select", "error")
+                error_embed = discord.Embed(title=error_message, color=discord.Color.red())
                 if not interaction.response.is_done():
                     await interaction.response.send_message(embed=error_embed)
                 else:

@@ -1,7 +1,9 @@
 import discord
 import asyncio
 import logging as logger
+from typing import Optional
 from .progress import ProgressDisplay
+from cogs.language_manager import LanguageManager
 
 class MusicControlView(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, player):
@@ -12,9 +14,71 @@ class MusicControlView(discord.ui.View):
         self.message = None
         self.update_task = None
         self.current_embed = None
+        self.lang_manager: Optional[LanguageManager] = None
         
         # Initialize button states without updating message
         asyncio.create_task(self.update_button_state(update_message=False))
+        
+    def _get_lang_manager(self):
+        """Get language manager instance"""
+        if not self.lang_manager and hasattr(self.player, 'bot') and self.player.bot:
+            self.lang_manager = self.player.bot.get_cog("LanguageManager")
+        return self.lang_manager
+        
+    def _translate_music(self, *path, **kwargs) -> str:
+        """音樂模組專用翻譯方法"""
+        lang_manager = self._get_lang_manager()
+        if not lang_manager:
+            return self._get_fallback_text(path[-1], **kwargs)
+        
+        return lang_manager.translate(str(self.guild.id), "system", "music", *path, **kwargs)
+        
+    def _get_fallback_text(self, key: str, **kwargs) -> str:
+        """備用文字機制"""
+        fallback_texts = {
+            "no_music": "❌ 沒有正在播放的音樂！",
+            "no_songs": "❌ 沒有可播放的歌曲！",
+            "previous": "⏮️ {user} 返回上一首",
+            "paused": "⏸️ {user} 暫停了音樂",
+            "resumed": "▶️ {user} 繼續了音樂",
+            "skipped": "⏭️ {user} 跳過了音樂",
+            "stopped": "⏹️ {user} 停止了播放",
+            "mode_changed": "🔄 {user} 將播放模式設為 {mode}",
+            "shuffle_toggled": "🔀 {user} {status}隨機播放",
+            "now_playing_prefix": "▶️ 正在播放:",
+            "queue_songs": "待播放歌曲:",
+            "update_failed": "無法更新播放清單"
+        }
+        
+        text = fallback_texts.get(key, key)
+        try:
+            return text.format(**kwargs)
+        except (KeyError, ValueError):
+            return text
+            
+    def _get_mode_name(self, mode: str) -> str:
+        """獲取播放模式翻譯名稱"""
+        lang_manager = self._get_lang_manager()
+        if lang_manager:
+            return lang_manager.translate(str(self.guild.id), "commands", "mode", "choices", mode)
+        
+        # 備用機制
+        mode_names = {
+            "no_loop": "不循環",
+            "loop_queue": "清單循環",
+            "loop_single": "單曲循環"
+        }
+        return mode_names.get(mode, mode)
+        
+    def _get_shuffle_status(self, is_enabled: bool) -> str:
+        """獲取隨機播放狀態文字"""
+        lang_manager = self._get_lang_manager()
+        if lang_manager:
+            status_key = "enabled" if is_enabled else "disabled"
+            return lang_manager.translate(str(self.guild.id), "commands", "shuffle", "responses", status_key)
+        
+        # 備用機制
+        return "開啟" if is_enabled else "關閉"
 
     async def update_button_state(self, update_message: bool = True):
         """Update button states based on current playback and mode status"""
@@ -173,13 +237,19 @@ class MusicControlView(discord.ui.View):
     async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
         voice_client = self.guild.voice_client
         if not voice_client:
-            await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
+            await interaction.response.send_message(
+                self._translate_music("controls", "no_music"),
+                ephemeral=True
+            )
             return
 
         state = self.player.state_manager.get_state(self.guild.id)
         queue = self.player.queue_manager.get_queue(self.guild.id)
         if not queue:
-            await interaction.response.send_message("❌ 沒有可播放的歌曲！", ephemeral=True)
+            await interaction.response.send_message(
+                self._translate_music("controls", "no_songs"),
+                ephemeral=True
+            )
             return
 
         # Copy queue items
@@ -214,7 +284,10 @@ class MusicControlView(discord.ui.View):
         
         # 再次更新按鈕狀態以確保顯示正確
         await self.update_button_state()
-        await self.update_embed(interaction, f"⏮️ {interaction.user.name} 返回上一首")
+        await self.update_embed(
+            interaction,
+            self._translate_music("controls", "previous", user=interaction.user.name)
+        )
         await interaction.response.defer()
 
     @discord.ui.button(emoji='⏯️', style=discord.ButtonStyle.gray, custom_id="toggle_playback")
@@ -228,7 +301,10 @@ class MusicControlView(discord.ui.View):
                 # 等待一小段時間確保狀態已更新
                 await asyncio.sleep(0.1)
                 await self.update_button_state()
-                await self.update_embed(interaction, f"⏸️ {interaction.user.name} 暫停了音樂")
+                await self.update_embed(
+                    interaction,
+                    self._translate_music("controls", "paused", user=interaction.user.name)
+                )
                 if self.update_task:
                     self.update_task.cancel()
                     self.update_task = None
@@ -240,7 +316,10 @@ class MusicControlView(discord.ui.View):
                 # 等待一小段時間確保狀態已更新
                 await asyncio.sleep(0.1)
                 await self.update_button_state()
-                await self.update_embed(interaction, f"▶️ {interaction.user.name} 繼續了音樂")
+                await self.update_embed(
+                    interaction,
+                    self._translate_music("controls", "resumed", user=interaction.user.name)
+                )
                 if self.update_task:
                     self.update_task.cancel()
                     self.update_task = None
@@ -252,13 +331,19 @@ class MusicControlView(discord.ui.View):
                     )
             await interaction.response.defer()
         else:
-            await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
+            await interaction.response.send_message(
+                self._translate_music("controls", "no_music"),
+                ephemeral=True
+            )
 
     @discord.ui.button(emoji='⏭️', style=discord.ButtonStyle.gray, custom_id="skip")
     async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
         voice_client = self.guild.voice_client
         if not voice_client:
-            await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
+            await interaction.response.send_message(
+                self._translate_music("controls", "no_music"),
+                ephemeral=True
+            )
             return
 
         queue = self.player.queue_manager.get_queue(self.guild.id)
@@ -286,7 +371,10 @@ class MusicControlView(discord.ui.View):
         
         # 再次更新按鈕狀態以確保顯示正確
         await self.update_button_state()
-        await self.update_embed(interaction, f"⏭️ {interaction.user.name} 跳過了音樂")
+        await self.update_embed(
+            interaction,
+            self._translate_music("controls", "skipped", user=interaction.user.name)
+        )
         await interaction.response.defer()
 
     @discord.ui.button(emoji='⏹️', style=discord.ButtonStyle.red, custom_id="stop")
@@ -314,10 +402,17 @@ class MusicControlView(discord.ui.View):
             
             # 再次更新按鈕狀態以確保顯示正確
             await self.update_button_state()
-            await self.update_embed(interaction, f"⏹️ {interaction.user.name} 停止了播放", discord.Color.red())
+            await self.update_embed(
+                interaction,
+                self._translate_music("controls", "stopped", user=interaction.user.name),
+                discord.Color.red()
+            )
             await interaction.response.defer()
         else:
-            await interaction.response.send_message("❌ 沒有正在播放的音樂！", ephemeral=True)
+            await interaction.response.send_message(
+                self._translate_music("controls", "no_music"),
+                ephemeral=True
+            )
 
     @discord.ui.button(emoji='🔄', style=discord.ButtonStyle.gray, custom_id="toggle_mode")
     async def toggle_mode(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -337,14 +432,13 @@ class MusicControlView(discord.ui.View):
             "loop_single": '🔂'
         }
         
-        mode_names = {
-            "no_loop": "不循環",
-            "loop_queue": "清單循環",
-            "loop_single": "單曲循環"
-        }
+        mode_name = self._get_mode_name(next_mode)
 
         await self.update_button_state()
-        await self.update_embed(interaction, f"🔄 {interaction.user.name} 將播放模式設為 {mode_names[next_mode]}")
+        await self.update_embed(
+            interaction,
+            self._translate_music("controls", "mode_changed", user=interaction.user.name, mode=mode_name)
+        )
         await interaction.response.defer()
 
     @discord.ui.button(emoji='🔀', style=discord.ButtonStyle.gray, custom_id="toggle_shuffle")
@@ -353,9 +447,12 @@ class MusicControlView(discord.ui.View):
         guild_id = self.guild.id
         is_shuffle = self.player.queue_manager.toggle_shuffle(guild_id)
         
-        status = "開啟" if is_shuffle else "關閉"
+        status = self._get_shuffle_status(is_shuffle)
         await self.update_button_state()
-        await self.update_embed(interaction, f"🔀 {interaction.user.name} {status}隨機播放")
+        await self.update_embed(
+            interaction,
+            self._translate_music("controls", "shuffle_toggled", user=interaction.user.name, status=status)
+        )
         await interaction.response.defer()
 
     @discord.ui.button(emoji='📜', style=discord.ButtonStyle.gray, custom_id="show_queue")
@@ -378,20 +475,25 @@ class MusicControlView(discord.ui.View):
             
             if state.current_song:
                 minutes, seconds = divmod(float(state.current_song["duration"]), 60)
-                queue_text += f"▶️ 正在播放: {state.current_song['title']} | {int(minutes):02d}:{int(seconds):02d}\n\n"
+                now_playing_prefix = self._translate_music("controls", "now_playing_prefix")
+                queue_text += f"{now_playing_prefix} {state.current_song['title']} | {int(minutes):02d}:{int(seconds):02d}\n\n"
             
             if queue_items:
-                queue_text += "待播放歌曲:\n"
+                queue_songs_label = self._translate_music("controls", "queue_songs")
+                queue_text += f"{queue_songs_label}\n"
                 for i, item in enumerate(queue_items, 1):
                     minutes, seconds = divmod(float(item["duration"]), 60)
                     queue_text += f"{i}. {item['title']} | {int(minutes):02d}:{int(seconds):02d}\n"
             
             if not queue_text:
-                queue_text = "清單為空"
+                queue_text = self._translate_music("player", "queue_empty")
             
             self.current_embed.set_field_at(4, name="📜 播放清單", value=queue_text, inline=False)
             # Use the common update_embed method which handles message recreation
             await self.update_embed(interaction, self.current_embed.title, self.current_embed.color)
             await interaction.response.defer()
         else:
-            await interaction.response.send_message("無法更新播放清單", ephemeral=True)
+            await interaction.response.send_message(
+                self._translate_music("controls", "update_failed"),
+                ephemeral=True
+            )

@@ -27,7 +27,9 @@ import json
 import requests
 import logging
 import random
+from typing import Optional
 from addons.settings import TOKENS
+from .language_manager import LanguageManager
 
 class GifTools(commands.Cog):
     """GIF 搜尋與管理工具。"""
@@ -39,6 +41,11 @@ class GifTools(commands.Cog):
         if not self.tenor_api_key:
             raise ValueError("TENOR_API_KEY not found in environment variables")
         self.logger = logging.getLogger('gif_tools')
+        self.lang_manager: Optional[LanguageManager] = None
+
+    async def cog_load(self):
+        """當 Cog 載入時初始化語言管理器"""
+        self.lang_manager = LanguageManager.get_instance(self.bot)
 
     async def search_gif(self, query: str, limit: int = 1) -> list:
         """搜尋 GIF。
@@ -61,7 +68,10 @@ class GifTools(commands.Cog):
                 "random": "true"
             }
             
-            self.logger.info(f"搜尋 GIF: {query}")
+            search_log = self.lang_manager.translate(
+                "0", "system", "gif_tools", "logs", "searching_gif", query=query
+            ) if self.lang_manager else f"搜尋 GIF: {query}"
+            self.logger.info(search_log)
             response = requests.get(url, params=params)
             
             if response.status_code == 200:
@@ -71,29 +81,45 @@ class GifTools(commands.Cog):
                     media_formats = result.get("media_formats", {})
                     if "gif" in media_formats:
                         url = media_formats["gif"]["url"]
-                        self.logger.debug(f"找到 GIF: {url}")
+                        found_log = self.lang_manager.translate(
+                            "0", "system", "gif_tools", "logs", "found_gif", url=url
+                        ) if self.lang_manager else f"找到 GIF: {url}"
+                        self.logger.debug(found_log)
                         gif_urls.append(url)
                 return gif_urls
             else:
-                self.logger.error(f"Tenor API 回應錯誤: {response.status_code}")
+                api_error_log = self.lang_manager.translate(
+                    "0", "system", "gif_tools", "logs", "api_error", status_code=response.status_code
+                ) if self.lang_manager else f"Tenor API 回應錯誤: {response.status_code}"
+                self.logger.error(api_error_log)
                 self.logger.debug(f"回應內容: {response.text}")
                 return []
             
         except Exception as e:
-            self.logger.error(f"GIF 搜尋錯誤: {e}", exc_info=True)
+            search_error_log = self.lang_manager.translate(
+                "0", "system", "gif_tools", "logs", "search_error", error=str(e)
+            ) if self.lang_manager else f"GIF 搜尋錯誤: {e}"
+            self.logger.error(search_error_log, exc_info=True)
             return []
 
     @app_commands.command(name="search_gif", description="搜尋 GIF")
     async def search_gif_command(self, interaction: discord.Interaction, query: str):
         """Discord 指令: 搜尋 GIF。"""
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+            
         await interaction.response.defer()
+        guild_id = str(interaction.guild_id)
         
         gifs = await self.search_gif(query)
         if gifs:
             gif_url = random.choice(gifs)
             await interaction.followup.send(gif_url)
         else:
-            await interaction.followup.send("找不到相關的 GIF。")
+            not_found_message = self.lang_manager.translate(
+                guild_id, "commands", "search_gif", "responses", "not_found"
+            ) if self.lang_manager else "找不到相關的 GIF。"
+            await interaction.followup.send(not_found_message)
 
     async def get_gif_url(self, query: str) -> str:
         """取得隨機一個符合搜尋條件的 GIF URL。
@@ -109,17 +135,26 @@ class GifTools(commands.Cog):
             # 預處理搜尋關鍵字
             query = query.strip()
             if not query:
-                self.logger.warning("空的搜尋關鍵字")
+                warning_log = self.lang_manager.translate(
+                    "0", "system", "gif_tools", "logs", "empty_query_warning"
+                ) if self.lang_manager else "空的搜尋關鍵字"
+                self.logger.warning(warning_log)
                 return ""
                 
             gifs = await self.search_gif(query)
             if gifs:
                 chosen_gif = random.choice(gifs)
-                self.logger.info(f"選擇了 GIF: {chosen_gif} (關鍵字: {query})")
+                chosen_log = self.lang_manager.translate(
+                    "0", "system", "gif_tools", "logs", "found_gif", url=chosen_gif
+                ) if self.lang_manager else f"選擇了 GIF: {chosen_gif} (關鍵字: {query})"
+                self.logger.info(chosen_log)
                 return chosen_gif
             return ""
         except Exception as e:
-            self.logger.error(f"取得 GIF URL 時發生錯誤: {e}", exc_info=True)
+            error_log = self.lang_manager.translate(
+                "0", "system", "gif_tools", "logs", "get_url_error", error=str(e)
+            ) if self.lang_manager else f"取得 GIF URL 時發生錯誤: {e}"
+            self.logger.error(error_log, exc_info=True)
             return ""
 
 async def setup(bot):

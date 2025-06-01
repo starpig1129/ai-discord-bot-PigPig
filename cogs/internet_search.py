@@ -174,7 +174,8 @@ class InternetSearchCog(commands.Cog):
         return search
 
     async def send_img(self, ctx, query, message_to_edit):
-        print('圖片搜尋:', query)
+        print('Image search:', query)
+        guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
 
         url = f"https://www.google.com.hk/search?q={query}&tbm=isch"
         chrome_options = self.get_chrome_options()
@@ -183,7 +184,7 @@ class InternetSearchCog(commands.Cog):
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(install_driver)
                 driver_path = await asyncio.get_event_loop().run_in_executor(
-                    None, 
+                    None,
                     lambda: future.result(timeout=10)
                 )
                 service = Service(driver_path)
@@ -213,7 +214,14 @@ class InternetSearchCog(commands.Cog):
                     smail_pic = smail_pic_elements[0]
                     goto_url_elements[0].click()
                 else:
-                    raise Exception("無法找到圖片元素或跳轉URL元素")
+                    error_message = self.lang_manager.translate(
+                        guild_id,
+                        "commands",
+                        "internet_search",
+                        "errors",
+                        "image_element_not_found"
+                    ) if self.lang_manager else "無法找到圖片元素或跳轉URL元素"
+                    raise Exception(error_message)
 
                 src = smail_pic.get_attribute('src')
                 self.save_image('./gpt/img/need.jpg', src)
@@ -232,8 +240,15 @@ class InternetSearchCog(commands.Cog):
             self.process_images(ctx, message_to_edit)
 
         except Exception as e:
-            print(f"圖片下載失敗: {e}")
-            self.send_error_message(ctx, message_to_edit, "圖片下載失敗")
+            print(f"Image download failed: {e}")
+            error_message = self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "internet_search",
+                "errors",
+                "image_download_failed"
+            ) if self.lang_manager else "圖片下載失敗"
+            self.send_error_message(ctx, message_to_edit, error_message)
 
         return None
 
@@ -334,6 +349,7 @@ class InternetSearchCog(commands.Cog):
             )
 
     async def fetch_page_content(self, ctx, query=None, message_to_edit=None):
+        guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
         url_regex = r'(https?://\S+)'
         if isinstance(ctx, discord.Interaction):
             content = ctx.data.get('options', [{}])[0].get('value', '')
@@ -341,7 +357,13 @@ class InternetSearchCog(commands.Cog):
             content = ctx.content
         urls = re.findall(url_regex, content)
         if not urls:
-            return "未找到有效的URL"
+            return self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "internet_search",
+                "errors",
+                "no_valid_url"
+            ) if self.lang_manager else "未找到有效的URL"
         
         all_texts = []
         error_messages = []
@@ -369,18 +391,33 @@ class InternetSearchCog(commands.Cog):
         combined_text = "\n\n".join(all_texts)
         combined_errors = "\n".join(error_messages)
         
-        result = combined_text if combined_text else "未能抓取到任何有效内容"
+        result = combined_text if combined_text else (
+            self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "internet_search",
+                "errors",
+                "no_valid_content"
+            ) if self.lang_manager else "未能抓取到任何有效内容"
+        )
         if combined_errors:
             result += f"\n\nErrors:\n{combined_errors}"
         
         return result
 
     async def eat_search(self, ctx, keyword: str = "_", message_to_edit: discord.Message = None):
+        guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
         predict = None
         if keyword == "_":
             keywords_list = self.db.getKeywords()
             if len(keywords_list) == 0:
-                return "沒有這種食物喔"
+                return self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "internet_search",
+                    "errors",
+                    "eat_no_food"
+                ) if self.lang_manager else "沒有這種食物喔"
             else:
                 keyword = random.choice(keywords_list)[0]
                 predict = self.train.predict(discord_id=str(ctx.guild.id))
@@ -414,7 +451,16 @@ class InternetSearchCog(commands.Cog):
             self.train.genModel(str(ctx.guild.id))
             return None  
         except Exception as e:
-            return f"原本想推薦你吃 {keyword if predict is None else predict}，但很抱歉系統出錯了QQ: {str(e)}"
+            keyword_to_use = keyword if predict is None else predict
+            return self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "internet_search",
+                "errors",
+                "eat_system_error",
+                keyword=keyword_to_use,
+                error=str(e)
+            ) if self.lang_manager else f"原本想推薦你吃 {keyword_to_use}，但很抱歉系統出錯了QQ: {str(e)}"
 
 async def setup(bot):
     await bot.add_cog(InternetSearchCog(bot))

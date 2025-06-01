@@ -179,7 +179,18 @@ class ImageGenerationCog(commands.Cog):
                 "general_error",
                 error=str(e)
             )
-            print(f"圖片生成過程出現錯誤：{str(e)}")
+            if self.lang_manager:
+                error_msg = self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "generate_image",
+                    "errors",
+                    "generation_error",
+                    error=str(e)
+                )
+                print(error_msg)
+            else:
+                print(f"圖片生成過程出現錯誤：{str(e)}")
             await interaction.followup.send(error_message)
 
     def _image_to_base64(self, image: Image.Image) -> str:
@@ -237,7 +248,18 @@ class ImageGenerationCog(commands.Cog):
                         image.save(image_buffer, format="PNG")
                         image_buffer.seek(0)
                     except Exception as e:
-                        print(f"圖片處理錯誤：{str(e)}")
+                        if self.lang_manager:
+                            error_msg = self.lang_manager.translate(
+                                "0",  # 使用默認 guild_id，因為這裡沒有 guild_id 參數
+                                "commands",
+                                "generate_image",
+                                "errors",
+                                "image_processing_error",
+                                error=str(e)
+                            )
+                            print(error_msg)
+                        else:
+                            print(f"圖片處理錯誤：{str(e)}")
                         print(f"Data type: {type(part.inline_data.data)}")
                         print(f"Data preview: {str(part.inline_data.data)[:100]}")
             
@@ -245,7 +267,18 @@ class ImageGenerationCog(commands.Cog):
             return image_buffer, final_text or None
             
         except Exception as e:
-            print(f"Gemini API 生成錯誤：{str(e)}")
+            if self.lang_manager:
+                error_msg = self.lang_manager.translate(
+                    "0",  # 使用默認 guild_id，因為這裡沒有 guild_id 參數
+                    "commands",
+                    "generate_image",
+                    "errors",
+                    "gemini_generation_error",
+                    error=str(e)
+                )
+                print(error_msg)
+            else:
+                print(f"Gemini API 生成錯誤：{str(e)}")
             return None, None
 
     async def generate_with_local_model(self, channel, prompt: str, n_steps: int = 10, message_to_edit: discord.Message = None, guild_id: str = None):
@@ -312,11 +345,22 @@ class ImageGenerationCog(commands.Cog):
             return image_buffer
 
         except Exception as e:
-            print(f"本地模型生成錯誤：{str(e)}")
+            if self.lang_manager:
+                error_msg = self.lang_manager.translate(
+                    guild_id or "0",  # 使用傳入的 guild_id 或默認值
+                    "commands",
+                    "generate_image",
+                    "errors",
+                    "local_model_error",
+                    error=str(e)
+                )
+                print(error_msg)
+            else:
+                print(f"本地模型生成錯誤：{str(e)}")
             return None
 
     async def cog_unload(self):
-        """清理资源"""
+        """清理資源"""
         if hasattr(self, 'session'):
             await self.session.close()
 

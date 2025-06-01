@@ -30,6 +30,22 @@ from addons.settings import Settings
 from typing import Optional
 from .language_manager import LanguageManager
 
+# 備用翻譯字典
+FALLBACK_TRANSLATIONS = {
+    "searching": "查詢用戶資料中...",
+    "updating": "資料更新中...",
+    "data_found": "用戶 <@{user_id}> 的資料：{data}",
+    "data_not_found": "找不到用戶 <@{user_id}> 的資料。",
+    "data_updated": "已更新用戶 <@{user_id}> 的資料：{data}",
+    "data_created": "已為用戶 <@{user_id}> 創建資料：{data}",
+    "invalid_action": "無效的操作。請使用 '讀取' 或 '保存'。",
+    "database_error": "資料庫操作錯誤：{error}",
+    "ai_processing_failed": "AI 處理用戶資料時發生錯誤：{error}",
+    "update_failed": "更新用戶資料失敗：{error}",
+    "analysis_failed": "資料分析失敗：{error}",
+    "invalid_user": "無效的用戶 ID"
+}
+
 class UserDataCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -38,6 +54,24 @@ class UserDataCog(commands.Cog):
         self.db = self.client["user_data"]
         self.collection = self.db["users"]
         self.lang_manager: Optional[LanguageManager] = None
+
+    def _translate(self, guild_id: str, *path, fallback_key: str = None, **kwargs) -> str:
+        """統一的翻譯方法，包含備用機制"""
+        if self.lang_manager:
+            try:
+                return self.lang_manager.translate(guild_id, *path, **kwargs)
+            except Exception:
+                pass
+        
+        # 使用備用翻譯
+        if fallback_key and fallback_key in FALLBACK_TRANSLATIONS:
+            try:
+                return FALLBACK_TRANSLATIONS[fallback_key].format(**kwargs)
+            except (KeyError, ValueError):
+                return FALLBACK_TRANSLATIONS[fallback_key]
+        
+        # 最後的備用
+        return "操作完成"
 
     async def cog_load(self):
         """當 Cog 載入時初始化語言管理器"""
@@ -58,100 +92,195 @@ class UserDataCog(commands.Cog):
         await interaction.followup.send(result)
 
     async def manage_user_data(self, interaction, user: discord.User, user_data: str = None, action: str = 'read', message_to_edit: discord.Message = None, guild_id: str = None):
+        # 確保 LanguageManager 已初始化
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+        
         user_id = str(user.id)
         if message_to_edit:
-            searching_message = self.lang_manager.translate(
+            searching_message = self._translate(
                 guild_id,
                 "commands",
                 "userdata",
                 "responses",
-                "searching"
+                "searching",
+                fallback_key="searching"
             )
             await message_to_edit.edit(content=searching_message)
 
         if action == 'read':
-            document = self.collection.find_one({"user_id": user_id})
-            if document:      
-                data = document["user_data"]
-                return self.lang_manager.translate(
+            try:
+                document = self.collection.find_one({"user_id": user_id})
+                if document:
+                    data = document["user_data"]
+                    return self._translate(
+                        guild_id,
+                        "commands",
+                        "userdata",
+                        "responses",
+                        "data_found",
+                        fallback_key="data_found",
+                        user_id=user_id,
+                        data=data
+                    )
+                else:
+                    return self._translate(
+                        guild_id,
+                        "commands",
+                        "userdata",
+                        "responses",
+                        "data_not_found",
+                        fallback_key="data_not_found",
+                        user_id=user_id
+                    )
+            except Exception as e:
+                return self._translate(
                     guild_id,
-                    "commands",
+                    "system",
                     "userdata",
-                    "responses",
-                    "data_found",
-                    user_id=user_id,
-                    data=data
-                )
-            else:
-                return self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "userdata",
-                    "responses",
-                    "data_not_found",
-                    user_id=user_id
+                    "errors",
+                    "database_error",
+                    fallback_key="database_error",
+                    error=str(e)
                 )
 
         elif action == 'save':
-            if message_to_edit:
-                updating_message = self.lang_manager.translate(
+            try:
+                if message_to_edit:
+                    updating_message = self._translate(
+                        guild_id,
+                        "commands",
+                        "userdata",
+                        "responses",
+                        "updating",
+                        fallback_key="updating"
+                    )
+                    await message_to_edit.edit(content=updating_message)
+                
+                document = self.collection.find_one({"user_id": user_id})
+                if document:
+                    existing_data = document["user_data"]
+                    prompt = f"Current original data: {existing_data}\nnew data: {user_data}"
+                    system_prompt = 'Return user data based on original data and new data.'
+                    
+                    try:
+                        thread, streamer = await generate_response(prompt, system_prompt)
+                        new_data = ''.join([response for response in streamer]).replace("<|eot_id|>","")
+                        thread.join()
+                    except Exception as e:
+                        return self._translate(
+                            guild_id,
+                            "system",
+                            "userdata",
+                            "errors",
+                            "ai_processing_failed",
+                            fallback_key="ai_processing_failed",
+                            error=str(e)
+                        )
+                    
+                    try:
+                        self.collection.update_one({"user_id": user_id}, {"$set": {"user_data": new_data}})
+                    except Exception as e:
+                        return self._translate(
+                            guild_id,
+                            "system",
+                            "userdata",
+                            "errors",
+                            "database_error",
+                            fallback_key="database_error",
+                            error=str(e)
+                        )
+                    
+                    return self._translate(
+                        guild_id,
+                        "commands",
+                        "userdata",
+                        "responses",
+                        "data_updated",
+                        fallback_key="data_updated",
+                        user_id=user_id,
+                        data=new_data
+                    )
+                else:
+                    try:
+                        self.collection.insert_one({"user_id": user_id, "user_data": user_data})
+                    except Exception as e:
+                        return self._translate(
+                            guild_id,
+                            "system",
+                            "userdata",
+                            "errors",
+                            "database_error",
+                            fallback_key="database_error",
+                            error=str(e)
+                        )
+                    
+                    return self._translate(
+                        guild_id,
+                        "commands",
+                        "userdata",
+                        "responses",
+                        "data_created",
+                        fallback_key="data_created",
+                        user_id=user_id,
+                        data=user_data
+                    )
+            except Exception as e:
+                return self._translate(
                     guild_id,
-                    "commands",
+                    "system",
                     "userdata",
-                    "responses",
-                    "updating"
-                )
-                await message_to_edit.edit(content=updating_message)
-            document = self.collection.find_one({"user_id": user_id})
-            if document:
-                existing_data = document["user_data"]
-                prompt = f"Current original data: {existing_data}\nnew data: {user_data}"
-                system_prompt = 'Return user data based on original data and new data.'
-                thread, streamer = await generate_response(prompt, system_prompt)
-                new_data = ''.join([response for response in streamer]).replace("<|eot_id|>","")
-                thread.join()
-                self.collection.update_one({"user_id": user_id}, {"$set": {"user_data": new_data}})
-                return self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "userdata",
-                    "responses",
-                    "data_updated",
-                    user_id=user_id,
-                    data=new_data
-                )
-            else:
-                self.collection.insert_one({"user_id": user_id, "user_data": user_data})
-                return self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "userdata",
-                    "responses",
-                    "data_created",
-                    user_id=user_id,
-                    data=user_data
+                    "errors",
+                    "update_failed",
+                    fallback_key="update_failed",
+                    error=str(e)
                 )
     
         else:
-            return self.lang_manager.translate(
+            return self._translate(
                 guild_id,
                 "commands",
                 "userdata",
                 "responses",
-                "invalid_action"
+                "invalid_action",
+                fallback_key="invalid_action"
             )
 
     async def manage_user_data_message(self, message, user_id=None, user_data=None, action='read',message_to_edit: discord.Message = None):
-        if user_id == "<@user_id>" or user_id is None:
-            user_id = str(message.author.id)
-        else:
-            match = re.search(r'\d+', user_id)
-            user_id = match.group() if match else str(message.author.id)
-
-        user = await self.bot.fetch_user(int(user_id))
-        result = await self.manage_user_data(message, user, user_data, action,message_to_edit)
+        guild_id = str(message.guild.id) if message.guild else None
         
-        return result
+        try:
+            if user_id == "<@user_id>" or user_id is None:
+                user_id = str(message.author.id)
+            else:
+                match = re.search(r'\d+', user_id)
+                user_id = match.group() if match else str(message.author.id)
+
+            try:
+                user = await self.bot.fetch_user(int(user_id))
+            except (ValueError, discord.NotFound):
+                return self._translate(
+                    guild_id,
+                    "system",
+                    "userdata",
+                    "errors",
+                    "invalid_user",
+                    fallback_key="invalid_user"
+                )
+            
+            result = await self.manage_user_data(message, user, user_data, action, message_to_edit, guild_id=guild_id)
+            return result
+            
+        except Exception as e:
+            return self._translate(
+                guild_id,
+                "system",
+                "userdata",
+                "errors",
+                "analysis_failed",
+                fallback_key="analysis_failed",
+                error=str(e)
+            )
 
 async def setup(bot):
     await bot.add_cog(UserDataCog(bot))

@@ -7,7 +7,7 @@ import logging
 from typing import Optional, Dict, Any
 
 class LanguageManager(commands.Cog):
-    """語言管理系統"""
+    """Language Management System"""
     
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -17,22 +17,23 @@ class LanguageManager(commands.Cog):
         
         self.logger = logging.getLogger(__name__)
         self.default_lang = "zh_TW"  # 預設使用繁體中文
-        self.supported_languages = {
-            "zh_TW": "繁體中文",
-            "zh_CN": "简体中文",
-            "en_US": "English",
-            "ja_JP": "日本語"
-        }
+        # 語言選項將在翻譯載入後初始化
+        self.supported_languages = {}
         self.translations: Dict[str, Dict[str, Dict[str, str]]] = {}
         self._load_translations()
+        # 在翻譯載入後初始化語言選項
+        self.supported_languages = self._get_supported_languages()
 
     def _load_translations(self):
         """載入所有語言翻譯"""
-        for lang_code in self.supported_languages.keys():
+        # 直接使用硬編碼的語言代碼列表進行初始化
+        lang_codes = ["zh_TW", "zh_CN", "en_US", "ja_JP"]
+        for lang_code in lang_codes:
             self.translations[lang_code] = {}
             lang_dir = os.path.join("translations", lang_code)
             
             if not os.path.exists(lang_dir):
+                # 在初始化階段使用備用訊息
                 self.logger.warning(f"找不到語言目錄：{lang_dir}")
                 continue
                 
@@ -49,7 +50,26 @@ class LanguageManager(commands.Cog):
                     self.translations[lang_code][category] = translations
                         
                 except Exception as e:
+                    # 在初始化階段使用備用訊息
                     self.logger.error(f"載入翻譯文件時出錯 {file_path}: {str(e)}")
+
+    def _get_supported_languages(self) -> Dict[str, str]:
+        """獲取支援的語言列表，使用翻譯系統或備用硬編碼選項"""
+        try:
+            return {
+                "zh_TW": self.translate("0", "system", "language_manager", "supported_languages", "zh_TW"),
+                "zh_CN": self.translate("0", "system", "language_manager", "supported_languages", "zh_CN"),
+                "en_US": self.translate("0", "system", "language_manager", "supported_languages", "en_US"),
+                "ja_JP": self.translate("0", "system", "language_manager", "supported_languages", "ja_JP")
+            }
+        except:
+            # 備用硬編碼選項，避免初始化時的循環依賴
+            return {
+                "zh_TW": "繁體中文",
+                "zh_CN": "简体中文",
+                "en_US": "English",
+                "ja_JP": "日本語"
+            }
 
     def get_server_lang(self, guild_id: str) -> str:
         """獲取伺服器的語言設定"""
@@ -61,7 +81,9 @@ class LanguageManager(commands.Cog):
                     return config.get('language', self.default_lang)
             return self.default_lang
         except Exception as e:
-            self.logger.error(f"讀取語言設定時出錯: {str(e)}")
+            self.logger.error(
+                self.translate("0", "system", "language_manager", "logs", "config_read_error", error=str(e))
+            )
             return self.default_lang
 
     def save_server_lang(self, guild_id: str, lang: str) -> bool:
@@ -79,7 +101,9 @@ class LanguageManager(commands.Cog):
                 json.dump(config, f, ensure_ascii=False, indent=4)
             return True
         except Exception as e:
-            self.logger.error(f"保存語言設定時出錯: {str(e)}")
+            self.logger.error(
+                self.translate("0", "system", "language_manager", "logs", "config_save_error", error=str(e))
+            )
             return False
 
     def translate(self, guild_id: str, *args, **kwargs) -> str:
@@ -94,6 +118,11 @@ class LanguageManager(commands.Cog):
             str: 翻譯後的文字
         """
         try:
+            # 處理初始化期間的特殊情況
+            if not hasattr(self, 'translations') or not self.translations:
+                # 如果翻譯還未載入，返回最後一個參數作為備用
+                return args[-1] if args else "LOADING..."
+                
             lang = self.get_server_lang(str(guild_id))
             translations = self.translations.get(lang, {}).get('common', {})
             
@@ -117,7 +146,10 @@ class LanguageManager(commands.Cog):
             # 沿著路徑獲取翻譯
             for part in path:
                 if not isinstance(result, dict):
-                    self.logger.warning(f"無法繼續遍歷路徑 {'/'.join(path)}, 當前結果不是字典: {result}")
+                    self.logger.warning(
+                        self.translate("0", "system", "language_manager", "logs", "path_traversal_error",
+                                     path='/'.join(path), result=str(result))
+                    )
                     return path[-1]
                 result = result.get(part, {})
             
@@ -126,15 +158,22 @@ class LanguageManager(commands.Cog):
                 try:
                     return result.format(**kwargs)
                 except KeyError as e:
-                    self.logger.error(f"格式化翻譯時出錯，缺少參數: {e}")
+                    self.logger.error(
+                        self.translate("0", "system", "language_manager", "logs", "format_error", error=str(e))
+                    )
                     return result
             
             # 如果找不到翻譯，返回最後一個路徑部分
-            self.logger.warning(f"未找到翻譯: {'/'.join(path)}")
+            self.logger.warning(
+                self.translate("0", "system", "language_manager", "logs", "translation_not_found",
+                             path='/'.join(path))
+            )
             return path[-1] if path else "TRANSLATION_NOT_FOUND"
             
         except Exception as e:
-            self.logger.error(f"翻譯文字時出錯: {str(e)}")
+            self.logger.error(
+                self.translate("0", "system", "language_manager", "logs", "translation_error", error=str(e))
+            )
             return args[-1] if args else "TRANSLATION_ERROR"
 
     @app_commands.command(
@@ -145,13 +184,10 @@ class LanguageManager(commands.Cog):
         language="選擇要使用的語言"
     )
     @app_commands.choices(language=[
-        app_commands.Choice(name=name, value=code)
-        for code, name in {
-            "zh_TW": "繁體中文",
-            "zh_CN": "简体中文",
-            "en_US": "English",
-            "ja_JP": "日本語"
-        }.items()
+        app_commands.Choice(name="繁體中文", value="zh_TW"),
+        app_commands.Choice(name="简体中文", value="zh_CN"),
+        app_commands.Choice(name="English", value="en_US"),
+        app_commands.Choice(name="日本語", value="ja_JP")
     ])
     async def set_language(self, interaction: discord.Interaction, language: str):
         """設定伺服器的顯示語言"""
