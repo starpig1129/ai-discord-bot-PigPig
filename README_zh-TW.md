@@ -26,10 +26,15 @@ PigPig 是一個基於多模態大型語言模型 (LLM) 的強大 Discord 機器
 
 ## 🖥️ 系統需求
 
+### 基本依賴項目
 - [Python 3.10+](https://www.python.org/downloads/)
-- [Lavalink 伺服器 (4.0.0+)](https://github.com/freyacodes/Lavalink)
-- [requirements 中的模組](https://github.com/ChocoMeow/Vocard/blob/main/requirements.txt)
-- 至少具有 12GB VRAM 的 NVIDIA GPU（最佳 AI 效能所需）
+- [MongoDB](https://www.mongodb.com/)（用於使用者資料和餐廳推薦功能）
+- [FFmpeg](https://ffmpeg.org/)（用於音樂播放功能）
+- [requirements 中的模組](requirements.txt)
+
+### 硬體需求
+- **GPU（可選）**：至少具有 12GB VRAM 的 NVIDIA GPU（建議用於本地模型推理）
+- **注意**：機器人優先使用 API 服務而非本地模型，因此 GPU 對大多數使用情況而言是可選的
 
 ## 📸 功能展示
 ### Discord 機器人
@@ -47,10 +52,10 @@ PigPig 是一個基於多模態大型語言模型 (LLM) 的強大 Discord 機器
 ## 🚀 快速入門
 ```sh
 git clone https://github.com/starpig1129/discord-LLM-bot-PigPig.git  #複製儲存庫
-cd PigPig-discord-LLM-bot                                        #進入目錄
+cd discord-LLM-bot-PigPig                                        #進入目錄
 python -m pip install -r requirements.txt          #安裝所需的套件
 ```
-安裝所有套件後，您必須先設定機器人才能啟動！[如何設定](https://github.com/ChocoMeow/Vocard#configuration)<br />
+
 使用 `python main.py` 啟動您的機器人
 
 ## ⚙️ 設定
@@ -68,6 +73,9 @@ VQA_MODEL_NAME = openbmb/MiniCPM-Llama3-V-2_5-int4
 ANTHROPIC_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# MongoDB 配置（使用者資料和餐廳功能必需）
+MONGODB_URI = mongodb://localhost:27017/pigpig
 ```
 | 值 | 描述 |
 |---|---|
@@ -79,7 +87,8 @@ GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 | ANTHROPIC_API_KEY | 您的 Anthropic API 金鑰 [(Anthropic API)](https://www.anthropic.com/api) ***(選填)*** |
 | OPENAI_API_KEY | 您的 OpenAI API 金鑰 [(OpenAI API)](https://openai.com/api/) ***(選填)*** |
 | GEMINI_API_KEY | 您的 GEMINI API 金鑰 [(GEMINI API)](https://aistudio.google.com/app/apikey/) ***(選填)*** |
-1. **將 `settings Example.json` 重新命名為 `settings.json` 並自訂您的設定**
+| MONGODB_URI | MongoDB 連線字串，用於使用者資料儲存 ***(使用者資料和餐廳功能必需)*** |
+2. **將 `settingsExample.json` 重新命名為 `settings.json` 並自訂您的設定**
 ***(注意：請勿更改 `settings.json` 中的任何金鑰)***
 ```json
 {
@@ -104,15 +113,19 @@ GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 - **CoT_AI:** 實現思維鏈推理，提供詳細的、循序漸進的回應。
 - **頻道管理器 (Channel Manager):** 管理特定頻道的設定和權限。
+- **Discord 管理代理 (Discord Manager Agent):** 處理 Discord 特定的管理操作和自動化功能。
 - **圖片生成 (Image Generation):** 基於文字提示生成圖片。
-- **說明 (Help):** 提供可用指令的列表。
+- **GIF 工具 (GIF Tools):** 提供 GIF 創建和操作功能。
+- **說明 (Help):** 提供可用指令的列表和協助。
 - **網路搜尋 (Internet Search):** 執行各種網路搜尋 (一般、圖片、YouTube、網址內容)。
-- **數學 (Math):** 執行數學計算。
-- **模型管理 (Model Management):** 載入和卸載語言模型。
-- **提醒 (Reminder):** 為使用者設定提醒事項。
-- **行程表 (Schedule):** 管理使用者行程表。
-- **使用者資料 (User Data):** 管理使用者特定資料。
-- **美食推薦 (Eat):** 提供美食推薦。
+- **語言管理器 (Language Manager):** 管理多語言支援和翻譯功能。
+- **數學 (Math):** 執行數學計算和問題解決。
+- **模型管理 (Model Management):** 載入和卸載語言模型以實現最佳效能。
+- **音樂 (Music):** 使用自建 YouTube 整合系統 (yt_dlp + PyNaCl) 提供音樂播放，支援播放清單、佇列和各種播放模式。
+- **提醒 (Reminder):** 為使用者設定和管理提醒事項。
+- **行程表 (Schedule):** 管理使用者行程表和日曆功能。
+- **使用者資料 (User Data):** 管理使用者特定資料和個人資料。
+- **美食推薦 (Eat):** 透過 MongoDB 整合提供智慧美食推薦。
 
 
 ## 授權條款

@@ -26,10 +26,15 @@ PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM
 
 ## 🖥️ System Requirements
 
+### Essential Dependencies
 - [Python 3.10+](https://www.python.org/downloads/)
-- [Lavalink Server (4.0.0+)](https://github.com/freyacodes/Lavalink)
-- [Modules in requirements](https://github.com/ChocoMeow/Vocard/blob/main/requirements.txt)
-- NVIDIA GPU with at least 12GB VRAM (required for optimal AI performance)
+- [MongoDB](https://www.mongodb.com/) (for user data and restaurant recommendation features)
+- [FFmpeg](https://ffmpeg.org/) (for music playback functionality)
+- [Modules in requirements](requirements.txt)
+
+### Hardware Requirements
+- **GPU (Optional)**: NVIDIA GPU with at least 12GB VRAM (recommended for local model inference)
+- **Note**: The bot prioritizes API services over local models, making GPU optional for most use cases
 
 ## 📸 Feature Showcase
 ### Discord Bot
@@ -47,10 +52,10 @@ PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM
 ## 🚀 Quick Start
 ```sh
 git clone https://github.com/starpig1129/discord-LLM-bot-PigPig.git  #Clone the repository
-cd PigPig-discord-LLM-bot                                        #Go to the directory
+cd discord-LLM-bot-PigPig                                        #Go to the directory
 python -m pip install -r requirements.txt          #Install required packages
 ```
-After installing all packages, you must configure the bot before to start! [How To Configure](https://github.com/ChocoMeow/Vocard#configuration)<br />
+
 Start your bot with `python main.py`
 
 ## ⚙️ Configuration
@@ -68,6 +73,9 @@ VQA_MODEL_NAME = openbmb/MiniCPM-Llama3-V-2_5-int4
 ANTHROPIC_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# MongoDB Configuration (required for user data and restaurant features)
+MONGODB_URI = mongodb://localhost:27017/pigpig
 ```
 | Values | Description |
 | --- | --- |
@@ -79,7 +87,8 @@ GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 | ANTHROPIC_API_KEY | Your Anthropic api key [(Anthropic API)](https://www.anthropic.com/api) ***(optional)*** |
 | OPENAI_API_KEY | Your OpenAI api key [(OpenAI API)](https://openai.com/api/) ***(optional)*** |
 | GEMINI_API_KEY | Your GEMINI API key [(GEMINI API)](https://aistudio.google.com/app/apikey/) ***(optional)*** |
-1. **Rename `settings Example.json` to `settings.json` and customize your settings**
+| MONGODB_URI | MongoDB connection string for user data storage ***(required for user data and restaurant features)*** |
+2. **Rename `settingsExample.json` to `settings.json` and customize your settings**
 ***(Note: Do not change any keys from `settings.json`)***
 ```json
 {
@@ -100,19 +109,23 @@ GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 ## Cogs Overview
 
-This bot utilizes a modular design with several cogs (modules) to handle different functionalities.  Here's a brief overview:
+This bot utilizes a modular design with several cogs (modules) to handle different functionalities. Here's a brief overview:
 
 - **CoT_AI:** Implements Chain of Thought reasoning for detailed, step-by-step responses.
 - **Channel Manager:** Manages channel-specific settings and permissions.
+- **Discord Manager Agent:** Handles Discord-specific management operations and automation.
 - **Image Generation:** Generates images based on text prompts.
-- **Help:** Provides a list of available commands.
+- **GIF Tools:** Provides GIF creation and manipulation functionality.
+- **Help:** Provides a list of available commands and assistance.
 - **Internet Search:** Performs various web searches (general, image, YouTube, URL content).
-- **Math:** Performs mathematical calculations.
-- **Model Management:** Loads and unloads language models.
-- **Reminder:** Sets reminders for users.
-- **Schedule:** Manages user schedules.
-- **User Data:** Manages user-specific data.
-- **Eat:** Provides food recommendations.
+- **Language Manager:** Manages multi-language support and translations.
+- **Math:** Performs mathematical calculations and problem-solving.
+- **Model Management:** Loads and unloads language models for optimal performance.
+- **Music:** Provides music playback using custom YouTube integration (yt_dlp + PyNaCl), supporting playlists, queues, and various playback modes.
+- **Reminder:** Sets and manages reminders for users.
+- **Schedule:** Manages user schedules and calendar functionality.
+- **User Data:** Manages user-specific data and profiles.
+- **Eat:** Provides intelligent food recommendations with MongoDB integration.
 
 
 ## License
