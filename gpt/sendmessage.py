@@ -33,6 +33,7 @@ import discord
 from typing import Optional, List, Dict, Any, Tuple
 
 from gpt.gpt_response_gen import generate_response, is_model_available
+from gpt.prompt_manager import get_prompt_manager
 from addons.settings import Settings, TOKENS
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -42,10 +43,58 @@ settings = Settings()
 tokens = TOKENS()
 
 # 使用設定檔中的 BOT_OWNER_ID，如果設定檔中沒有則使用預設值
-bot_owner_id = getattr(tokens, 'bot_owner_id', 0.0)
+bot_owner_id = getattr(tokens, 'bot_owner_id', 0)
 
-system_prompt='''
-                You are an AI chatbot named 🐖🐖 <@{bot_id}>, created by 星豬<@{bot_owner_id}>. You are chatting in a Discord server, so keep responses concise and engaging. Please follow these instructions:
+# 初始化全域 PromptManager 實例
+_prompt_manager = None
+
+def _get_prompt_manager():
+    """取得 PromptManager 實例（延遲初始化）"""
+    global _prompt_manager
+    if _prompt_manager is None:
+        try:
+            _prompt_manager = get_prompt_manager()
+        except Exception as e:
+            logging.error(f"Failed to initialize PromptManager: {e}")
+            _prompt_manager = None
+    return _prompt_manager
+
+def get_system_prompt(bot_id: str, message=None) -> str:
+    """
+    取得系統提示（整合 YAML 提示管理系統）
+    
+    Args:
+        bot_id: Discord 機器人 ID
+        message: Discord 訊息物件（用於語言檢測）
+        
+    Returns:
+        完整的系統提示字串
+    """
+    # 嘗試使用新的 YAML 提示管理系統
+    try:
+        prompt_manager = _get_prompt_manager()
+        if prompt_manager:
+            return prompt_manager.get_system_prompt(bot_id, message)
+    except Exception as e:
+        logging.error(f"YAML 提示管理系統失敗，使用降級策略: {e}")
+    
+    # 降級策略：使用硬編碼的基本提示（保持向後相容性）
+    logging.warning("使用降級的硬編碼系統提示")
+    return _get_fallback_system_prompt(bot_id, message)
+
+def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
+    """
+    降級策略的系統提示函式（保持原有邏輯）
+    
+    Args:
+        bot_id: Discord 機器人 ID
+        message: Discord 訊息物件
+        
+    Returns:
+        降級的系統提示字串
+    """
+    # 硬編碼的降級提示
+    fallback_prompt = '''You are an AI chatbot named 🐖🐖 <@{bot_id}>, created by 星豬<@{bot_owner_id}>. You are chatting in a Discord server, so keep responses concise and engaging. Please follow these instructions:
                 
                 1. Personality and Expression (表達風格):
                 - Maintain a humorous and fun conversational style.
@@ -79,7 +128,7 @@ system_prompt='''
 
                 6. Discord Markdown Formatting:
                 - Use **bold** for emphasis
-                - Use *italics* for subtle emphasis 
+                - Use *italics* for subtle emphasis
                 - Use __underline__ for underlining
                 - Use ~~strikethrough~~ when needed
                 - Use `code blocks` for code snippets
@@ -88,11 +137,9 @@ system_prompt='''
                 - Use [標題](<URL>) for references
                 - Use <@user_id> to mention users
 
-                Remember: You're in a Discord chat environment - keep responses brief and engaging for casual conversations. Only provide detailed responses when specifically discussing technical or educational topics. Focus on the current message and avoid unnecessary references to past conversations.
-                '''
-
-def get_system_prompt(bot_id: str, message=None) -> str:
-    # 獲取語言管理器
+                Remember: You're in a Discord chat environment - keep responses brief and engaging for casual conversations. Only provide detailed responses when specifically discussing technical or educational topics. Focus on the current message and avoid unnecessary references to past conversations.'''
+    
+    # 保持原有的語言管理邏輯
     default_lang = "zh_TW"
     lang = default_lang
     
@@ -107,7 +154,7 @@ def get_system_prompt(bot_id: str, message=None) -> str:
                     language_settings = lang_manager.translations[lang]["common"]["system"]["chat_bot"]["language"]
 
                     # 替換系統提示中的語言相關設定
-                    modified_prompt = system_prompt.replace(
+                    modified_prompt = fallback_prompt.replace(
                         "Always answer in Traditional Chinese",
                         language_settings["answer_in"]
                     ).replace(
@@ -125,7 +172,7 @@ def get_system_prompt(bot_id: str, message=None) -> str:
         logging.error(f"獲取語言設定時發生錯誤：{e}")
 
     # 如果無法獲取語言設定，使用預設值
-    return system_prompt.format(bot_id=bot_id, bot_owner_id=bot_owner_id)
+    return fallback_prompt.format(bot_id=bot_id, bot_owner_id=bot_owner_id)
 
 # 初始化 Hugging Face 嵌入模型
 hf_embeddings_model = "sentence-transformers/all-MiniLM-L6-v2"

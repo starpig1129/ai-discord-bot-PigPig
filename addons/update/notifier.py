@@ -28,7 +28,29 @@ class DiscordNotifier:
         self.owner_id = int(os.getenv("BOT_OWNER_ID", 0))
         
         if self.owner_id == 0:
-            self.logger.warning("BOT_OWNER_ID 未設定，無法發送通知")
+            self.logger.error("BOT_OWNER_ID 未設定或為 0，無法發送通知")
+        else:
+            self.logger.info(f"DiscordNotifier 初始化完成，Bot 擁有者 ID: {self.owner_id}")
+    
+    async def _get_bot_owner_safely(self) -> Optional[discord.User]:
+        """
+        安全地獲取 Bot 擁有者
+        
+        Returns:
+            Bot 擁有者物件，如果獲取失敗則返回 None
+        """
+        if self.owner_id == 0:
+            self.logger.error("BOT_OWNER_ID 未設定或為 0")
+            return None
+        
+        try:
+            owner = await self.bot.fetch_user(self.owner_id)
+            if owner:
+                self.logger.debug(f"成功獲取 Bot 擁有者: {owner.name}")
+            return owner
+        except Exception as e:
+            self.logger.error(f"獲取 Bot 擁有者失敗: {e}")
+            return None
     
     async def notify_update_available(self, version_info: Dict[str, Any]) -> bool:
         """
@@ -40,14 +62,9 @@ class DiscordNotifier:
         Returns:
             通知是否發送成功
         """
-        if self.owner_id == 0:
-            return False
-        
-        owner = self.bot.get_user(self.owner_id)
+        owner = await self._get_bot_owner_safely()
         if not owner:
-            self.logger.error("無法找到 Bot 擁有者")
             return False
-        
         try:
             embed = discord.Embed(
                 title="🆕 新版本可用",
@@ -118,10 +135,7 @@ class DiscordNotifier:
         Returns:
             通知是否發送成功
         """
-        if self.owner_id == 0:
-            return False
-        
-        owner = self.bot.get_user(self.owner_id)
+        owner = await self._get_bot_owner_safely()
         if not owner:
             return False
         
@@ -161,10 +175,7 @@ class DiscordNotifier:
         Returns:
             通知是否發送成功
         """
-        if self.owner_id == 0:
-            return False
-        
-        owner = self.bot.get_user(self.owner_id)
+        owner = await self._get_bot_owner_safely()
         if not owner:
             return False
         
@@ -241,10 +252,7 @@ class DiscordNotifier:
         Returns:
             通知是否發送成功
         """
-        if self.owner_id == 0:
-            return False
-        
-        owner = self.bot.get_user(self.owner_id)
+        owner = await self._get_bot_owner_safely()
         if not owner:
             return False
         
@@ -293,10 +301,7 @@ class DiscordNotifier:
         Returns:
             通知是否發送成功
         """
-        if self.owner_id == 0:
-            return False
-        
-        owner = self.bot.get_user(self.owner_id)
+        owner = await self._get_bot_owner_safely()
         if not owner:
             return False
         
@@ -384,8 +389,15 @@ class QuickUpdateView(discord.ui.View):
         # 檢查是否為 Bot 擁有者
         load_dotenv()
         owner_id = int(os.getenv("BOT_OWNER_ID", 0))
+        logger = logging.getLogger(__name__)
+        
+        if owner_id == 0:
+            logger.error("Bot 擁有者未配置")
+            await interaction.response.send_message("❌ Bot 擁有者未配置", ephemeral=True)
+            return
         
         if interaction.user.id != owner_id:
+            logger.warning(f"非擁有者嘗試執行更新: {interaction.user.name}")
             await interaction.response.send_message("❌ 僅限 Bot 擁有者可以執行更新", ephemeral=True)
             return
         
