@@ -31,6 +31,7 @@ from gpt.gpt_response_gen import get_model_and_tokenizer, set_model_and_tokenize
 import gc
 from typing import Optional
 from .language_manager import LanguageManager
+from addons.settings import TOKENS
 
 load_dotenv()
 
@@ -38,20 +39,21 @@ class ModelManagement(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.lang_manager: Optional[LanguageManager] = None
+        self.tokens = TOKENS()  # 初始化 TOKENS 實例以獲取 BOT_OWNER_ID
         print("ModelManagement Cog initialized.")
 
     async def cog_load(self):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    @staticmethod
-    def check_user(user_id: int) -> bool:
-        # 檢查使用者是否有權限使用這些命令
+    def check_user(self, user_id: int) -> bool:
+        """檢查使用者是否有權限使用這些命令"""
         print(f"Checking permissions for user_id: {user_id}")
-        return user_id in [597028717948043274]  # 用戶ID
+        # 使用設定檔中的 BOT_OWNER_ID，如果設定檔中沒有則使用預設值
+        bot_owner_id = getattr(self.tokens, 'bot_owner_id', 0)
+        return user_id == bot_owner_id
 
     @app_commands.command(name="model_management", description="管理AI模型（開發者專用）")
-    @app_commands.check(lambda interaction: ModelManagement.check_user(interaction.user.id))
     @app_commands.choices(
         action=[
             app_commands.Choice(name="卸載模型", value="unload"),
@@ -59,6 +61,18 @@ class ModelManagement(commands.Cog):
         ]
     )
     async def model_management_command(self, interaction: discord.Interaction, action: app_commands.Choice[str]):
+        # 檢查權限
+        if not self.check_user(interaction.user.id):
+            if not self.lang_manager:
+                self.lang_manager = LanguageManager.get_instance(self.bot)
+            
+            guild_id = str(interaction.guild_id)
+            error_msg = self.lang_manager.translate(
+                guild_id, "system", "model_management", "errors", "permission_denied"
+            ) if self.lang_manager else "您沒有權限執行此操作，僅限開發者使用。"
+            
+            await interaction.response.send_message(error_msg, ephemeral=True)
+            return
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
         

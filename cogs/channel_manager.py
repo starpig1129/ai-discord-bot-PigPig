@@ -5,12 +5,14 @@ import json
 import os
 from typing import Optional
 from .language_manager import LanguageManager
+from addons.settings import TOKENS
 
 class ChannelManager(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.data_dir = "data/channel_configs"
         self.lang_manager: Optional[LanguageManager] = None
+        self.tokens = TOKENS()  # 初始化 TOKENS 實例以獲取 BOT_OWNER_ID
         os.makedirs(self.data_dir, exist_ok=True)
 
     async def cog_load(self):
@@ -39,7 +41,9 @@ class ChannelManager(commands.Cog):
 
     async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
         """檢查是否有管理員權限"""
-        if interaction.user.guild_permissions.administrator or str(interaction.user.id) == '597028717948043274':
+        # 使用設定檔中的 BOT_OWNER_ID，如果設定檔中沒有則使用預設值
+        bot_owner_id = getattr(self.tokens, 'bot_owner_id', 0)
+        if interaction.user.guild_permissions.administrator or interaction.user.id == bot_owner_id:
             return True
         
         # 使用翻譯系統

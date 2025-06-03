@@ -22,6 +22,7 @@ PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM
 - 👤 **User Information Management**: Create and maintain user profiles.
 - 📊 **Channel Data RAG**: Use channel history for context-aware responses.
 - 💭 **Chain of Thought Reasoning**: Employs Chain of Thought reasoning to provide detailed, step-by-step explanations of its thought process, enhancing transparency and understanding.  This feature allows the bot to break down complex problems into smaller, manageable steps, providing a more comprehensive and insightful response.
+- 🔄 **Auto-Update System**: Automatically checks for and downloads GitHub updates with secure backup and rollback mechanisms.
 
 
 ## 🖥️ System Requirements
@@ -74,6 +75,9 @@ ANTHROPIC_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
+# Bot Owner ID (for auto-update system and admin operations)
+BOT_OWNER_ID = 123456789012345678
+
 # MongoDB Configuration (required for user data and restaurant features)
 MONGODB_URI = mongodb://localhost:27017/pigpig
 ```
@@ -87,6 +91,7 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
 | ANTHROPIC_API_KEY | Your Anthropic api key [(Anthropic API)](https://www.anthropic.com/api) ***(optional)*** |
 | OPENAI_API_KEY | Your OpenAI api key [(OpenAI API)](https://openai.com/api/) ***(optional)*** |
 | GEMINI_API_KEY | Your GEMINI API key [(GEMINI API)](https://aistudio.google.com/app/apikey/) ***(optional)*** |
+| BOT_OWNER_ID | Your Discord User ID for bot owner privileges and auto-update system ***(required for auto-update)*** |
 | MONGODB_URI | MongoDB connection string for user data storage ***(required for user data and restaurant features)*** |
 2. **Rename `settingsExample.json` to `settings.json` and customize your settings**
 ***(Note: Do not change any keys from `settings.json`)***
@@ -103,7 +108,37 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
         "port": 8000,
         "enable": false
     },
-    "version": "v1.2.0"
+    "version": "v2.0.0",
+    "mongodb": "mongodb://localhost:27017/",
+    "music_temp_base": "./temp/music",
+    "model_priority": ["gemini", "local", "openai", "claude"],
+    "auto_update": {
+        "enabled": true,
+        "check_interval": 21600,
+        "require_owner_confirmation": true,
+        "auto_restart": true
+    },
+    "notification": {
+        "discord_dm": true,
+        "update_channel_id": null,
+        "notification_mentions": []
+    },
+    "security": {
+        "backup_enabled": true,
+        "max_backups": 5,
+        "verify_downloads": true,
+        "protected_files": ["settings.json", ".env", "data/"]
+    },
+    "restart": {
+        "graceful_shutdown_timeout": 30,
+        "restart_command": "python main.py",
+        "pre_restart_delay": 5
+    },
+    "github": {
+        "repository": "starpig1129/ai-discord-bot-PigPig",
+        "api_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/releases/latest",
+        "download_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
+    }
 }
 ```
 
@@ -124,6 +159,7 @@ This bot utilizes a modular design with several cogs (modules) to handle differe
 - **Music:** Provides music playback using custom YouTube integration (yt_dlp + PyNaCl), supporting playlists, queues, and various playback modes.
 - **Reminder:** Sets and manages reminders for users.
 - **Schedule:** Manages user schedules and calendar functionality.
+- **Update Manager:** Manages the auto-update system, providing version checking, secure downloading, and system restart functionality.
 - **User Data:** Manages user-specific data and profiles.
 - **Eat:** Provides intelligent food recommendations with MongoDB integration.
 

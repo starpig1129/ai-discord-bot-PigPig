@@ -33,14 +33,19 @@ import discord
 from typing import Optional, List, Dict, Any, Tuple
 
 from gpt.gpt_response_gen import generate_response, is_model_available
-from addons.settings import Settings
+from addons.settings import Settings, TOKENS
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.docstore.in_memory import InMemoryDocstore
 
 settings = Settings()
+tokens = TOKENS()
+
+# 使用設定檔中的 BOT_OWNER_ID，如果設定檔中沒有則使用預設值
+bot_owner_id = getattr(tokens, 'bot_owner_id', 0.0)
+
 system_prompt='''
-                You are an AI chatbot named 🐖🐖 <@{bot_id}>, created by 星豬<@597028717948043274>. You are chatting in a Discord server, so keep responses concise and engaging. Please follow these instructions:
+                You are an AI chatbot named 🐖🐖 <@{bot_id}>, created by 星豬<@{bot_owner_id}>. You are chatting in a Discord server, so keep responses concise and engaging. Please follow these instructions:
                 
                 1. Personality and Expression (表達風格):
                 - Maintain a humorous and fun conversational style.
@@ -113,14 +118,14 @@ def get_system_prompt(bot_id: str, message=None) -> str:
                         language_settings["references"]
                     )
                     
-                    return modified_prompt.format(bot_id=bot_id)
+                    return modified_prompt.format(bot_id=bot_id, bot_owner_id=bot_owner_id)
                 except (KeyError, TypeError) as e:
                     logging.warning(f"無法獲取語言設定，使用預設值：{e}")
     except Exception as e:
         logging.error(f"獲取語言設定時發生錯誤：{e}")
 
     # 如果無法獲取語言設定，使用預設值
-    return system_prompt.format(bot_id=bot_id)
+    return system_prompt.format(bot_id=bot_id, bot_owner_id=bot_owner_id)
 
 # 初始化 Hugging Face 嵌入模型
 hf_embeddings_model = "sentence-transformers/all-MiniLM-L6-v2"
