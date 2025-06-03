@@ -2,11 +2,15 @@ import requests, zipfile, os, shutil, argparse
 from io import BytesIO
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))  # 獲取當前腳本所在的目錄路徑
-__version__ = "v2.1.0"  # 當前版本號
+__version__ = "v2.1.1"  # 當前版本號
 
 GITHUB_API_URL = "https://api.github.com/repos/PigPig-discord-LLM-bot/releases/latest"  # GitHub API 地址,用於獲取最新版本信息
 PIGPIG_URL = "https://github.com/PigPig-discord-LLM-bot/archive/"  # 下載 PigPig Bot 的 URL
-IGNORE_FILES = ["settings.json", ".env", "data/"]  # 忽略的文件和目錄列表
+IGNORE_FILES = [
+    "settings.json", ".env", "data/", "systemPrompt.yaml",
+    "logs/", "temp/", "__pycache__/", "*.pyc", "models/", 
+    "lavalink/", "chromedriver*/", "school", ".git/", ".gitignore"
+]  # 忽略的文件和目錄列表
 
 class bcolors:
     WARNING = '\033[93m'  # 警告顏色
