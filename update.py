@@ -2,7 +2,7 @@ import requests, zipfile, os, shutil, argparse
 from io import BytesIO
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))  # 獲取當前腳本所在的目錄路徑
-__version__ = "v1.2.0"  # 當前版本號
+__version__ = "v2.1.0"  # 當前版本號
 
 GITHUB_API_URL = "https://api.github.com/repos/PigPig-discord-LLM-bot/releases/latest"  # GitHub API 地址,用於獲取最新版本信息
 PIGPIG_URL = "https://github.com/PigPig-discord-LLM-bot/archive/"  # 下載 PigPig Bot 的 URL
