@@ -436,6 +436,16 @@
                     "formatting": "Discord 格式化規則",
                     "professional_personality": "專業個性化設定"
                 },
+                "modules_select_descriptions": {
+                    "base": "基本身份和核心指令",
+                    "personality": "個性特徵和表達風格",
+                    "answering_principles": "回答問題的基本原則",
+                    "language": "語言偏好和表達方式",
+                    "professionalism": "專業話題的表現標準",
+                    "interaction": "互動模式和對話風格",
+                    "formatting": "Discord 格式化規則",
+                    "professional_personality": "專業個性化設定"
+                },
                 "help": {
                     "title": "📦 模組說明",
                     "description": "以下模組可以個別編輯來自訂 AI 的行為：",

@@ -826,7 +826,7 @@ class ModuleSelect(discord.ui.Select):
                 module_name = option.value
                 # Try short description first
                 short_desc_key = f"commands.system_prompt.modules_select_descriptions.{module_name}"
-                short_description = lang_manager.translate(str(self.guild.id), "commands", "system_prompt", "modules_select_descriptions", module_name)
+                short_description = lang_manager.translate(str(self.guild.id), "commands", "system_prompt", "modules", "modules_select_descriptions", module_name)
 
                 if short_description == module_name: # Not found, try full description
                     full_description = lang_manager.translate(str(self.guild.id), "commands", "system_prompt", "modules", "descriptions", module_name)

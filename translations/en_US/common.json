@@ -436,6 +436,16 @@
                     "formatting": "Discord formatting rules",
                     "professional_personality": "Professional personality configuration"
                 },
+                "modules_select_descriptions": {
+                    "base": "Basic identity and core instructions",
+                    "personality": "Personality traits and expression style",
+                    "answering_principles": "Basic principles for AI responses",
+                    "language": "Language preferences and expression methods",
+                    "professionalism": "Performance standards on professional topics",
+                    "interaction": "Interaction modes and conversation style",
+                    "formatting": "Discord formatting rules",
+                    "professional_personality": "Professional personality configuration"
+                },
                 "help": {
                     "title": "📦 Module Descriptions",
                     "description": "The following modules can be individually edited to customize AI behavior:",

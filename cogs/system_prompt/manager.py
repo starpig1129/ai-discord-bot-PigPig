@@ -574,12 +574,14 @@ class SystemPromptManager:
             else:
                 # 預設模組列表（基於 YAML 配置）
                 return [
+                    'base',
                     'personality',
                     'answering_principles',
                     'language',
                     'professionalism',
                     'interaction',
-                    'formatting'
+                    'formatting',
+                    'professional_personality'
                 ]
         except Exception as e:
             self.logger.error(f"取得可用模組列表時發生錯誤: {e}")

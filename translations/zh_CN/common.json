@@ -449,6 +449,16 @@
                     "formatting": "Discord 格式化规则",
                     "professional_personality": "专业个性化设定"
                 },
+                "modules_select_descriptions": {
+                    "base": "基本身份和核心指令",
+                    "personality": "个性特征和表达风格",
+                    "answering_principles": "回答问题的基本原则",
+                    "language": "语言偏好和表达方式",
+                    "professionalism": "专业话题的表现标准",
+                    "interaction": "互动模式和对话风格",
+                    "formatting": "Discord 格式化规则",
+                    "professional_personality": "专业个性化设定"
+                },
                 "help": {
                     "title": "📦 模块说明",
                     "description": "以下模块可以单独编辑来自定义 AI 的行为：",
