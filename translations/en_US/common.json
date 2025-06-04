@@ -258,6 +258,177 @@
                 "success": "Set channel {channel} auto response to: {enabled}"
             }
         },
+        "system_prompt": {
+            "name": "system_prompt",
+            "description": "Manage system prompt settings",
+            "subcommands": {
+                "set": {
+                    "name": "set",
+                    "description": "Set system prompt",
+                    "options": {
+                        "type": "Setting type (channel specific or server default)",
+                        "channel": "Target channel (for channel specific settings)",
+                        "content": "System prompt content (optional, leave empty to open editor)"
+                    },
+                    "choices": {
+                        "channel": "Channel Specific",
+                        "server": "Server Default"
+                    }
+                },
+                "view": {
+                    "name": "view",
+                    "description": "View system prompt configuration",
+                    "options": {
+                        "channel": "Target channel (optional)",
+                        "show_inherited": "Show inherited prompts"
+                    }
+                },
+                "remove": {
+                    "name": "remove",
+                    "description": "Remove system prompt",
+                    "options": {
+                        "type": "Removal type",
+                        "channel": "Target channel (for channel specific removal)"
+                    },
+                    "choices": {
+                        "channel": "Channel Specific",
+                        "server": "Server Default"
+                    }
+                },
+                "copy": {
+                    "name": "copy",
+                    "description": "Copy system prompt to another channel",
+                    "options": {
+                        "from_channel": "Source channel",
+                        "to_channel": "Target channel"
+                    }
+                },
+                "reset": {
+                    "name": "reset",
+                    "description": "Reset system prompt",
+                    "options": {
+                        "type": "Reset type"
+                    },
+                    "choices": {
+                        "channel": "Current Channel",
+                        "server": "Server Default",
+                        "all": "Reset All"
+                    }
+                },
+                "modules": {
+                    "name": "modules",
+                    "description": "View available module list"
+                }
+            },
+            "ui": {
+                "modals": {
+                    "system_prompt": {
+                        "title": "Set System Prompt",
+                        "title_channel": "Set #{channel} System Prompt",
+                        "title_server": "Set Server Default System Prompt",
+                        "title_edit": "Edit System Prompt",
+                        "prompt_label": "System Prompt Content",
+                        "prompt_placeholder": "Please enter system prompt content..."
+                    },
+                    "module_prompt": {
+                        "title": "Set Module: {module}",
+                        "prompt_label": "{module} Module Content",
+                        "prompt_placeholder": "Please enter {module} module content..."
+                    }
+                },
+                "buttons": {
+                    "confirm": "Confirm",
+                    "confirm_remove": "Confirm Remove",
+                    "confirm_reset": "Confirm Reset",
+                    "confirm_copy": "Confirm Copy",
+                    "cancel": "Cancel",
+                    "edit": "Edit",
+                    "preview": "Preview"
+                },
+                "selectors": {
+                    "channel_placeholder": "Select Channel",
+                    "module_placeholder": "Select modules to override",
+                    "module_description": "Override {module} module"
+                },
+                "embeds": {
+                    "system_prompt_title": "🤖 System Prompt Settings",
+                    "preview_title": "🔍 System Prompt Preview",
+                    "modules_title": "📦 Available Modules"
+                }
+            },
+            "messages": {
+                "success": {
+                    "set": "✅ System Prompt Set Successfully",
+                    "set_description": "Successfully set system prompt for {scope}",
+                    "remove": "✅ Removal Successful",
+                    "remove_description": "Successfully removed system prompt for {scope}",
+                    "copy": "✅ Copy Successful",
+                    "copy_description": "Successfully copied system prompt from #{from_channel} to #{to_channel}",
+                    "reset": "✅ Reset Successful",
+                    "reset_description": "Successfully reset {scope} system prompt settings",
+                    "operation_confirmed": "✅ Operation Confirmed",
+                    "operation_cancelled": "❌ Operation Cancelled"
+                },
+                "info": {
+                    "scope_channel": "channel #{channel}",
+                    "scope_server": "server default",
+                    "scope_all": "all",
+                    "content_length": "Content Length",
+                    "created_by": "Set by",
+                    "source": "Source",
+                    "source_yaml": "YAML Base Prompt",
+                    "source_server": "Server Default + YAML",
+                    "source_channel": "Channel Specific + Server Default + YAML",
+                    "source_cache": "Cache",
+                    "prompt_length": "{length} characters",
+                    "language": "Language",
+                    "channel": "Channel",
+                    "inheritance_title": "Inheritance Levels",
+                    "inheritance_yaml": "🔹 YAML Base Prompt",
+                    "inheritance_server": "🔸 Server Default Prompt",
+                    "inheritance_channel": "🔸 Channel Specific Prompt",
+                    "inheritance_none": "YAML Base Only",
+                    "modules_description": "The following are YAML system prompt modules that can be overridden:",
+                    "modules_usage": "When setting system prompts, you can use module override functionality to customize specific module content",
+                    "modules_none": "No modules available",
+                    "preview_content": "Content",
+                    "preview_source": "Source",
+                    "preview_length": "Length"
+                },
+                "confirm": {
+                    "remove_channel": "Are you sure you want to remove the system prompt for channel #{channel}?",
+                    "remove_server": "Are you sure you want to remove the server default system prompt?",
+                    "reset_channel": "Are you sure you want to reset the system prompt for channel #{channel}?",
+                    "reset_server": "Are you sure you want to reset the server default system prompt?",
+                    "reset_all": "Are you sure you want to reset all system prompt settings?\n⚠️ This action cannot be undone!",
+                    "copy_simple": "Copy system prompt from #{from_channel} to #{to_channel}",
+                    "copy_overwrite": "Copy system prompt from #{from_channel} to #{to_channel}\n⚠️ Target channel already has a system prompt, it will be overwritten",
+                    "title_remove": "⚠️ Confirm Removal",
+                    "title_reset": "⚠️ Confirm Reset",
+                    "title_copy": "🔄 Confirm Copy"
+                },
+                "validation": {
+                    "prompt_empty": "❌ System prompt content cannot be empty",
+                    "prompt_too_long": "❌ System prompt too long (max 4000 characters), current {length} characters",
+                    "same_channel": "❌ Source and target channels cannot be the same",
+                    "module_empty": "❌ {module} module content cannot be empty"
+                }
+            },
+            "errors": {
+                "permission_denied": "You don't have permission to perform this action",
+                "channel_permission_denied": "You don't have permission to manage this channel's system prompt",
+                "server_permission_denied": "You don't have permission to manage server-level system prompts",
+                "prompt_not_found": "System prompt not found",
+                "channel_not_found": "Specified channel not found",
+                "validation_failed": "Validation failed: {error}",
+                "operation_failed": "Operation failed: {error}",
+                "system_error": "System error, please try again later",
+                "timeout": "Operation timed out, please retry",
+                "modal_error": "Error occurred while processing request: {error}",
+                "unknown_error": "Unknown error occurred, please try again later",
+                "modules_unavailable": "Unable to get module list: {error}"
+            }
+        },
         "search_gif": {
             "name": "search_gif",
             "description": "Search for GIF",

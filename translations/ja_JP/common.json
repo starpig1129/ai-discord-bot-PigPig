@@ -258,6 +258,177 @@
                 "success": "チャンネル {channel} の自動応答を {enabled} に設定しました"
             }
         },
+        "system_prompt": {
+            "name": "system_prompt",
+            "description": "システムプロンプト設定を管理",
+            "subcommands": {
+                "set": {
+                    "name": "set",
+                    "description": "システムプロンプトを設定",
+                    "options": {
+                        "type": "設定タイプ（チャンネル固有またはサーバーデフォルト）",
+                        "channel": "対象チャンネル（チャンネル固有設定時に使用）",
+                        "content": "システムプロンプト内容（任意、空の場合はエディターが開きます）"
+                    },
+                    "choices": {
+                        "channel": "チャンネル固有",
+                        "server": "サーバーデフォルト"
+                    }
+                },
+                "view": {
+                    "name": "view",
+                    "description": "システムプロンプト設定を表示",
+                    "options": {
+                        "channel": "対象チャンネル（任意）",
+                        "show_inherited": "継承されたプロンプトを表示"
+                    }
+                },
+                "remove": {
+                    "name": "remove",
+                    "description": "システムプロンプトを削除",
+                    "options": {
+                        "type": "削除タイプ",
+                        "channel": "対象チャンネル（チャンネル固有削除時に使用）"
+                    },
+                    "choices": {
+                        "channel": "チャンネル固有",
+                        "server": "サーバーデフォルト"
+                    }
+                },
+                "copy": {
+                    "name": "copy",
+                    "description": "システムプロンプトを他のチャンネルにコピー",
+                    "options": {
+                        "from_channel": "コピー元チャンネル",
+                        "to_channel": "コピー先チャンネル"
+                    }
+                },
+                "reset": {
+                    "name": "reset",
+                    "description": "システムプロンプトをリセット",
+                    "options": {
+                        "type": "リセットタイプ"
+                    },
+                    "choices": {
+                        "channel": "現在のチャンネル",
+                        "server": "サーバーデフォルト",
+                        "all": "すべてリセット"
+                    }
+                },
+                "modules": {
+                    "name": "modules",
+                    "description": "利用可能なモジュールリストを表示"
+                }
+            },
+            "ui": {
+                "modals": {
+                    "system_prompt": {
+                        "title": "システムプロンプトを設定",
+                        "title_channel": "チャンネル #{channel} のシステムプロンプトを設定",
+                        "title_server": "サーバーデフォルトのシステムプロンプトを設定",
+                        "title_edit": "システムプロンプトを編集",
+                        "prompt_label": "システムプロンプト内容",
+                        "prompt_placeholder": "システムプロンプト内容を入力してください..."
+                    },
+                    "module_prompt": {
+                        "title": "モジュールを設定: {module}",
+                        "prompt_label": "{module} モジュール内容",
+                        "prompt_placeholder": "{module} モジュールの内容を入力してください..."
+                    }
+                },
+                "buttons": {
+                    "confirm": "確認",
+                    "confirm_remove": "削除を確認",
+                    "confirm_reset": "リセットを確認",
+                    "confirm_copy": "コピーを確認",
+                    "cancel": "キャンセル",
+                    "edit": "編集",
+                    "preview": "プレビュー"
+                },
+                "selectors": {
+                    "channel_placeholder": "チャンネルを選択",
+                    "module_placeholder": "上書きするモジュールを選択",
+                    "module_description": "{module} モジュールを上書き"
+                },
+                "embeds": {
+                    "system_prompt_title": "🤖 システムプロンプト設定",
+                    "preview_title": "🔍 システムプロンプトプレビュー",
+                    "modules_title": "📦 利用可能なモジュール"
+                }
+            },
+            "messages": {
+                "success": {
+                    "set": "✅ システムプロンプト設定成功",
+                    "set_description": "{scope}のシステムプロンプトが正常に設定されました",
+                    "remove": "✅ 削除成功",
+                    "remove_description": "{scope}のシステムプロンプトが正常に削除されました",
+                    "copy": "✅ コピー成功",
+                    "copy_description": "#{from_channel} のシステムプロンプトを #{to_channel} に正常にコピーしました",
+                    "reset": "✅ リセット成功",
+                    "reset_description": "{scope}システムプロンプト設定が正常にリセットされました",
+                    "operation_confirmed": "✅ 操作が確認されました",
+                    "operation_cancelled": "❌ 操作がキャンセルされました"
+                },
+                "info": {
+                    "scope_channel": "チャンネル #{channel}",
+                    "scope_server": "サーバーデフォルト",
+                    "scope_all": "すべて",
+                    "content_length": "内容の長さ",
+                    "created_by": "設定者",
+                    "source": "ソース",
+                    "source_yaml": "YAML基本プロンプト",
+                    "source_server": "サーバーデフォルト + YAML",
+                    "source_channel": "チャンネル固有 + サーバーデフォルト + YAML",
+                    "source_cache": "キャッシュ",
+                    "prompt_length": "{length} 文字",
+                    "language": "言語",
+                    "channel": "チャンネル",
+                    "inheritance_title": "継承レベル",
+                    "inheritance_yaml": "🔹 YAML基本プロンプト",
+                    "inheritance_server": "🔸 サーバーデフォルトプロンプト",
+                    "inheritance_channel": "🔸 チャンネル固有プロンプト",
+                    "inheritance_none": "YAML基本のみ",
+                    "modules_description": "以下は上書き可能な YAML システムプロンプトモジュールです：",
+                    "modules_usage": "システムプロンプト設定時に、モジュール上書き機能を使用して特定のモジュール内容をカスタマイズできます",
+                    "modules_none": "利用可能なモジュールはありません",
+                    "preview_content": "内容",
+                    "preview_source": "ソース",
+                    "preview_length": "長さ"
+                },
+                "confirm": {
+                    "remove_channel": "チャンネル #{channel} のシステムプロンプトを削除しますか？",
+                    "remove_server": "サーバーデフォルトのシステムプロンプトを削除しますか？",
+                    "reset_channel": "チャンネル #{channel} のシステムプロンプトをリセットしますか？",
+                    "reset_server": "サーバーデフォルトのシステムプロンプトをリセットしますか？",
+                    "reset_all": "すべてのシステムプロンプト設定をリセットしますか？\n⚠️ この操作は元に戻せません！",
+                    "copy_simple": "#{from_channel} のシステムプロンプトを #{to_channel} にコピー",
+                    "copy_overwrite": "#{from_channel} のシステムプロンプトを #{to_channel} にコピー\n⚠️ 対象チャンネルには既にシステムプロンプトがあり、上書きされます",
+                    "title_remove": "⚠️ 削除の確認",
+                    "title_reset": "⚠️ リセットの確認",
+                    "title_copy": "🔄 コピーの確認"
+                },
+                "validation": {
+                    "prompt_empty": "❌ システムプロンプト内容は空にできません",
+                    "prompt_too_long": "❌ システムプロンプトが長すぎます（最大 4000 文字）、現在 {length} 文字",
+                    "same_channel": "❌ コピー元とコピー先のチャンネルは同じにできません",
+                    "module_empty": "❌ {module} モジュール内容は空にできません"
+                }
+            },
+            "errors": {
+                "permission_denied": "この操作を実行する権限がありません",
+                "channel_permission_denied": "このチャンネルのシステムプロンプトを管理する権限がありません",
+                "server_permission_denied": "サーバーレベルのシステムプロンプトを管理する権限がありません",
+                "prompt_not_found": "システムプロンプトが見つかりません",
+                "channel_not_found": "指定されたチャンネルが見つかりません",
+                "validation_failed": "検証に失敗しました：{error}",
+                "operation_failed": "操作に失敗しました：{error}",
+                "system_error": "システムエラーです。後でもう一度お試しください",
+                "timeout": "操作がタイムアウトしました。再試行してください",
+                "modal_error": "リクエスト処理中にエラーが発生しました: {error}",
+                "unknown_error": "不明なエラーが発生しました。後でもう一度お試しください",
+                "modules_unavailable": "モジュールリストを取得できません: {error}"
+            }
+        },
         "search_gif": {
             "name": "search_gif",
             "description": "GIF を検索",

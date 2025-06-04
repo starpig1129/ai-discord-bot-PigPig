@@ -3,7 +3,10 @@ from discord.ext import commands
 from discord import app_commands
 import json
 import os
-from typing import Optional
+import time
+import logging
+from datetime import datetime
+from typing import Optional, Dict, List, Any, Tuple
 from .language_manager import LanguageManager
 from addons.settings import TOKENS
 
@@ -23,21 +26,38 @@ class ChannelManager(commands.Cog):
         return os.path.join(self.data_dir, f"{guild_id}.json")
 
     def load_config(self, guild_id):
+        """載入伺服器配置"""
         config_path = self.get_config_path(guild_id)
         if os.path.exists(config_path):
-            with open(config_path, "r") as f:
-                config = json.load(f)
-                # Ensure auto_response key exists
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                # 確保必要的鍵值存在
                 if "auto_response" not in config:
                     config["auto_response"] = {}
                 return config
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return self._get_default_config()
         else:
-            return {"mode": "unrestricted", "whitelist": [], "blacklist": [], "auto_response": {}}
+            return self._get_default_config()
+
+    def _get_default_config(self):
+        """取得預設配置"""
+        return {
+            "mode": "unrestricted",
+            "whitelist": [],
+            "blacklist": [],
+            "auto_response": {}
+        }
 
     def save_config(self, guild_id, config):
+        """儲存伺服器配置"""
         config_path = self.get_config_path(guild_id)
-        with open(config_path, "w") as f:
-            json.dump(config, f, indent=4)
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            logging.error(f"Failed to save config for guild {guild_id}: {e}")
 
     async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
         """檢查是否有管理員權限"""
@@ -249,7 +269,6 @@ class ChannelManager(commands.Cog):
         
         await interaction.response.send_message(success_message)
 
-
     def is_allowed_channel(self, channel: discord.TextChannel, guild_id: str):
         config = self.load_config(guild_id)
         channel_id = str(channel.id)
@@ -263,6 +282,7 @@ class ChannelManager(commands.Cog):
         elif mode == "blacklist":
             return channel_id not in config.get("blacklist", []), auto_response_enabled
         return False, False
+
 
 async def setup(bot):
     await bot.add_cog(ChannelManager(bot))

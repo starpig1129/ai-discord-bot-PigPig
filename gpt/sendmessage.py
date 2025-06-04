@@ -61,16 +61,36 @@ def _get_prompt_manager():
 
 def get_system_prompt(bot_id: str, message=None) -> str:
     """
-    取得系統提示（整合 YAML 提示管理系統）
+    取得系統提示（整合 YAML 提示管理系統和頻道系統提示）
     
     Args:
         bot_id: Discord 機器人 ID
-        message: Discord 訊息物件（用於語言檢測）
+        message: Discord 訊息物件（用於語言檢測和頻道資訊）
         
     Returns:
         完整的系統提示字串
     """
-    # 嘗試使用新的 YAML 提示管理系統
+    # 優先級順序：
+    # 1. 頻道特定系統提示（如果存在且有效）
+    # 2. 伺服器級別系統提示（如果存在且有效）
+    # 3. YAML 全域預設提示（現有機制）
+    # 4. 硬編碼降級提示（現有機制）
+    
+    # 如果有訊息物件，嘗試使用頻道系統提示
+    if message and hasattr(message, 'channel') and hasattr(message, 'guild'):
+        try:
+            channel_prompt = get_channel_system_prompt(
+                str(message.channel.id),
+                str(message.guild.id),
+                bot_id,
+                message
+            )
+            if channel_prompt and channel_prompt.strip():
+                return channel_prompt
+        except Exception as e:
+            logging.error(f"頻道系統提示獲取失敗，降級到 YAML 提示管理系統: {e}")
+    
+    # 降級到原有的 YAML 提示管理系統
     try:
         prompt_manager = _get_prompt_manager()
         if prompt_manager:
@@ -78,9 +98,65 @@ def get_system_prompt(bot_id: str, message=None) -> str:
     except Exception as e:
         logging.error(f"YAML 提示管理系統失敗，使用降級策略: {e}")
     
-    # 降級策略：使用硬編碼的基本提示（保持向後相容性）
+    # 最終降級策略：使用硬編碼的基本提示（保持向後相容性）
     logging.warning("使用降級的硬編碼系統提示")
     return _get_fallback_system_prompt(bot_id, message)
+
+
+def get_channel_system_prompt(channel_id: str, guild_id: str, bot_id: str, message=None) -> str:
+    """
+    取得頻道特定的系統提示（整合三層繼承機制）
+    
+    Args:
+        channel_id: 頻道 ID
+        guild_id: 伺服器 ID
+        bot_id: Discord 機器人 ID
+        message: Discord 訊息物件（用於語言檢測）
+        
+    Returns:
+        完整的系統提示字串，包含三層繼承：YAML基礎 + 伺服器級別 + 頻道級別
+    """
+    try:
+        # 取得機器人實例
+        bot = None
+        if message and hasattr(message, 'guild') and message.guild:
+            bot = message.guild.me._state._get_client()
+        
+        # 嘗試取得新的 SystemPromptManagerCog
+        system_prompt_cog = None
+        if bot and hasattr(bot, 'get_cog'):
+            system_prompt_cog = bot.get_cog('SystemPromptManagerCog')
+        
+        if system_prompt_cog:
+            # 使用新系統提示模組的三層繼承機制
+            effective_prompt = system_prompt_cog.get_system_prompt_manager().get_effective_prompt(
+                channel_id, guild_id, message
+            )
+            
+            if effective_prompt and 'prompt' in effective_prompt:
+                prompt = effective_prompt['prompt']
+                source = effective_prompt.get('source', 'unknown')
+                
+                # 記錄提示來源以供調試
+                logging.debug(f"頻道系統提示來源: {source}, 頻道: {channel_id}, 伺服器: {guild_id}")
+                
+                # 如果有頻道或伺服器級別的自定義提示，返回完整提示
+                if source in ['channel', 'server']:
+                    return prompt
+                elif source == 'yaml':
+                    # 僅有 YAML 基礎提示，返回空字串讓上層函式處理
+                    return ""
+                else:
+                    return prompt
+        
+        # 新系統提示模組不可用時的降級策略
+        logging.warning(f"SystemPromptManagerCog 不可用，無法取得頻道 {channel_id} 的系統提示")
+        return ""
+        
+    except Exception as e:
+        logging.error(f"取得頻道系統提示時發生錯誤 (頻道: {channel_id}, 伺服器: {guild_id}): {e}")
+        return ""
+
 
 def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
     """
@@ -452,4 +528,11 @@ async def gpt_message(
 load_vector_store('./data/vector_store')
 load_and_index_dialogue_history('./data/dialogue_history.json')
 
-__all__ = ['gpt_message', 'load_and_index_dialogue_history', 'save_vector_store', 'vector_stores']
+__all__ = [
+    'gpt_message',
+    'get_system_prompt',
+    'get_channel_system_prompt',
+    'load_and_index_dialogue_history',
+    'save_vector_store',
+    'vector_stores'
+]
