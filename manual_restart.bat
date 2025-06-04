@@ -1,110 +1,139 @@
 @echo off
-REM PigPig Discord Bot 手動重啟腳本
-REM 當自動重啟失敗時使用此腳本
+chcp 65001 >nul 2>&1
+REM PigPig Discord Bot Manual Restart Script
+REM Use this script when automatic restart fails
 
 echo ========================================
-echo PigPig Discord Bot 手動重啟腳本
+echo PigPig Discord Bot Manual Restart Script
 echo ========================================
 echo.
 
-REM 檢查當前目錄
-echo 當前目錄: %CD%
+REM Check current directory
+echo Current Directory: %CD%
 echo.
 
-REM 檢查重要文件
-echo 檢查重要文件...
+REM Check important files
+echo Checking important files...
 if exist "main.py" (
-    echo [✓] main.py 存在
+    echo [OK] main.py exists
 ) else (
-    echo [✗] main.py 不存在！
-    echo 請確認您在正確的 Bot 目錄中
+    echo [ERROR] main.py not found!
+    echo Please confirm you are in the correct Bot directory
     pause
     exit /b 1
 )
 
 if exist "bot.py" (
-    echo [✓] bot.py 存在
+    echo [OK] bot.py exists
 ) else (
-    echo [✗] bot.py 不存在！
+    echo [WARNING] bot.py not found!
 )
 
 if exist "settings.json" (
-    echo [✓] settings.json 存在
+    echo [OK] settings.json exists
 ) else (
-    echo [✗] settings.json 不存在！
-    echo 請確認配置文件是否正確
+    echo [WARNING] settings.json not found!
+    echo Please check if configuration file is correct
 )
 echo.
 
-REM 檢查虛擬環境
-echo 檢查 Python 環境...
-if defined VIRTUAL_ENV (
-    echo [✓] 檢測到虛擬環境: %VIRTUAL_ENV%
+REM Check virtual environment
+echo Checking Python environment...
+set PYTHON_CMD=python
+
+REM Try to find Python in virtual environment first
+if exist "dcbot\Scripts\python.exe" (
+    echo [OK] Found dcbot virtual environment
+    set PYTHON_CMD="dcbot\Scripts\python.exe"
+) else if exist "venv\Scripts\python.exe" (
+    echo [OK] Found venv virtual environment
+    set PYTHON_CMD="venv\Scripts\python.exe"
+) else if exist ".venv\Scripts\python.exe" (
+    echo [OK] Found .venv virtual environment  
+    set PYTHON_CMD=".venv\Scripts\python.exe"
+) else if defined VIRTUAL_ENV (
+    echo [OK] Detected virtual environment: %VIRTUAL_ENV%
     set PYTHON_CMD="%VIRTUAL_ENV%\Scripts\python.exe"
-    if exist %PYTHON_CMD% (
-        echo [✓] 虛擬環境 Python 存在
-    ) else (
-        echo [✗] 虛擬環境 Python 不存在，使用系統 Python
+    if not exist %PYTHON_CMD% (
+        echo [WARNING] Virtual environment Python not found, using system Python
         set PYTHON_CMD=python
     )
 ) else (
-    echo [!] 未檢測到虛擬環境，使用系統 Python
-    set PYTHON_CMD=python
+    echo [INFO] No virtual environment detected, using system Python
+    REM Try python3 command as fallback
+    python3 --version >nul 2>&1
+    if %errorlevel% equ 0 (
+        set PYTHON_CMD=python3
+    )
 )
 
-REM 測試 Python 命令
+REM Test Python command
 echo.
-echo 測試 Python 命令...
+echo Testing Python command...
 %PYTHON_CMD% --version >nul 2>&1
 if %errorlevel% equ 0 (
-    echo [✓] Python 命令可用
-    %PYTHON_CMD% --version
+    echo [OK] Python command available
+    for /f "tokens=*" %%i in ('%PYTHON_CMD% --version 2^>^&1') do echo %%i
 ) else (
-    echo [✗] Python 命令不可用！
-    echo 請檢查 Python 安裝或環境變數設定
-    pause
-    exit /b 1
+    echo [ERROR] Python command not available!
+    echo Please check Python installation or environment variables
+    echo.
+    echo Trying alternative Python commands...
+    
+    REM Try py launcher
+    py --version >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo [OK] Found Python via py launcher
+        set PYTHON_CMD=py
+        py --version
+    ) else (
+        echo [ERROR] All Python commands failed!
+        echo Please install Python or check your PATH environment variable
+        pause
+        exit /b 1
+    )
 )
 
 echo.
 echo ========================================
-echo 準備啟動 PigPig Discord Bot
+echo Ready to start PigPig Discord Bot
 echo ========================================
-echo 使用的 Python: %PYTHON_CMD%
-echo 啟動命令: %PYTHON_CMD% main.py
+echo Using Python: %PYTHON_CMD%
+echo Start command: %PYTHON_CMD% main.py
 echo.
 
-REM 詢問是否繼續
-set /p continue="是否繼續啟動 Bot？(Y/n): "
+REM Ask whether to continue
+set /p continue="Continue to start Bot? (Y/n): "
 if /i "%continue%"=="n" (
-    echo 已取消啟動
+    echo Startup cancelled
     pause
     exit /b 0
 )
 
 echo.
-echo 正在啟動 PigPig Discord Bot...
-echo 按 Ctrl+C 停止 Bot
+echo Starting PigPig Discord Bot...
+echo Press Ctrl+C to stop Bot
 echo ========================================
 echo.
 
-REM 啟動 Bot
+REM Start Bot
 %PYTHON_CMD% main.py
 
-REM Bot 結束後的處理
+REM Handle Bot termination
+set BOT_EXIT_CODE=%errorlevel%
 echo.
 echo ========================================
-echo Bot 已結束
+echo Bot has terminated
 echo ========================================
-echo 退出代碼: %errorlevel%
+echo Exit code: %BOT_EXIT_CODE%
 
-if %errorlevel% neq 0 (
-    echo [!] Bot 非正常結束（錯誤代碼: %errorlevel%）
-    echo 請檢查錯誤訊息並確認配置是否正確
+if %BOT_EXIT_CODE% neq 0 (
+    echo [WARNING] Bot terminated abnormally (Error code: %BOT_EXIT_CODE%)
+    echo Please check error messages and confirm configuration is correct
 ) else (
-    echo [✓] Bot 正常結束
+    echo [OK] Bot terminated normally
 )
 
 echo.
-echo 按任意鍵關閉視窗...
+echo Press any key to close window...
 pause >nul

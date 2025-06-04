@@ -276,8 +276,21 @@ class UpdateManager:
                     # 延遲一下讓通知發送完成
                     await asyncio.sleep(2)
                     
-                    # 執行重啟
-                    await self.restart_manager.execute_restart("update_restart")
+                    # 執行重啟 - 增強版診斷
+                    self.logger.info("🔄 === 準備執行自動重啟 ===")
+                    self.logger.info("📋 重啟配置檢查...")
+                    try:
+                        await self.restart_manager.execute_restart("update_restart")
+                        self.logger.info("✅ 重啟命令已成功執行")
+                    except Exception as restart_error:
+                        self.logger.error("💥 重啟執行失敗!")
+                        self.logger.error(f"❌ 重啟錯誤: {restart_error}")
+                        self.logger.error(f"🏷️ 錯誤類型: {type(restart_error).__name__}")
+                        import traceback
+                        self.logger.error(f"📋 重啟錯誤堆疊:\n{traceback.format_exc()}")
+                        
+                        # 重新拋出異常讓外層處理
+                        raise restart_error
                     
                     return result
                 else:

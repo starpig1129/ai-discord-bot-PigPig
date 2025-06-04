@@ -89,18 +89,23 @@ class GracefulRestartManager:
     
     async def execute_restart(self, reason: str = "update_restart") -> None:
         """
-        執行重啟
+        執行重啟 - 增強診斷版
         
         Args:
             reason: 重啟原因
         """
         try:
-            self.logger.info("開始執行重啟...")
+            self.logger.info("🔄 === 開始執行重啟流程 ===")
+            self.logger.info(f"📝 重啟原因: {reason}")
+            self.logger.info(f"🆔 當前進程 PID: {os.getpid()}")
             
             # 準備重啟
+            self.logger.info("🔧 開始準備重啟階段...")
             await self.prepare_restart(reason)
+            self.logger.info("✅ 重啟準備階段完成")
             
             # 保存重啟標記
+            self.logger.info("💾 正在保存重啟標記...")
             restart_info = {
                 "restart_time": datetime.now().isoformat(),
                 "reason": reason,
@@ -112,22 +117,35 @@ class GracefulRestartManager:
             with open(flag_file, "w", encoding='utf-8') as f:
                 json.dump(restart_info, f, indent=2, ensure_ascii=False)
             
-            self.logger.info("重啟標記已保存，準備關閉 Bot...")
+            self.logger.info(f"✅ 重啟標記已保存到: {flag_file}")
+            self.logger.info("📋 重啟標記內容:")
+            for key, value in restart_info.items():
+                self.logger.info(f"  {key}: {value}")
             
             # 通知重啟開始
+            self.logger.info("📢 發送重啟開始通知...")
             await self._notify_restart_start()
             
             # 優雅關閉 Bot
+            self.logger.info("🔌 開始優雅關閉 Discord Bot...")
             await self.bot.close()
+            self.logger.info("✅ Discord Bot 已關閉")
             
             # 等待一小段時間確保 Bot 完全關閉
+            self.logger.info("⏳ 等待 2 秒確保 Bot 完全關閉...")
             await asyncio.sleep(2)
+            self.logger.info("✅ Bot 關閉等待完成")
             
-            # 執行增強版重啟命令
-            self._execute_enhanced_restart_command()
+            # 執行重啟命令
+            self.logger.info("🚀 === 開始執行重啟命令階段 ===")
+            self._execute_restart_command()
             
         except Exception as e:
-            self.logger.error(f"執行重啟時發生錯誤: {e}")
+            self.logger.error("💥 執行重啟時發生嚴重錯誤!")
+            self.logger.error(f"❌ 錯誤訊息: {e}")
+            self.logger.error(f"🏷️ 錯誤類型: {type(e).__name__}")
+            import traceback
+            self.logger.error(f"📋 錯誤堆疊:\n{traceback.format_exc()}")
             await self._handle_restart_failure(e)
             raise e
     
@@ -232,65 +250,93 @@ class GracefulRestartManager:
             self.logger.error(f"發送重啟開始通知時發生錯誤: {e}")
     
     def _execute_restart_command(self) -> None:
-        """執行增強版重啟命令"""
+        """執行重啟命令 - 增強版診斷"""
         try:
+            self.logger.info("🚀 開始執行重啟命令...")
             command = self.restart_config["restart_command"]
-            self.logger.info(f"原始重啟命令: {command}")
+            self.logger.info(f"📋 原始重啟命令: {command}")
+            self.logger.info(f"💻 操作系統: {os.name} ({platform.system()} {platform.release()})")
+            self.logger.info(f"🐍 Python 版本: {sys.version}")
+            self.logger.info(f"📁 當前工作目錄: {os.getcwd()}")
+            self.logger.info(f"🔧 虛擬環境: {os.environ.get('VIRTUAL_ENV', 'None')}")
             
             # Windows 環境使用增強版重啟
             if os.name == 'nt':
+                self.logger.info("🖥️ Windows 系統，使用增強版重啟...")
                 if self.restart_config.get("enable_detailed_logging", True):
+                    self.logger.info("📊 啟用詳細診斷模式")
                     success = self._enhanced_windows_restart(command)
                     if not success:
-                        self.logger.warning("增強版 Windows 重啟失敗，嘗試傳統方法...")
+                        self.logger.warning("⚠️ 增強版 Windows 重啟失敗，嘗試傳統方法...")
                         success = self._windows_restart(command)
                         if not success:
+                            self.logger.error("❌ 所有 Windows 重啟方法都失敗")
                             raise Exception("所有 Windows 重啟方法都失敗")
+                        else:
+                            self.logger.info("✅ 傳統 Windows 重啟方法成功")
+                    else:
+                        self.logger.info("✅ 增強版 Windows 重啟方法成功")
                 else:
+                    self.logger.info("📊 使用基本重啟模式")
                     success = self._windows_restart(command)
                     if not success:
+                        self.logger.error("❌ Windows 重啟失敗")
                         raise Exception("Windows 重啟失敗")
+                    else:
+                        self.logger.info("✅ Windows 重啟方法成功")
             else:  # Unix/Linux
+                self.logger.info("🐧 Unix/Linux 系統，使用傳統重啟...")
                 self._unix_restart(command)
+                self.logger.info("✅ Unix/Linux 重啟命令已執行")
             
             # 給新進程一些時間啟動
-            self.logger.info("等待 5 秒確保新進程啟動...")
+            self.logger.info("⏳ 等待 5 秒確保新進程啟動...")
             time.sleep(5)
             
             # 退出當前進程
-            self.logger.info("準備退出當前進程...")
+            self.logger.info("🔚 準備退出當前進程...")
+            self.logger.info("👋 Bot 即將關閉，新進程應該正在啟動...")
             sys.exit(0)
             
         except Exception as e:
-            self.logger.error(f"執行增強版重啟命令時發生錯誤: {e}")
-            self.logger.error(f"錯誤類型: {type(e).__name__}")
+            self.logger.error("💥 執行重啟命令時發生嚴重錯誤!")
+            self.logger.error(f"❌ 錯誤訊息: {e}")
+            self.logger.error(f"🏷️ 錯誤類型: {type(e).__name__}")
             import traceback
-            self.logger.error(f"錯誤堆疊: {traceback.format_exc()}")
+            self.logger.error(f"📋 錯誤堆疊:\n{traceback.format_exc()}")
+            self.logger.error("🔄 重啟流程失敗，程式即將退出")
             sys.exit(1)
     
     def _enhanced_windows_restart(self, command: str) -> bool:
-        """增強版 Windows 重啟方法"""
+        """增強版 Windows 重啟方法 - 增強診斷版"""
         try:
             current_dir = os.getcwd()
-            self.logger.info("=== 開始增強版 Windows 重啟流程 ===")
+            self.logger.info("🔧 === 開始增強版 Windows 重啟流程 ===")
+            self.logger.info(f"📁 工作目錄: {current_dir}")
+            self.logger.info(f"⚙️ 重啟命令: {command}")
             
             # 創建增強版重啟管理器
+            self.logger.info("🏗️ 正在創建增強版重啟管理器...")
             enhanced_manager = EnhancedWindowsRestartManager(self.logger, self.diagnostics)
+            self.logger.info("✅ 增強版重啟管理器創建成功")
             
             # 執行帶診斷的重啟
+            self.logger.info("🚀 開始執行帶診斷的重啟流程...")
             success = enhanced_manager.execute_restart_with_diagnostics(command, current_dir)
             
             if success:
-                self.logger.info("增強版重啟執行成功")
+                self.logger.info("🎉 增強版重啟執行成功")
                 return True
             else:
-                self.logger.error("增強版重啟執行失敗")
+                self.logger.error("❌ 增強版重啟執行失敗")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"增強版 Windows 重啟過程發生錯誤: {e}")
+            self.logger.error("💥 增強版 Windows 重啟過程發生嚴重錯誤!")
+            self.logger.error(f"❌ 錯誤訊息: {e}")
+            self.logger.error(f"🏷️ 錯誤類型: {type(e).__name__}")
             import traceback
-            self.logger.error(f"錯誤堆疊: {traceback.format_exc()}")
+            self.logger.error(f"📋 錯誤堆疊:\n{traceback.format_exc()}")
             return False
     
     def _windows_restart(self, command: str) -> bool:
@@ -868,7 +914,7 @@ class EnhancedWindowsRestartManager:
         
     def execute_restart_with_diagnostics(self, command: str, current_dir: str) -> bool:
         """
-        執行帶診斷的重啟
+        執行帶診斷的重啟 - 超詳細版
         
         Args:
             command: 重啟命令
@@ -878,47 +924,76 @@ class EnhancedWindowsRestartManager:
             重啟是否成功
         """
         try:
-            self.logger.info("=== 開始增強版重啟流程 ===")
+            self.logger.info("🔬 === 開始增強版重啟診斷流程 ===")
+            self.logger.info(f"⚙️ 重啟命令: {command}")
+            self.logger.info(f"📁 工作目錄: {current_dir}")
             
             # 收集診斷資訊
+            self.logger.info("📊 正在收集系統診斷資訊...")
             system_info = self.diagnostics.collect_system_info()
+            self.logger.info("✅ 系統資訊收集完成")
+            
+            self.logger.info("🌍 正在收集環境診斷資訊...")
             env_info = self.diagnostics.collect_restart_environment()
+            self.logger.info("✅ 環境資訊收集完成")
             
             # 保存診斷資訊
-            self.diagnostics.save_diagnostics()
+            self.logger.info("💾 正在保存診斷資訊...")
+            if self.diagnostics.save_diagnostics():
+                self.logger.info("✅ 診斷資訊保存成功")
+            else:
+                self.logger.warning("⚠️ 診斷資訊保存失敗")
             
             # 記錄詳細的環境資訊
+            self.logger.info("📋 記錄詳細環境資訊...")
             self._log_detailed_environment(system_info, env_info)
             
             # 準備多種重啟方法
+            self.logger.info("🛠️ 正在準備多種重啟方法...")
             restart_methods = self._prepare_restart_methods(command, current_dir, system_info)
+            self.logger.info(f"✅ 已準備 {len(restart_methods)} 種重啟方法")
+            
+            # 列出所有方法
+            for i, method in enumerate(restart_methods, 1):
+                self.logger.info(f"  方法 {i}: {method['name']}")
             
             # 依序嘗試每種重啟方法
+            self.logger.info("🚀 開始嘗試重啟方法...")
             for i, method in enumerate(restart_methods, 1):
-                self.logger.info(f"=== 嘗試重啟方法 {i}/{len(restart_methods)}: {method['name']} ===")
+                self.logger.info(f"🔧 === 嘗試重啟方法 {i}/{len(restart_methods)}: {method['name']} ===")
+                self.logger.info(f"📝 方法描述: {method.get('description', 'N/A')}")
                 
                 attempt_result = self._attempt_restart_method(method, i)
                 self.restart_attempts.append(attempt_result)
                 
                 if attempt_result["success"]:
-                    self.logger.info(f"重啟方法 {i} 成功！")
+                    self.logger.info(f"🎉 重啟方法 {i} 執行成功！")
+                    self.logger.info(f"📊 執行結果: {attempt_result}")
                     self._save_restart_success_log(attempt_result)
                     return True
                 else:
-                    self.logger.warning(f"重啟方法 {i} 失敗: {attempt_result['error']}")
+                    self.logger.warning(f"❌ 重啟方法 {i} 失敗")
+                    self.logger.warning(f"💭 失敗原因: {attempt_result['error']}")
+                    self.logger.warning(f"📊 詳細結果: {attempt_result}")
                     
                 # 短暫延遲再嘗試下一種方法
-                time.sleep(1)
+                if i < len(restart_methods):
+                    self.logger.info("⏳ 等待 1 秒後嘗試下一種方法...")
+                    time.sleep(1)
             
             # 所有方法都失敗
-            self.logger.error("所有重啟方法都失敗")
+            self.logger.error("💥 所有重啟方法都失敗")
+            self.logger.error(f"📊 失敗統計: 嘗試了 {len(restart_methods)} 種方法")
             self._save_restart_failure_log()
+            self._log_manual_restart_instructions()
             return False
             
         except Exception as e:
-            self.logger.error(f"增強版重啟流程發生錯誤: {e}")
+            self.logger.error("💥 增強版重啟流程發生嚴重錯誤!")
+            self.logger.error(f"❌ 錯誤訊息: {e}")
+            self.logger.error(f"🏷️ 錯誤類型: {type(e).__name__}")
             import traceback
-            self.logger.error(f"錯誤堆疊: {traceback.format_exc()}")
+            self.logger.error(f"📋 錯誤堆疊:\n{traceback.format_exc()}")
             return False
     
     def _log_detailed_environment(self, system_info: Dict[str, Any], env_info: Dict[str, Any]) -> None:
