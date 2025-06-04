@@ -31,7 +31,15 @@ class Settings:
             "backup_enabled": True,
             "max_backups": 5,
             "verify_downloads": True,
-            "protected_files": ["settings.json", ".env", "data/"]
+            "protected_files": [
+                "settings.json",
+                ".env",
+                "data/schedule/",
+                "data/dialogue_history.json",
+                "data/channel_configs/",
+                "data/user_data/",
+                "data/update_logs/"
+            ]
         })
         self.restart: dict = settings.get("restart", {
             "graceful_shutdown_timeout": 30,
@@ -122,15 +130,30 @@ class UpdateSettings:
             "backup_enabled": True,
             "max_backups": 5,
             "verify_downloads": True,
-            "protected_files": ["settings.json", ".env", "data/"]
+            "protected_files": [
+                "settings.json",
+                ".env",
+                "data/schedule/",
+                "data/dialogue_history.json",
+                "data/channel_configs/",
+                "data/user_data/",
+                "data/update_logs/"
+            ]
         }
     
     def _get_default_restart(self) -> dict:
         """獲取預設重啟配置"""
+        # 根據作業系統調整重啟命令
+        if os.name == 'nt':  # Windows
+            restart_command = "python.exe main.py"
+        else:  # Unix/Linux
+            restart_command = "python main.py"
+            
         return {
             "graceful_shutdown_timeout": 30,
-            "restart_command": "python main.py",
-            "pre_restart_delay": 5
+            "restart_command": restart_command,
+            "pre_restart_delay": 5,
+            "restart_flag_file": "data/restart_flag.json"
         }
     
     def _get_default_github(self) -> dict:

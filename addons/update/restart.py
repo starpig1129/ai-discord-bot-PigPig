@@ -10,6 +10,7 @@ import json
 import asyncio
 import logging
 import subprocess
+import shutil
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -222,19 +223,109 @@ class GracefulRestartManager:
         """執行重啟命令"""
         try:
             command = self.restart_config["restart_command"]
-            self.logger.info(f"執行重啟命令: {command}")
+            self.logger.info(f"原始重啟命令: {command}")
             
-            # 分離當前進程，在新進程中啟動
-            if os.name == 'nt':  # Windows
-                subprocess.Popen(command, shell=True, creationflags=subprocess.CREATE_NEW_CONSOLE)
+            # Windows 環境特殊處理
+            if os.name == 'nt':
+                # 檢測虛擬環境
+                venv_path = os.environ.get('VIRTUAL_ENV')
+                if venv_path:
+                    self.logger.info(f"檢測到虛擬環境: {venv_path}")
+                    python_exe = os.path.join(venv_path, 'Scripts', 'python.exe')
+                    if os.path.exists(python_exe):
+                        command = f'"{python_exe}" main.py'
+                        self.logger.info(f"使用虛擬環境 Python: {command}")
+                    else:
+                        self.logger.warning(f"虛擬環境 Python 不存在: {python_exe}")
+                
+                # 獲取當前工作目錄
+                current_dir = os.getcwd()
+                self.logger.info(f"當前工作目錄: {current_dir}")
+                
+                # 建構完整的重啟命令
+                if 'python' not in command.lower():
+                    command = f"python {command}"
+                
+                self.logger.info(f"最終重啟命令: {command}")
+                self.logger.info(f"工作目錄: {current_dir}")
+                
+                # 記錄環境變數
+                self.logger.info(f"PATH: {os.environ.get('PATH', 'N/A')[:200]}...")
+                self.logger.info(f"PYTHON 路徑: {shutil.which('python')}")
+                
+                # 嘗試多種重啟方式
+                restart_methods = [
+                    # 方法 1: 使用 cmd /c 在新控制台啟動
+                    f'cmd /c "cd /d {current_dir} && {command}"',
+                    # 方法 2: 使用 start 命令在新窗口啟動
+                    f'start cmd /k "cd /d {current_dir} && {command}"',
+                    # 方法 3: 直接啟動
+                    command
+                ]
+                
+                success = False
+                for i, method in enumerate(restart_methods, 1):
+                    try:
+                        self.logger.info(f"嘗試重啟方法 {i}: {method}")
+                        
+                        if i == 1:
+                            # CREATE_NEW_CONSOLE 創建新控制台
+                            process = subprocess.Popen(
+                                method,
+                                shell=True,
+                                cwd=current_dir,
+                                creationflags=subprocess.CREATE_NEW_CONSOLE,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL
+                            )
+                        elif i == 2:
+                            # DETACHED_PROCESS 分離進程
+                            process = subprocess.Popen(
+                                method,
+                                shell=True,
+                                cwd=current_dir,
+                                creationflags=subprocess.DETACHED_PROCESS,
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL
+                            )
+                        else:
+                            # 標準方式
+                            process = subprocess.Popen(
+                                method,
+                                shell=True,
+                                cwd=current_dir,
+                                creationflags=subprocess.CREATE_NEW_CONSOLE
+                            )
+                        
+                        self.logger.info(f"重啟方法 {i} 執行成功，PID: {process.pid}")
+                        success = True
+                        break
+                        
+                    except Exception as method_error:
+                        self.logger.error(f"重啟方法 {i} 失敗: {method_error}")
+                        continue
+                
+                if not success:
+                    raise Exception("所有重啟方法都失敗")
+                    
             else:  # Unix/Linux
+                self.logger.info(f"Unix/Linux 系統重啟命令: {command}")
                 subprocess.Popen(command.split(), start_new_session=True)
             
+            # 給新進程一些時間啟動
+            self.logger.info("等待 3 秒確保新進程啟動...")
+            import time
+            time.sleep(3)
+            
             # 退出當前進程
+            self.logger.info("準備退出當前進程...")
             sys.exit(0)
             
         except Exception as e:
             self.logger.error(f"執行重啟命令時發生錯誤: {e}")
+            self.logger.error(f"錯誤類型: {type(e).__name__}")
+            import traceback
+            self.logger.error(f"錯誤堆疊: {traceback.format_exc()}")
             sys.exit(1)
     
     async def _perform_health_check(self) -> bool:

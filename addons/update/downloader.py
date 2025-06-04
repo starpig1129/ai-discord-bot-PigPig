@@ -55,7 +55,12 @@ class UpdateDownloader:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(download_url) as response:
                     if response.status != 200:
-                        raise Exception(f"下載失敗：HTTP {response.status}")
+                        if response.status == 404:
+                            self.logger.error(f"下載URL不存在 (404): {download_url}")
+                            raise Exception(f"下載失敗：HTTP 404 - 檔案不存在。請檢查版本號或URL格式")
+                        else:
+                            self.logger.error(f"下載請求失敗: HTTP {response.status}")
+                            raise Exception(f"下載失敗：HTTP {response.status}")
                     
                     total_size = int(response.headers.get('content-length', 0))
                     downloaded = 0

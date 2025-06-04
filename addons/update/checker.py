@@ -68,7 +68,7 @@ class VersionChecker:
                             "update_available": update_available,
                             "release_notes": data.get("body", ""),
                             "published_at": data.get("published_at", ""),
-                            "download_url": f"https://github.com/PigPig-discord-LLM-bot/archive/{latest_version}.zip",
+                            "download_url": f"https://github.com/starpig1129/ai-discord-bot-PigPig/archive/refs/tags/{latest_version}.zip",
                             "tag_name": data.get("tag_name", latest_version),
                             "prerelease": data.get("prerelease", False)
                         }

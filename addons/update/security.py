@@ -98,8 +98,20 @@ class BackupManager:
         
         if protected_files is None:
             protected_files = [
-                "settings.json", ".env", "data/", "cogs/", "gpt/", 
-                "addons/", "bot.py", "main.py", "function.py", "update.py"
+                "settings.json",
+                ".env",
+                "data/schedule/",
+                "data/dialogue_history.json",
+                "data/channel_configs/",
+                "data/user_data/",
+                "data/update_logs/",
+                "cogs/",
+                "gpt/",
+                "addons/",
+                "bot.py",
+                "main.py",
+                "function.py",
+                "update.py"
             ]
         
         try:
@@ -120,9 +132,8 @@ class BackupManager:
                     dest_path = os.path.join(backup_path, item)
                     
                     if os.path.isdir(item):
-                        # 備份目錄
-                        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-                        shutil.copytree(item, dest_path, dirs_exist_ok=True)
+                        # 備份目錄，但排除備份目錄本身以避免無限遞歸
+                        self._backup_directory_safely(item, dest_path, backup_path)
                         backed_up_items.append(f"dir:{item}")
                     else:
                         # 備份檔案
@@ -148,6 +159,79 @@ class BackupManager:
             if os.path.exists(backup_path):
                 shutil.rmtree(backup_path, ignore_errors=True)
             raise Exception(f"備份創建失敗: {e}")
+    
+    def _backup_directory_safely(self, source_dir: str, dest_dir: str, backup_root: str) -> None:
+        """
+        安全地備份目錄，避免備份目錄本身造成無限遞歸
+        
+        Args:
+            source_dir: 來源目錄路徑
+            dest_dir: 目標目錄路徑
+            backup_root: 備份根目錄路徑
+        """
+        # 正規化路徑以進行比較
+        source_abs = os.path.abspath(source_dir)
+        backup_abs = os.path.abspath(self.backup_dir)
+        
+        # 確保目標目錄存在
+        os.makedirs(os.path.dirname(dest_dir), exist_ok=True)
+        
+        def should_skip_item(item_path: str) -> bool:
+            """檢查是否應該跳過該項目"""
+            item_abs = os.path.abspath(item_path)
+            
+            # 跳過備份目錄本身以避免無限遞歸
+            if item_abs.startswith(backup_abs):
+                return True
+            
+            # 跳過臨時目錄
+            if 'temp' in item_path.lower() or '__pycache__' in item_path:
+                return True
+                
+            return False
+        
+        try:
+            if not os.path.exists(source_dir):
+                self.logger.warning(f"來源目錄不存在: {source_dir}")
+                return
+            
+            # 創建目標目錄
+            os.makedirs(dest_dir, exist_ok=True)
+            
+            # 遞歷並複製目錄內容
+            for root, dirs, files in os.walk(source_dir):
+                # 計算相對路徑
+                rel_path = os.path.relpath(root, source_dir)
+                if rel_path == '.':
+                    target_root = dest_dir
+                else:
+                    target_root = os.path.join(dest_dir, rel_path)
+                
+                # 檢查是否應該跳過當前目錄
+                if should_skip_item(root):
+                    dirs.clear()  # 不遞歸進入此目錄
+                    continue
+                
+                # 創建目標目錄
+                os.makedirs(target_root, exist_ok=True)
+                
+                # 複製檔案
+                for file in files:
+                    source_file = os.path.join(root, file)
+                    target_file = os.path.join(target_root, file)
+                    
+                    if not should_skip_item(source_file):
+                        try:
+                            shutil.copy2(source_file, target_file)
+                        except Exception as e:
+                            self.logger.warning(f"複製檔案失敗 {source_file}: {e}")
+                
+                # 過濾要遞歸的目錄
+                dirs[:] = [d for d in dirs if not should_skip_item(os.path.join(root, d))]
+                
+        except Exception as e:
+            self.logger.error(f"備份目錄時發生錯誤 {source_dir}: {e}")
+            raise
     
     def rollback_to_backup(self, backup_id: str) -> bool:
         """
@@ -179,26 +263,62 @@ class BackupManager:
             
             # 執行回滾
             for item in backed_up_items:
-                item_type, item_path = item.split(":", 1)
-                source_path = os.path.join(backup_path, item_path)
+                try:
+                    parts = item.split(":", 1)
+                    if len(parts) != 2:
+                        self.logger.warning(f"備份項目格式錯誤，跳過: {item}")
+                        continue
+                    
+                    item_type, item_path = parts
+                    
+                    # 驗證路徑不為空
+                    if not item_path or not item_path.strip():
+                        self.logger.warning(f"備份項目路徑為空，跳過: {item}")
+                        continue
+                    
+                    source_path = os.path.join(backup_path, item_path)
+                    
+                    if not os.path.exists(source_path):
+                        self.logger.warning(f"備份中的項目不存在，跳過: {item_path}")
+                        continue
+                        
+                except ValueError as e:
+                    self.logger.error(f"解析備份項目時發生錯誤，跳過: {item} - {e}")
+                    continue
                 
-                if not os.path.exists(source_path):
-                    self.logger.warning(f"備份中的項目不存在，跳過: {item_path}")
+                # 驗證目標路徑的安全性
+                normalized_item_path = os.path.normpath(item_path)
+                if os.path.isabs(normalized_item_path) or '..' in normalized_item_path:
+                    self.logger.warning(f"不安全的路徑，跳過: {item_path}")
                     continue
                 
                 # 刪除現有項目
                 if os.path.exists(item_path):
-                    if os.path.isdir(item_path):
-                        shutil.rmtree(item_path)
-                    else:
-                        os.remove(item_path)
+                    try:
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        else:
+                            os.remove(item_path)
+                        self.logger.debug(f"已刪除現有項目: {item_path}")
+                    except Exception as e:
+                        self.logger.error(f"刪除現有項目失敗 {item_path}: {e}")
+                        continue
                 
                 # 恢復備份項目
-                if item_type == "dir":
-                    shutil.copytree(source_path, item_path)
-                else:
-                    os.makedirs(os.path.dirname(item_path), exist_ok=True)
-                    shutil.copy2(source_path, item_path)
+                try:
+                    if item_type == "dir":
+                        shutil.copytree(source_path, item_path)
+                        self.logger.debug(f"已恢復目錄: {item_path}")
+                    else:
+                        # 確保父目錄存在
+                        parent_dir = os.path.dirname(item_path)
+                        if parent_dir:
+                            os.makedirs(parent_dir, exist_ok=True)
+                        shutil.copy2(source_path, item_path)
+                        self.logger.debug(f"已恢復檔案: {item_path}")
+                except Exception as e:
+                    self.logger.error(f"恢復備份項目失敗 {item_path}: {e}")
+                    continue
             
             self.logger.info(f"回滾到備份成功: {backup_id}")
             return True
