@@ -151,7 +151,7 @@ class GracefulRestartManager:
     
     async def post_restart_check(self) -> bool:
         """
-        重啟後健康檢查
+        重啟後健康檢查 - 包含進程分離驗證
         
         Returns:
             檢查是否通過
@@ -166,15 +166,26 @@ class GracefulRestartManager:
                 
                 self.logger.info("檢測到重啟標記，執行重啟後檢查...")
                 
+                # 驗證進程分離
+                process_detached = self._verify_process_detachment()
+                if process_detached:
+                    self.logger.info("✅ 進程分離驗證通過 - 新進程已完全獨立")
+                else:
+                    self.logger.warning("⚠️ 進程分離驗證失敗 - 可能仍有依賴關係")
+                
                 # 基本健康檢查
                 health_ok = await self._perform_health_check()
                 
                 if health_ok:
                     # 發送重啟成功通知
+                    restart_info["process_detached"] = process_detached
                     await self._notify_restart_success(restart_info)
                     
-                    # 清理重啟標記
+                    # 清理重啟標記和進程資訊文件
                     os.remove(flag_file)
+                    if os.path.exists("data/current_process_info.json"):
+                        os.remove("data/current_process_info.json")
+                    
                     self.logger.info("重啟後檢查完成，系統運行正常")
                     return True
                 else:
@@ -259,6 +270,17 @@ class GracefulRestartManager:
             self.logger.info(f"🐍 Python 版本: {sys.version}")
             self.logger.info(f"📁 當前工作目錄: {os.getcwd()}")
             self.logger.info(f"🔧 虛擬環境: {os.environ.get('VIRTUAL_ENV', 'None')}")
+            self.logger.info(f"🆔 當前進程 PID: {os.getpid()}")
+            
+            # 保存當前進程資訊用於驗證分離
+            current_process_info = {
+                "pid": os.getpid(),
+                "ppid": os.getppid() if hasattr(os, 'getppid') else None,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            with open("data/current_process_info.json", "w", encoding='utf-8') as f:
+                json.dump(current_process_info, f, indent=2, ensure_ascii=False)
             
             # Windows 環境使用增強版重啟
             if os.name == 'nt':
@@ -285,7 +307,7 @@ class GracefulRestartManager:
                     else:
                         self.logger.info("✅ Windows 重啟方法成功")
             else:  # Unix/Linux
-                self.logger.info("🐧 Unix/Linux 系統，使用傳統重啟...")
+                self.logger.info("🐧 Unix/Linux 系統，使用增強進程分離重啟...")
                 self._unix_restart(command)
                 self.logger.info("✅ Unix/Linux 重啟命令已執行")
             
@@ -399,10 +421,15 @@ pause
             process = subprocess.Popen(
                 [batch_file],
                 cwd=current_dir,
-                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                creationflags=(
+                    subprocess.DETACHED_PROCESS |
+                    subprocess.CREATE_NEW_PROCESS_GROUP |
+                    subprocess.CREATE_NEW_CONSOLE
+                ),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
+                close_fds=True
             )
             
             self.logger.info(f"批次檔案重啟成功，PID: {process.pid}")
@@ -459,10 +486,15 @@ pause
                     method["cmd"],
                     shell=method["shell"],
                     cwd=current_dir,
-                    creationflags=method["flags"],
+                    creationflags=(
+                        method["flags"] |
+                        subprocess.DETACHED_PROCESS |
+                        subprocess.CREATE_NEW_PROCESS_GROUP
+                    ),
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    stdin=subprocess.DEVNULL
+                    stdin=subprocess.DEVNULL,
+                    close_fds=True
                 )
                 
                 self.logger.info(f"重啟方法 {i} 執行成功，PID: {process.pid}")
@@ -475,9 +507,26 @@ pause
         return False
     
     def _unix_restart(self, command: str) -> None:
-        """Unix/Linux 重啟方法"""
-        self.logger.info(f"Unix/Linux 系統重啟命令: {command}")
-        subprocess.Popen(command.split(), start_new_session=True)
+        """Unix/Linux 重啟方法 - 增強進程分離"""
+        try:
+            self.logger.info(f"Unix/Linux 系統重啟命令: {command}")
+            
+            # 使用完全進程分離的方式啟動新進程
+            process = subprocess.Popen(
+                command.split(),
+                start_new_session=True,  # 創建新的會話
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                close_fds=True,  # 關閉所有文件描述符
+                preexec_fn=os.setsid if hasattr(os, 'setsid') else None  # 創建新的進程組
+            )
+            
+            self.logger.info(f"Unix/Linux 重啟進程已啟動，PID: {process.pid}")
+            
+        except Exception as e:
+            self.logger.error(f"Unix/Linux 重啟失敗: {e}")
+            raise e
     
     async def _perform_health_check(self) -> bool:
         """
@@ -643,6 +692,98 @@ pause
         except Exception as e:
             self.logger.error(f"取消重啟時發生錯誤: {e}")
             return False
+    
+    def _verify_process_detachment(self) -> bool:
+        """
+        驗證進程分離是否成功
+        
+        Returns:
+            進程是否已完全分離
+        """
+        try:
+            # 讀取之前保存的進程資訊
+            process_info_file = "data/current_process_info.json"
+            if not os.path.exists(process_info_file):
+                self.logger.warning("找不到之前的進程資訊文件，無法驗證分離")
+                return False
+            
+            with open(process_info_file, "r", encoding='utf-8') as f:
+                old_process_info = json.load(f)
+            
+            current_pid = os.getpid()
+            old_pid = old_process_info.get("pid")
+            
+            self.logger.info(f"🔍 進程分離驗證:")
+            self.logger.info(f"  舊進程 PID: {old_pid}")
+            self.logger.info(f"  當前進程 PID: {current_pid}")
+            
+            # 基本檢查：PID 必須不同
+            if current_pid == old_pid:
+                self.logger.error("❌ 進程 PID 相同，重啟可能失敗")
+                return False
+            
+            # 檢查父進程
+            if hasattr(os, 'getppid'):
+                current_ppid = os.getppid()
+                old_ppid = old_process_info.get("ppid")
+                
+                self.logger.info(f"  舊進程 PPID: {old_ppid}")
+                self.logger.info(f"  當前進程 PPID: {current_ppid}")
+                
+                # Windows 系統進程分離驗證
+                if os.name == 'nt':
+                    # 在 Windows 中，如果使用了 DETACHED_PROCESS，
+                    # 新進程的父進程應該不是舊進程的 PID
+                    if current_ppid != old_pid:
+                        self.logger.info("✅ Windows 進程分離驗證通過")
+                        return True
+                    else:
+                        self.logger.warning("⚠️ Windows 進程仍有父子關係")
+                        return False
+                
+                # Unix/Linux 系統進程分離驗證
+                else:
+                    # 在 Unix/Linux 中，如果使用了 start_new_session，
+                    # 新進程應該在新的會話中
+                    try:
+                        import psutil
+                        current_process = psutil.Process(current_pid)
+                        
+                        # 檢查會話 ID
+                        if hasattr(current_process, 'sid') and callable(getattr(current_process, 'sid')):
+                            session_id = current_process.sid()
+                            self.logger.info(f"  當前會話 ID: {session_id}")
+                            
+                            # 如果會話 ID 不等於進程 ID，表示可能在新會話中
+                            if session_id != current_pid:
+                                self.logger.info("✅ Unix/Linux 會話分離驗證通過")
+                                return True
+                        
+                        # 檢查是否為進程組領導者
+                        if hasattr(current_process, 'gids') and callable(getattr(current_process, 'gids')):
+                            gids = current_process.gids()
+                            self.logger.info(f"  進程組 ID: {gids}")
+                    
+                    except ImportError:
+                        self.logger.warning("psutil 未安裝，無法進行詳細的 Unix 進程分離驗證")
+                    except Exception as e:
+                        self.logger.warning(f"Unix 進程分離驗證時發生錯誤: {e}")
+                    
+                    # 基本的 Unix 驗證：父進程不是舊進程
+                    if current_ppid != old_pid:
+                        self.logger.info("✅ Unix/Linux 基本進程分離驗證通過")
+                        return True
+                    else:
+                        self.logger.warning("⚠️ Unix/Linux 進程仍有父子關係")
+                        return False
+            
+            # 如果無法檢查父進程，只能基於 PID 不同來判斷
+            self.logger.info("✅ 基本進程分離驗證通過（僅基於 PID 差異）")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"驗證進程分離時發生錯誤: {e}")
+            return False
     def create_windows_restart_script(self) -> str:
             """
             創建 Windows PowerShell 重啟腳本
@@ -715,10 +856,15 @@ pause
             
             process = subprocess.Popen(
                 ps_cmd,
-                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                creationflags=(
+                    subprocess.DETACHED_PROCESS |
+                    subprocess.CREATE_NEW_PROCESS_GROUP |
+                    subprocess.CREATE_NEW_CONSOLE
+                ),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
+                close_fds=True
             )
             
             self.logger.info(f"PowerShell 重啟腳本執行成功，PID: {process.pid}")
@@ -733,9 +879,15 @@ pause
                 process = subprocess.Popen(
                     cmd_ps,
                     shell=True,
-                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    creationflags=(
+                        subprocess.DETACHED_PROCESS |
+                        subprocess.CREATE_NEW_PROCESS_GROUP |
+                        subprocess.CREATE_NEW_CONSOLE
+                    ),
                     stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    close_fds=True
                 )
                 
                 self.logger.info(f"CMD PowerShell 重啟執行成功，PID: {process.pid}")
@@ -1181,10 +1333,15 @@ del "{batch_file}" 2>nul
             process = subprocess.Popen(
                 [batch_file],
                 cwd=current_dir,
-                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                creationflags=(
+                    subprocess.DETACHED_PROCESS |
+                    subprocess.CREATE_NEW_PROCESS_GROUP |
+                    subprocess.CREATE_NO_WINDOW
+                ),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
+                close_fds=True
             )
             
             details = {
@@ -1249,10 +1406,15 @@ Read-Host
             
             process = subprocess.Popen(
                 ps_cmd,
-                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                creationflags=(
+                    subprocess.DETACHED_PROCESS |
+                    subprocess.CREATE_NEW_PROCESS_GROUP |
+                    subprocess.CREATE_NO_WINDOW
+                ),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
+                close_fds=True
             )
             
             details = {
@@ -1275,10 +1437,15 @@ Read-Host
             process = subprocess.Popen(
                 command,
                 shell=True,
-                creationflags=subprocess.DETACHED_PROCESS,
+                creationflags=(
+                    subprocess.DETACHED_PROCESS |
+                    subprocess.CREATE_NEW_PROCESS_GROUP |
+                    subprocess.CREATE_NEW_CONSOLE
+                ),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
+                close_fds=True
             )
             
             details = {
@@ -1369,10 +1536,15 @@ del "{batch_file}" 2>nul
             process = subprocess.Popen(
                 [batch_file],
                 cwd=current_dir,
-                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                creationflags=(
+                    subprocess.DETACHED_PROCESS |
+                    subprocess.CREATE_NEW_PROCESS_GROUP |
+                    subprocess.CREATE_NEW_CONSOLE
+                ),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
+                close_fds=True
             )
             
             details = {
@@ -1400,10 +1572,16 @@ del "{batch_file}" 2>nul
             process = subprocess.Popen(
                 cmd_args,
                 cwd=current_dir,
-                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                creationflags=(
+                    subprocess.DETACHED_PROCESS |
+                    subprocess.CREATE_NEW_PROCESS_GROUP |
+                    subprocess.CREATE_NEW_CONSOLE
+                ),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL
+                stdin=subprocess.DEVNULL,
+                close_fds=True,
+                start_new_session=True  # Unix 系統的會話分離
             )
             
             details = {
