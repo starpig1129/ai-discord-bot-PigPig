@@ -89,6 +89,18 @@ class SystemPromptCommands(commands.Cog):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
         self.manager = SystemPromptManager(bot)
+        
+        # 設定語言管理器
+        try:
+            language_manager = bot.get_cog("LanguageManager")
+            self.manager.language_manager = language_manager
+            if language_manager:
+                self.logger.debug("✅ 語言管理器已設定")
+            else:
+                self.logger.warning("⚠️ 語言管理器未找到")
+        except Exception as e:
+            self.logger.warning(f"設定語言管理器時發生錯誤: {e}")
+        
         self.permission_validator = PermissionValidator(bot)
     
     def get_system_prompt_manager(self) -> SystemPromptManager:

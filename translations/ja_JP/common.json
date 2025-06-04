@@ -438,6 +438,15 @@
                     "interaction": "AIのインタラクションモードを設定し、会話スタイル、集中管理などを含む",
                     "formatting": "Discord環境でのフォーマットルールを規定し、Markdown構文、言及フォーマットなどを含む"
                 },
+                "select_descriptions": {
+                    "base": "基本的なアイデンティティとコア指示",
+                    "personality": "個性特性と表現スタイル",
+                    "answering_principles": "AI応答の基本原則",
+                    "language": "言語設定と表現方法",
+                    "professionalism": "専門的トピックのパフォーマンス基準",
+                    "interaction": "インタラクションモードと会話スタイル",
+                    "formatting": "Discordフォーマットルール"
+                },
                 "help": {
                     "title": "📦 モジュール説明",
                     "description": "以下のモジュールを個別に編集してAIの動作をカスタマイズできます：",

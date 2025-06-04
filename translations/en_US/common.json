@@ -425,6 +425,15 @@
                     "interaction": "Set AI's interaction modes, including conversation style, focus management, etc.",
                     "formatting": "Define formatting rules for Discord environment, including Markdown syntax, mention formats, etc."
                 },
+                "select_descriptions": {
+                    "base": "Basic identity and core instructions",
+                    "personality": "Personality traits and expression style",
+                    "answering_principles": "Basic principles for AI responses",
+                    "language": "Language preferences and expression methods",
+                    "professionalism": "Performance standards on professional topics",
+                    "interaction": "Interaction modes and conversation style",
+                    "formatting": "Discord formatting rules"
+                },
                 "help": {
                     "title": "📦 Module Descriptions",
                     "description": "The following modules can be individually edited to customize AI behavior:",

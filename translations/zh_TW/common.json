@@ -425,6 +425,15 @@
                     "interaction": "設定 AI 的互動模式，包括對話風格、專注度管理等",
                     "formatting": "規定 Discord 環境下的格式化規則，包括 Markdown 語法、提及格式等"
                 },
+                "select_descriptions": {
+                    "base": "基本身份和核心指令",
+                    "personality": "個性特徵和表達風格",
+                    "answering_principles": "回答問題的基本原則",
+                    "language": "語言偏好和表達方式",
+                    "professionalism": "專業話題的表現標準",
+                    "interaction": "互動模式和對話風格",
+                    "formatting": "Discord 格式化規則"
+                },
                 "help": {
                     "title": "📦 模組說明",
                     "description": "以下模組可以個別編輯來自訂 AI 的行為：",
