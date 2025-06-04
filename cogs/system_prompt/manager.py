@@ -237,6 +237,12 @@ class SystemPromptManager:
             # 應用語言本地化
             prompt = self._apply_language_localization(prompt, lang, guild_id)
             
+            # 🔧 修復：確保最終提示都經過變數替換處理
+            # 只有在非 YAML 來源時才需要額外的變數替換（因為 YAML 提示已經在 PromptManager 中替換過）
+            if source != 'yaml':
+                prompt = self._apply_variable_replacements(prompt)
+                self.logger.debug(f"✅ 對 {source} 級別提示應用了最終變數替換")
+            
             # 快取結果
             self.cache.set(guild_id, channel_id, prompt, lang)
             
@@ -670,21 +676,49 @@ class SystemPromptManager:
             self.logger.error(f"獲取模組 '{module_name}' 預設內容時發生錯誤: {e}")
             return ""
     
-    def get_effective_full_prompt(self, channel_id: str, guild_id: str) -> str:
+    def get_effective_full_prompt(self, channel_id: str, guild_id: str, for_editing: bool = False) -> str:
         """
         獲取當前有效的完整系統提示（用於直接編輯時顯示）
         
         Args:
             channel_id: 頻道 ID
             guild_id: 伺服器 ID
+            for_editing: 是否用於編輯（如果是，返回未替換變數的版本）
             
         Returns:
             完整的有效系統提示內容
         """
         try:
-            # 取得有效提示
-            prompt_data = self.get_effective_prompt(channel_id, guild_id)
-            return prompt_data.get('prompt', '')
+            if for_editing:
+                # 編輯模式：返回原始配置中的提示（保留變數占位符）
+                config = self._load_guild_config(guild_id)
+                system_prompts = config.get('system_prompts', {})
+                
+                # 優先檢查頻道特定提示
+                if channel_id:
+                    channels = system_prompts.get('channels', {})
+                    if channel_id in channels and 'prompt' in channels[channel_id]:
+                        return channels[channel_id]['prompt']
+                
+                # 檢查伺服器級別提示
+                server_level = system_prompts.get('server_level', {})
+                if 'prompt' in server_level:
+                    return server_level['prompt']
+                
+                # 如果沒有自定義提示，從 YAML 提示取得原始內容
+                if self._prompt_manager:
+                    try:
+                        config = self._prompt_manager.loader.load_yaml_config()
+                        default_modules = config.get('composition', {}).get('default_modules', [])
+                        return self._prompt_manager.builder.build_system_prompt(config, default_modules)
+                    except Exception as yaml_error:
+                        self.logger.warning(f"無法取得 YAML 原始提示: {yaml_error}")
+                
+                return ""
+            else:
+                # 非編輯模式：返回完全處理後的提示（包含變數替換）
+                prompt_data = self.get_effective_prompt(channel_id, guild_id)
+                return prompt_data.get('prompt', '')
             
         except Exception as e:
             self.logger.error(f"獲取完整系統提示時發生錯誤: {e}")
@@ -1212,7 +1246,9 @@ class SystemPromptManager:
         """應用伺服器級別覆蓋"""
         try:
             if 'prompt' in server_config:
-                return server_config['prompt']
+                # 對編輯後的提示進行變數替換
+                prompt = server_config['prompt']
+                return self._apply_variable_replacements(prompt)
             
             # 模組覆蓋邏輯 - 重新建構 YAML 提示
             modules = server_config.get('modules', {})
@@ -1228,7 +1264,8 @@ class SystemPromptManager:
             if 'append_content' in server_config:
                 prompt += f"\n\n{server_config['append_content']}"
             
-            return prompt
+            # 對最終提示進行變數替換
+            return self._apply_variable_replacements(prompt)
             
         except Exception as e:
             self.logger.error(f"應用伺服器覆蓋時發生錯誤: {e}")
@@ -1238,7 +1275,9 @@ class SystemPromptManager:
         """應用頻道級別覆蓋"""
         try:
             if 'prompt' in channel_config:
-                return channel_config['prompt']
+                # 對編輯後的提示進行變數替換
+                prompt = channel_config['prompt']
+                return self._apply_variable_replacements(prompt)
             
             # 模組覆蓋邏輯 - 重新建構 YAML 提示
             modules = channel_config.get('modules', {})
@@ -1254,7 +1293,8 @@ class SystemPromptManager:
             if 'append_content' in channel_config:
                 prompt += f"\n\n{channel_config['append_content']}"
             
-            return prompt
+            # 對最終提示進行變數替換
+            return self._apply_variable_replacements(prompt)
             
         except Exception as e:
             self.logger.error(f"應用頻道覆蓋時發生錯誤: {e}")
@@ -1382,6 +1422,98 @@ class SystemPromptManager:
                 except Exception as fallback_error:
                     self.logger.error(f"降級重建也失敗: {fallback_error}")
             return ""
+    
+    def _apply_variable_replacements(self, prompt: str) -> str:
+        """
+        對系統提示應用變數替換
+        
+        Args:
+            prompt: 包含變數占位符的提示字串
+            
+        Returns:
+            替換變數後的提示字串
+        """
+        try:
+            # 獲取必要的變數
+            variables = self._get_system_variables()
+            
+            # 使用 PromptBuilder 的變數替換功能
+            if self._prompt_manager and hasattr(self._prompt_manager, 'builder'):
+                formatted_prompt = self._prompt_manager.builder.format_with_variables(prompt, variables)
+                self.logger.debug(f"✅ 變數替換完成 - 原長度: {len(prompt)}, 新長度: {len(formatted_prompt)}")
+                return formatted_prompt
+            else:
+                # 降級策略：直接使用 format 方法
+                formatted_prompt = prompt.format(**variables)
+                self.logger.debug(f"✅ 變數替換完成（降級策略）- 原長度: {len(prompt)}, 新長度: {len(formatted_prompt)}")
+                return formatted_prompt
+                
+        except KeyError as e:
+            self.logger.warning(f"⚠️ 變數替換時缺少變數: {e}，返回原始提示")
+            return prompt
+        except Exception as e:
+            self.logger.error(f"❌ 變數替換時發生錯誤: {e}，返回原始提示")
+            return prompt
+    
+    def _get_system_variables(self) -> Dict[str, Any]:
+        """
+        獲取系統變數字典
+        
+        Returns:
+            系統變數字典
+        """
+        try:
+            variables = {}
+            
+            # 獲取機器人 ID
+            if self.bot and hasattr(self.bot, 'user') and self.bot.user:
+                variables['bot_id'] = str(self.bot.user.id)
+            else:
+                variables['bot_id'] = '0'  # 預設值
+            
+            # 獲取機器人擁有者 ID
+            try:
+                from addons.settings import TOKENS
+                tokens = TOKENS()
+                variables['bot_owner_id'] = getattr(tokens, 'bot_owner_id', 0)
+            except ImportError:
+                variables['bot_owner_id'] = 0
+            
+            # 🔧 修復：從 YAML 配置中取得預設值，確保所有變數都可用
+            try:
+                if self._prompt_manager:
+                    config = self._prompt_manager.loader.load_yaml_config()
+                    base_config = config.get('base', {})
+                    variables['bot_name'] = base_config.get('bot_name', '🐖🐖')
+                    variables['creator'] = base_config.get('creator', '星豬')
+                    variables['environment'] = base_config.get('environment', 'Discord server')
+                else:
+                    # 降級預設值
+                    variables['bot_name'] = '🐖🐖'
+                    variables['creator'] = '星豬'
+                    variables['environment'] = 'Discord server'
+            except Exception as e:
+                self.logger.warning(f"無法從 YAML 取得基礎變數，使用預設值: {e}")
+                variables['bot_name'] = '🐖🐖'
+                variables['creator'] = '星豬'
+                variables['environment'] = 'Discord server'
+            
+            # 添加其他可能的系統變數
+            variables['timestamp'] = time.time()
+            
+            self.logger.debug(f"🔧 系統變數已準備: {list(variables.keys())}")
+            return variables
+            
+        except Exception as e:
+            self.logger.error(f"獲取系統變數時發生錯誤: {e}")
+            return {
+                'bot_id': '0',
+                'bot_owner_id': 0,
+                'bot_name': '🐖🐖',
+                'creator': '星豬',
+                'environment': 'Discord server',
+                'timestamp': time.time()
+            }
     
     def _get_language(self, guild_id: str, message: Optional[discord.Message] = None) -> str:
         """取得語言設定"""

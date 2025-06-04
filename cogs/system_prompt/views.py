@@ -372,6 +372,22 @@ class EditModeSelectionView(discord.ui.View):
             server_level = system_prompts.get('server_level', {})
             existing_content = server_level.get('prompt', '')
 
+        # 如果沒有現有內容，取得當前有效提示作為預設值（但保留變數占位符）
+        if not existing_content:
+            try:
+                # 從有效提示中取得內容，但需要保留變數占位符
+                effective_prompt_data = self.manager.get_effective_prompt(
+                    str(self.target_channel.id) if self.scope == "channel" and self.target_channel else "",
+                    guild_id_str
+                )
+                if effective_prompt_data and effective_prompt_data.get('source') in ['yaml']:
+                    # 只有當來源是 YAML 時才顯示，因為這樣可以保留變數格式
+                    existing_content = effective_prompt_data.get('prompt', '')
+                    # 將已替換的變數還原為占位符格式（反向替換）
+                    existing_content = self._restore_variable_placeholders(existing_content, guild_id_str)
+            except Exception as e:
+                self.logger.warning(f"無法取得有效提示作為預設值: {e}")
+
         modal = SystemPromptModal(
             title=f"直接編輯 {self.scope_text} 系統提示",
             initial_value=existing_content,
@@ -382,6 +398,41 @@ class EditModeSelectionView(discord.ui.View):
             show_default_content=not existing_content
         )
         await interaction.response.send_modal(modal)
+    
+    def _restore_variable_placeholders(self, prompt: str, guild_id: str) -> str:
+        """
+        將已替換的變數還原為占位符格式，以便編輯時顯示原始模板
+        
+        Args:
+            prompt: 已替換變數的提示
+            guild_id: 伺服器 ID
+            
+        Returns:
+            還原變數占位符的提示
+        """
+        try:
+            # 獲取當前的變數值
+            variables = self.manager._get_system_variables()
+            
+            # 反向替換：將實際值替換回占位符
+            restored_prompt = prompt
+            for var_name, var_value in variables.items():
+                if str(var_value) in prompt:
+                    # 使用更精確的替換，避免誤替換
+                    if var_name == 'bot_id' and f"<@{var_value}>" in prompt:
+                        restored_prompt = restored_prompt.replace(f"<@{var_value}>", f"<@{{bot_id}}>")
+                    elif var_name == 'bot_owner_id' and f"<@{var_value}>" in prompt:
+                        restored_prompt = restored_prompt.replace(f"<@{var_value}>", f"<@{{bot_owner_id}}>")
+                    else:
+                        # 對於其他變數，使用一般替換
+                        restored_prompt = restored_prompt.replace(str(var_value), f"{{{var_name}}}")
+            
+            self.logger.debug(f"🔄 變數占位符還原完成 - 原長度: {len(prompt)}, 新長度: {len(restored_prompt)}")
+            return restored_prompt
+            
+        except Exception as e:
+            self.logger.warning(f"還原變數占位符時發生錯誤: {e}，返回原始提示")
+            return prompt
 
     async def _handle_module_edit(self, interaction: discord.Interaction):
         """處理模組化編輯"""

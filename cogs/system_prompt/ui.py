@@ -50,10 +50,36 @@ class SystemPromptModal(discord.ui.Modal):
         # 如果沒有提供初始值且需要顯示預設內容，嘗試載入完整有效提示
         if not initial_value and show_default_content and manager and channel_id and guild_id:
             try:
-                initial_value = manager.get_effective_full_prompt(channel_id, guild_id)
-                if initial_value:
-                    prompt_placeholder = "基於當前有效的系統提示進行編輯..."
-                    self.logger.info(f"已載入完整有效提示作為預設內容，長度: {len(initial_value)}")
+                # 先嘗試從配置中取得原始提示（保留變數占位符）
+                config = manager._load_guild_config(guild_id)
+                system_prompts = config.get('system_prompts', {})
+                
+                if channel_id:
+                    # 頻道特定提示
+                    channels = system_prompts.get('channels', {})
+                    if channel_id in channels:
+                        initial_value = channels[channel_id].get('prompt', '')
+                        if initial_value:
+                            prompt_placeholder = "編輯頻道特定的系統提示..."
+                            self.logger.info(f"已載入頻道提示作為預設內容，長度: {len(initial_value)}")
+                
+                # 如果還沒有內容，嘗試伺服器級別提示
+                if not initial_value:
+                    server_level = system_prompts.get('server_level', {})
+                    if server_level.get('prompt'):
+                        initial_value = server_level['prompt']
+                        prompt_placeholder = "編輯伺服器預設的系統提示..."
+                        self.logger.info(f"已載入伺服器提示作為預設內容，長度: {len(initial_value)}")
+                
+                # 最後降級到有效提示，但要還原變數占位符
+                if not initial_value:
+                    effective_prompt = manager.get_effective_full_prompt(channel_id, guild_id)
+                    if effective_prompt:
+                        # 還原變數占位符
+                        initial_value = self._restore_variable_placeholders(effective_prompt, manager)
+                        prompt_placeholder = "基於當前有效的系統提示進行編輯（已還原變數格式）..."
+                        self.logger.info(f"已載入有效提示並還原變數格式，長度: {len(initial_value)}")
+                        
             except Exception as e:
                 self.logger.warning(f"載入預設內容時發生錯誤: {e}")
         
@@ -67,6 +93,44 @@ class SystemPromptModal(discord.ui.Modal):
             required=True
         )
         self.add_item(self.prompt_input)
+    
+    def _restore_variable_placeholders(self, prompt: str, manager) -> str:
+        """
+        還原變數占位符格式
+        
+        Args:
+            prompt: 已替換變數的提示
+            manager: SystemPromptManager 實例
+            
+        Returns:
+            還原變數占位符的提示
+        """
+        try:
+            if not manager or not hasattr(manager, '_get_system_variables'):
+                return prompt
+                
+            # 獲取當前的變數值
+            variables = manager._get_system_variables()
+            
+            # 反向替換：將實際值替換回占位符
+            restored_prompt = prompt
+            for var_name, var_value in variables.items():
+                if str(var_value) in prompt:
+                    # 使用更精確的替換，避免誤替換
+                    if var_name == 'bot_id' and f"<@{var_value}>" in prompt:
+                        restored_prompt = restored_prompt.replace(f"<@{var_value}>", f"<@{{bot_id}}>")
+                    elif var_name == 'bot_owner_id' and f"<@{var_value}>" in prompt:
+                        restored_prompt = restored_prompt.replace(f"<@{var_value}>", f"<@{{bot_owner_id}}>")
+                    else:
+                        # 對於其他變數，使用一般替換
+                        restored_prompt = restored_prompt.replace(str(var_value), f"{{{var_name}}}")
+            
+            self.logger.debug(f"🔄 UI 模組變數占位符還原完成")
+            return restored_prompt
+            
+        except Exception as e:
+            self.logger.warning(f"UI 模組還原變數占位符時發生錯誤: {e}")
+            return prompt
     
     async def on_submit(self, interaction: discord.Interaction):
         """處理 Modal 提交"""
