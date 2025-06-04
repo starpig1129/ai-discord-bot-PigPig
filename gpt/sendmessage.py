@@ -105,7 +105,7 @@ def get_system_prompt(bot_id: str, message=None) -> str:
 
 def get_channel_system_prompt(channel_id: str, guild_id: str, bot_id: str, message=None) -> str:
     """
-    取得頻道特定的系統提示（整合三層繼承機制）
+    取得頻道特定的系統提示（整合三層繼承機制，強制重新載入）
     
     Args:
         channel_id: 頻道 ID
@@ -117,6 +117,8 @@ def get_channel_system_prompt(channel_id: str, guild_id: str, bot_id: str, messa
         完整的系統提示字串，包含三層繼承：YAML基礎 + 伺服器級別 + 頻道級別
     """
     try:
+        logging.debug(f"🔍 取得頻道系統提示 - 頻道: {channel_id}, 伺服器: {guild_id}")
+        
         # 取得機器人實例
         bot = None
         if message and hasattr(message, 'guild') and message.guild:
@@ -128,24 +130,53 @@ def get_channel_system_prompt(channel_id: str, guild_id: str, bot_id: str, messa
             system_prompt_cog = bot.get_cog('SystemPromptManagerCog')
         
         if system_prompt_cog:
-            # 使用新系統提示模組的三層繼承機制
-            effective_prompt = system_prompt_cog.get_system_prompt_manager().get_effective_prompt(
+            # 強制清除相關快取，確保取得最新的系統提示
+            manager = system_prompt_cog.get_system_prompt_manager()
+            
+            # 先清除快取確保獲取最新數據
+            try:
+                manager.cache.invalidate(guild_id, channel_id)
+                logging.debug(f"✅ 已清除頻道快取: {guild_id}:{channel_id}")
+            except Exception as cache_error:
+                logging.warning(f"清除頻道快取失敗: {cache_error}")
+            
+            # 使用新系統提示模組的三層繼承機制（強制重新載入）
+            effective_prompt = manager.get_effective_prompt(
                 channel_id, guild_id, message
             )
             
             if effective_prompt and 'prompt' in effective_prompt:
                 prompt = effective_prompt['prompt']
                 source = effective_prompt.get('source', 'unknown')
+                timestamp = effective_prompt.get('timestamp', 0)
                 
                 # 記錄提示來源以供調試
-                logging.debug(f"頻道系統提示來源: {source}, 頻道: {channel_id}, 伺服器: {guild_id}")
+                logging.info(f"📋 頻道系統提示 - 來源: {source}, 頻道: {channel_id}, 時間戳: {timestamp}")
+                logging.debug(f"📄 提示內容預覽: {prompt[:100]}...")
                 
                 # 如果有頻道或伺服器級別的自定義提示，返回完整提示
                 if source in ['channel', 'server']:
+                    logging.info(f"✅ 使用 {source} 級別的自定義提示")
                     return prompt
                 elif source == 'yaml':
                     # 僅有 YAML 基礎提示，返回空字串讓上層函式處理
+                    logging.debug("📝 僅有 YAML 基礎提示，返回空字串")
                     return ""
+                elif source == 'cache':
+                    # 快取來源，但可能是舊的，強制重新取得
+                    logging.warning(f"⚠️ 發現快取來源，強制重新取得最新提示")
+                    manager.cache.invalidate(guild_id, channel_id)
+                    # 遞迴調用一次，但要避免無限遞迴
+                    if not hasattr(get_channel_system_prompt, '_retry_count'):
+                        get_channel_system_prompt._retry_count = 0
+                    if get_channel_system_prompt._retry_count < 1:
+                        get_channel_system_prompt._retry_count += 1
+                        result = get_channel_system_prompt(channel_id, guild_id, bot_id, message)
+                        get_channel_system_prompt._retry_count = 0
+                        return result
+                    else:
+                        get_channel_system_prompt._retry_count = 0
+                        return prompt
                 else:
                     return prompt
         
@@ -155,7 +186,71 @@ def get_channel_system_prompt(channel_id: str, guild_id: str, bot_id: str, messa
         
     except Exception as e:
         logging.error(f"取得頻道系統提示時發生錯誤 (頻道: {channel_id}, 伺服器: {guild_id}): {e}")
+        import traceback
+        logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
         return ""
+
+
+def clear_system_prompt_cache(guild_id: str = None, channel_id: str = None):
+    """
+    清除系統提示相關的快取（加強版，確保完全清除）
+    
+    Args:
+        guild_id: 伺服器 ID（可選）
+        channel_id: 頻道 ID（可選）
+    """
+    try:
+        logging.info(f"🗑️ 開始清除 sendmessage 模組快取 - 伺服器: {guild_id}, 頻道: {channel_id}")
+        
+        # 1. 清除全域 PromptManager 的快取
+        prompt_manager = _get_prompt_manager()
+        if prompt_manager and hasattr(prompt_manager, 'cache'):
+            if guild_id:
+                # 清除特定伺服器相關的快取 - 使用更全面的清除策略
+                # 嘗試所有可能的 bot_id 組合
+                possible_bot_ids = ["", "0", guild_id]  # 包含可能的 bot_id 值
+                languages = ["zh_TW", "zh_CN", "en_US", "ja_JP"]
+                
+                for bot_id in possible_bot_ids:
+                    for lang in languages:
+                        cache_key = f"system_prompt_{bot_id}_{lang}"
+                        prompt_manager.cache.invalidate(cache_key)
+                        
+                        # 也嘗試清除可能的變體
+                        for variant in ["", "_fallback", "_cached", f"_{guild_id}"]:
+                            variant_key = f"{cache_key}{variant}"
+                            prompt_manager.cache.invalidate(variant_key)
+                
+                # 強制清理過期項目
+                if hasattr(prompt_manager.cache, 'cleanup_expired'):
+                    prompt_manager.cache.cleanup_expired()
+                
+                # 清除預編譯快取
+                if hasattr(prompt_manager.cache, 'precompiled_cache'):
+                    prompt_manager.cache.precompiled_cache.clear()
+                    
+            else:
+                # 清除所有快取
+                prompt_manager.cache.clear_all()
+                logging.info("🗑️ 已清除所有 PromptManager 快取")
+            
+            logging.info(f"✅ sendmessage 模組的 PromptManager 快取已清除")
+        
+        # 2. 強制重新初始化全域 PromptManager（確保下次調用時重新載入）
+        global _prompt_manager
+        if guild_id and _prompt_manager:
+            # 清除實例快取但不重新初始化（避免性能問題）
+            if hasattr(_prompt_manager, '_cached_prompts'):
+                _prompt_manager._cached_prompts.clear()
+            if hasattr(_prompt_manager, '_last_reload_time'):
+                _prompt_manager._last_reload_time = 0
+                
+        logging.info(f"✅ sendmessage 模組快取清除完成")
+            
+    except Exception as e:
+        logging.warning(f"清除 sendmessage 快取時發生錯誤: {e}")
+        import traceback
+        logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
 
 
 def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
@@ -532,6 +627,7 @@ __all__ = [
     'gpt_message',
     'get_system_prompt',
     'get_channel_system_prompt',
+    'clear_system_prompt_cache',
     'load_and_index_dialogue_history',
     'save_vector_store',
     'vector_stores'

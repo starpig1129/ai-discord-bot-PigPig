@@ -98,6 +98,8 @@ class SystemPromptMainView(discord.ui.View):
                 await self._handle_copy_function(interaction)
             elif function == "remove":
                 await self._handle_remove_function(interaction)
+            elif function == "reload":
+                await self._handle_reload_function(interaction)
             elif function == "reset":
                 await self._handle_reset_function(interaction)
                 
@@ -389,6 +391,13 @@ class EditModeSelectionView(discord.ui.View):
         try:
             prompt_data = {'prompt': content}
             
+            # 先處理 Discord 互動快取問題 - 確保安全的異步調用
+            try:
+                result = await self.manager.handle_discord_interaction_cache_issues(interaction)
+                self.logger.debug(f"Discord 互動快取處理結果: {result}")
+            except Exception as cache_error:
+                self.logger.warning(f"Discord 互動快取處理失敗，繼續操作: {cache_error}")
+            
             if self.scope == "channel":
                 success = self.manager.set_channel_prompt(
                     str(interaction.guild.id),
@@ -404,6 +413,13 @@ class EditModeSelectionView(discord.ui.View):
                 )
             
             if success:
+                # 額外確保快取清除
+                await self.manager.force_clear_all_caches(
+                    str(interaction.guild.id),
+                    str(self.target_channel.id) if self.scope == "channel" else None,
+                    interaction
+                )
+                
                 embed = discord.Embed(
                     title="✅ 系統提示設定成功",
                     description=f"已成功設定{self.scope_text}的系統提示",
@@ -803,6 +819,13 @@ class ModuleSelect(discord.ui.Select):
             logger.info(f"🔧 開始處理模組編輯回調 - 模組: {module_name}, 範圍: {self.scope}")
             logger.debug(f"模組內容: {content[:100]}..." if len(content) > 100 else f"模組內容: {content}")
             
+            # 先處理 Discord 互動快取問題 - 確保安全的異步調用
+            try:
+                result = await self.manager.handle_discord_interaction_cache_issues(interaction)
+                logger.debug(f"Discord 互動快取處理結果: {result}")
+            except Exception as cache_error:
+                logger.warning(f"Discord 互動快取處理失敗，繼續操作: {cache_error}")
+            
             # 取得所有現有模組，避免覆蓋其他模組
             config = self.manager._load_guild_config(str(self.guild.id))
             system_prompts = config.get('system_prompts', {})
@@ -846,8 +869,15 @@ class ModuleSelect(discord.ui.Select):
             
             logger.info(f"模組設定結果: {success}")
             
-            # 驗證保存結果
+            # 驗證保存結果並額外確保快取清除
             if success:
+                # 額外的生產環境快取清除
+                await self.manager.force_clear_all_caches(
+                    str(self.guild.id),
+                    str(self.channel.id) if self.scope == "channel" and self.channel else None,
+                    interaction
+                )
+                
                 # 立即重新讀取配置進行驗證
                 verification_config = self.manager._load_guild_config(str(self.guild.id))
                 verification_prompts = verification_config.get('system_prompts', {})
@@ -885,7 +915,7 @@ class ModuleSelect(discord.ui.Select):
                 # 添加驗證資訊到 embed
                 embed.add_field(
                     name="驗證狀態",
-                    value="已驗證保存成功",
+                    value="已驗證保存成功並清除快取",
                     inline=True
                 )
                 
@@ -1154,19 +1184,45 @@ class RemoveButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         """移除操作"""
         view: SystemPromptRemoveView = self.view
+        logger = logging.getLogger(__name__)
         
         try:
+            logger.info(f"🗑️ 開始移除操作 - 類型: {self.remove_type}")
+            
             # 權限檢查和確認文字
             if self.remove_type == "channel":
                 view.permission_validator.validate_permission_or_raise(
                     interaction.user, 'modify_channel', interaction.channel
                 )
                 confirm_text = f"確定要移除頻道 #{interaction.channel.name} 的系統提示嗎？"
+                operation_text = f"頻道 #{interaction.channel.name}"
             else:
                 view.permission_validator.validate_permission_or_raise(
                     interaction.user, 'modify_server', interaction.guild
                 )
                 confirm_text = "確定要移除伺服器預設系統提示嗎？"
+                operation_text = "伺服器預設"
+            
+            # 先檢查是否有內容可移除
+            config = view.manager._load_guild_config(str(interaction.guild.id))
+            system_prompts = config.get('system_prompts', {})
+            
+            if self.remove_type == "channel":
+                channels = system_prompts.get('channels', {})
+                if str(interaction.channel.id) not in channels:
+                    await interaction.response.send_message(
+                        f"❌ 頻道 #{interaction.channel.name} 沒有設定系統提示",
+                        ephemeral=True
+                    )
+                    return
+            else:
+                server_level = system_prompts.get('server_level', {})
+                if not server_level:
+                    await interaction.response.send_message(
+                        "❌ 伺服器沒有設定預設系統提示",
+                        ephemeral=True
+                    )
+                    return
             
             # 確認對話框
             embed = discord.Embed(
@@ -1181,33 +1237,89 @@ class RemoveButton(discord.ui.Button):
             )
             
             await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
-            await confirm_view.wait()
+            
+            # 等待用戶確認
+            timeout = await confirm_view.wait()
+            
+            if timeout:
+                logger.warning("移除操作超時")
+                return
             
             if confirm_view.result:
-                if self.remove_type == "channel":
-                    success = view.manager.remove_channel_prompt(
-                        str(interaction.guild.id),
-                        str(interaction.channel.id)
-                    )
-                    scope_text = f"頻道 #{interaction.channel.name}"
-                else:
-                    success = view.manager.remove_server_prompt(
-                        str(interaction.guild.id)
-                    )
-                    scope_text = "伺服器預設"
+                logger.info(f"用戶確認移除 {operation_text}")
                 
-                if success:
-                    embed = discord.Embed(
-                        title="✅ 移除成功",
-                        description=f"已成功移除{scope_text}的系統提示",
-                        color=discord.Color.green()
+                # 執行移除操作
+                try:
+                    if self.remove_type == "channel":
+                        success = view.manager.remove_channel_prompt(
+                            str(interaction.guild.id),
+                            str(interaction.channel.id)
+                        )
+                        logger.info(f"頻道移除結果: {success}")
+                    else:
+                        success = view.manager.remove_server_prompt(
+                            str(interaction.guild.id)
+                        )
+                        logger.info(f"伺服器移除結果: {success}")
+                    
+                    if success:
+                        # 立即驗證移除結果
+                        verification_config = view.manager._load_guild_config(str(interaction.guild.id))
+                        verification_prompts = verification_config.get('system_prompts', {})
+                        
+                        verification_success = True
+                        if self.remove_type == "channel":
+                            verification_channels = verification_prompts.get('channels', {})
+                            if str(interaction.channel.id) in verification_channels:
+                                verification_success = False
+                                logger.error(f"驗證失敗：頻道 {interaction.channel.id} 仍存在於配置中")
+                        else:
+                            verification_server_level = verification_prompts.get('server_level', {})
+                            if verification_server_level:
+                                verification_success = False
+                                logger.error(f"驗證失敗：伺服器級別配置仍存在: {verification_server_level}")
+                        
+                        if verification_success:
+                            embed = discord.Embed(
+                                title="✅ 移除成功",
+                                description=f"已成功移除{operation_text}的系統提示",
+                                color=discord.Color.green()
+                            )
+                            logger.info(f"✅ {operation_text} 移除驗證通過")
+                        else:
+                            embed = discord.Embed(
+                                title="⚠️ 移除異常",
+                                description=f"移除操作完成，但驗證發現配置仍存在",
+                                color=discord.Color.orange()
+                            )
+                        
+                        await interaction.followup.send(embed=embed, ephemeral=True)
+                    else:
+                        logger.error("移除操作返回 False")
+                        await interaction.followup.send(
+                            f"❌ 移除{operation_text}失敗：操作未成功",
+                            ephemeral=True
+                        )
+                
+                except Exception as remove_error:
+                    logger.error(f"執行移除操作時發生錯誤: {remove_error}")
+                    await interaction.followup.send(
+                        f"❌ 移除{operation_text}時發生錯誤: {str(remove_error)}",
+                        ephemeral=True
                     )
-                    await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                logger.info("用戶取消移除操作")
             
         except Exception as e:
-            await interaction.response.send_message(
-                f"❌ 移除失敗：{str(e)}", ephemeral=True
-            )
+            logger.error(f"移除操作發生錯誤: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    f"❌ 移除失敗：{str(e)}", ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    f"❌ 移除失敗：{str(e)}", ephemeral=True
+                )
 
 
 class ResetButton(discord.ui.Button):
@@ -1220,24 +1332,56 @@ class ResetButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         """重置操作"""
         view: SystemPromptResetView = self.view
+        logger = logging.getLogger(__name__)
         
         try:
+            logger.info(f"🔄 開始重置操作 - 類型: {self.reset_type}")
+            
             # 權限檢查和確認文字
             if self.reset_type == "channel":
                 view.permission_validator.validate_permission_or_raise(
                     interaction.user, 'modify_channel', interaction.channel
                 )
                 confirm_text = f"確定要重置頻道 #{interaction.channel.name} 的系統提示嗎？"
+                operation_text = f"頻道 #{interaction.channel.name}"
             elif self.reset_type == "server":
                 view.permission_validator.validate_permission_or_raise(
                     interaction.user, 'modify_server', interaction.guild
                 )
                 confirm_text = "確定要重置伺服器預設系統提示嗎？"
+                operation_text = "伺服器預設"
             else:  # all
                 view.permission_validator.validate_permission_or_raise(
                     interaction.user, 'modify_server', interaction.guild
                 )
                 confirm_text = "確定要重置所有系統提示設定嗎？\n⚠️ 此操作無法復原！"
+                operation_text = "所有"
+            
+            # 先檢查是否有內容可重置
+            config = view.manager._load_guild_config(str(interaction.guild.id))
+            system_prompts = config.get('system_prompts', {})
+            
+            has_content_to_reset = False
+            if self.reset_type == "channel":
+                channels = system_prompts.get('channels', {})
+                if str(interaction.channel.id) in channels:
+                    has_content_to_reset = True
+            elif self.reset_type == "server":
+                server_level = system_prompts.get('server_level', {})
+                if server_level:
+                    has_content_to_reset = True
+            else:  # all
+                server_level = system_prompts.get('server_level', {})
+                channels = system_prompts.get('channels', {})
+                if server_level or channels:
+                    has_content_to_reset = True
+            
+            if not has_content_to_reset:
+                await interaction.response.send_message(
+                    f"❌ {operation_text}沒有設定需要重置",
+                    ephemeral=True
+                )
+                return
             
             # 確認對話框
             embed = discord.Embed(
@@ -1252,36 +1396,109 @@ class ResetButton(discord.ui.Button):
             )
             
             await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
-            await confirm_view.wait()
+            
+            # 等待用戶確認
+            timeout = await confirm_view.wait()
+            
+            if timeout:
+                logger.warning("重置操作超時")
+                return
             
             if confirm_view.result:
-                if self.reset_type == "channel":
-                    success = view.manager.remove_channel_prompt(
-                        str(interaction.guild.id),
-                        str(interaction.channel.id)
-                    )
-                    scope_text = f"頻道 #{interaction.channel.name}"
-                elif self.reset_type == "server":
-                    success = view.manager.remove_server_prompt(
-                        str(interaction.guild.id)
-                    )
-                    scope_text = "伺服器預設"
-                else:  # all
-                    config = view.manager._get_default_config()
-                    view.manager._save_guild_config(str(interaction.guild.id), config)
-                    view.manager.clear_cache(str(interaction.guild.id))
-                    success = True
-                    scope_text = "所有"
+                logger.info(f"用戶確認重置 {operation_text}")
                 
-                if success:
-                    embed = discord.Embed(
-                        title="✅ 重置成功",
-                        description=f"已成功重置{scope_text}系統提示設定",
-                        color=discord.Color.green()
-                    )
+                # 執行重置操作
+                try:
+                    success = False
+                    
+                    if self.reset_type == "channel":
+                        success = view.manager.remove_channel_prompt(
+                            str(interaction.guild.id),
+                            str(interaction.channel.id)
+                        )
+                        logger.info(f"頻道重置結果: {success}")
+                        
+                        # 驗證重置結果
+                        if success:
+                            verification_config = view.manager._load_guild_config(str(interaction.guild.id))
+                            verification_channels = verification_config.get('system_prompts', {}).get('channels', {})
+                            if str(interaction.channel.id) in verification_channels:
+                                success = False
+                                logger.error(f"驗證失敗：頻道 {interaction.channel.id} 仍存在於配置中")
+                        
+                    elif self.reset_type == "server":
+                        success = view.manager.remove_server_prompt(
+                            str(interaction.guild.id)
+                        )
+                        logger.info(f"伺服器重置結果: {success}")
+                        
+                        # 驗證重置結果
+                        if success:
+                            verification_config = view.manager._load_guild_config(str(interaction.guild.id))
+                            verification_server_level = verification_config.get('system_prompts', {}).get('server_level', {})
+                            if verification_server_level:
+                                success = False
+                                logger.error(f"驗證失敗：伺服器級別配置仍存在: {verification_server_level}")
+                        
+                    else:  # all
+                        try:
+                            # 重置為預設配置
+                            default_config = view.manager._get_default_config()
+                            view.manager._save_guild_config(str(interaction.guild.id), default_config)
+                            
+                            # 清除所有快取
+                            view.manager.clear_cache(str(interaction.guild.id))
+                            logger.info("已清除快取")
+                            
+                            # 驗證重置結果
+                            verification_config = view.manager._load_guild_config(str(interaction.guild.id))
+                            verification_prompts = verification_config.get('system_prompts', {})
+                            verification_server_level = verification_prompts.get('server_level', {})
+                            verification_channels = verification_prompts.get('channels', {})
+                            
+                            if not verification_server_level and not verification_channels:
+                                success = True
+                                logger.info("✅ 全部重置驗證通過")
+                            else:
+                                success = False
+                                logger.error(f"驗證失敗：仍有配置存在 - 伺服器: {verification_server_level}, 頻道: {verification_channels}")
+                            
+                        except Exception as reset_all_error:
+                            logger.error(f"重置全部設定時發生錯誤: {reset_all_error}")
+                            success = False
+                    
+                    if success:
+                        embed = discord.Embed(
+                            title="✅ 重置成功",
+                            description=f"已成功重置{operation_text}系統提示設定",
+                            color=discord.Color.green()
+                        )
+                        logger.info(f"✅ {operation_text} 重置驗證通過")
+                    else:
+                        embed = discord.Embed(
+                            title="❌ 重置失敗",
+                            description=f"重置{operation_text}操作未成功或驗證失敗",
+                            color=discord.Color.red()
+                        )
+                    
                     await interaction.followup.send(embed=embed, ephemeral=True)
+                
+                except Exception as reset_error:
+                    logger.error(f"執行重置操作時發生錯誤: {reset_error}")
+                    await interaction.followup.send(
+                        f"❌ 重置{operation_text}時發生錯誤: {str(reset_error)}",
+                        ephemeral=True
+                    )
+            else:
+                logger.info("用戶取消重置操作")
             
         except Exception as e:
-            await interaction.response.send_message(
-                f"❌ 重置失敗：{str(e)}", ephemeral=True
-            )
+            logger.error(f"重置操作發生錯誤: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    f"❌ 重置失敗：{str(e)}", ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    f"❌ 重置失敗：{str(e)}", ephemeral=True
+                )
