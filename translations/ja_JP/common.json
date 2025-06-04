@@ -427,6 +427,41 @@
                 "modal_error": "リクエスト処理中にエラーが発生しました: {error}",
                 "unknown_error": "不明なエラーが発生しました。後でもう一度お試しください",
                 "modules_unavailable": "モジュールリストを取得できません: {error}"
+            },
+            "modules": {
+                "descriptions": {
+                    "base": "AIの基本的なアイデンティティとコア指示を定義し、ボット名、作成者情報などの基本設定を含む",
+                    "personality": "AIの個性特性と表現スタイルを設定し、ユーモア、礼儀、言語スタイルなどを含む",
+                    "answering_principles": "AI応答の基本原則を規定し、優先度処理、情報源表示などを含む",
+                    "language": "AIの言語設定と表現方法を設定し、主要言語、スタイル要素、応答長などを含む",
+                    "professionalism": "専門的なトピックでのAIのパフォーマンス基準を定義し、ユーモアと専門性のバランスを取る",
+                    "interaction": "AIのインタラクションモードを設定し、会話スタイル、集中管理などを含む",
+                    "formatting": "Discord環境でのフォーマットルールを規定し、Markdown構文、言及フォーマットなどを含む"
+                },
+                "help": {
+                    "title": "📦 モジュール説明",
+                    "description": "以下のモジュールを個別に編集してAIの動作をカスタマイズできます：",
+                    "usage_tip": "💡 ヒント：モジュール編集時にデフォルトコンテンツが参考として表示されます",
+                    "inheritance_note": "⚠️ 注意：モジュール編集は対応するYAMLモジュールコンテンツを上書きします"
+                }
+            },
+            "user_experience": {
+                "default_content": {
+                    "loaded": "✅ デフォルトコンテンツを編集ベースとして読み込みました",
+                    "loading_failed": "⚠️ デフォルトコンテンツの読み込みに失敗しました。空白から開始します",
+                    "effective_prompt_loaded": "📝 現在有効な完全なシステムプロンプトを読み込みました",
+                    "module_default_loaded": "📦 {module} モジュールのデフォルトコンテンツを読み込みました"
+                },
+                "editing": {
+                    "based_on_current": "現在有効なシステムプロンプトに基づいて編集...",
+                    "based_on_default": "{module} モジュールのデフォルトコンテンツに基づいて編集...",
+                    "from_scratch": "新しいコンテンツを入力してください..."
+                },
+                "guidance": {
+                    "first_time_edit": "🎯 初回編集ヒント：デフォルトコンテンツを基に修正できます",
+                    "module_explanation": "💭 このモジュールの役割：{description}",
+                    "inheritance_info": "🔗 この設定が影響する範囲：{scope}"
+                }
             }
         },
         "search_gif": {

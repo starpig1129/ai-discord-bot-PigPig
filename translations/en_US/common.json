@@ -414,6 +414,41 @@
                 "modal_error": "Error occurred while processing request: {error}",
                 "unknown_error": "Unknown error occurred, please try again later",
                 "modules_unavailable": "Unable to get module list: {error}"
+            },
+            "modules": {
+                "descriptions": {
+                    "base": "Define AI's basic identity and core instructions, including bot name, creator info, and basic settings",
+                    "personality": "Set AI's personality traits and expression style, including humor, politeness, language style, etc.",
+                    "answering_principles": "Define basic principles for AI responses, such as priority handling, source attribution, etc.",
+                    "language": "Set AI's language preferences and expression methods, including primary language, style elements, response length, etc.",
+                    "professionalism": "Define AI's performance standards on professional topics, balancing humor and professionalism",
+                    "interaction": "Set AI's interaction modes, including conversation style, focus management, etc.",
+                    "formatting": "Define formatting rules for Discord environment, including Markdown syntax, mention formats, etc."
+                },
+                "help": {
+                    "title": "📦 Module Descriptions",
+                    "description": "The following modules can be individually edited to customize AI behavior:",
+                    "usage_tip": "💡 Tip: Default content will be displayed as reference when editing modules",
+                    "inheritance_note": "⚠️ Note: Module editing will override corresponding YAML module content"
+                }
+            },
+            "user_experience": {
+                "default_content": {
+                    "loaded": "✅ Default content loaded as editing base",
+                    "loading_failed": "⚠️ Failed to load default content, starting from blank",
+                    "effective_prompt_loaded": "📝 Current effective full system prompt loaded",
+                    "module_default_loaded": "📦 Default content for {module} module loaded"
+                },
+                "editing": {
+                    "based_on_current": "Edit based on current effective system prompt...",
+                    "based_on_default": "Edit based on default content for {module} module...",
+                    "from_scratch": "Please enter new content..."
+                },
+                "guidance": {
+                    "first_time_edit": "🎯 First time editing: You can modify based on default content",
+                    "module_explanation": "💭 This module is responsible for: {description}",
+                    "inheritance_info": "🔗 This setting will affect: {scope}"
+                }
             }
         },
         "search_gif": {

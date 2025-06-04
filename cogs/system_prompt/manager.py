@@ -566,18 +566,181 @@ class SystemPromptManager:
                 # 從 YAML 提示管理器取得模組列表
                 return self._prompt_manager.get_available_modules()
             else:
-                # 預設模組列表
+                # 預設模組列表（基於 YAML 配置）
                 return [
                     'personality',
-                    'interaction_style',
-                    'language_preference',
-                    'technical_focus',
-                    'response_format',
-                    'behavior_rules'
+                    'answering_principles',
+                    'language',
+                    'professionalism',
+                    'interaction',
+                    'formatting'
                 ]
         except Exception as e:
             self.logger.error(f"取得可用模組列表時發生錯誤: {e}")
             return []
+    
+    def get_default_module_content(self, module_name: str) -> str:
+        """
+        獲取指定模組的預設內容
+        
+        Args:
+            module_name: 模組名稱
+            
+        Returns:
+            模組的預設內容字串
+        """
+        try:
+            if not self._prompt_manager:
+                return ""
+            
+            # 載入 YAML 配置
+            config = self._prompt_manager.loader.load_yaml_config()
+            if not config or module_name not in config:
+                return ""
+            
+            module_config = config[module_name]
+            
+            # 根據模組類型格式化內容
+            if module_name == 'base':
+                return module_config.get('core_instruction', '')
+            elif module_name == 'personality':
+                style_items = module_config.get('style', [])
+                content_items = module_config.get('content_filtering', [])
+                content = ""
+                if style_items:
+                    content += "風格特點：\n" + "\n".join(f"- {item}" for item in style_items)
+                if content_items:
+                    if content:
+                        content += "\n\n"
+                    content += "內容過濾：\n" + "\n".join(f"- {item}" for item in content_items)
+                return content
+            elif module_name == 'language':
+                primary = module_config.get('primary', '')
+                elements = module_config.get('style_elements', [])
+                length_settings = module_config.get('response_length', {})
+                
+                content = f"主要語言：{primary}"
+                if elements:
+                    content += "\n\n風格元素：\n" + "\n".join(f"- {item}" for item in elements)
+                if length_settings:
+                    content += "\n\n回應長度設定：\n"
+                    for key, value in length_settings.items():
+                        content += f"- {key}: {value}\n"
+                return content
+            elif module_name == 'answering_principles':
+                focus_items = module_config.get('focus', [])
+                info_items = module_config.get('information_handling', [])
+                source_format = module_config.get('source_format', '')
+                
+                content = ""
+                if focus_items:
+                    content += "專注原則：\n" + "\n".join(f"- {item}" for item in focus_items)
+                if info_items:
+                    if content:
+                        content += "\n\n"
+                    content += "資訊處理：\n" + "\n".join(f"- {item}" for item in info_items)
+                if source_format:
+                    if content:
+                        content += "\n\n"
+                    content += f"來源格式：{source_format}"
+                return content
+            else:
+                # 通用格式處理
+                if isinstance(module_config, dict):
+                    content_parts = []
+                    for key, value in module_config.items():
+                        if isinstance(value, list):
+                            content_parts.append(f"{key}：\n" + "\n".join(f"- {item}" for item in value))
+                        elif isinstance(value, str):
+                            content_parts.append(f"{key}：{value}")
+                        elif isinstance(value, dict):
+                            sub_content = []
+                            for sub_key, sub_value in value.items():
+                                if isinstance(sub_value, str):
+                                    sub_content.append(f"  - {sub_key}: {sub_value}")
+                            if sub_content:
+                                content_parts.append(f"{key}：\n" + "\n".join(sub_content))
+                    return "\n\n".join(content_parts)
+                elif isinstance(module_config, list):
+                    return "\n".join(f"- {item}" for item in module_config)
+                else:
+                    return str(module_config)
+            
+        except Exception as e:
+            self.logger.error(f"獲取模組 '{module_name}' 預設內容時發生錯誤: {e}")
+            return ""
+    
+    def get_effective_full_prompt(self, channel_id: str, guild_id: str) -> str:
+        """
+        獲取當前有效的完整系統提示（用於直接編輯時顯示）
+        
+        Args:
+            channel_id: 頻道 ID
+            guild_id: 伺服器 ID
+            
+        Returns:
+            完整的有效系統提示內容
+        """
+        try:
+            # 取得有效提示
+            prompt_data = self.get_effective_prompt(channel_id, guild_id)
+            return prompt_data.get('prompt', '')
+            
+        except Exception as e:
+            self.logger.error(f"獲取完整系統提示時發生錯誤: {e}")
+            return ""
+    
+    def get_module_descriptions(self, lang: str = "zh_TW") -> Dict[str, str]:
+        """
+        獲取模組說明字典
+        
+        Args:
+            lang: 語言代碼
+            
+        Returns:
+            模組名稱對應說明的字典
+        """
+        # 模組說明字典（支援多語言）
+        descriptions = {
+            "zh_TW": {
+                'base': '定義 AI 的基本身份和核心指令，包括機器人名稱、創建者信息等基礎設定',
+                'personality': '設定 AI 的個性特徵和表達風格，包括幽默感、禮貌程度、語言風格等',
+                'answering_principles': '規定 AI 回答問題的基本原則，如優先級處理、資訊來源標註等',
+                'language': '設定 AI 的語言偏好和表達方式，包括主要語言、風格元素、回應長度等',
+                'professionalism': '定義 AI 在專業話題上的表現標準，平衡幽默性與專業性',
+                'interaction': '設定 AI 的互動模式，包括對話風格、專注度管理等',
+                'formatting': '規定 Discord 環境下的格式化規則，包括 Markdown 語法、提及格式等'
+            },
+            "zh_CN": {
+                'base': '定义 AI 的基本身份和核心指令，包括机器人名称、创建者信息等基础设定',
+                'personality': '设定 AI 的个性特征和表达风格，包括幽默感、礼貌程度、语言风格等',
+                'answering_principles': '规定 AI 回答问题的基本原则，如优先级处理、信息来源标注等',
+                'language': '设定 AI 的语言偏好和表达方式，包括主要语言、风格元素、回应长度等',
+                'professionalism': '定义 AI 在专业话题上的表现标准，平衡幽默性与专业性',
+                'interaction': '设定 AI 的互动模式，包括对话风格、专注度管理等',
+                'formatting': '规定 Discord 环境下的格式化规则，包括 Markdown 语法、提及格式等'
+            },
+            "en_US": {
+                'base': 'Define AI\'s basic identity and core instructions, including bot name, creator info, and basic settings',
+                'personality': 'Set AI\'s personality traits and expression style, including humor, politeness, language style, etc.',
+                'answering_principles': 'Define basic principles for AI responses, such as priority handling, source attribution, etc.',
+                'language': 'Set AI\'s language preferences and expression methods, including primary language, style elements, response length, etc.',
+                'professionalism': 'Define AI\'s performance standards on professional topics, balancing humor and professionalism',
+                'interaction': 'Set AI\'s interaction modes, including conversation style, focus management, etc.',
+                'formatting': 'Define formatting rules for Discord environment, including Markdown syntax, mention formats, etc.'
+            },
+            "ja_JP": {
+                'base': 'AIの基本的なアイデンティティとコア指示を定義し、ボット名、作成者情報などの基本設定を含む',
+                'personality': 'AIの個性特性と表現スタイルを設定し、ユーモア、礼儀、言語スタイルなどを含む',
+                'answering_principles': 'AI応答の基本原則を規定し、優先度処理、情報源表示などを含む',
+                'language': 'AIの言語設定と表現方法を設定し、主要言語、スタイル要素、応答長などを含む',
+                'professionalism': '専門的なトピックでのAIのパフォーマンス基準を定義し、ユーモアと専門性のバランスを取る',
+                'interaction': 'AIのインタラクションモードを設定し、会話スタイル、集中管理などを含む',
+                'formatting': 'Discord環境でのフォーマットルールを規定し、Markdown構文、言及フォーマットなどを含む'
+            }
+        }
+        
+        return descriptions.get(lang, descriptions["zh_TW"])
     
     def clear_cache(self, guild_id: Optional[str] = None,
                    channel_id: Optional[str] = None) -> None:

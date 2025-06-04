@@ -427,6 +427,41 @@
                 "modal_error": "处理请求时发生错误: {error}",
                 "unknown_error": "发生未知错误，请稍后再试",
                 "modules_unavailable": "无法获取模块列表: {error}"
+            },
+            "modules": {
+                "descriptions": {
+                    "base": "定义 AI 的基本身份和核心指令，包括机器人名称、创建者信息等基础设定",
+                    "personality": "设定 AI 的个性特征和表达风格，包括幽默感、礼貌程度、语言风格等",
+                    "answering_principles": "规定 AI 回答问题的基本原则，如优先级处理、信息来源标注等",
+                    "language": "设定 AI 的语言偏好和表达方式，包括主要语言、风格元素、回应长度等",
+                    "professionalism": "定义 AI 在专业话题上的表现标准，平衡幽默性与专业性",
+                    "interaction": "设定 AI 的互动模式，包括对话风格、专注度管理等",
+                    "formatting": "规定 Discord 环境下的格式化规则，包括 Markdown 语法、提及格式等"
+                },
+                "help": {
+                    "title": "📦 模块说明",
+                    "description": "以下模块可以单独编辑来自定义 AI 的行为：",
+                    "usage_tip": "💡 提示：编辑模块时会显示默认内容作为参考",
+                    "inheritance_note": "⚠️ 注意：模块编辑会覆盖对应的 YAML 模块内容"
+                }
+            },
+            "user_experience": {
+                "default_content": {
+                    "loaded": "✅ 已载入默认内容作为编辑基础",
+                    "loading_failed": "⚠️ 载入默认内容失败，将从空白开始",
+                    "effective_prompt_loaded": "📝 已载入当前有效的完整系统提示",
+                    "module_default_loaded": "📦 已载入 {module} 模块的默认内容"
+                },
+                "editing": {
+                    "based_on_current": "基于当前有效的系统提示进行编辑...",
+                    "based_on_default": "基于 {module} 模块的默认内容进行编辑...",
+                    "from_scratch": "请输入新的内容..."
+                },
+                "guidance": {
+                    "first_time_edit": "🎯 首次编辑提示：您可以基于默认内容进行修改",
+                    "module_explanation": "💭 此模块负责：{description}",
+                    "inheritance_info": "🔗 此设定将影响：{scope}"
+                }
             }
         },
         "search_gif": {

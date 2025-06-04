@@ -340,13 +340,17 @@ class EditModeSelectionView(discord.ui.View):
             server_level = system_prompts.get('server_level', {})
             existing_content = server_level.get('prompt', '')
         
-        # 開啟編輯 Modal
+        # 開啟編輯 Modal - 使用新的功能
         modal = SystemPromptModal(
             title=f"直接編輯{self.scope_text}系統提示",
             initial_value=existing_content,
             callback_func=lambda i, prompt: self._handle_direct_set_callback(
                 i, prompt
-            )
+            ),
+            manager=self.manager,
+            channel_id=str(self.target_channel.id) if self.scope == "channel" else "",
+            guild_id=str(interaction.guild.id),
+            show_default_content=not existing_content  # 只在沒有現有內容時顯示預設內容
         )
         
         await interaction.response.send_modal(modal)
@@ -792,13 +796,25 @@ class ModuleSelect(discord.ui.Select):
                 modules = server_level.get('modules', {})
                 existing_content = modules.get(selected_module, '')
             
-            # 開啟模組編輯 Modal
+            # 獲取語言設定
+            lang = "zh_TW"  # 預設語言，可以從語言管理器取得
+            try:
+                lang_manager = interaction.client.get_cog("LanguageManager")
+                if lang_manager:
+                    lang = lang_manager.get_server_lang(str(self.guild.id))
+            except Exception:
+                pass
+            
+            # 開啟模組編輯 Modal - 使用新的功能
             modal = SystemPromptModuleModal(
                 module_name=selected_module,
                 initial_value=existing_content,
                 callback_func=lambda i, module, content: self._handle_module_callback(
                     i, module, content
-                )
+                ),
+                manager=self.manager,
+                lang=lang,
+                show_default_content=not existing_content  # 只在沒有現有內容時顯示預設內容
             )
             
             await interaction.response.send_modal(modal)

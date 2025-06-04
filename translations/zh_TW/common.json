@@ -414,6 +414,41 @@
                 "modal_error": "處理請求時發生錯誤: {error}",
                 "unknown_error": "發生未知錯誤，請稍後再試",
                 "modules_unavailable": "無法取得模組列表: {error}"
+            },
+            "modules": {
+                "descriptions": {
+                    "base": "定義 AI 的基本身份和核心指令，包括機器人名稱、創建者信息等基礎設定",
+                    "personality": "設定 AI 的個性特徵和表達風格，包括幽默感、禮貌程度、語言風格等",
+                    "answering_principles": "規定 AI 回答問題的基本原則，如優先級處理、資訊來源標註等",
+                    "language": "設定 AI 的語言偏好和表達方式，包括主要語言、風格元素、回應長度等",
+                    "professionalism": "定義 AI 在專業話題上的表現標準，平衡幽默性與專業性",
+                    "interaction": "設定 AI 的互動模式，包括對話風格、專注度管理等",
+                    "formatting": "規定 Discord 環境下的格式化規則，包括 Markdown 語法、提及格式等"
+                },
+                "help": {
+                    "title": "📦 模組說明",
+                    "description": "以下模組可以個別編輯來自訂 AI 的行為：",
+                    "usage_tip": "💡 提示：編輯模組時會顯示預設內容作為參考",
+                    "inheritance_note": "⚠️ 注意：模組編輯會覆蓋對應的 YAML 模組內容"
+                }
+            },
+            "user_experience": {
+                "default_content": {
+                    "loaded": "✅ 已載入預設內容作為編輯基礎",
+                    "loading_failed": "⚠️ 載入預設內容失敗，將從空白開始",
+                    "effective_prompt_loaded": "📝 已載入當前有效的完整系統提示",
+                    "module_default_loaded": "📦 已載入 {module} 模組的預設內容"
+                },
+                "editing": {
+                    "based_on_current": "基於當前有效的系統提示進行編輯...",
+                    "based_on_default": "基於 {module} 模組的預設內容進行編輯...",
+                    "from_scratch": "請輸入新的內容..."
+                },
+                "guidance": {
+                    "first_time_edit": "🎯 首次編輯提示：您可以基於預設內容進行修改",
+                    "module_explanation": "💭 此模組負責：{description}",
+                    "inheritance_info": "🔗 此設定將影響：{scope}"
+                }
             }
         },
         "search_gif": {

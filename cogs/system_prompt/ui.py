@@ -14,12 +14,16 @@ from .exceptions import ValidationError, ContentTooLongError
 class SystemPromptModal(discord.ui.Modal):
     """系統提示設定的 Modal 對話框"""
     
-    def __init__(self, 
+    def __init__(self,
                  title: str = "設定系統提示",
                  prompt_label: str = "系統提示內容",
                  prompt_placeholder: str = "請輸入系統提示內容...",
                  initial_value: str = "",
                  callback_func: Optional[Callable] = None,
+                 manager=None,
+                 channel_id: str = "",
+                 guild_id: str = "",
+                 show_default_content: bool = True,
                  **kwargs):
         """
         初始化 Modal 對話框
@@ -30,11 +34,28 @@ class SystemPromptModal(discord.ui.Modal):
             prompt_placeholder: 提示輸入框佔位文字
             initial_value: 初始值
             callback_func: 回調函式
+            manager: SystemPromptManager 實例
+            channel_id: 頻道 ID
+            guild_id: 伺服器 ID
+            show_default_content: 是否顯示預設內容
             **kwargs: 其他參數
         """
         super().__init__(title=title, **kwargs)
         self.callback_func = callback_func
+        self.manager = manager
+        self.channel_id = channel_id
+        self.guild_id = guild_id
         self.logger = logging.getLogger(__name__)
+        
+        # 如果沒有提供初始值且需要顯示預設內容，嘗試載入完整有效提示
+        if not initial_value and show_default_content and manager and channel_id and guild_id:
+            try:
+                initial_value = manager.get_effective_full_prompt(channel_id, guild_id)
+                if initial_value:
+                    prompt_placeholder = "基於當前有效的系統提示進行編輯..."
+                    self.logger.info(f"已載入完整有效提示作為預設內容，長度: {len(initial_value)}")
+            except Exception as e:
+                self.logger.warning(f"載入預設內容時發生錯誤: {e}")
         
         # 系統提示輸入框
         self.prompt_input = discord.ui.TextInput(
@@ -92,6 +113,9 @@ class SystemPromptModuleModal(discord.ui.Modal):
                  module_name: str,
                  initial_value: str = "",
                  callback_func: Optional[Callable] = None,
+                 manager=None,
+                 lang: str = "zh_TW",
+                 show_default_content: bool = True,
                  **kwargs):
         """
         初始化模組設定 Modal
@@ -100,23 +124,73 @@ class SystemPromptModuleModal(discord.ui.Modal):
             module_name: 模組名稱
             initial_value: 初始值
             callback_func: 回調函式
+            manager: SystemPromptManager 實例
+            lang: 語言代碼
+            show_default_content: 是否顯示預設內容
             **kwargs: 其他參數
         """
-        super().__init__(title=f"設定模組: {module_name}", **kwargs)
+        # 獲取模組說明
+        module_description = ""
+        if manager:
+            descriptions = manager.get_module_descriptions(lang)
+            module_description = descriptions.get(module_name, "")
+        
+        # 構建標題，包含說明
+        title = f"設定模組: {module_name}"
+        if module_description:
+            # Discord Modal 標題有長度限制，所以縮短描述
+            short_desc = module_description[:50] + "..." if len(module_description) > 50 else module_description
+            title = f"📦 {module_name}: {short_desc}"
+        
+        super().__init__(title=title[:100], **kwargs)  # Discord 限制標題長度
         self.module_name = module_name
         self.callback_func = callback_func
+        self.manager = manager
+        self.module_description = module_description
         self.logger = logging.getLogger(__name__)
+        
+        # 如果沒有提供初始值且需要顯示預設內容，載入預設模組內容
+        placeholder_text = f"請輸入 {module_name} 模組的內容..."
+        if not initial_value and show_default_content and manager:
+            try:
+                default_content = manager.get_default_module_content(module_name)
+                if default_content:
+                    initial_value = default_content
+                    placeholder_text = f"基於 {module_name} 模組的預設內容進行編輯..."
+                    self.logger.info(f"已載入模組 '{module_name}' 的預設內容，長度: {len(default_content)}")
+            except Exception as e:
+                self.logger.warning(f"載入模組 '{module_name}' 預設內容時發生錯誤: {e}")
+        
+        # 構建標籤，包含模組說明
+        label_text = f"{module_name} 模組內容"
+        if module_description:
+            # 在標籤中添加簡短說明
+            short_label_desc = module_description[:30] + "..." if len(module_description) > 30 else module_description
+            label_text = f"{module_name} - {short_label_desc}"
         
         # 模組內容輸入框
         self.module_input = discord.ui.TextInput(
-            label=f"{module_name} 模組內容",
-            placeholder=f"請輸入 {module_name} 模組的內容...",
+            label=label_text[:45],  # Discord 限制標籤長度
+            placeholder=placeholder_text,
             style=discord.TextStyle.paragraph,
             max_length=2000,
             default=initial_value,
             required=True
         )
         self.add_item(self.module_input)
+        
+        # 如果有詳細說明，添加說明輸入框（僅顯示，不可編輯）
+        if module_description and len(module_description) > 50:
+            self.description_display = discord.ui.TextInput(
+                label="📋 模組說明",
+                placeholder="",
+                default=module_description,
+                style=discord.TextStyle.paragraph,
+                max_length=1000,
+                required=False
+            )
+            # 讓說明框只讀（雖然Discord不直接支持，但可以在提交時忽略）
+            self.add_item(self.description_display)
     
     async def on_submit(self, interaction: discord.Interaction):
         """處理模組 Modal 提交"""
