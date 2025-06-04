@@ -259,15 +259,21 @@ class SystemPromptManager:
             是否設定成功
         """
         try:
+            self.logger.info(f"🔧 開始設定頻道系統提示 - 伺服器: {guild_id}, 頻道: {channel_id}")
+            self.logger.debug(f"提示數據: {prompt_data}")
+            
             # 驗證提示內容
             if 'prompt' in prompt_data:
                 self.validator.validate_prompt_content(prompt_data['prompt'])
+                self.logger.debug("✅ 提示內容驗證通過")
             
             if 'modules' in prompt_data:
                 self.validator.validate_modules(prompt_data['modules'])
+                self.logger.debug(f"✅ 模組驗證通過，模組數量: {len(prompt_data['modules'])}")
             
             # 載入配置
             config = self._load_guild_config(guild_id)
+            self.logger.debug(f"✅ 載入配置完成，現有結構: {bool(config.get('system_prompts'))}")
             
             # 確保系統提示結構存在
             if 'system_prompts' not in config:
@@ -277,11 +283,19 @@ class SystemPromptManager:
                     'channels': {},
                     'permissions': {}
                 }
+                self.logger.debug("✅ 創建新的 system_prompts 結構")
             
             # 設定頻道提示
             channels = config['system_prompts']['channels']
             if channel_id not in channels:
                 channels[channel_id] = {}
+                self.logger.debug(f"✅ 創建新的頻道配置: {channel_id}")
+            else:
+                self.logger.debug(f"✅ 使用現有頻道配置: {channel_id}")
+            
+            # 記錄更新前的狀態
+            old_channel_config = channels[channel_id].copy()
+            self.logger.debug(f"更新前頻道配置: {old_channel_config}")
             
             # 更新頻道配置
             channel_config = channels[channel_id]
@@ -296,23 +310,56 @@ class SystemPromptManager:
             # 設定提示內容
             if 'prompt' in prompt_data:
                 channel_config['prompt'] = prompt_data['prompt']
+                self.logger.debug(f"✅ 設定提示內容，長度: {len(prompt_data['prompt'])}")
             
             if 'modules' in prompt_data:
                 channel_config['modules'] = prompt_data['modules']
+                self.logger.info(f"✅ 設定模組: {list(prompt_data['modules'].keys())}")
+                for module_name, module_content in prompt_data['modules'].items():
+                    content_preview = module_content[:50] + "..." if len(module_content) > 50 else module_content
+                    self.logger.debug(f"  - {module_name}: {content_preview}")
             
             if 'override_modules' in prompt_data:
                 channel_config['override_modules'] = prompt_data['override_modules']
+                self.logger.debug("✅ 設定覆蓋模組")
             
             if 'append_content' in prompt_data:
                 channel_config['append_content'] = prompt_data['append_content']
+                self.logger.debug("✅ 設定追加內容")
+            
+            # 記錄更新後的狀態
+            self.logger.debug(f"更新後頻道配置: {channel_config}")
             
             # 保存配置
+            self.logger.info(f"💾 開始保存配置到檔案...")
             self._save_guild_config(guild_id, config)
+            self.logger.info(f"✅ 配置保存完成")
+            
+            # 立即驗證保存結果
+            verification_config = self._load_guild_config(guild_id)
+            verification_channels = verification_config.get('system_prompts', {}).get('channels', {})
+            if channel_id in verification_channels:
+                verification_channel_config = verification_channels[channel_id]
+                verification_modules = verification_channel_config.get('modules', {})
+                self.logger.info(f"🔍 保存驗證 - 檔案中的模組: {verification_modules}")
+                
+                # 比較模組
+                if 'modules' in prompt_data:
+                    expected_modules = prompt_data['modules']
+                    if verification_modules == expected_modules:
+                        self.logger.info("✅ 保存驗證通過：模組數據一致")
+                    else:
+                        self.logger.warning(f"⚠️ 保存驗證失敗：模組數據不一致")
+                        self.logger.warning(f"期望: {expected_modules}")
+                        self.logger.warning(f"實際: {verification_modules}")
+            else:
+                self.logger.warning(f"⚠️ 保存驗證失敗：找不到頻道 {channel_id} 的配置")
             
             # 清除快取
+            self.logger.debug(f"🗑️ 清除快取: {guild_id}:{channel_id}")
             self.cache.invalidate(guild_id, channel_id)
             
-            self.logger.info(f"頻道 {channel_id} 系統提示設定成功，操作者: {user_id}")
+            self.logger.info(f"✅ 頻道 {channel_id} 系統提示設定成功，操作者: {user_id}")
             return True
             
         except Exception as e:
@@ -612,13 +659,15 @@ class SystemPromptManager:
             if 'prompt' in server_config:
                 return server_config['prompt']
             
-            # 模組覆蓋邏輯
-            prompt = base_prompt
+            # 模組覆蓋邏輯 - 重新建構 YAML 提示
             modules = server_config.get('modules', {})
+            override_modules = server_config.get('override_modules', [])
             
-            for module_name, module_content in modules.items():
-                # 簡單的模組替換邏輯（可擴展）
-                prompt = prompt.replace(f"[{module_name}]", module_content)
+            if modules or override_modules:
+                prompt = self._rebuild_prompt_with_module_overrides(modules, override_modules)
+                self.logger.info(f"🔄 伺服器級別應用模組覆蓋：{list(modules.keys())}")
+            else:
+                prompt = base_prompt
             
             # 追加內容
             if 'append_content' in server_config:
@@ -636,12 +685,15 @@ class SystemPromptManager:
             if 'prompt' in channel_config:
                 return channel_config['prompt']
             
-            # 模組覆蓋邏輯
-            prompt = base_prompt
+            # 模組覆蓋邏輯 - 重新建構 YAML 提示
             modules = channel_config.get('modules', {})
+            override_modules = channel_config.get('override_modules', [])
             
-            for module_name, module_content in modules.items():
-                prompt = prompt.replace(f"[{module_name}]", module_content)
+            if modules or override_modules:
+                prompt = self._rebuild_prompt_with_module_overrides(modules, override_modules)
+                self.logger.info(f"🔄 頻道級別應用模組覆蓋：{list(modules.keys())}")
+            else:
+                prompt = base_prompt
             
             # 追加內容
             if 'append_content' in channel_config:
@@ -689,6 +741,92 @@ class SystemPromptManager:
         except Exception as e:
             self.logger.error(f"應用語言本地化時發生錯誤: {e}")
             return prompt
+    
+    def _rebuild_prompt_with_module_overrides(self, module_overrides: Dict[str, str],
+                                            override_modules: List[str] = None) -> str:
+        """
+        使用模組覆蓋重新建構 YAML 提示
+        
+        Args:
+            module_overrides: 模組覆蓋字典 {模組名: 覆蓋內容}
+            override_modules: 要覆蓋的模組列表
+            
+        Returns:
+            重新建構的提示字串
+        """
+        try:
+            if not self._prompt_manager:
+                self.logger.warning("PromptManager 未初始化，無法重新建構提示")
+                return ""
+            
+            self.logger.debug(f"🔧 開始重新建構提示，覆蓋模組: {list(module_overrides.keys())}")
+            
+            # 取得原始 YAML 配置
+            config = self._prompt_manager.loader.load_yaml_config()
+            if not config:
+                self.logger.error("無法載入 YAML 配置")
+                return ""
+            
+            # 創建配置副本以進行修改
+            modified_config = config.copy()
+            
+            # 應用模組覆蓋
+            for module_name, module_content in module_overrides.items():
+                if module_name in config:
+                    self.logger.debug(f"📝 覆蓋模組 '{module_name}': {module_content[:50]}...")
+                    
+                    # 將字串內容轉換為適合的模組結構
+                    if module_name == 'personality':
+                        modified_config[module_name] = {
+                            'style': [module_content],
+                            'content_filtering': modified_config[module_name].get('content_filtering', [])
+                        }
+                    elif module_name == 'language':
+                        modified_config[module_name] = {
+                            'primary': module_content,
+                            'style_elements': modified_config[module_name].get('style_elements', []),
+                            'response_length': modified_config[module_name].get('response_length', {})
+                        }
+                    elif module_name == 'base':
+                        # 基礎模組需要保持結構，只覆蓋核心指令
+                        base_config = modified_config[module_name].copy()
+                        base_config['core_instruction'] = module_content
+                        modified_config[module_name] = base_config
+                    else:
+                        # 其他模組使用通用格式
+                        if isinstance(config.get(module_name), dict):
+                            # 保持原始結構，添加覆蓋內容
+                            original_module = config[module_name].copy()
+                            original_module['override_content'] = [module_content]
+                            modified_config[module_name] = original_module
+                        else:
+                            # 簡單結構
+                            modified_config[module_name] = {'content': [module_content]}
+                else:
+                    self.logger.warning(f"⚠️ 模組 '{module_name}' 不存在於 YAML 配置中")
+            
+            # 取得預設模組列表
+            default_modules = modified_config.get('composition', {}).get('default_modules', [])
+            
+            # 使用修改後的配置重新建構提示
+            prompt = self._prompt_manager.builder.build_system_prompt(modified_config, default_modules)
+            
+            self.logger.info(f"✅ 重新建構提示完成，長度: {len(prompt)}")
+            self.logger.debug(f"重新建構的提示預覽: {prompt[:200]}...")
+            
+            return prompt
+            
+        except Exception as e:
+            self.logger.error(f"重新建構提示時發生錯誤: {e}")
+            # 降級到原始提示
+            if self._prompt_manager:
+                try:
+                    config = self._prompt_manager.loader.load_yaml_config()
+                    default_modules = config.get('composition', {}).get('default_modules', [])
+                    return self._prompt_manager.builder.build_system_prompt(config, default_modules)
+                except Exception as fallback_error:
+                    self.logger.error(f"降級重建也失敗: {fallback_error}")
+            return ""
     
     def _get_language(self, guild_id: str, message: Optional[discord.Message] = None) -> str:
         """取得語言設定"""

@@ -47,7 +47,7 @@ class SystemPromptMainView(discord.ui.View):
         
         # 第一列：基本功能
         self.add_item(SystemPromptFunctionButton(
-            label="設定提示",
+            label="編輯提示",
             emoji="✏️",
             style=discord.ButtonStyle.primary,
             function="set",
@@ -59,14 +59,6 @@ class SystemPromptMainView(discord.ui.View):
             emoji="👁️",
             style=discord.ButtonStyle.secondary,
             function="view",
-            row=0
-        ))
-        
-        self.add_item(SystemPromptFunctionButton(
-            label="模組編輯",
-            emoji="📦",
-            style=discord.ButtonStyle.secondary,
-            function="modules",
             row=0
         ))
         
@@ -102,8 +94,6 @@ class SystemPromptMainView(discord.ui.View):
                 await self._handle_set_function(interaction)
             elif function == "view":
                 await self._handle_view_function(interaction)
-            elif function == "modules":
-                await self._handle_modules_function(interaction)
             elif function == "copy":
                 await self._handle_copy_function(interaction)
             elif function == "remove":
@@ -147,35 +137,6 @@ class SystemPromptMainView(discord.ui.View):
         
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     
-    async def _handle_modules_function(self, interaction: discord.Interaction):
-        """處理模組編輯功能"""
-        try:
-            modules = self.manager.get_available_modules()
-            
-            if not modules:
-                await interaction.response.send_message(
-                    "❌ 暫無可用的模組", ephemeral=True
-                )
-                return
-            
-            view = ModuleEditView(
-                manager=self.manager,
-                permission_validator=self.permission_validator,
-                modules=modules
-            )
-            
-            embed = discord.Embed(
-                title="📦 模組化編輯",
-                description="請選擇要編輯的模組和範圍",
-                color=discord.Color.purple()
-            )
-            
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-            
-        except Exception as e:
-            await interaction.response.send_message(
-                f"❌ 載入模組時發生錯誤：{str(e)}", ephemeral=True
-            )
     
     async def _handle_copy_function(self, interaction: discord.Interaction):
         """處理複製提示功能"""
@@ -284,30 +245,22 @@ class SystemPromptSetView(discord.ui.View):
                 target_channel = None
                 scope_text = "伺服器預設"
             
-            # 取得現有內容
-            existing_content = ""
-            if scope == "channel":
-                config = self.manager._load_guild_config(str(interaction.guild.id))
-                system_prompts = config.get('system_prompts', {})
-                channels = system_prompts.get('channels', {})
-                if str(interaction.channel.id) in channels:
-                    existing_content = channels[str(interaction.channel.id)].get('prompt', '')
-            else:
-                config = self.manager._load_guild_config(str(interaction.guild.id))
-                system_prompts = config.get('system_prompts', {})
-                server_level = system_prompts.get('server_level', {})
-                existing_content = server_level.get('prompt', '')
-            
-            # 開啟編輯 Modal
-            modal = SystemPromptModal(
-                title=f"設定{scope_text}系統提示",
-                initial_value=existing_content,
-                callback_func=lambda i, prompt: self._handle_set_callback(
-                    i, scope, target_channel, prompt
-                )
+            # 建立編輯模式選擇選單
+            view = EditModeSelectionView(
+                manager=self.manager,
+                permission_validator=self.permission_validator,
+                scope=scope,
+                target_channel=target_channel,
+                scope_text=scope_text
             )
             
-            await interaction.response.send_modal(modal)
+            embed = discord.Embed(
+                title=f"⚙️ 編輯{scope_text}系統提示",
+                description="請選擇編輯模式",
+                color=discord.Color.blue()
+            )
+            
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
             
         except PermissionError as e:
             await interaction.response.send_message(
@@ -318,35 +271,142 @@ class SystemPromptSetView(discord.ui.View):
                 f"❌ 操作失敗：{str(e)}", ephemeral=True
             )
     
-    async def _handle_set_callback(self, 
-                                   interaction: discord.Interaction,
-                                   scope: str,
-                                   channel: Optional[discord.TextChannel],
-                                   content: str):
-        """處理設定回調"""
+
+
+class EditModeSelectionView(discord.ui.View):
+    """編輯模式選擇選單"""
+    
+    def __init__(self,
+                 manager: SystemPromptManager,
+                 permission_validator: PermissionValidator,
+                 scope: str,
+                 target_channel: Optional[discord.TextChannel],
+                 scope_text: str,
+                 timeout: float = 180.0):
+        super().__init__(timeout=timeout)
+        self.manager = manager
+        self.permission_validator = permission_validator
+        self.scope = scope
+        self.target_channel = target_channel
+        self.scope_text = scope_text
+        self.logger = logging.getLogger(__name__)
+        
+        # 編輯模式按鈕
+        self.add_item(EditModeButton(
+            label="直接編輯提示",
+            emoji="✏️",
+            style=discord.ButtonStyle.primary,
+            edit_mode="direct"
+        ))
+        
+        self.add_item(EditModeButton(
+            label="模組化編輯",
+            emoji="📦",
+            style=discord.ButtonStyle.secondary,
+            edit_mode="module"
+        ))
+        
+        # 返回主選單按鈕
+        self.add_item(BackButton())
+    
+    async def edit_mode_callback(self, interaction: discord.Interaction, edit_mode: str):
+        """處理編輯模式選擇"""
+        try:
+            if edit_mode == "direct":
+                await self._handle_direct_edit(interaction)
+            elif edit_mode == "module":
+                await self._handle_module_edit(interaction)
+                
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ 操作失敗：{str(e)}", ephemeral=True
+            )
+    
+    async def _handle_direct_edit(self, interaction: discord.Interaction):
+        """處理直接編輯提示"""
+        # 取得現有內容
+        existing_content = ""
+        if self.scope == "channel":
+            config = self.manager._load_guild_config(str(interaction.guild.id))
+            system_prompts = config.get('system_prompts', {})
+            channels = system_prompts.get('channels', {})
+            if str(self.target_channel.id) in channels:
+                existing_content = channels[str(self.target_channel.id)].get('prompt', '')
+        else:
+            config = self.manager._load_guild_config(str(interaction.guild.id))
+            system_prompts = config.get('system_prompts', {})
+            server_level = system_prompts.get('server_level', {})
+            existing_content = server_level.get('prompt', '')
+        
+        # 開啟編輯 Modal
+        modal = SystemPromptModal(
+            title=f"直接編輯{self.scope_text}系統提示",
+            initial_value=existing_content,
+            callback_func=lambda i, prompt: self._handle_direct_set_callback(
+                i, prompt
+            )
+        )
+        
+        await interaction.response.send_modal(modal)
+    
+    async def _handle_module_edit(self, interaction: discord.Interaction):
+        """處理模組化編輯"""
+        try:
+            modules = self.manager.get_available_modules()
+            
+            if not modules:
+                await interaction.response.send_message(
+                    "❌ 暫無可用的模組", ephemeral=True
+                )
+                return
+            
+            view = ModuleEditView(
+                manager=self.manager,
+                permission_validator=self.permission_validator,
+                modules=modules,
+                scope=self.scope,
+                target_channel=self.target_channel,
+                scope_text=self.scope_text
+            )
+            
+            embed = discord.Embed(
+                title=f"📦 模組化編輯{self.scope_text}",
+                description="請選擇要編輯的模組",
+                color=discord.Color.purple()
+            )
+            
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ 載入模組時發生錯誤：{str(e)}", ephemeral=True
+            )
+    
+    async def _handle_direct_set_callback(self,
+                                         interaction: discord.Interaction,
+                                         content: str):
+        """處理直接設定回調"""
         try:
             prompt_data = {'prompt': content}
             
-            if scope == "channel":
+            if self.scope == "channel":
                 success = self.manager.set_channel_prompt(
                     str(interaction.guild.id),
-                    str(channel.id),
+                    str(self.target_channel.id),
                     prompt_data,
                     str(interaction.user.id)
                 )
-                scope_text = f"頻道 #{channel.name}"
             else:
                 success = self.manager.set_server_prompt(
                     str(interaction.guild.id),
                     prompt_data,
                     str(interaction.user.id)
                 )
-                scope_text = "伺服器預設"
             
             if success:
                 embed = discord.Embed(
                     title="✅ 系統提示設定成功",
-                    description=f"已成功設定{scope_text}的系統提示",
+                    description=f"已成功設定{self.scope_text}的系統提示",
                     color=discord.Color.green()
                 )
                 embed.add_field(
@@ -367,6 +427,19 @@ class SystemPromptSetView(discord.ui.View):
             await interaction.response.send_message(
                 f"❌ 設定失敗: {str(e)}", ephemeral=True
             )
+
+
+class EditModeButton(discord.ui.Button):
+    """編輯模式按鈕"""
+    
+    def __init__(self, edit_mode: str, **kwargs):
+        super().__init__(**kwargs)
+        self.edit_mode = edit_mode
+    
+    async def callback(self, interaction: discord.Interaction):
+        """按鈕回調"""
+        view: EditModeSelectionView = self.view
+        await view.edit_mode_callback(interaction, self.edit_mode)
 
 
 class SystemPromptScopeButton(discord.ui.Button):
@@ -421,6 +494,13 @@ class SystemPromptViewOptionsView(discord.ui.View):
                 interaction.user, 'view', channel
             )
             
+            # 添加調試日誌
+            self.manager.logger.info(f"🔍 查看配置請求 - 頻道: {channel.id}, 伺服器: {interaction.guild.id}, 類型: {view_type}")
+            
+            # 先清除可能的快取以確保讀取最新數據
+            self.manager.cache.invalidate(str(interaction.guild.id), str(channel.id))
+            self.manager.logger.debug(f"已清除快取: {interaction.guild.id}:{channel.id}")
+            
             # 取得有效提示
             prompt_data = self.manager.get_effective_prompt(
                 str(channel.id),
@@ -428,14 +508,41 @@ class SystemPromptViewOptionsView(discord.ui.View):
                 None
             )
             
+            # 添加調試日誌 - 直接讀取配置檔案進行對比
+            config = self.manager._load_guild_config(str(interaction.guild.id))
+            system_prompts = config.get('system_prompts', {})
+            channels = system_prompts.get('channels', {})
+            
+            if str(channel.id) in channels:
+                channel_config = channels[str(channel.id)]
+                modules = channel_config.get('modules', {})
+                self.manager.logger.info(f"📄 配置檔案中的模組: {modules}")
+            else:
+                self.manager.logger.info(f"⚠️ 配置檔案中未找到頻道 {channel.id} 的配置")
+            
+            self.manager.logger.info(f"💡 有效提示數據來源: {prompt_data.get('source', 'unknown')}")
+            
             # 建立 Embed
             embed = create_system_prompt_embed(prompt_data, channel)
             
+            # 添加模組資訊到 embed（用於調試）
+            if str(channel.id) in channels:
+                channel_config = channels[str(channel.id)]
+                modules = channel_config.get('modules', {})
+                if modules:
+                    module_info = []
+                    for module_name, module_content in modules.items():
+                        content_preview = module_content[:50] + "..." if len(module_content) > 50 else module_content
+                        module_info.append(f"**{module_name}**: {content_preview}")
+                    
+                    embed.add_field(
+                        name="🔧 已配置模組",
+                        value="\n".join(module_info) if module_info else "無",
+                        inline=False
+                    )
+            
             # 如果顯示繼承資訊
             if view_type == "inheritance":
-                config = self.manager._load_guild_config(str(interaction.guild.id))
-                system_prompts = config.get('system_prompts', {})
-                
                 # 檢查各層級的提示
                 inheritance_info = []
                 
@@ -444,14 +551,13 @@ class SystemPromptViewOptionsView(discord.ui.View):
                 
                 # 伺服器級別
                 server_level = system_prompts.get('server_level', {})
-                if server_level.get('prompt'):
+                if server_level.get('prompt') or server_level.get('modules'):
                     inheritance_info.append("🔸 伺服器預設提示")
                 
                 # 頻道級別
-                channels = system_prompts.get('channels', {})
                 if str(channel.id) in channels:
                     channel_config = channels[str(channel.id)]
-                    if channel_config.get('prompt'):
+                    if channel_config.get('prompt') or channel_config.get('modules'):
                         inheritance_info.append("🔸 頻道特定提示")
                 
                 embed.add_field(
@@ -488,19 +594,32 @@ class SystemPromptViewButton(discord.ui.Button):
 class ModuleEditView(discord.ui.View):
     """模組編輯選單"""
     
-    def __init__(self, 
+    def __init__(self,
                  manager: SystemPromptManager,
                  permission_validator: PermissionValidator,
                  modules: List[str],
+                 scope: str = None,
+                 target_channel: Optional[discord.TextChannel] = None,
+                 scope_text: str = None,
                  timeout: float = 300.0):
         super().__init__(timeout=timeout)
         self.manager = manager
         self.permission_validator = permission_validator
         self.modules = modules
-        self.selected_scope = None
+        self.scope = scope
+        self.target_channel = target_channel
+        self.scope_text = scope_text
         self.logger = logging.getLogger(__name__)
         
-        # 先選擇範圍
+        # 如果已經有範圍，直接顯示模組選擇器
+        if scope and scope_text:
+            self._setup_module_selector()
+        else:
+            # 否則先選擇範圍（保持向後相容）
+            self._setup_scope_selector()
+    
+    def _setup_scope_selector(self):
+        """設定範圍選擇器"""
         self.add_item(ModuleScopeButton(
             label="頻道模組",
             emoji="📢",
@@ -514,6 +633,33 @@ class ModuleEditView(discord.ui.View):
             style=discord.ButtonStyle.secondary,
             scope="server"
         ))
+        
+        # 返回主選單按鈕
+        self.add_item(BackButton())
+    
+    def _setup_module_selector(self):
+        """設定模組選擇器"""
+        # 建立模組選擇器
+        options = []
+        for module in self.modules[:25]:  # Discord 限制
+            options.append(discord.SelectOption(
+                label=module,
+                value=module,
+                description=f"編輯 {module} 模組"
+            ))
+        
+        if options:
+            select = ModuleSelect(
+                placeholder="選擇要編輯的模組",
+                options=options,
+                manager=self.manager,
+                scope=self.scope,
+                channel=self.target_channel,
+                guild=None,  # 將在回調中設定
+                scope_text=self.scope_text
+            )
+            
+            self.add_item(select)
         
         # 返回主選單按鈕
         self.add_item(BackButton())
@@ -591,22 +737,28 @@ class ModuleScopeButton(discord.ui.Button):
 class ModuleSelect(discord.ui.Select):
     """模組選擇器"""
     
-    def __init__(self, 
+    def __init__(self,
                  manager: SystemPromptManager,
                  scope: str,
                  channel: Optional[discord.TextChannel],
-                 guild: discord.Guild,
+                 guild: Optional[discord.Guild],
+                 scope_text: str = None,
                  **kwargs):
         super().__init__(**kwargs)
         self.manager = manager
         self.scope = scope
         self.channel = channel
         self.guild = guild
+        self.scope_text = scope_text or scope
     
     async def callback(self, interaction: discord.Interaction):
         """選擇器回調"""
         try:
             selected_module = self.values[0]
+            
+            # 設定 guild（如果為 None）
+            if not self.guild:
+                self.guild = interaction.guild
             
             # 取得現有模組內容
             existing_content = ""
@@ -640,36 +792,83 @@ class ModuleSelect(discord.ui.Select):
                 f"❌ 開啟編輯器失敗：{str(e)}", ephemeral=True
             )
     
-    async def _handle_module_callback(self, 
+    async def _handle_module_callback(self,
                                       interaction: discord.Interaction,
                                       module_name: str,
                                       content: str):
         """處理模組編輯回調"""
         try:
-            # 準備模組資料
-            modules_data = {module_name: content}
-            prompt_data = {'modules': modules_data}
+            # 添加調試日誌
+            logger = logging.getLogger(__name__)
+            logger.info(f"🔧 開始處理模組編輯回調 - 模組: {module_name}, 範圍: {self.scope}")
+            logger.debug(f"模組內容: {content[:100]}..." if len(content) > 100 else f"模組內容: {content}")
+            
+            # 取得所有現有模組，避免覆蓋其他模組
+            config = self.manager._load_guild_config(str(self.guild.id))
+            system_prompts = config.get('system_prompts', {})
+            
+            logger.debug(f"載入配置完成，system_prompts 存在: {bool(system_prompts)}")
+            
+            existing_modules = {}
+            if self.scope == "channel" and self.channel:
+                channels = system_prompts.get('channels', {})
+                if str(self.channel.id) in channels:
+                    existing_modules = channels[str(self.channel.id)].get('modules', {})
+                logger.info(f"頻道現有模組: {existing_modules}")
+            else:
+                server_level = system_prompts.get('server_level', {})
+                existing_modules = server_level.get('modules', {})
+                logger.info(f"伺服器現有模組: {existing_modules}")
+            
+            # 更新特定模組
+            existing_modules[module_name] = content
+            prompt_data = {'modules': existing_modules}
+            
+            logger.info(f"準備保存的模組數據: {prompt_data}")
             
             if self.scope == "channel" and self.channel:
+                logger.info(f"正在設定頻道模組: {self.guild.id}/{self.channel.id}")
                 success = self.manager.set_channel_prompt(
                     str(self.guild.id),
                     str(self.channel.id),
                     prompt_data,
                     str(interaction.user.id)
                 )
-                scope_text = f"頻道 #{self.channel.name}"
+                display_scope_text = self.scope_text or f"頻道 #{self.channel.name}"
             else:
+                logger.info(f"正在設定伺服器模組: {self.guild.id}")
                 success = self.manager.set_server_prompt(
                     str(self.guild.id),
                     prompt_data,
                     str(interaction.user.id)
                 )
-                scope_text = "伺服器預設"
+                display_scope_text = self.scope_text or "伺服器預設"
             
+            logger.info(f"模組設定結果: {success}")
+            
+            # 驗證保存結果
             if success:
+                # 立即重新讀取配置進行驗證
+                verification_config = self.manager._load_guild_config(str(self.guild.id))
+                verification_prompts = verification_config.get('system_prompts', {})
+                
+                if self.scope == "channel" and self.channel:
+                    verification_channels = verification_prompts.get('channels', {})
+                    if str(self.channel.id) in verification_channels:
+                        verification_modules = verification_channels[str(self.channel.id)].get('modules', {})
+                        logger.info(f"✅ 驗證：保存後的模組 = {verification_modules}")
+                        
+                        # 檢查特定模組是否正確保存
+                        if module_name in verification_modules and verification_modules[module_name] == content:
+                            logger.info(f"✅ 驗證通過：模組 {module_name} 已正確保存")
+                        else:
+                            logger.warning(f"⚠️ 驗證失敗：模組 {module_name} 保存不正確")
+                            logger.warning(f"期望內容: {content}")
+                            logger.warning(f"實際內容: {verification_modules.get(module_name, 'NOT_FOUND')}")
+                
                 embed = discord.Embed(
                     title="✅ 模組設定成功",
-                    description=f"已成功設定{scope_text}的 {module_name} 模組",
+                    description=f"已成功設定{display_scope_text}的 {module_name} 模組",
                     color=discord.Color.green()
                 )
                 embed.add_field(
@@ -683,7 +882,19 @@ class ModuleSelect(discord.ui.Select):
                     inline=True
                 )
                 
+                # 添加驗證資訊到 embed
+                embed.add_field(
+                    name="驗證狀態",
+                    value="已驗證保存成功",
+                    inline=True
+                )
+                
                 await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                logger.error("模組設定失敗，success = False")
+                await interaction.response.send_message(
+                    f"❌ 設定模組失敗: 操作未成功", ephemeral=True
+                )
                 
         except Exception as e:
             await interaction.response.send_message(
