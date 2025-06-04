@@ -1243,7 +1243,7 @@ class RemoveButton(discord.ui.Button):
                     # Re-fetch channel_id_str if it wasn't set above (though it should be)
                     channel_id_str_op = str(interaction.channel.id) if interaction.channel else None
                     if channel_id_str_op:
-                        success = view.manager.remove_channel_prompt(guild_id_str, channel_id_str_op, str(interaction.user.id))
+                        success = view.manager.remove_channel_prompt(guild_id_str, channel_id_str_op)
                 else: # server
                     success = view.manager.remove_server_prompt(guild_id_str, str(interaction.user.id))
                 
@@ -1341,19 +1341,19 @@ class ResetButton(discord.ui.Button):
                 user_id_str = str(interaction.user.id)
 
                 if self.reset_type == "channel" and interaction.channel:
-                    success = view.manager.remove_channel_prompt(guild_id_str, str(interaction.channel.id), user_id_str)
+                    success = view.manager.remove_channel_prompt(guild_id_str, str(interaction.channel.id))
                 elif self.reset_type == "server":
-                    success = view.manager.remove_server_prompt(guild_id_str, user_id_str)
+                    success = view.manager.remove_server_prompt(guild_id_str)
                 elif self.reset_type == "all":
                     # This assumes manager has a method to reset all for a guild
                     if hasattr(view.manager, "reset_all_guild_prompts"):
                         success = view.manager.reset_all_guild_prompts(guild_id_str, user_id_str)
                     else: # Fallback: remove server and all channel prompts individually
-                        view.manager.remove_server_prompt(guild_id_str, user_id_str) # Remove server default
+                        view.manager.remove_server_prompt(guild_id_str) # Remove server default
                         current_config = view.manager._load_guild_config(guild_id_str)
                         channels_to_reset = list(current_config.get('system_prompts', {}).get('channels', {}).keys())
                         for chan_id in channels_to_reset:
-                            view.manager.remove_channel_prompt(guild_id_str, chan_id, user_id_str)
+                            view.manager.remove_channel_prompt(guild_id_str, chan_id)
                         success = True # Assume success if operations don't throw
                         self.logger.info(f"重置所有設定：移除了伺服器預設和 {len(channels_to_reset)} 個頻道的設定。")
 

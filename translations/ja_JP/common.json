@@ -436,7 +436,8 @@
                     "language": "AIの言語設定と表現方法を設定し、主要言語、スタイル要素、応答長などを含む",
                     "professionalism": "専門的なトピックでのAIのパフォーマンス基準を定義し、ユーモアと専門性のバランスを取る",
                     "interaction": "AIのインタラクションモードを設定し、会話スタイル、集中管理などを含む",
-                    "formatting": "Discord環境でのフォーマットルールを規定し、Markdown構文、言及フォーマットなどを含む"
+                    "formatting": "Discord環境でのフォーマットルールを規定し、Markdown構文、言及フォーマットなどを含む",
+                    "professional_personality": "専門性と個性設定を統合し、プロフェッショナルでありながら親しみやすいAIの動作を作成する"
                 },
                 "select_descriptions": {
                     "base": "基本的なアイデンティティとコア指示",
@@ -445,7 +446,8 @@
                     "language": "言語設定と表現方法",
                     "professionalism": "専門的トピックのパフォーマンス基準",
                     "interaction": "インタラクションモードと会話スタイル",
-                    "formatting": "Discordフォーマットルール"
+                    "formatting": "Discordフォーマットルール",
+                    "professional_personality": "プロフェッショナル個性設定"
                 },
                 "help": {
                     "title": "📦 モジュール説明",

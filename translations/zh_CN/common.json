@@ -436,7 +436,8 @@
                     "language": "设定 AI 的语言偏好和表达方式，包括主要语言、风格元素、回应长度等",
                     "professionalism": "定义 AI 在专业话题上的表现标准，平衡幽默性与专业性",
                     "interaction": "设定 AI 的互动模式，包括对话风格、专注度管理等",
-                    "formatting": "规定 Discord 环境下的格式化规则，包括 Markdown 语法、提及格式等"
+                    "formatting": "规定 Discord 环境下的格式化规则，包括 Markdown 语法、提及格式等",
+                    "professional_personality": "整合专业性与个性化设定，创造既专业又有个性的 AI 表现方式"
                 },
                 "select_descriptions": {
                     "base": "基本身份和核心指令",
@@ -445,7 +446,8 @@
                     "language": "语言偏好和表达方式",
                     "professionalism": "专业话题的表现标准",
                     "interaction": "互动模式和对话风格",
-                    "formatting": "Discord 格式化规则"
+                    "formatting": "Discord 格式化规则",
+                    "professional_personality": "专业个性化设定"
                 },
                 "help": {
                     "title": "📦 模块说明",

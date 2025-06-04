@@ -423,7 +423,8 @@
                     "language": "Set AI's language preferences and expression methods, including primary language, style elements, response length, etc.",
                     "professionalism": "Define AI's performance standards on professional topics, balancing humor and professionalism",
                     "interaction": "Set AI's interaction modes, including conversation style, focus management, etc.",
-                    "formatting": "Define formatting rules for Discord environment, including Markdown syntax, mention formats, etc."
+                    "formatting": "Define formatting rules for Discord environment, including Markdown syntax, mention formats, etc.",
+                    "professional_personality": "Integrate professionalism with personality settings to create AI behavior that is both professional and personable"
                 },
                 "select_descriptions": {
                     "base": "Basic identity and core instructions",
@@ -432,7 +433,8 @@
                     "language": "Language preferences and expression methods",
                     "professionalism": "Performance standards on professional topics",
                     "interaction": "Interaction modes and conversation style",
-                    "formatting": "Discord formatting rules"
+                    "formatting": "Discord formatting rules",
+                    "professional_personality": "Professional personality configuration"
                 },
                 "help": {
                     "title": "📦 Module Descriptions",
