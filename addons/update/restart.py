@@ -227,90 +227,11 @@ class GracefulRestartManager:
             
             # Windows 環境特殊處理
             if os.name == 'nt':
-                # 檢測虛擬環境
-                venv_path = os.environ.get('VIRTUAL_ENV')
-                if venv_path:
-                    self.logger.info(f"檢測到虛擬環境: {venv_path}")
-                    python_exe = os.path.join(venv_path, 'Scripts', 'python.exe')
-                    if os.path.exists(python_exe):
-                        command = f'"{python_exe}" main.py'
-                        self.logger.info(f"使用虛擬環境 Python: {command}")
-                    else:
-                        self.logger.warning(f"虛擬環境 Python 不存在: {python_exe}")
-                
-                # 獲取當前工作目錄
-                current_dir = os.getcwd()
-                self.logger.info(f"當前工作目錄: {current_dir}")
-                
-                # 建構完整的重啟命令
-                if 'python' not in command.lower():
-                    command = f"python {command}"
-                
-                self.logger.info(f"最終重啟命令: {command}")
-                self.logger.info(f"工作目錄: {current_dir}")
-                
-                # 記錄環境變數
-                self.logger.info(f"PATH: {os.environ.get('PATH', 'N/A')[:200]}...")
-                self.logger.info(f"PYTHON 路徑: {shutil.which('python')}")
-                
-                # 嘗試多種重啟方式
-                restart_methods = [
-                    # 方法 1: 使用 cmd /c 在新控制台啟動
-                    f'cmd /c "cd /d {current_dir} && {command}"',
-                    # 方法 2: 使用 start 命令在新窗口啟動
-                    f'start cmd /k "cd /d {current_dir} && {command}"',
-                    # 方法 3: 直接啟動
-                    command
-                ]
-                
-                success = False
-                for i, method in enumerate(restart_methods, 1):
-                    try:
-                        self.logger.info(f"嘗試重啟方法 {i}: {method}")
-                        
-                        if i == 1:
-                            # CREATE_NEW_CONSOLE 創建新控制台
-                            process = subprocess.Popen(
-                                method,
-                                shell=True,
-                                cwd=current_dir,
-                                creationflags=subprocess.CREATE_NEW_CONSOLE,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL
-                            )
-                        elif i == 2:
-                            # DETACHED_PROCESS 分離進程
-                            process = subprocess.Popen(
-                                method,
-                                shell=True,
-                                cwd=current_dir,
-                                creationflags=subprocess.DETACHED_PROCESS,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL
-                            )
-                        else:
-                            # 標準方式
-                            process = subprocess.Popen(
-                                method,
-                                shell=True,
-                                cwd=current_dir,
-                                creationflags=subprocess.CREATE_NEW_CONSOLE
-                            )
-                        
-                        self.logger.info(f"重啟方法 {i} 執行成功，PID: {process.pid}")
-                        success = True
-                        break
-                        
-                    except Exception as method_error:
-                        self.logger.error(f"重啟方法 {i} 失敗: {method_error}")
-                        continue
-                
+                success = self._windows_restart(command)
                 if not success:
-                    raise Exception("所有重啟方法都失敗")
-                    
+                    raise Exception("Windows 重啟失敗")
             else:  # Unix/Linux
-                self.logger.info(f"Unix/Linux 系統重啟命令: {command}")
-                subprocess.Popen(command.split(), start_new_session=True)
+                self._unix_restart(command)
             
             # 給新進程一些時間啟動
             self.logger.info("等待 3 秒確保新進程啟動...")
@@ -327,6 +248,146 @@ class GracefulRestartManager:
             import traceback
             self.logger.error(f"錯誤堆疊: {traceback.format_exc()}")
             sys.exit(1)
+    
+    def _windows_restart(self, command: str) -> bool:
+        """Windows 專用重啟方法"""
+        try:
+            current_dir = os.getcwd()
+            self.logger.info(f"當前工作目錄: {current_dir}")
+            
+            # 檢測虛擬環境
+            venv_path = os.environ.get('VIRTUAL_ENV')
+            if venv_path:
+                self.logger.info(f"檢測到虛擬環境: {venv_path}")
+                python_exe = os.path.join(venv_path, 'Scripts', 'python.exe')
+                if os.path.exists(python_exe):
+                    command = f'"{python_exe}" main.py'
+                    self.logger.info(f"使用虛擬環境 Python: {command}")
+                else:
+                    self.logger.warning(f"虛擬環境 Python 不存在: {python_exe}")
+            
+            # 記錄環境資訊
+            self.logger.info(f"PATH: {os.environ.get('PATH', 'N/A')[:200]}...")
+            self.logger.info(f"PYTHON 路徑: {shutil.which('python')}")
+            
+            # 方法 1: 創建 PowerShell 腳本重啟
+            script_path = self.create_windows_restart_script()
+            if script_path and self.execute_powershell_restart(script_path):
+                return True
+            
+            # 方法 2: 創建批次檔案重啟
+            if self._create_restart_batch(command, current_dir):
+                return True
+                
+            # 方法 3: 使用 subprocess 多種方式
+            return self._subprocess_restart_methods(command, current_dir)
+            
+        except Exception as e:
+            self.logger.error(f"Windows 重啟過程發生錯誤: {e}")
+            return False
+    
+    def _create_restart_batch(self, command: str, current_dir: str) -> bool:
+        """創建批次檔案進行重啟"""
+        try:
+            batch_file = os.path.join(current_dir, "restart_bot.bat")
+            
+            # 創建批次檔案內容
+            batch_content = f"""@echo off
+cd /d "{current_dir}"
+echo Starting PigPig Discord Bot...
+{command}
+pause
+"""
+            
+            # 寫入批次檔案
+            with open(batch_file, 'w', encoding='utf-8') as f:
+                f.write(batch_content)
+            
+            self.logger.info(f"批次檔案已創建: {batch_file}")
+            
+            # 執行批次檔案
+            process = subprocess.Popen(
+                [batch_file],
+                cwd=current_dir,
+                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL
+            )
+            
+            self.logger.info(f"批次檔案重啟成功，PID: {process.pid}")
+            
+            # 延遲刪除批次檔案（讓它有時間執行）
+            import threading
+            def delayed_cleanup():
+                import time
+                time.sleep(10)
+                try:
+                    if os.path.exists(batch_file):
+                        os.remove(batch_file)
+                        self.logger.info("批次檔案已清理")
+                except:
+                    pass
+            
+            thread = threading.Thread(target=delayed_cleanup, daemon=True)
+            thread.start()
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"批次檔案重啟失敗: {e}")
+            return False
+    
+    def _subprocess_restart_methods(self, command: str, current_dir: str) -> bool:
+        """使用 subprocess 的多種重啟方法"""
+        restart_methods = [
+            # 方法 1: 使用 cmd /c 在新控制台啟動
+            {
+                "cmd": ['cmd', '/c', f'cd /d "{current_dir}" && {command}'],
+                "flags": subprocess.CREATE_NEW_CONSOLE,
+                "shell": False
+            },
+            # 方法 2: 使用 start 命令
+            {
+                "cmd": f'start "PigPig Bot" cmd /k "cd /d {current_dir} && {command}"',
+                "flags": subprocess.DETACHED_PROCESS,
+                "shell": True
+            },
+            # 方法 3: 直接執行
+            {
+                "cmd": command,
+                "flags": subprocess.CREATE_NEW_CONSOLE,
+                "shell": True
+            }
+        ]
+        
+        for i, method in enumerate(restart_methods, 1):
+            try:
+                self.logger.info(f"嘗試重啟方法 {i}: {method['cmd']}")
+                
+                process = subprocess.Popen(
+                    method["cmd"],
+                    shell=method["shell"],
+                    cwd=current_dir,
+                    creationflags=method["flags"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL
+                )
+                
+                self.logger.info(f"重啟方法 {i} 執行成功，PID: {process.pid}")
+                return True
+                
+            except Exception as method_error:
+                self.logger.error(f"重啟方法 {i} 失敗: {method_error}")
+                continue
+        
+        return False
+    
+    def _unix_restart(self, command: str) -> None:
+        """Unix/Linux 重啟方法"""
+        self.logger.info(f"Unix/Linux 系統重啟命令: {command}")
+        subprocess.Popen(command.split(), start_new_session=True)
     
     async def _perform_health_check(self) -> bool:
         """
@@ -492,3 +553,104 @@ class GracefulRestartManager:
         except Exception as e:
             self.logger.error(f"取消重啟時發生錯誤: {e}")
             return False
+    def create_windows_restart_script(self) -> str:
+            """
+            創建 Windows PowerShell 重啟腳本
+            
+            Returns:
+                腳本檔案路徑
+            """
+            try:
+                current_dir = os.getcwd()
+                script_path = os.path.join(current_dir, "restart_bot.ps1")
+                
+                # 檢測虛擬環境
+                venv_path = os.environ.get('VIRTUAL_ENV')
+                if venv_path:
+                    python_exe = os.path.join(venv_path, 'Scripts', 'python.exe')
+                    if not os.path.exists(python_exe):
+                        python_exe = "python.exe"
+                else:
+                    python_exe = "python.exe"
+                
+                # PowerShell 腳本內容
+                ps_content = f'''# PigPig Discord Bot 重啟腳本
+    Write-Host "等待 5 秒後重啟 Bot..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 5
+
+    Write-Host "切換到工作目錄..." -ForegroundColor Green
+    Set-Location "{current_dir}"
+
+    Write-Host "啟動 PigPig Discord Bot..." -ForegroundColor Green
+    try {{
+        & "{python_exe}" main.py
+    }} catch {{
+        Write-Host "啟動失敗，嘗試使用 python 命令..." -ForegroundColor Red
+        & python main.py
+    }}
+
+    Write-Host "Bot 已結束，按任意鍵關閉視窗..." -ForegroundColor Cyan
+    Read-Host
+    '''
+                
+                # 寫入 PowerShell 腳本
+                with open(script_path, 'w', encoding='utf-8') as f:
+                    f.write(ps_content)
+                
+                self.logger.info(f"PowerShell 重啟腳本已創建: {script_path}")
+                return script_path
+                
+            except Exception as e:
+                self.logger.error(f"創建 PowerShell 腳本失敗: {e}")
+                return ""
+    
+    def execute_powershell_restart(self, script_path: str) -> bool:
+        """
+        執行 PowerShell 重啟腳本
+        
+        Args:
+            script_path: PowerShell 腳本路徑
+            
+        Returns:
+            執行是否成功
+        """
+        try:
+            # 方法 1: 使用 PowerShell 執行
+            ps_cmd = [
+                "powershell.exe", 
+                "-WindowStyle", "Normal",
+                "-ExecutionPolicy", "Bypass",
+                "-File", script_path
+            ]
+            
+            process = subprocess.Popen(
+                ps_cmd,
+                creationflags=subprocess.CREATE_NEW_CONSOLE | subprocess.DETACHED_PROCESS,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL
+            )
+            
+            self.logger.info(f"PowerShell 重啟腳本執行成功，PID: {process.pid}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"PowerShell 重啟失敗: {e}")
+            
+            # 方法 2: 備用 - 使用 cmd 執行 PowerShell
+            try:
+                cmd_ps = f'powershell.exe -WindowStyle Normal -ExecutionPolicy Bypass -File "{script_path}"'
+                process = subprocess.Popen(
+                    cmd_ps,
+                    shell=True,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                
+                self.logger.info(f"CMD PowerShell 重啟執行成功，PID: {process.pid}")
+                return True
+                
+            except Exception as e2:
+                self.logger.error(f"CMD PowerShell 重啟也失敗: {e2}")
+                return False
