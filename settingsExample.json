@@ -10,7 +10,7 @@
         "port": 8000,
         "enable": false
     },
-    "version": "v2.2.0",
+    "version": "v2.2.1",
     "mongodb": "mongodb://localhost:27017/",
     "music_temp_base": "./temp/music",
     "model_priority": ["gemini", "local", "openai", "claude"],
