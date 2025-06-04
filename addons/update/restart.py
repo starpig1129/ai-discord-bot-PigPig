@@ -136,9 +136,15 @@ class GracefulRestartManager:
             await asyncio.sleep(2)
             self.logger.info("✅ Bot 關閉等待完成")
             
-            # 執行重啟命令
+            # 執行重啟命令 - 修復：在執行器中運行同步方法
             self.logger.info("🚀 === 開始執行重啟命令階段 ===")
-            self._execute_restart_command()
+            self.logger.info("🔧 使用執行器防止事件循環阻塞...")
+            
+            # 在執行器中運行重啟命令以避免阻塞事件循環
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._execute_restart_command)
+            
+            self.logger.info("✅ 重啟命令執行器調用完成")
             
         except Exception as e:
             self.logger.error("💥 執行重啟時發生嚴重錯誤!")
@@ -263,7 +269,7 @@ class GracefulRestartManager:
     def _execute_restart_command(self) -> None:
         """執行重啟命令 - 增強版診斷"""
         try:
-            self.logger.info("🚀 開始執行重啟命令...")
+            self.logger.info("🚀 === 重啟命令執行開始 ===")
             command = self.restart_config["restart_command"]
             self.logger.info(f"📋 原始重啟命令: {command}")
             self.logger.info(f"💻 操作系統: {os.name} ({platform.system()} {platform.release()})")
@@ -282,43 +288,70 @@ class GracefulRestartManager:
             with open("data/current_process_info.json", "w", encoding='utf-8') as f:
                 json.dump(current_process_info, f, indent=2, ensure_ascii=False)
             
+            self.logger.info("💾 進程資訊已保存，開始執行重啟...")
+            
+            restart_success = False
+            
             # Windows 環境使用增強版重啟
             if os.name == 'nt':
-                self.logger.info("🖥️ Windows 系統，使用增強版重啟...")
-                if self.restart_config.get("enable_detailed_logging", True):
-                    self.logger.info("📊 啟用詳細診斷模式")
-                    success = self._enhanced_windows_restart(command)
-                    if not success:
-                        self.logger.warning("⚠️ 增強版 Windows 重啟失敗，嘗試傳統方法...")
-                        success = self._windows_restart(command)
-                        if not success:
-                            self.logger.error("❌ 所有 Windows 重啟方法都失敗")
-                            raise Exception("所有 Windows 重啟方法都失敗")
+                self.logger.info("🖥️ Windows 系統，開始多重重啟嘗試...")
+                
+                # 方法 1: 增強版重啟
+                try:
+                    self.logger.info("🔧 方法 1: 增強版 Windows 重啟")
+                    restart_success = self._enhanced_windows_restart(command)
+                    if restart_success:
+                        self.logger.info("✅ 增強版 Windows 重啟成功")
+                    else:
+                        self.logger.warning("⚠️ 增強版 Windows 重啟失敗")
+                except Exception as e:
+                    self.logger.error(f"💥 增強版重啟異常: {e}")
+                
+                # 方法 2: 傳統重啟
+                if not restart_success:
+                    try:
+                        self.logger.info("🔧 方法 2: 傳統 Windows 重啟")
+                        restart_success = self._windows_restart(command)
+                        if restart_success:
+                            self.logger.info("✅ 傳統 Windows 重啟成功")
                         else:
-                            self.logger.info("✅ 傳統 Windows 重啟方法成功")
-                    else:
-                        self.logger.info("✅ 增強版 Windows 重啟方法成功")
-                else:
-                    self.logger.info("📊 使用基本重啟模式")
-                    success = self._windows_restart(command)
-                    if not success:
-                        self.logger.error("❌ Windows 重啟失敗")
-                        raise Exception("Windows 重啟失敗")
-                    else:
-                        self.logger.info("✅ Windows 重啟方法成功")
+                            self.logger.warning("⚠️ 傳統 Windows 重啟失敗")
+                    except Exception as e:
+                        self.logger.error(f"💥 傳統重啟異常: {e}")
+                
+                # 方法 3: 簡單批次檔重啟
+                if not restart_success:
+                    try:
+                        self.logger.info("🔧 方法 3: 簡單批次檔重啟")
+                        restart_success = self._simple_batch_restart(command)
+                        if restart_success:
+                            self.logger.info("✅ 簡單批次檔重啟成功")
+                        else:
+                            self.logger.warning("⚠️ 簡單批次檔重啟失敗")
+                    except Exception as e:
+                        self.logger.error(f"💥 簡單批次檔重啟異常: {e}")
+                        
             else:  # Unix/Linux
-                self.logger.info("🐧 Unix/Linux 系統，使用增強進程分離重啟...")
-                self._unix_restart(command)
-                self.logger.info("✅ Unix/Linux 重啟命令已執行")
+                try:
+                    self.logger.info("🐧 Unix/Linux 系統，使用增強進程分離重啟...")
+                    self._unix_restart(command)
+                    restart_success = True
+                    self.logger.info("✅ Unix/Linux 重啟命令已執行")
+                except Exception as e:
+                    self.logger.error(f"💥 Unix/Linux 重啟異常: {e}")
             
-            # 給新進程一些時間啟動
-            self.logger.info("⏳ 等待 5 秒確保新進程啟動...")
-            time.sleep(5)
-            
-            # 退出當前進程
-            self.logger.info("🔚 準備退出當前進程...")
-            self.logger.info("👋 Bot 即將關閉，新進程應該正在啟動...")
-            sys.exit(0)
+            if restart_success:
+                # 給新進程一些時間啟動
+                self.logger.info("⏳ 等待 5 秒確保新進程啟動...")
+                time.sleep(5)
+                
+                # 退出當前進程
+                self.logger.info("🔚 準備退出當前進程...")
+                self.logger.info("👋 Bot 即將關閉，新進程應該正在啟動...")
+                sys.exit(0)
+            else:
+                self.logger.error("❌ 所有重啟方法都失敗!")
+                raise Exception("所有重啟方法都失敗")
             
         except Exception as e:
             self.logger.error("💥 執行重啟命令時發生嚴重錯誤!")
@@ -326,7 +359,11 @@ class GracefulRestartManager:
             self.logger.error(f"🏷️ 錯誤類型: {type(e).__name__}")
             import traceback
             self.logger.error(f"📋 錯誤堆疊:\n{traceback.format_exc()}")
-            self.logger.error("🔄 重啟流程失敗，程式即將退出")
+            
+            # 創建手動重啟指示
+            self._create_manual_restart_instruction(command)
+            
+            self.logger.error("🔄 自動重啟失敗，請查看 manual_restart_instructions.txt")
             sys.exit(1)
     
     def _enhanced_windows_restart(self, command: str) -> bool:
@@ -1730,6 +1767,76 @@ del "{batch_file}" 2>nul
         except Exception as e:
             self.logger.error(f"保存重啟失敗日誌時發生錯誤: {e}")
     
+    def _simple_batch_restart(self, command: str) -> bool:
+        """簡單批次檔重啟方法 - 最後備用方案"""
+        try:
+            self.logger.info("🔧 創建簡單批次檔重啟...")
+            
+            # 創建最簡單的批次檔
+            batch_content = f"""@echo off
+echo PigPig Discord Bot Auto Restart
+cd /d "{os.getcwd()}"
+timeout /t 3 /nobreak
+{command}
+pause
+"""
+            
+            batch_file = "simple_restart.bat"
+            with open(batch_file, 'w', encoding='utf-8') as f:
+                f.write(batch_content)
+            
+            self.logger.info(f"📄 簡單批次檔已創建: {batch_file}")
+            
+            # 使用最基本的方式執行
+            try:
+                import subprocess
+                process = subprocess.Popen(
+                    f'start "" "{batch_file}"',
+                    shell=True,
+                    cwd=os.getcwd()
+                )
+                self.logger.info(f"🚀 簡單批次檔已啟動，PID: {process.pid}")
+                return True
+            except Exception as e:
+                self.logger.error(f"❌ 簡單批次檔執行失敗: {e}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"💥 創建簡單批次檔失敗: {e}")
+            return False
+    
+    def _create_manual_restart_instruction(self, command: str) -> None:
+        """創建手動重啟指示文件"""
+        try:
+            instruction_content = f"""# PigPig Discord Bot 手動重啟指示
+
+自動重啟失敗，請按照以下步驟手動重啟 Bot：
+
+## Windows 用戶：
+1. 打開命令提示字元 (CMD)
+2. 切換到 Bot 目錄：cd "{os.getcwd()}"
+3. 執行重啟命令：{command}
+
+## 或者使用批次檔：
+1. 雙擊執行 manual_restart.bat
+
+## 故障排除：
+- 確認虛擬環境已啟動：{os.environ.get('VIRTUAL_ENV', '未檢測到')}
+- 確認 Python 可執行：python --version
+- 檢查依賴：pip list
+
+## 時間戳記：{datetime.now().isoformat()}
+## 失敗的重啟命令：{command}
+"""
+
+            with open("manual_restart_instructions.txt", "w", encoding='utf-8') as f:
+                f.write(instruction_content)
+            
+            self.logger.info("📄 手動重啟指示已創建: manual_restart_instructions.txt")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 創建手動重啟指示失敗: {e}")
+
     def _log_manual_restart_instructions(self) -> None:
         """記錄手動重啟指引"""
         self.logger.error("=" * 60)

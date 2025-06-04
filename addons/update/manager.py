@@ -375,34 +375,82 @@ class UpdateManager:
             protected_files.add("temp")  # 保護臨時目錄
             protected_files.add("data/backups")  # 保護備份目錄
             
+            # 增強 Git 保護邏輯
+            self.logger.info("🛡️ === Git 保護檢查開始 ===")
+            git_items = [item for item in os.listdir(".") if item.startswith('.git')]
+            if git_items:
+                self.logger.info(f"🔍 檢測到 Git 相關項目: {git_items}")
+                for git_item in git_items:
+                    protected_files.add(git_item)
+                    self.logger.info(f"🛡️ 已保護 Git 項目: {git_item}")
+            else:
+                self.logger.info("ℹ️ 未檢測到 Git 相關項目")
+            
+            self.logger.info(f"🛡️ 最終保護列表: {sorted(protected_files)}")
+            
             # 刪除舊檔案（除了保護檔案）
             current_items = set(os.listdir("."))
-            for item in current_items:
-                if item not in protected_files and not item.startswith('.'):
-                    item_path = os.path.join(".", item)
-                    try:
-                        if os.path.isdir(item_path):
-                            shutil.rmtree(item_path)
-                        else:
-                            os.remove(item_path)
-                        self.logger.debug(f"已刪除舊項目: {item}")
-                    except Exception as e:
-                        self.logger.warning(f"刪除舊項目失敗 {item}: {e}")
+            self.logger.info("🗑️ === 開始清理舊檔案 ===")
             
-            # 複製新檔案
-            for item in os.listdir(source_dir):
-                if item not in protected_files:
-                    source_item = os.path.join(source_dir, item)
-                    dest_item = os.path.join(".", item)
+            for item in current_items:
+                should_protect = (
+                    item in protected_files or
+                    item.startswith('.git') or
+                    item.startswith('.env') or
+                    any(item.startswith(pf.rstrip('/')) for pf in protected_files if pf.endswith('/'))
+                )
+                
+                if should_protect:
+                    self.logger.info(f"🛡️ 保護項目: {item}")
+                    continue
                     
-                    try:
-                        if os.path.isdir(source_item):
-                            shutil.copytree(source_item, dest_item, dirs_exist_ok=True)
-                        else:
-                            shutil.copy2(source_item, dest_item)
-                        self.logger.debug(f"已複製新項目: {item}")
-                    except Exception as e:
-                        self.logger.warning(f"複製新項目失敗 {item}: {e}")
+                item_path = os.path.join(".", item)
+                try:
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                        self.logger.info(f"🗑️ 已刪除舊目錄: {item}")
+                    else:
+                        os.remove(item_path)
+                        self.logger.info(f"🗑️ 已刪除舊檔案: {item}")
+                except Exception as e:
+                    self.logger.warning(f"❌ 刪除項目失敗 {item}: {e}")
+            
+            self.logger.info("✅ 舊檔案清理完成")
+            
+            # 複製新檔案 - 增強保護
+            self.logger.info("📦 === 開始複製新檔案 ===")
+            
+            for item in os.listdir(source_dir):
+                should_skip = (
+                    item in protected_files or
+                    item.startswith('.git') or
+                    item.startswith('.env') or
+                    any(item.startswith(pf.rstrip('/')) for pf in protected_files if pf.endswith('/'))
+                )
+                
+                if should_skip:
+                    self.logger.info(f"⏭️ 跳過保護項目: {item}")
+                    continue
+                    
+                source_item = os.path.join(source_dir, item)
+                dest_item = os.path.join(".", item)
+                
+                # 額外檢查目標位置是否為受保護的 Git 目錄
+                if os.path.exists(dest_item) and item.startswith('.git'):
+                    self.logger.warning(f"🛡️ 目標位置存在 Git 目錄，跳過覆蓋: {item}")
+                    continue
+                
+                try:
+                    if os.path.isdir(source_item):
+                        shutil.copytree(source_item, dest_item, dirs_exist_ok=True)
+                        self.logger.info(f"📁 已複製新目錄: {item}")
+                    else:
+                        shutil.copy2(source_item, dest_item)
+                        self.logger.info(f"📄 已複製新檔案: {item}")
+                except Exception as e:
+                    self.logger.warning(f"❌ 複製項目失敗 {item}: {e}")
+            
+            self.logger.info("✅ 新檔案複製完成")
             
             # 清理臨時目錄
             shutil.rmtree(temp_dir, ignore_errors=True)

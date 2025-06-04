@@ -34,6 +34,9 @@ class Settings:
             "protected_files": [
                 "settings.json",
                 ".env",
+                ".git/",
+                ".gitignore",
+                ".gitattributes",
                 "data/schedule/",
                 "data/dialogue_history.json",
                 "data/channel_configs/",
@@ -133,6 +136,9 @@ class UpdateSettings:
             "protected_files": [
                 "settings.json",
                 ".env",
+                ".git/",
+                ".gitignore",
+                ".gitattributes",
                 "data/schedule/",
                 "data/dialogue_history.json",
                 "data/channel_configs/",
