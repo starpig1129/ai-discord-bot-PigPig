@@ -389,7 +389,7 @@ class EditModeSelectionView(discord.ui.View):
                 self.logger.warning(f"無法取得有效提示作為預設值: {e}")
 
         modal = SystemPromptModal(
-            title=f"直接編輯 {self.scope_text} 系統提示",
+            title="編輯系統提示",
             initial_value=existing_content,
             callback_func=lambda i, prompt_content: self._handle_direct_set_callback(i, prompt_content),
             manager=self.manager, # Pass manager if modal needs it

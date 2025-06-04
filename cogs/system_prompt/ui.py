@@ -199,14 +199,15 @@ class SystemPromptModuleModal(discord.ui.Modal):
             descriptions = manager.get_module_descriptions(lang)
             module_description = descriptions.get(module_name, "")
         
-        # 構建標題，包含說明
-        title = f"設定模組: {module_name}"
-        if module_description:
-            # Discord Modal 標題有長度限制，所以縮短描述
-            short_desc = module_description[:50] + "..." if len(module_description) > 50 else module_description
-            title = f"📦 {module_name}: {short_desc}"
+        # 構建標題，確保不超過 45 字元限制
+        title = f"編輯模組: {module_name}"
+        if len(title) > 45:
+            # 如果模組名稱太長，縮短標題
+            max_module_name_len = 45 - len("編輯模組: ")
+            short_module_name = module_name[:max_module_name_len] + "..." if len(module_name) > max_module_name_len else module_name
+            title = f"編輯模組: {short_module_name}"
         
-        super().__init__(title=title[:100], **kwargs)  # Discord 限制標題長度
+        super().__init__(title=title[:45], **kwargs)  # Discord 限制標題長度為 45 字元
         self.module_name = module_name
         self.callback_func = callback_func
         self.manager = manager
