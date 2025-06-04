@@ -1186,7 +1186,16 @@ class EnhancedWindowsRestartManager:
         # 取得最佳的 Python 執行檔路徑
         best_python = self._get_best_python_executable(system_info)
         
-        # 方法 1: 使用虛擬環境 Python + 延遲重啟批次檔
+        # 方法 1: 最強健的 Windows CMD 重啟方法
+        methods.append({
+            "name": "強健的 CMD 重啟方法",
+            "type": "robust_cmd_restart",
+            "command": f'"{best_python or "python"}" main.py' if best_python else command,
+            "delay": 3,
+            "description": "使用 CMD 的 START 命令配合完全分離標誌"
+        })
+        
+        # 方法 2: 使用虛擬環境 Python + 延遲重啟批次檔
         if best_python:
             methods.append({
                 "name": "虛擬環境 Python + 延遲批次檔",
@@ -1195,7 +1204,7 @@ class EnhancedWindowsRestartManager:
                 "delay": 10
             })
         
-        # 方法 2: PowerShell 腳本 + 延遲重啟
+        # 方法 3: PowerShell 腳本 + 延遲重啟
         methods.append({
             "name": "PowerShell 腳本延遲重啟",
             "type": "powershell_delayed",
@@ -1203,14 +1212,14 @@ class EnhancedWindowsRestartManager:
             "delay": 8
         })
         
-        # 方法 3: 使用 START 命令在新視窗啟動
+        # 方法 4: 使用 START 命令在新視窗啟動
         methods.append({
             "name": "START 命令新視窗",
             "type": "start_new_window",
             "command": f'start "PigPig Bot" /D "{current_dir}" cmd /k "{best_python or "python"} main.py"' if best_python else f'start "PigPig Bot" /D "{current_dir}" cmd /k "{command}"'
         })
         
-        # 方法 4: 使用 scheduled task (Windows 10+)
+        # 方法 5: 使用 scheduled task (Windows 10+)
         methods.append({
             "name": "Windows 排程任務",
             "type": "scheduled_task",
@@ -1218,14 +1227,14 @@ class EnhancedWindowsRestartManager:
             "delay": 5
         })
         
-        # 方法 5: 傳統批次檔案方法
+        # 方法 6: 傳統批次檔案方法
         methods.append({
             "name": "傳統批次檔案",
             "type": "traditional_batch",
             "command": f'"{best_python or "python"}" main.py' if best_python else command
         })
         
-        # 方法 6: 直接 subprocess 方法
+        # 方法 7: 直接 subprocess 方法
         methods.append({
             "name": "直接 subprocess",
             "type": "direct_subprocess",
@@ -1268,7 +1277,9 @@ class EnhancedWindowsRestartManager:
         try:
             method_type = method["type"]
             
-            if method_type == "delayed_batch":
+            if method_type == "robust_cmd_restart":
+                success, pid, details = self._execute_robust_cmd_restart(method)
+            elif method_type == "delayed_batch":
                 success, pid, details = self._execute_delayed_batch_restart(method)
             elif method_type == "powershell_delayed":
                 success, pid, details = self._execute_powershell_delayed_restart(method)
@@ -1297,6 +1308,84 @@ class EnhancedWindowsRestartManager:
             attempt_result["traceback"] = traceback.format_exc()
         
         return attempt_result
+    
+    def _execute_robust_cmd_restart(self, method: Dict[str, Any]) -> tuple:
+        """執行強健的 CMD 重啟方法"""
+        try:
+            current_dir = os.getcwd()
+            command = method["command"]
+            delay = method.get("delay", 3)
+            
+            # 創建一個簡單但強健的批次檔
+            batch_file = os.path.join(current_dir, f"robust_restart_{int(time.time())}.bat")
+            
+            # 使用最可靠的批次檔內容
+            batch_content = f"""@echo off
+chcp 65001 >nul 2>&1
+echo PigPig Discord Bot 強健重啟腳本
+echo 等待 {delay} 秒...
+timeout /t {delay} /nobreak >nul
+cd /d "{current_dir}"
+echo 切換目錄: {current_dir}
+echo 啟動命令: {command}
+
+REM 嘗試多種啟動方式
+{command}
+if errorlevel 1 (
+    echo 第一次啟動失敗，嘗試備用方法...
+    python main.py
+    if errorlevel 1 (
+        echo 第二次啟動失敗，嘗試系統 Python...
+        py main.py
+        if errorlevel 1 (
+            echo 所有啟動方法都失敗！
+            echo 請手動啟動 Bot
+            pause
+        )
+    )
+)
+
+REM 自動清理
+del "{batch_file}" 2>nul
+"""
+            
+            # 寫入批次檔
+            with open(batch_file, 'w', encoding='utf-8') as f:
+                f.write(batch_content)
+            
+            # 使用最強健的進程創建方式
+            cmd_command = f'cmd /c "start /min "PigPig Bot Restart" cmd /c ""{batch_file}"""'
+            
+            process = subprocess.Popen(
+                cmd_command,
+                shell=True,
+                creationflags=(
+                    subprocess.DETACHED_PROCESS |
+                    subprocess.CREATE_NEW_PROCESS_GROUP |
+                    subprocess.CREATE_NO_WINDOW
+                ),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                close_fds=True,
+                cwd=current_dir
+            )
+            
+            details = {
+                "batch_file": batch_file,
+                "delay_seconds": delay,
+                "command": command,
+                "cmd_command": cmd_command,
+                "working_directory": current_dir
+            }
+            
+            # 短暫等待確保進程啟動
+            time.sleep(1)
+            
+            return True, process.pid, details
+            
+        except Exception as e:
+            return False, None, {"error": str(e)}
     
     def _execute_delayed_batch_restart(self, method: Dict[str, Any]) -> tuple:
         """執行延遲批次檔重啟"""
