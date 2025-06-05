@@ -214,6 +214,7 @@ chcp 65001 >nul 2>&1
 timeout /t 3 /nobreak >nul
 cd /d "{current_dir}"
 "{python_exe}" main.py
+exit
 """
             
             batch_file = os.path.join(current_dir, "temp_restart.bat")
@@ -223,8 +224,8 @@ cd /d "{current_dir}"
             
             self.logger.info(f"重啟批次檔已創建: {batch_file}")
             
-            # 使用 start 命令執行批次檔
-            cmd = f'start "PigPig Bot Restart" "{batch_file}"'
+            # 使用 start 命令執行批次檔，並關閉當前視窗
+            cmd = f'start "PigPig Bot Restart" /B "{batch_file}" && exit'
             
             self.logger.info(f"執行重啟命令: {cmd}")
             

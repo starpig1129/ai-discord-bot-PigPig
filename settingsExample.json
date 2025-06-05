@@ -10,7 +10,7 @@
         "port": 8000,
         "enable": false
     },
-    "version": "v2.2.7",
+    "version": "v2.2.8",
     "mongodb": "mongodb://localhost:27017/",
     "music_temp_base": "./temp/music",
     "model_priority": ["gemini", "local", "openai", "claude"],
@@ -29,7 +29,19 @@
         "backup_enabled": true,
         "max_backups": 5,
         "verify_downloads": true,
-        "protected_files": ["settings.json", ".env", "data/"]
+        "protected_files": [
+            "settings.json",
+            "systemPrompt.yaml",
+            ".env",
+            ".git/",
+            ".gitignore",
+            ".gitattributes",
+            "data/schedule/",
+            "data/dialogue_history.json",
+            "data/channel_configs/",
+            "data/user_data/",
+            "data/update_logs/"
+        ]
     },
     "restart": {
         "graceful_shutdown_timeout": 30,
