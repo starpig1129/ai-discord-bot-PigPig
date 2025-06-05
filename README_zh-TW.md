@@ -51,17 +51,62 @@ PigPig 是一個基於多模態大型語言模型 (LLM) 的強大 Discord 機器
 ![alt text](readmeimg/image-3.png)
 
 ## 🚀 快速入門
-```sh
+```
+
+### FFmpeg 設定
+
+機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
+
+| 設定項目 | 描述 |
+| --- | --- |
+| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
+| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
+| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
+| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
+| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
+
+這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。sh
 git clone https://github.com/starpig1129/discord-LLM-bot-PigPig.git  #複製儲存庫
 cd discord-LLM-bot-PigPig                                        #進入目錄
 python -m pip install -r requirements.txt          #安裝所需的套件
 ```
 
+### FFmpeg 設定
+
+機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
+
+| 設定項目 | 描述 |
+| --- | --- |
+| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
+| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
+| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
+| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
+| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
+
+這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。
+
 使用 `python main.py` 啟動您的機器人
 
 ## ⚙️ 設定
 1. **將 `.env Example` 重新命名為 `.env` 並填寫所有值**
-```sh
+```
+
+### FFmpeg 設定
+
+機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
+
+| 設定項目 | 描述 |
+| --- | --- |
+| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
+| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
+| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
+| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
+| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
+
+這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。sh
 TOKEN = XXXXXXXXXXXXXXXXXXXXXXXX.XXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXX
 CLIENT_ID = 123456789012345678
 CLIENT_SECRET_ID = XXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXX
@@ -81,6 +126,21 @@ BOT_OWNER_ID = 123456789012345678
 # MongoDB 配置（使用者資料和餐廳功能必需）
 MONGODB_URI = mongodb://localhost:27017/pigpig
 ```
+
+### FFmpeg 設定
+
+機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
+
+| 設定項目 | 描述 |
+| --- | --- |
+| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
+| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
+| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
+| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
+| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
+
+這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。
 | 值 | 描述 |
 |---|---|
 | TOKEN | 您的 Discord 機器人權杖 [(Discord 入口網站)](https://discord.com/developers/applications) |
@@ -95,7 +155,22 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
 | MONGODB_URI | MongoDB 連線字串，用於使用者資料儲存 ***(使用者資料和餐廳功能必需)*** |
 2. **將 `settingsExample.json` 重新命名為 `settings.json` 並自訂您的設定**
 ***(注意：請勿更改 `settings.json` 中的任何金鑰)***
-```json
+```
+
+### FFmpeg 設定
+
+機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
+
+| 設定項目 | 描述 |
+| --- | --- |
+| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
+| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
+| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
+| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
+| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
+
+這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。json
 {
     "prefix": "/",
     "activity": [
@@ -108,7 +183,7 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
         "port": 8000,
         "enable": false
     },
-    "version": "v2.0.0",
+    "version": "v2.2.11",
     "mongodb": "mongodb://localhost:27017/",
     "music_temp_base": "./temp/music",
     "model_priority": ["gemini", "local", "openai", "claude"],
@@ -138,9 +213,56 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
         "repository": "starpig1129/ai-discord-bot-PigPig",
         "api_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/releases/latest",
         "download_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
+    },
+    "ffmpeg": {
+        "location": "/usr/bin/ffmpeg",
+        "audio_quality": "192",
+        "audio_codec": "mp3",
+        "postprocessor_args": {
+            "threads": 2,
+            "loglevel": "warning",
+            "overwrite_output": true,
+            "max_muxing_queue_size": 2048,
+            "analyzeduration": "20M",
+            "probesize": "20M",
+            "reconnect": true,
+            "reconnect_streamed": true,
+            "reconnect_delay_max": 30,
+            "timeout": 30000000,
+            "rw_timeout": 30000000
+        },
+        "ytdlp_options": {
+            "socket_timeout": 300,
+            "retries": 10,
+            "concurrent_fragment_downloads": 1,
+            "file_access_retries": 5,
+            "fragment_retries": 10,
+            "retry_sleep_http": 5
+        },
+        "http_headers": {
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "accept_language": "en-us,en;q=0.5",
+            "sec_fetch_mode": "navigate"
+        }
     }
 }
 ```
+
+### FFmpeg 設定
+
+機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
+
+| 設定項目 | 描述 |
+| --- | --- |
+| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
+| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
+| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
+| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
+| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
+
+這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。
 
 ## Cogs 概述
 
@@ -159,6 +281,7 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
 - **音樂 (Music):** 使用自建 YouTube 整合系統 (yt_dlp + PyNaCl) 提供音樂播放，支援播放清單、佇列和各種播放模式。
 - **提醒 (Reminder):** 為使用者設定和管理提醒事項。
 - **行程表 (Schedule):** 管理使用者行程表和日曆功能。
+- **系統提示管理器 (System Prompt Manager):** 管理頻道和伺服器專用的系統提示，具備權限驗證、快取機制和模組化提示系統整合功能。
 - **更新管理器 (Update Manager):** 管理自動更新系統，提供版本檢查、安全下載和系統重啟功能。
 - **使用者資料 (User Data):** 管理使用者特定資料和個人資料。
 - **美食推薦 (Eat):** 透過 MongoDB 整合提供智慧美食推薦。

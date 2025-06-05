@@ -51,17 +51,62 @@ PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM
 ![alt text](readmeimg/image-3.png)
 
 ## 🚀 Quick Start
-```sh
+```
+
+### FFmpeg Configuration
+
+The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
+
+| Setting | Description |
+| --- | --- |
+| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
+| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
+| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
+| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
+| `ffmpeg.http_headers` | HTTP headers for download requests |
+
+These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.sh
 git clone https://github.com/starpig1129/discord-LLM-bot-PigPig.git  #Clone the repository
 cd discord-LLM-bot-PigPig                                        #Go to the directory
 python -m pip install -r requirements.txt          #Install required packages
 ```
 
+### FFmpeg Configuration
+
+The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
+
+| Setting | Description |
+| --- | --- |
+| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
+| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
+| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
+| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
+| `ffmpeg.http_headers` | HTTP headers for download requests |
+
+These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.
+
 Start your bot with `python main.py`
 
 ## ⚙️ Configuration
 1. **Rename `.env Example` to `.env` and fill all the values**
-```sh
+```
+
+### FFmpeg Configuration
+
+The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
+
+| Setting | Description |
+| --- | --- |
+| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
+| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
+| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
+| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
+| `ffmpeg.http_headers` | HTTP headers for download requests |
+
+These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.sh
 TOKEN = XXXXXXXXXXXXXXXXXXXXXXXX.XXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXX
 CLIENT_ID = 123456789012345678
 CLIENT_SECRET_ID = XXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXX
@@ -81,6 +126,21 @@ BOT_OWNER_ID = 123456789012345678
 # MongoDB Configuration (required for user data and restaurant features)
 MONGODB_URI = mongodb://localhost:27017/pigpig
 ```
+
+### FFmpeg Configuration
+
+The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
+
+| Setting | Description |
+| --- | --- |
+| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
+| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
+| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
+| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
+| `ffmpeg.http_headers` | HTTP headers for download requests |
+
+These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.
 | Values | Description |
 | --- | --- |
 | TOKEN | Your Discord bot token [(Discord Portal)](https://discord.com/developers/applications) |
@@ -95,7 +155,22 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
 | MONGODB_URI | MongoDB connection string for user data storage ***(required for user data and restaurant features)*** |
 2. **Rename `settingsExample.json` to `settings.json` and customize your settings**
 ***(Note: Do not change any keys from `settings.json`)***
-```json
+```
+
+### FFmpeg Configuration
+
+The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
+
+| Setting | Description |
+| --- | --- |
+| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
+| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
+| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
+| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
+| `ffmpeg.http_headers` | HTTP headers for download requests |
+
+These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.json
 {
     "prefix": "/",
     "activity": [
@@ -108,7 +183,7 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
         "port": 8000,
         "enable": false
     },
-    "version": "v2.0.0",
+    "version": "v2.2.11",
     "mongodb": "mongodb://localhost:27017/",
     "music_temp_base": "./temp/music",
     "model_priority": ["gemini", "local", "openai", "claude"],
@@ -138,9 +213,56 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
         "repository": "starpig1129/ai-discord-bot-PigPig",
         "api_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/releases/latest",
         "download_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
+    },
+    "ffmpeg": {
+        "location": "/usr/bin/ffmpeg",
+        "audio_quality": "192",
+        "audio_codec": "mp3",
+        "postprocessor_args": {
+            "threads": 2,
+            "loglevel": "warning",
+            "overwrite_output": true,
+            "max_muxing_queue_size": 2048,
+            "analyzeduration": "20M",
+            "probesize": "20M",
+            "reconnect": true,
+            "reconnect_streamed": true,
+            "reconnect_delay_max": 30,
+            "timeout": 30000000,
+            "rw_timeout": 30000000
+        },
+        "ytdlp_options": {
+            "socket_timeout": 300,
+            "retries": 10,
+            "concurrent_fragment_downloads": 1,
+            "file_access_retries": 5,
+            "fragment_retries": 10,
+            "retry_sleep_http": 5
+        },
+        "http_headers": {
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "accept_language": "en-us,en;q=0.5",
+            "sec_fetch_mode": "navigate"
+        }
     }
 }
 ```
+
+### FFmpeg Configuration
+
+The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
+
+| Setting | Description |
+| --- | --- |
+| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
+| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
+| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
+| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
+| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
+| `ffmpeg.http_headers` | HTTP headers for download requests |
+
+These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.
 
 ## Cogs Overview
 
@@ -159,6 +281,7 @@ This bot utilizes a modular design with several cogs (modules) to handle differe
 - **Music:** Provides music playback using custom YouTube integration (yt_dlp + PyNaCl), supporting playlists, queues, and various playback modes.
 - **Reminder:** Sets and manages reminders for users.
 - **Schedule:** Manages user schedules and calendar functionality.
+- **System Prompt Manager:** Manages channel and server-specific system prompts with permission validation, caching, and modular prompt system integration.
 - **Update Manager:** Manages the auto-update system, providing version checking, secure downloading, and system restart functionality.
 - **User Data:** Manages user-specific data and profiles.
 - **Eat:** Provides intelligent food recommendations with MongoDB integration.
