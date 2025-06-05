@@ -54,6 +54,44 @@ class Settings:
             "api_url": "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest",
             "download_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
         })
+        
+        # FFmpeg 設定
+        self.ffmpeg: dict = settings.get("ffmpeg", self._get_default_ffmpeg())
+    
+    def _get_default_ffmpeg(self) -> dict:
+        """獲取預設 FFmpeg 設定"""
+        return {
+            "location": "/usr/bin/ffmpeg",
+            "audio_quality": "192",
+            "audio_codec": "mp3",
+            "postprocessor_args": {
+                "threads": 2,
+                "loglevel": "warning",
+                "overwrite_output": True,
+                "max_muxing_queue_size": 2048,
+                "analyzeduration": "20M",
+                "probesize": "20M",
+                "reconnect": True,
+                "reconnect_streamed": True,
+                "reconnect_delay_max": 30,
+                "timeout": 30000000,
+                "rw_timeout": 30000000
+            },
+            "ytdlp_options": {
+                "socket_timeout": 300,
+                "retries": 10,
+                "concurrent_fragment_downloads": 1,
+                "file_access_retries": 5,
+                "fragment_retries": 10,
+                "retry_sleep_http": 5
+            },
+            "http_headers": {
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "accept_language": "en-us,en;q=0.5",
+                "sec_fetch_mode": "navigate"
+            }
+        }
 
 class TOKENS:
     def __init__(self) -> None:

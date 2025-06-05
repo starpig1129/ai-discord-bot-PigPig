@@ -4,29 +4,104 @@ import subprocess
 import asyncio
 import yt_dlp
 from youtube_search import YoutubeSearch
+from addons.settings import Settings
 
-async def check_ffmpeg():
+async def check_ffmpeg(ffmpeg_path='/usr/bin/ffmpeg'):
     """檢查 FFmpeg 是否可用且能正常運作"""
     try:
         # 使用 asyncio.to_thread 非同步執行 FFmpeg 檢查
         await asyncio.to_thread(
-            lambda: subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+            lambda: subprocess.run([ffmpeg_path, '-version'], capture_output=True, check=True)
         )
         return True
     except (subprocess.SubprocessError, FileNotFoundError):
-        logger.error("FFmpeg 無法使用或運作異常")
+        logger.error(f"FFmpeg 無法使用或運作異常: {ffmpeg_path}")
         return False
 
 class YouTubeManager:
     def __init__(self, time_limit=1800):  # 30 分鐘限制
         self.time_limit = time_limit
+        # 載入 FFmpeg 設定
+        try:
+            self.settings = Settings()
+            self.ffmpeg_config = self.settings.ffmpeg
+        except Exception as e:
+            logger.error(f"載入 FFmpeg 設定失敗，使用預設值: {e}")
+            # 使用預設 FFmpeg 設定
+            self.ffmpeg_config = self._get_default_ffmpeg_config()
+    
+    def _get_default_ffmpeg_config(self) -> dict:
+        """獲取預設 FFmpeg 設定"""
+        return {
+            "location": "/usr/bin/ffmpeg",
+            "audio_quality": "192",
+            "audio_codec": "mp3",
+            "postprocessor_args": {
+                "threads": 2,
+                "loglevel": "warning",
+                "overwrite_output": True,
+                "max_muxing_queue_size": 2048,
+                "analyzeduration": "20M",
+                "probesize": "20M",
+                "reconnect": True,
+                "reconnect_streamed": True,
+                "reconnect_delay_max": 30,
+                "timeout": 30000000,
+                "rw_timeout": 30000000
+            },
+            "ytdlp_options": {
+                "socket_timeout": 300,
+                "retries": 10,
+                "concurrent_fragment_downloads": 1,
+                "file_access_retries": 5,
+                "fragment_retries": 10,
+                "retry_sleep_http": 5
+            },
+            "http_headers": {
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
+                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "accept_language": "en-us,en;q=0.5",
+                "sec_fetch_mode": "navigate"
+            }
+        }
+    
+    def _build_postprocessor_args(self) -> list:
+        """根據設定構建 FFmpeg postprocessor 參數"""
+        args = []
+        pp_config = self.ffmpeg_config.get("postprocessor_args", {})
+        
+        # 執行緒數
+        if "threads" in pp_config:
+            args.extend(["-threads", str(pp_config["threads"])])
+        
+        # 日誌等級
+        if "loglevel" in pp_config:
+            args.extend(["-loglevel", pp_config["loglevel"]])
+        
+        # 覆蓋輸出檔案
+        if pp_config.get("overwrite_output", False):
+            args.append("-y")
+        
+        # 其他參數
+        for key, value in pp_config.items():
+            if key in ["threads", "loglevel", "overwrite_output"]:
+                continue
+                
+            if isinstance(value, bool):
+                if value:
+                    args.extend([f"-{key}", "1"])
+            else:
+                args.extend([f"-{key}", str(value)])
+        
+        return args
         
     @classmethod
     async def create(cls, time_limit=1800):
         """Create and initialize a new YouTubeManager instance"""
-        if not await check_ffmpeg():
-            raise RuntimeError("系統需要 FFmpeg，但目前無法使用")
         manager = cls(time_limit)
+        ffmpeg_path = manager.ffmpeg_config.get('location', '/usr/bin/ffmpeg')
+        if not await check_ffmpeg(ffmpeg_path):
+            raise RuntimeError(f"系統需要 FFmpeg，但目前無法使用: {ffmpeg_path}")
         return manager
 
     async def search_videos(self, query, max_results=10):
@@ -83,15 +158,16 @@ class YouTubeManager:
                 'format': 'bestaudio[ext=m4a]/bestaudio/best',  # 優先選擇 M4A 格式，以取得較佳相容性
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
+                    'preferredcodec': self.ffmpeg_config.get('audio_codec', 'mp3'),
+                    'preferredquality': self.ffmpeg_config.get('audio_quality', '192'),
                 }],
                 'outtmpl': output_template,
                 'noplaylist': False,
                 'extract_flat': True,  # 僅提取播放清單資訊，不下載
                 'quiet': True,
                 'no_warnings': True,
-                'force_generic_extractor': False
+                'force_generic_extractor': False,
+                'ffmpeg_location': self.ffmpeg_config.get('location', '/usr/bin/ffmpeg')
             }
 
             # 使用 asyncio.to_thread 非同步執行 yt-dlp 資訊提取
@@ -150,15 +226,16 @@ class YouTubeManager:
                 'format': 'bestaudio/best',
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
+                    'preferredcodec': self.ffmpeg_config.get('audio_codec', 'mp3'),
+                    'preferredquality': self.ffmpeg_config.get('audio_quality', '192'),
                 }],
                 'playlist_items': '1-50',
                 'noplaylist': True,
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
-                'force_generic_extractor': False
+                'force_generic_extractor': False,
+                'ffmpeg_location': self.ffmpeg_config.get('location', '/usr/bin/ffmpeg')
             }
 
             # 使用 asyncio.to_thread 非同步執行 yt-dlp 資訊提取
@@ -216,12 +293,16 @@ class YouTubeManager:
             except Exception as e:
                 logger.error(f"檢查磁碟空間失敗: {e}")
                 
+            # 從設定構建 ydl_opts
+            ytdlp_config = self.ffmpeg_config.get('ytdlp_options', {})
+            http_headers = self.ffmpeg_config.get('http_headers', {})
+            
             ydl_opts = {
                 'format': 'bestaudio/best',
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
+                    'preferredcodec': self.ffmpeg_config.get('audio_codec', 'mp3'),
+                    'preferredquality': self.ffmpeg_config.get('audio_quality', '192'),
                 }],
                 'playlist_items': '1-50',
                 'outtmpl': output_template,
@@ -230,34 +311,22 @@ class YouTubeManager:
                 'no_warnings': False,
                 'extract_flat': False,
                 'force_generic_extractor': False,
-                'ffmpeg_location': '/usr/bin/ffmpeg',
-                'postprocessor_args': [
-                    '-threads', '2',  # 降低執行緒數量以避免過載
-                    '-loglevel', 'warning',
-                    '-y',  # 覆蓋輸出檔案
-                    '-max_muxing_queue_size', '2048',  # 擴增緩衝區大小
-                    '-analyzeduration', '20M',  # 增加分析時間
-                    '-probesize', '20M',  # 增加探測大小
-                    '-reconnect', '1',  # 啟用重新連線
-                    '-reconnect_streamed', '1',
-                    '-reconnect_delay_max', '30',  # 重新連線間的最長延遲
-                    '-timeout', '30000000',  # 超時設定 (微秒) (此處約 30 秒)
-                    '-rw_timeout', '30000000'  # 讀寫超時
-                ],
-                'socket_timeout': 300,  # 延長連線超時時間
-                'retries': 10,  # 提高重試次數
+                'ffmpeg_location': self.ffmpeg_config.get('location', '/usr/bin/ffmpeg'),
+                'postprocessor_args': self._build_postprocessor_args(),
+                'socket_timeout': ytdlp_config.get('socket_timeout', 300),
+                'retries': ytdlp_config.get('retries', 10),
                 'verbose': False,
                 'progress_hooks': [lambda d: logger.info(f"下載進度: {d.get('status', 'unknown')} - {d.get('_percent_str', '0%')}")],
-                'merge_output_format': 'mp3',
-                'concurrent_fragment_downloads': 1,  # 限制同時下載的片段數
-                'file_access_retries': 5,  # 檔案存取的重試次數
-                'fragment_retries': 10,  # 片段下載的重試次數
-                'retry_sleep_functions': {'http': lambda n: 5},  # 重試間隔 5 秒
+                'merge_output_format': self.ffmpeg_config.get('audio_codec', 'mp3'),
+                'concurrent_fragment_downloads': ytdlp_config.get('concurrent_fragment_downloads', 1),
+                'file_access_retries': ytdlp_config.get('file_access_retries', 5),
+                'fragment_retries': ytdlp_config.get('fragment_retries', 10),
+                'retry_sleep_functions': {'http': lambda n: ytdlp_config.get('retry_sleep_http', 5)},
                 'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-us,en;q=0.5',
-                    'Sec-Fetch-Mode': 'navigate'
+                    'User-Agent': http_headers.get('user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36'),
+                    'Accept': http_headers.get('accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
+                    'Accept-Language': http_headers.get('accept_language', 'en-us,en;q=0.5'),
+                    'Sec-Fetch-Mode': http_headers.get('sec_fetch_mode', 'navigate')
                 }
             }
 
@@ -308,9 +377,10 @@ class YouTubeManager:
 
                     # 非同步驗證 MP3 格式
                     try:
+                        ffmpeg_path = self.ffmpeg_config.get('location', '/usr/bin/ffmpeg')
                         await asyncio.to_thread(
                             lambda: subprocess.run(
-                                ['ffmpeg', '-v', 'error', '-i', file_path, '-f', 'null', '-'],
+                                [ffmpeg_path, '-v', 'error', '-i', file_path, '-f', 'null', '-'],
                                 check=True, capture_output=True
                             )
                         )
