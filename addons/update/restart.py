@@ -208,12 +208,17 @@ class SimpleRestartManager:
         try:
             self.logger.info("使用 Windows 簡單重啟方法")
             
-            # 創建簡單的重啟批次檔
+            # 獲取當前進程 PID
+            current_pid = os.getpid()
+            
+            # 創建強力關閉原始 CMD 的重啟批次檔
             batch_content = f"""@echo off
 chcp 65001 >nul 2>&1
 timeout /t 3 /nobreak >nul
 cd /d "{current_dir}"
 "{python_exe}" main.py
+rem 重啟完成後，嘗試關閉原始 CMD 視窗
+taskkill /F /PID {current_pid} >nul 2>&1
 exit
 """
             
@@ -224,21 +229,24 @@ exit
             
             self.logger.info(f"重啟批次檔已創建: {batch_file}")
             
-            # 使用 start 命令執行批次檔，並關閉當前視窗
-            cmd = f'start "PigPig Bot Restart" /B "{batch_file}" && exit'
+            # 使用 start 命令執行批次檔，不等待完成直接分離
+            cmd = f'start "PigPig Bot Restart" /B "{batch_file}"'
             
             self.logger.info(f"執行重啟命令: {cmd}")
             
-            result = subprocess.run(
+            # 使用 Popen 進行真正的進程分離
+            process = subprocess.Popen(
                 cmd,
                 shell=True,
                 cwd=current_dir,
-                capture_output=True,
-                text=True
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, 'CREATE_NEW_CONSOLE') else 0
             )
             
-            if result.returncode == 0:
-                self.logger.info("Windows 重啟命令執行成功")
+            if process.pid:
+                self.logger.info(f"Windows 重啟進程已啟動，PID: {process.pid}")
                 
                 # 延遲刪除批次檔
                 import threading
@@ -255,7 +263,7 @@ exit
                 
                 return True
             else:
-                self.logger.error(f"Windows 重啟命令失敗: {result.stderr}")
+                self.logger.error("Windows 重啟進程啟動失敗")
                 return False
                 
         except Exception as e:
