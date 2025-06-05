@@ -8,7 +8,6 @@
 - UI 元件
 - 快取系統
 
-作者: Kilo Code
 版本: 1.0.0
 """
 
@@ -23,7 +22,6 @@ from .exceptions import (
 )
 
 __version__ = "1.0.0"
-__author__ = "Kilo Code"
 
 __all__ = [
     'SystemPromptManager',

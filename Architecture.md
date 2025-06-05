@@ -532,9 +532,8 @@ self.dialogue_history[channel_id] = [
 
 #### 2. 向量存儲 RAG
 ```python
-# 向量化對話歷史
-load_and_index_dialogue_history(dialogue_history_file)
-save_vector_store(vector_stores, vector_store_path)
+# 向量存儲功能已移除，等待新記憶系統實作
+# 詳見 docs/discord_bot_memory_system_architecture.md
 ```
 
 #### 3. 分伺服器配置

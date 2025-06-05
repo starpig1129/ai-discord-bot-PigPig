@@ -1,5 +1,4 @@
-discord==2.3.2
-discord.py==2.4.0
+discord>=2.4.0
 aiohttp==3.9.5
 python-dotenv==1.0.1
 pymongo==4.7.3
@@ -37,14 +36,25 @@ accelerate==1.2.1
 timm==0.9.10
 soundfile==0.12.1
 librosa==0.9.0
-decord
-moviepy
 webdriver-manager
 openai
-moviepy==1.0.3 
+moviepy==1.0.3
 tiktoken
 anthropic
 pytz
 yt_dlp
 youtube_search
 PyNaCl
+# ============================================================================
+# Memory System Dependencies (智能頻道記憶系統)
+# ============================================================================
+# 向量搜尋和語義理解功能
+faiss-cpu>=1.7.4              # CPU 版本向量索引（記憶系統核心）
+# faiss-gpu>=1.7.0            # GPU 版本（可選，需要 CUDA）
+sentence-transformers>=2.2.2  # 語義嵌入模型（語義搜尋）
+psutil>=5.9.8                 # 系統硬體檢測（記憶系統監控）
+scikit-learn>=1.0.0           # 機器學習工具（相似度計算）
+
+# Note: 記憶系統已整合至主要依賴項目
+# GPU 用戶可選擇安裝: pip install faiss-gpu
+# Apple Silicon 用戶建議: pip install torch torchvision torchaudio

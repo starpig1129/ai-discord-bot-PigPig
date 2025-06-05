@@ -29,11 +29,13 @@ import function as func
 import json
 import logging
 import asyncio
+from typing import Optional
 from discord.ext import commands
 from gpt.choose_act import ActionHandler
-from gpt.sendmessage import load_and_index_dialogue_history, save_vector_store, vector_stores
 from gpt.gpt_response_gen import get_model_and_tokenizer
 from logs import TimedRotatingFileHandler
+from cogs.memory.memory_manager import MemoryManager
+from cogs.memory.exceptions import MemorySystemError
 # 配置 logging
 def setup_logger(server_name):
     logger = logging.getLogger(server_name)
@@ -47,11 +49,13 @@ class PigPig(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.dialogue_history_file = './data/dialogue_history.json'
-        self.vector_store_path = './data/vector_store'
         self.load_dialogue_history()
-        load_and_index_dialogue_history(self.dialogue_history_file)
         self.loggers = {}
         self.action_handler = ActionHandler(self)
+        
+        # 記憶系統初始化
+        self.memory_manager: Optional[MemoryManager] = None
+        self.memory_enabled = False
 
     def setup_logger_for_guild(self, guild_name):
         if guild_name not in self.loggers:
@@ -80,7 +84,53 @@ class PigPig(commands.Bot):
         """將對話歷史保存到檔案中"""
         with open(self.dialogue_history_file, 'w', encoding='utf-8') as file:
             json.dump(self.dialogue_history, file, ensure_ascii=False, indent=4)
-        save_vector_store(vector_stores, self.vector_store_path)
+    
+    async def initialize_memory_system(self):
+        """初始化記憶系統"""
+        try:
+            # 檢查設定是否啟用記憶系統
+            memory_config = func.settings.memory_system if hasattr(func.settings, 'memory_system') else {}
+            if not memory_config.get("enabled", False):
+                print("記憶系統已在設定中停用")
+                return
+            
+            self.memory_manager = MemoryManager()
+            self.memory_enabled = await self.memory_manager.initialize()
+            
+            if self.memory_enabled:
+                print("記憶系統初始化成功")
+            else:
+                print("記憶系統初始化失敗，將使用傳統對話歷史")
+                
+        except Exception as e:
+            print(f"記憶系統初始化失敗: {e}")
+            self.memory_enabled = False
+    
+    async def store_message_to_memory(self, message: discord.Message):
+        """將訊息儲存到記憶系統"""
+        if not self.memory_enabled or not self.memory_manager:
+            return
+        
+        try:
+            # 過濾機器人訊息和非伺服器訊息
+            if message.author.bot or not message.guild:
+                return
+            
+            # 檢查頻道是否允許記憶功能
+            channel_manager = self.get_cog('ChannelManager')
+            if channel_manager:
+                guild_id = str(message.guild.id)
+                is_allowed, _ = channel_manager.is_allowed_channel(message.channel, guild_id)
+                if not is_allowed:
+                    return
+            
+            # 儲存訊息到記憶系統
+            await self.memory_manager.store_message(message)
+            
+        except MemorySystemError as e:
+            print(f"記憶系統儲存訊息失敗: {e}")
+        except Exception as e:
+            print(f"儲存訊息到記憶系統時發生未預期錯誤: {e}")
         
     async def on_message(self, message: discord.Message, /) -> None:
         if message.author.bot or not message.guild:
@@ -91,6 +141,10 @@ class PigPig(commands.Bot):
         logger = self.loggers[guild_name]
         
         logger.info(f'收到訊息: {message.content} (來自:伺服器:{message.guild},頻道:{message.channel.name},{message.author.name})')
+        
+        # 儲存訊息到記憶系統
+        await self.store_message_to_memory(message)
+        
         await self.process_commands(message)
         
         channel_id = str(message.channel.id)
@@ -179,6 +233,9 @@ class PigPig(commands.Bot):
                 except Exception as e:
                     print(traceback.format_exc())
 
+        # 初始化記憶系統
+        await self.initialize_memory_system()
+
         if func.settings.ipc_server.get("enable", False):
             await self.ipc.start()
 
@@ -220,6 +277,20 @@ class PigPig(commands.Bot):
         func.tokens.client_id = self.user.id
         while True:
             await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="大家的聲音"))
-            await asyncio.sleep(5) 
+            await asyncio.sleep(5)
+    
+    async def close(self):
+        """優雅關閉機器人和記憶系統"""
+        try:
+            # 關閉記憶系統
+            if self.memory_manager:
+                await self.memory_manager.cleanup()
+                print("記憶系統已優雅關閉")
+            
+            # 關閉父類
+            await super().close()
+            
+        except Exception as e:
+            print(f"關閉機器人時發生錯誤: {e}")
             await self.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name=f"泥巴在{len(self.guilds)}個伺服器中"))
             await asyncio.sleep(5)

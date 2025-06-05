@@ -21,7 +21,6 @@
 # SOFTWARE.
 import os
 import json
-import faiss
 import logging
 import opencc
 import asyncio
@@ -35,9 +34,9 @@ from typing import Optional, List, Dict, Any, Tuple
 from gpt.gpt_response_gen import generate_response, is_model_available
 from gpt.prompt_manager import get_prompt_manager
 from addons.settings import Settings, TOKENS
-from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.docstore.in_memory import InMemoryDocstore
+from cogs.memory.memory_manager import MemoryManager, SearchQuery, SearchType
+from cogs.memory.exceptions import MemorySystemError, SearchError
 
 settings = Settings()
 tokens = TOKENS()
@@ -345,7 +344,7 @@ def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
     # 如果無法獲取語言設定，使用預設值
     return fallback_prompt.format(bot_id=bot_id, bot_owner_id=bot_owner_id)
 
-# 初始化 Hugging Face 嵌入模型
+# 初始化 Hugging Face 嵌入模型（保留供未來使用）
 hf_embeddings_model = "sentence-transformers/all-MiniLM-L6-v2"
 embeddings = HuggingFaceEmbeddings(model_name=hf_embeddings_model)
 
@@ -361,77 +360,6 @@ def get_converter(lang: str) -> Optional[opencc.OpenCC]:
     """根據語言獲取適當的轉換器"""
     return converters.get(lang, converters["zh_TW"])
 
-# 創建一個字典來存儲每個頻道的向量存儲
-vector_stores = {}
-
-def create_faiss_index() -> FAISS:
-    embedding_size = 384
-    index = faiss.IndexFlatL2(embedding_size)
-    docstore = InMemoryDocstore({})
-    index_to_docstore_id = {}
-    return FAISS(embeddings, index, docstore, index_to_docstore_id)
-
-def load_and_index_dialogue_history(dialogue_history_file: str) -> None:
-    if not os.path.exists(dialogue_history_file):
-        return
-
-    with open(dialogue_history_file, 'r', encoding='utf-8') as file:
-        dialogue_history = json.load(file)
-
-    for channel_id, messages in dialogue_history.items():
-        if channel_id not in vector_stores:
-            vector_stores[channel_id] = create_faiss_index()
-        texts = [msg["content"] for msg in messages if msg["role"] == "user"]
-        metadatas = [{"text": text} for text in texts]
-        try:
-            vector_stores[channel_id].add_texts(texts, metadatas)
-        except Exception as e:
-            print(f"Error adding texts to vector store: {e}") #added debug print statement
-
-def save_vector_store(stores: Dict[str, FAISS], path: str) -> None:
-    try:
-        for channel_id, store in stores.items():
-            channel_path = f"{path}_{channel_id}"
-            #faiss.write_index(store.index, channel_path)
-    except Exception as e:
-        logging.error(f"保存 FAISS 索引時發生錯誤: {e}")
-        raise
-
-def load_vector_store(path: str) -> None:
-    global vector_stores
-    vector_stores = {}
-    base_dir = os.path.dirname(path)
-    base_name = os.path.basename(path)
-    for file in os.listdir(base_dir):
-        if file.startswith(base_name):
-            channel_id = file.split('_')[-1]
-            full_path = os.path.join(base_dir, file)
-            vector_stores[channel_id] = create_faiss_index()
-            vector_stores[channel_id].index = faiss.read_index(full_path)
-            logging.info(f"FAISS 索引成功載入: {channel_id}")
-
-def search_vector_database(query: str, channel_id: str) -> str:
-    try:
-        if channel_id not in vector_stores:
-            return ''
-        results = vector_stores[channel_id].similarity_search(query, k=20)
-        related_data = [result.metadata['text'] for result in results]
-        related_data = set(related_data)
-        # 格式化相關資訊
-        formatted_data = "Database:\n"
-        for i, data in enumerate(related_data, 1):
-            formatted_data += f"{i}. <{data}>\n"
-        
-        return formatted_data.strip()  # 移除最後的換行符
-    except Exception as e:
-        logging.error(f"Error in search_vector_database: {e}")
-        return ''
-
-def to_gpu(index: faiss.Index) -> faiss.Index:
-    return faiss.index_cpu_to_all_gpus(index)
-
-def to_cpu(index: faiss.Index) -> faiss.Index:
-    return faiss.index_gpu_to_cpu(index)
 
 async def process_tenor_tags(text: str, channel: discord.TextChannel) -> list:
     """處理文本中的 tenor 標籤並返回要執行的任務列表。
@@ -458,6 +386,98 @@ async def process_tenor_tags(text: str, channel: discord.TextChannel) -> list:
     
     return gif_tasks
 
+async def search_relevant_memory(
+    bot: discord.Client,
+    channel_id: str,
+    query_text: str,
+    limit: int = 5
+) -> List[Dict[str, Any]]:
+    """搜尋相關的記憶內容
+    
+    Args:
+        bot: Discord bot 實例
+        channel_id: 頻道 ID
+        query_text: 查詢文字
+        limit: 限制結果數量
+        
+    Returns:
+        List[Dict[str, Any]]: 相關的記憶內容
+    """
+    try:
+        # 取得記憶管理器
+        memory_manager = getattr(bot, 'memory_manager', None)
+        if not memory_manager or not getattr(bot, 'memory_enabled', False):
+            return []
+        
+        # 建立搜尋查詢
+        search_query = SearchQuery(
+            text=query_text,
+            channel_id=channel_id,
+            search_type=SearchType.HYBRID,
+            limit=limit,
+            threshold=0.7
+        )
+        
+        # 執行搜尋
+        search_result = await memory_manager.search_memory(search_query)
+        
+        # 過濾和格式化結果
+        relevant_memories = []
+        for i, message_data in enumerate(search_result.messages):
+            if i >= limit:
+                break
+            
+            # 確保有足夠的相關性
+            relevance_score = search_result.relevance_scores[i] if i < len(search_result.relevance_scores) else 0.0
+            if relevance_score >= 0.3:  # 降低閾值以獲得更多上下文
+                relevant_memories.append({
+                    "content": message_data.get("content", ""),
+                    "user_id": message_data.get("user_id", ""),
+                    "timestamp": message_data.get("timestamp", ""),
+                    "relevance": relevance_score
+                })
+        
+        logging.info(f"找到 {len(relevant_memories)} 條相關記憶，搜尋方法: {search_result.search_method}")
+        return relevant_memories
+        
+    except (MemorySystemError, SearchError) as e:
+        logging.warning(f"記憶搜尋失敗: {e}")
+        return []
+    except Exception as e:
+        logging.error(f"搜尋相關記憶時發生未預期錯誤: {e}")
+        return []
+
+
+def format_memory_context(memories: List[Dict[str, Any]]) -> str:
+    """格式化記憶內容為上下文字串
+    
+    Args:
+        memories: 記憶內容列表
+        
+    Returns:
+        str: 格式化的上下文字串
+    """
+    if not memories:
+        return ""
+    
+    context_parts = ["[相關歷史對話]"]
+    
+    for memory in memories[:3]:  # 限制最多3條記憶
+        content = memory.get("content", "").strip()
+        if content and len(content) > 10:  # 過濾太短的內容
+            # 限制每條記憶的長度
+            if len(content) > 150:
+                content = content[:150] + "..."
+            
+            context_parts.append(f"- {content}")
+    
+    if len(context_parts) > 1:
+        context_parts.append("[/相關歷史對話]")
+        return "\n".join(context_parts)
+    
+    return ""
+
+
 async def gpt_message(
     message_to_edit: discord.Message,
     message: discord.Message,
@@ -481,13 +501,21 @@ async def gpt_message(
     channel = message.channel
     channel_id = str(channel.id)
     
-    # 從向量資料庫尋找相關資料
-    #related_data = search_vector_database(prompt, channel_id)
     print(prompt)
     
     # 組合資料
     user_id = str(message.author.id)
-    combined_prompt = f"[user_id: {user_id}] {prompt}"
+    
+    # 搜尋相關記憶
+    bot = message.guild.me._state._get_client()
+    relevant_memories = await search_relevant_memory(bot, channel_id, prompt)
+    
+    # 構建增強的提示
+    memory_context = format_memory_context(relevant_memories)
+    if memory_context:
+        combined_prompt = f"{memory_context}\n\n[user_id: {user_id}] {prompt}"
+    else:
+        combined_prompt = f"[user_id: {user_id}] {prompt}"
     
     try:
         responses = ""
@@ -619,16 +647,10 @@ async def gpt_message(
         if thread is not None:  # 只在線程存在時調用 join
             thread.join()
 
-# 在模塊加載時索引對話歷史並載入向量資料庫
-load_vector_store('./data/vector_store')
-load_and_index_dialogue_history('./data/dialogue_history.json')
 
 __all__ = [
     'gpt_message',
     'get_system_prompt',
     'get_channel_system_prompt',
-    'clear_system_prompt_cache',
-    'load_and_index_dialogue_history',
-    'save_vector_store',
-    'vector_stores'
+    'clear_system_prompt_cache'
 ]

@@ -21,6 +21,7 @@ PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM
 - 🍽️ **Practical Features**: Set reminders, get recommendations, and perform calculations.
 - 👤 **User Information Management**: Create and maintain user profiles.
 - 📊 **Channel Data RAG**: Use channel history for context-aware responses.
+- 🧠 **Intelligent Channel Memory System**: Permanently stores and intelligently retrieves channel conversation history, providing semantic search and context enhancement
 - 💭 **Chain of Thought Reasoning**: Employs Chain of Thought reasoning to provide detailed, step-by-step explanations of its thought process, enhancing transparency and understanding.  This feature allows the bot to break down complex problems into smaller, manageable steps, providing a more comprehensive and insightful response.
 - 🔄 **Auto-Update System**: Automatically checks for and downloads GitHub updates with secure backup and rollback mechanisms.
 
@@ -264,6 +265,35 @@ The bot now supports configurable FFmpeg settings through the `settings.json` fi
 
 These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.
 
+## 🧠 Memory System Configuration
+
+The bot includes an intelligent channel memory system that provides permanent conversation storage and semantic search capabilities. Key features include:
+
+### Memory System Features
+- **Permanent Storage**: All channel conversations are automatically stored in a local SQLite database
+- **Semantic Search**: Advanced vector-based search using sentence transformers for meaningful context retrieval
+- **Multilingual Support**: Works with multiple languages including English, Chinese, Japanese, and more
+- **Hybrid Search**: Combines keyword and semantic search for optimal results
+- **Context Enhancement**: Automatically provides relevant conversation history to improve AI responses
+
+### Memory System Commands
+- `/memory_search <query>`: Search through conversation history using semantic search
+- `/memory_stats`: View memory system statistics and storage information
+- `/memory_config`: Manage memory system configuration settings
+
+### Hardware Requirements for Memory System
+- **CPU**: Standard CPU sufficient for basic operations
+- **RAM**: Minimum 4GB recommended for vector operations
+- **Storage**: Local storage for SQLite database and vector indices
+- **Optional GPU**: NVIDIA GPU can accelerate vector computations (install `faiss-gpu` instead of `faiss-cpu`)
+
+### Memory System Dependencies
+The memory system uses the following key dependencies (automatically installed with requirements.txt):
+- `faiss-cpu>=1.7.4`: Vector similarity search engine
+- `sentence-transformers>=2.2.2`: Multilingual sentence embeddings
+- `scikit-learn>=1.0.0`: Machine learning utilities for similarity calculations
+- `psutil>=5.9.8`: System monitoring for performance optimization
+
 ## Cogs Overview
 
 This bot utilizes a modular design with several cogs (modules) to handle different functionalities. Here's a brief overview:
@@ -277,6 +307,8 @@ This bot utilizes a modular design with several cogs (modules) to handle differe
 - **Internet Search:** Performs various web searches (general, image, YouTube, URL content).
 - **Language Manager:** Manages multi-language support and translations.
 - **Math:** Performs mathematical calculations and problem-solving.
+- **Memory System:** Intelligent channel memory system providing permanent conversation storage, semantic search, and intelligent context enhancement with multilingual vector search and hybrid search strategies.
+- **Memory Commands:** Memory system management commands including memory search, statistics, configuration management, and other functions.
 - **Model Management:** Loads and unloads language models for optimal performance.
 - **Music:** Provides music playback using custom YouTube integration (yt_dlp + PyNaCl), supporting playlists, queues, and various playback modes.
 - **Reminder:** Sets and manages reminders for users.

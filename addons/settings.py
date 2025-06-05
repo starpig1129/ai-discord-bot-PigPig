@@ -57,6 +57,9 @@ class Settings:
         
         # FFmpeg 設定
         self.ffmpeg: dict = settings.get("ffmpeg", self._get_default_ffmpeg())
+        
+        # 記憶系統設定
+        self.memory_system: dict = settings.get("memory_system", self._get_default_memory_system())
     
     def _get_default_ffmpeg(self) -> dict:
         """獲取預設 FFmpeg 設定"""
@@ -90,6 +93,64 @@ class Settings:
                 "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "accept_language": "en-us,en;q=0.5",
                 "sec_fetch_mode": "navigate"
+            }
+        }
+    
+    def _get_default_memory_system(self) -> dict:
+        """獲取預設記憶系統設定"""
+        return {
+            "enabled": True,
+            "auto_detection": True,
+            "vector_enabled": True,
+            "cpu_only_mode": False,
+            "memory_threshold_mb": 2048,
+            "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+            "database_path": "data/memory/memory.db",
+            "channel_settings": {
+                "default_enabled": True,
+                "whitelist_channels": [],
+                "blacklist_channels": [],
+                "auto_initialize": True
+            },
+            "search_settings": {
+                "default_search_type": "hybrid",
+                "semantic_threshold": 0.7,
+                "keyword_threshold": 0.5,
+                "max_context_messages": 5,
+                "enable_temporal_decay": True
+            },
+            "index_optimization": {
+                "enabled": True,
+                "interval_hours": 24,
+                "cleanup_old_data_days": 90,
+                "auto_rebuild": False,
+                "compression_enabled": True
+            },
+            "cache": {
+                "enabled": True,
+                "max_size_mb": 512,
+                "ttl_seconds": 3600,
+                "query_cache_size": 1000,
+                "preload_frequent_queries": True
+            },
+            "performance": {
+                "max_concurrent_queries": 10,
+                "query_timeout_seconds": 30,
+                "batch_size": 50,
+                "async_storage": True,
+                "memory_pool_size": 4
+            },
+            "monitoring": {
+                "enable_metrics": True,
+                "log_slow_queries": True,
+                "slow_query_threshold_ms": 1000,
+                "performance_alerts": False
+            },
+            "backup": {
+                "enabled": True,
+                "interval_hours": 168,
+                "max_backups": 7,
+                "compression": True
             }
         }
 

@@ -8,7 +8,7 @@ if not os.path.exists(os.path.join(ROOT_DIR, "settings.json")):
     raise Exception("Settings file not set!")
 
 tokens: TOKENS = TOKENS()
-settings: Settings
+settings: Settings = Settings()
 SETTINGS_BUFFER: dict[int, dict[str, Any]] = {}
 def open_json(path: str) -> dict:
     try:

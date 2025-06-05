@@ -84,5 +84,60 @@
             "accept_language": "en-us,en;q=0.5",
             "sec_fetch_mode": "navigate"
         }
+    },
+    "memory_system": {
+        "enabled": true,
+        "auto_detection": true,
+        "vector_enabled": false,
+        "cpu_only_mode": false,
+        "memory_threshold_mb": 2048,
+        "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "database_path": "data/memory/memory.db",
+        "channel_settings": {
+            "default_enabled": true,
+            "whitelist_channels": [],
+            "blacklist_channels": [],
+            "auto_initialize": true
+        },
+        "search_settings": {
+            "default_search_type": "hybrid",
+            "semantic_threshold": 0.7,
+            "keyword_threshold": 0.5,
+            "max_context_messages": 5,
+            "enable_temporal_decay": true
+        },
+        "index_optimization": {
+            "enabled": true,
+            "interval_hours": 24,
+            "cleanup_old_data_days": 90,
+            "auto_rebuild": false,
+            "compression_enabled": true
+        },
+        "cache": {
+            "enabled": true,
+            "max_size_mb": 512,
+            "ttl_seconds": 3600,
+            "query_cache_size": 1000,
+            "preload_frequent_queries": true
+        },
+        "performance": {
+            "max_concurrent_queries": 10,
+            "query_timeout_seconds": 30,
+            "batch_size": 50,
+            "async_storage": true,
+            "memory_pool_size": 4
+        },
+        "monitoring": {
+            "enable_metrics": true,
+            "log_slow_queries": true,
+            "slow_query_threshold_ms": 1000,
+            "performance_alerts": false
+        },
+        "backup": {
+            "enabled": true,
+            "interval_hours": 168,
+            "max_backups": 7,
+            "compression": true
+        }
     }
 }
