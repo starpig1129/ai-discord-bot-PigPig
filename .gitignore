@@ -28,3 +28,19 @@ chromedriverlinux64/
 # 忽略特定檔案
 school
 temp
+
+# 忽略測試和臨時檔案
+test_*.py
+*_test.py
+*.log
+dialogue_migration.log
+
+# 忽略備份檔案（保留結構）
+data/backups/**/*.db
+data/backups/*.db
+!data/backups/.gitkeep
+
+# 忽略臨時報告檔案
+*REPORT*.md
+*_REPORT.md
+PHASE*_*.md

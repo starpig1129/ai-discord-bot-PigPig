@@ -884,6 +884,120 @@ class MemoryManager:
     @property
     def vector_enabled(self) -> bool:
         """向量搜尋是否啟用"""
-        return (self.current_profile and 
-                self.current_profile.vector_enabled and 
+        return (self.current_profile and
+                self.current_profile.vector_enabled and
                 self.is_enabled)
+    
+    async def store_message_from_dict(self, message_data: Dict[str, Any]) -> bool:
+        """從字典資料儲存訊息（用於資料轉移）
+        
+        Args:
+            message_data: 標準化的訊息資料字典
+            
+        Returns:
+            bool: 是否成功儲存
+        """
+        try:
+            # 確保必要欄位存在
+            required_fields = ["message_id", "channel_id", "user_id", "content", "timestamp"]
+            for field in required_fields:
+                if field not in message_data:
+                    raise ValueError(f"缺少必要欄位: {field}")
+            
+            # 轉換時間戳記格式
+            timestamp = message_data["timestamp"]
+            if isinstance(timestamp, str):
+                timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            elif not isinstance(timestamp, datetime):
+                timestamp = datetime.now()
+            
+            # 準備訊息資料
+            processed_data = {
+                "message_id": str(message_data["message_id"]),
+                "channel_id": str(message_data["channel_id"]),
+                "user_id": str(message_data["user_id"]),
+                "content": str(message_data["content"]),
+                "timestamp": timestamp,
+                "message_type": message_data.get("message_type", "user"),
+                "content_processed": message_data.get("content_processed"),
+                "metadata": message_data.get("metadata")
+            }
+            
+            # 儲存到資料庫
+            loop = asyncio.get_event_loop()
+            success = await loop.run_in_executor(
+                None,
+                self._store_message_sync,
+                processed_data
+            )
+            
+            if success and self.vector_enabled:
+                # 非同步儲存向量嵌入
+                asyncio.create_task(self._store_message_vector(processed_data))
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"從字典儲存訊息失敗: {e}")
+            return False
+    
+    async def clear_channel_memory(self, channel_id: str) -> bool:
+        """清除頻道記憶
+        
+        Args:
+            channel_id: 頻道 ID
+            
+        Returns:
+            bool: 是否成功清除
+        """
+        if not self._check_initialized():
+            return False
+        
+        try:
+            loop = asyncio.get_event_loop()
+            
+            # 清除資料庫記錄
+            success = await loop.run_in_executor(
+                None,
+                self._clear_channel_database,
+                channel_id
+            )
+            
+            if success and self.vector_manager:
+                # 清除向量索引
+                await loop.run_in_executor(
+                    None,
+                    self.vector_manager.delete_channel_index,
+                    channel_id
+                )
+            
+            if success:
+                self.logger.info(f"頻道記憶已清除: {channel_id}")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"清除頻道記憶失敗: {e}")
+            return False
+    
+    def _clear_channel_database(self, channel_id: str) -> bool:
+        """清除頻道的資料庫記錄
+        
+        Args:
+            channel_id: 頻道 ID
+            
+        Returns:
+            bool: 是否成功清除
+        """
+        try:
+            with self.db_manager.get_connection() as conn:
+                # 由於外鍵約束，刪除頻道會級聯刪除相關的訊息和嵌入
+                conn.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
+                conn.commit()
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"清除頻道資料庫記錄失敗: {e}")
+            return False
+    

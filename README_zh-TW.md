@@ -293,6 +293,7 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
 - `sentence-transformers>=2.2.2`: 多語言句子嵌入
 - `scikit-learn>=1.0.0`: 機器學習工具用於相似度計算
 - `psutil>=5.9.8`: 系統監控以優化效能
+詳細的設定和使用說明，請參閱 [記憶系統快速使用指南](docs/memory_system_quick_start_guide.md)。
 
 ## Cogs 概述
 

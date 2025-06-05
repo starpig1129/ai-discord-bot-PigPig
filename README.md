@@ -293,6 +293,7 @@ The memory system uses the following key dependencies (automatically installed w
 - `sentence-transformers>=2.2.2`: Multilingual sentence embeddings
 - `scikit-learn>=1.0.0`: Machine learning utilities for similarity calculations
 - `psutil>=5.9.8`: System monitoring for performance optimization
+For detailed setup and usage instructions, see the [Memory System Quick Start Guide](docs/memory_system_quick_start_guide.md).
 
 ## Cogs Overview
 
