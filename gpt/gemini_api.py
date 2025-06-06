@@ -69,7 +69,12 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
                 # 處理多個圖片輸入
                 
                 for i, img in enumerate(image_input, 1):
-                    content_parts.append({'mime_type': 'image/jpeg', 'data': image_to_base64(img)})
+                    content_parts.append({
+                        "inlineData": {
+                            "mimeType": "image/jpeg",
+                            "data": image_to_base64(img)
+                        }
+                    })
     except Exception as e:
         raise GeminiError(f"Gemini API 影像處理錯誤: {str(e)}")
     try:

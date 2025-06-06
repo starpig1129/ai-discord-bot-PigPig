@@ -5,7 +5,7 @@ import re
 from discord.ext import commands
 from discord import app_commands
 from threading import Thread
-import google.generativeai as genai
+from google import genai
 from transformers import TextIteratorStreamer
 from gpt.gpt_response_gen import get_model_and_tokenizer
 from addons.settings import TOKENS

@@ -27,7 +27,7 @@ selenium==4.22.0
 decord
 pdf2image
 opencc
-google-generativeai
+google-genai
 langchain_huggingface
 sentencepiece==0.2.0
 vector-quantize-pytorch==1.18.5
