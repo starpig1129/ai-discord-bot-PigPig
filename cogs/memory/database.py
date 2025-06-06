@@ -379,6 +379,39 @@ class DatabaseManager:
             self.logger.error(f"取得頻道訊息失敗: {e}")
             raise DatabaseError(f"取得頻道訊息失敗: {e}", operation="get_messages", table="messages")
     
+    def get_messages_by_ids(self, message_ids: List[str]) -> List[Dict[str, Any]]:
+        """根據訊息 ID 批次查詢訊息
+        
+        Args:
+            message_ids: 訊息 ID 列表
+            
+        Returns:
+            List[Dict[str, Any]]: 訊息資料列表
+        """
+        if not message_ids:
+            return []
+        
+        try:
+            with self.get_connection() as conn:
+                # 建立 IN 查詢的佔位符
+                placeholders = ','.join('?' * len(message_ids))
+                query = f"SELECT * FROM messages WHERE message_id IN ({placeholders})"
+                
+                cursor = conn.execute(query, message_ids)
+                rows = cursor.fetchall()
+                
+                # 轉換為字典列表
+                messages = [dict(row) for row in rows]
+                
+                # 記錄查詢結果統計
+                self.logger.debug(f"批次查詢 {len(message_ids)} 個訊息 ID，找到 {len(messages)} 個結果")
+                
+                return messages
+                
+        except Exception as e:
+            self.logger.error(f"批次查詢訊息失敗: {e}")
+            raise DatabaseError(f"批次查詢訊息失敗: {e}", operation="get_messages_by_ids", table="messages")
+    
     def _ensure_channel_exists(self, conn: sqlite3.Connection, channel_id: str) -> None:
         """確保頻道記錄存在
         

@@ -191,6 +191,7 @@ class DataDetector:
                 first_chunk = f.read(1024)
                 f.seek(0)
                 
+                # 檢查是否為標準的對話歷史格式
                 if '"message_id"' in first_chunk and '"content"' in first_chunk:
                     # 可能是對話歷史檔案
                     data = json.load(f)
@@ -206,6 +207,23 @@ class DataDetector:
                             len(data["messages"]),
                             {"format": "object_with_messages", "has_message_id": True}
                         )
+                
+                # 檢查是否為頻道對話格式 (role + content)
+                if '"role"' in first_chunk and '"content"' in first_chunk:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        # 計算總訊息數
+                        total_messages = 0
+                        for channel_id, messages in data.items():
+                            if isinstance(messages, list):
+                                total_messages += len(messages)
+                        
+                        if total_messages > 0:
+                            return (
+                                DataSourceType.JSON_DIALOGUE_HISTORY,
+                                total_messages,
+                                {"format": "channel_dialogue_history", "channels": len(data)}
+                            )
                 
         except Exception as e:
             self.logger.debug(f"分析 JSON 檔案 {file_path} 失敗: {e}")
@@ -444,30 +462,57 @@ class DataMigrator:
             with open(source.path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # 解析資料格式
-            messages = []
-            if isinstance(data, list):
-                messages = data
-            elif isinstance(data, dict) and "messages" in data:
-                messages = data["messages"]
-            
-            # 轉換每條訊息
-            for message_data in messages:
-                try:
-                    # 轉換為標準格式
-                    converted_message = await self._convert_legacy_message(message_data)
-                    
-                    if not dry_run:
-                        # 儲存到新系統
-                        success = await self.memory_manager.store_message_from_dict(converted_message)
-                        if success:
-                            migrated_count += 1
-                    else:
-                        migrated_count += 1
+            # 處理特殊的對話歷史格式 (channel_id -> messages 列表)
+            if isinstance(data, dict) and not any(key in data for key in ["messages", "content", "role"]):
+                # 這是以頻道ID為key的格式
+                for channel_id, channel_messages in data.items():
+                    if isinstance(channel_messages, list):
+                        for i, message_data in enumerate(channel_messages):
+                            try:
+                                # 添加頻道和索引資訊
+                                enhanced_message = message_data.copy()
+                                enhanced_message["channel_id"] = str(channel_id)
+                                enhanced_message["message_index"] = i
+                                
+                                # 轉換為標準格式
+                                converted_message = await self._convert_legacy_message(enhanced_message)
+                                
+                                if not dry_run:
+                                    # 儲存到新系統
+                                    success = await self.memory_manager.store_message_from_dict(converted_message)
+                                    if success:
+                                        migrated_count += 1
+                                else:
+                                    migrated_count += 1
+                                    
+                            except Exception as e:
+                                self.logger.warning(f"轉換頻道 {channel_id} 訊息 {i} 失敗: {e}")
+                                continue
+            else:
+                # 處理標準格式
+                messages = []
+                if isinstance(data, list):
+                    messages = data
+                elif isinstance(data, dict) and "messages" in data:
+                    messages = data["messages"]
+                
+                # 轉換每條訊息
+                for message_data in messages:
+                    try:
+                        # 轉換為標準格式
+                        converted_message = await self._convert_legacy_message(message_data)
                         
-                except Exception as e:
-                    self.logger.warning(f"轉換訊息失敗: {e}")
-                    continue
+                        if not dry_run:
+                            # 儲存到新系統
+                            success = await self.memory_manager.store_message_from_dict(converted_message)
+                            if success:
+                                migrated_count += 1
+                        else:
+                            migrated_count += 1
+                            
+                    except Exception as e:
+                        self.logger.warning(f"轉換訊息失敗: {e}")
+                        continue
             
         except Exception as e:
             raise MemorySystemError(f"讀取 JSON 檔案失敗: {e}")
@@ -584,7 +629,8 @@ class DataMigrator:
             "time": "timestamp",
             "created_at": "timestamp",
             "type": "message_type",
-            "message_type": "message_type"
+            "message_type": "message_type",
+            "role": "message_type"  # 支援對話歷史的 role 欄位
         }
         
         converted = {}
@@ -594,19 +640,34 @@ class DataMigrator:
             if old_key in message_data:
                 converted[new_key] = message_data[old_key]
         
-        # 確保必要欄位存在
+        # 特殊處理：生成唯一的訊息ID
         if "message_id" not in converted:
-            converted["message_id"] = f"legacy_{hash(str(message_data))}"
+            # 使用頻道ID、索引和內容雜湊生成更唯一的ID
+            channel_part = message_data.get("channel_id", "unknown")
+            index_part = message_data.get("message_index", 0)
+            content_hash = abs(hash(str(message_data.get("content", ""))))
+            converted["message_id"] = f"legacy_{channel_part}_{index_part}_{content_hash}"
         
+        # 確保頻道ID存在
         if "channel_id" not in converted:
             converted["channel_id"] = "unknown_channel"
         
+        # 設定使用者ID（對話歷史通常沒有具體使用者）
         if "user_id" not in converted:
-            converted["user_id"] = "unknown_user"
+            # 根據角色設定不同的使用者ID
+            role = message_data.get("role", "user")
+            if role == "assistant":
+                converted["user_id"] = "ai_assistant"
+            elif role == "system":
+                converted["user_id"] = "system"
+            else:
+                converted["user_id"] = "legacy_user"
         
+        # 確保內容存在
         if "content" not in converted:
-            converted["content"] = str(message_data)
+            converted["content"] = str(message_data.get("content", ""))
         
+        # 處理時間戳記
         if "timestamp" not in converted:
             converted["timestamp"] = datetime.now()
         elif isinstance(converted["timestamp"], str):
@@ -615,8 +676,23 @@ class DataMigrator:
             except:
                 converted["timestamp"] = datetime.now()
         
+        # 處理訊息類型
         if "message_type" not in converted:
-            converted["message_type"] = "user"
+            role = message_data.get("role", "user")
+            # 映射對話角色到系統訊息類型
+            type_mapping = {
+                "user": "user",
+                "assistant": "bot",
+                "system": "system"
+            }
+            converted["message_type"] = type_mapping.get(role, "user")
+        
+        # 保存原始元資料
+        converted["metadata"] = {
+            "migration_source": "dialogue_history",
+            "original_data": message_data,
+            "migration_timestamp": datetime.now().isoformat()
+        }
         
         return converted
     

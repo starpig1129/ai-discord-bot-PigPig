@@ -5,7 +5,9 @@
 """
 
 import asyncio
+import json
 import logging
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -13,6 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import discord
+import numpy as np
 
 from .database import DatabaseManager
 from .config import MemoryConfig, MemoryProfile
@@ -213,11 +216,15 @@ class MemoryManager:
                 self.current_profile,
                 self.embedding_service,
                 self.vector_manager,
+                self.db_manager,
                 memory_config.get("cache", {}).get("enabled", True)
             )
             
             # 預熱嵌入模型
             await loop.run_in_executor(None, self.embedding_service.warmup)
+            
+            # 載入現有的索引檔案
+            await self._load_existing_indices()
             
             self.logger.info("向量搜尋組件初始化完成")
             
@@ -225,6 +232,62 @@ class MemoryManager:
             self.logger.error(f"初始化向量組件失敗: {e}")
             # 不拋出例外，允許系統在無向量功能的情況下運行
             self.current_profile.vector_enabled = False
+    
+    async def _load_existing_indices(self) -> None:
+        """載入現有的索引檔案到記憶體中"""
+        try:
+            if not self.vector_manager or not self.current_profile.vector_enabled:
+                return
+            
+            # 取得索引目錄
+            indices_path = self.vector_manager.storage_path
+            if not indices_path.exists():
+                self.logger.info("索引目錄不存在，跳過載入現有索引")
+                return
+            
+            # 搜尋所有 .index 檔案
+            index_files = list(indices_path.glob("*.index"))
+            if not index_files:
+                self.logger.info("沒有找到現有的索引檔案")
+                return
+            
+            self.logger.info(f"找到 {len(index_files)} 個現有索引檔案，開始載入...")
+            
+            # 載入索引檔案
+            loop = asyncio.get_event_loop()
+            loaded_count = 0
+            failed_count = 0
+            
+            for index_file in index_files:
+                try:
+                    # 從檔案名稱取得頻道 ID
+                    channel_id = index_file.stem
+                    
+                    # 在執行緒池中載入索引
+                    success = await loop.run_in_executor(
+                        None,
+                        self.vector_manager.create_channel_index,
+                        channel_id
+                    )
+                    
+                    if success:
+                        loaded_count += 1
+                        self.logger.debug(f"成功載入頻道 {channel_id} 的索引")
+                    else:
+                        failed_count += 1
+                        self.logger.warning(f"載入頻道 {channel_id} 的索引失敗")
+                        
+                except Exception as e:
+                    failed_count += 1
+                    self.logger.error(f"載入索引檔案 {index_file.name} 失敗: {e}")
+            
+            self.logger.info(
+                f"索引載入完成: {loaded_count} 個成功，{failed_count} 個失敗，"
+                f"總共 {loaded_count + failed_count} 個索引檔案"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"載入現有索引失敗: {e}")
     
     async def store_message(self, message: discord.Message) -> bool:
         """儲存 Discord 訊息
@@ -283,7 +346,7 @@ class MemoryManager:
         # 建立元資料
         metadata = {
             "author_name": message.author.display_name,
-            "author_id": str(message.author.id),
+            "user_id": str(message.author.id),
             "has_attachments": len(message.attachments) > 0,
             "has_embeds": len(message.embeds) > 0,
             "reply_to": str(message.reference.message_id) if message.reference else None
@@ -295,9 +358,9 @@ class MemoryManager:
             "user_id": str(message.author.id),
             "content": content,
             "content_processed": content_processed,
-            "timestamp": message.created_at,
+            "timestamp": message.created_at,  # 保持為 datetime 物件
             "message_type": message_type,
-            "metadata": str(metadata) if metadata else None
+            "metadata": json.dumps(metadata, ensure_ascii=False) if metadata else None
         }
     
     def _preprocess_content(self, content: str) -> str:
@@ -376,8 +439,8 @@ class MemoryManager:
                 content
             )
             
-            # 儲存向量到索引
-            success = await loop.run_in_executor(
+            # 儲存向量到 FAISS 索引
+            faiss_success = await loop.run_in_executor(
                 None,
                 self.vector_manager.add_vectors,
                 channel_id,
@@ -385,14 +448,92 @@ class MemoryManager:
                 [message_id]
             )
             
-            if success:
-                self.logger.debug(f"向量嵌入已儲存: {message_id}")
+            # 儲存嵌入到資料庫
+            db_success = await loop.run_in_executor(
+                None,
+                self._store_embedding_to_database,
+                message_id,
+                channel_id,
+                embedding,
+                self.current_profile.embedding_model,
+                len(embedding)
+            )
+            
+            # 定期儲存索引檔案（每 50 個向量儲存一次）
+            if faiss_success:
+                try:
+                    # 取得頻道的向量統計
+                    stats = self.vector_manager.get_index_stats(channel_id)
+                    total_vectors = stats.get("total_vectors", 0)
+                    
+                    # 每 50 個向量或第一個向量時儲存索引
+                    if total_vectors == 1 or total_vectors % 50 == 0:
+                        save_success = await loop.run_in_executor(
+                            None,
+                            self.vector_manager.save_index,
+                            channel_id
+                        )
+                        if save_success:
+                            self.logger.debug(f"頻道 {channel_id} 索引檔案已儲存（向量數: {total_vectors}）")
+                        else:
+                            self.logger.warning(f"頻道 {channel_id} 索引檔案儲存失敗")
+                except Exception as e:
+                    self.logger.warning(f"定期儲存索引檔案失敗: {e}")
+            
+            if faiss_success and db_success:
+                self.logger.debug(f"向量嵌入已儲存到索引和資料庫: {message_id}")
+            elif faiss_success:
+                self.logger.warning(f"向量嵌入儲存到索引成功，但資料庫儲存失敗: {message_id}")
+            elif db_success:
+                self.logger.warning(f"向量嵌入儲存到資料庫成功，但索引儲存失敗: {message_id}")
             else:
-                self.logger.warning(f"向量嵌入儲存失敗: {message_id}")
+                self.logger.warning(f"向量嵌入儲存完全失敗: {message_id}")
                 
         except Exception as e:
             self.logger.error(f"儲存訊息向量失敗: {e}")
             # 不拋出例外，避免影響主要的訊息儲存流程
+    
+    def _store_embedding_to_database(
+        self,
+        message_id: str,
+        channel_id: str,
+        embedding: np.ndarray,
+        model_version: str,
+        dimension: int
+    ) -> bool:
+        """將嵌入向量儲存到資料庫
+        
+        Args:
+            message_id: 訊息 ID
+            channel_id: 頻道 ID
+            embedding: 嵌入向量
+            model_version: 模型版本
+            dimension: 向量維度
+            
+        Returns:
+            bool: 是否成功儲存
+        """
+        try:
+            # 生成嵌入 ID
+            embedding_id = f"{message_id}_{uuid.uuid4().hex[:8]}"
+            
+            # 序列化向量資料
+            vector_data = embedding.tobytes()
+            
+            with self.db_manager.get_connection() as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO embeddings
+                    (embedding_id, message_id, channel_id, vector_data, model_version, dimension)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (embedding_id, message_id, channel_id, vector_data, model_version, dimension))
+                conn.commit()
+            
+            self.logger.debug(f"嵌入向量已儲存到資料庫: {message_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"儲存嵌入向量到資料庫失敗: {e}")
+            return False
     
     async def search_memory(self, query: SearchQuery) -> SearchResult:
         """搜尋記憶
@@ -447,7 +588,7 @@ class MemoryManager:
             SearchResult: 搜尋結果
         """
         # 如果有搜尋引擎且啟用向量功能，使用新的搜尋引擎
-        if self.search_engine and query.search_type == SearchType.SEMANTIC:
+        if self.search_engine and query.search_type in [SearchType.SEMANTIC, SearchType.HYBRID]:
             return await self._semantic_search_with_engine(query)
         
         # 回退到基本搜尋
@@ -463,11 +604,15 @@ class MemoryManager:
             SearchResult: 搜尋結果
         """
         try:
-            # 轉換搜尋查詢格式
+            # 轉換搜尋查詢格式，保持原有的搜尋類型
+            engine_search_type = EngineSearchType.SEMANTIC
+            if query.search_type == SearchType.HYBRID:
+                engine_search_type = EngineSearchType.HYBRID
+            
             engine_query = EngineSearchQuery(
                 text=query.text,
                 channel_id=query.channel_id,
-                search_type=EngineSearchType.SEMANTIC,
+                search_type=engine_search_type,
                 time_range=TimeRange(
                     start_time=query.time_range[0] if query.time_range else None,
                     end_time=query.time_range[1] if query.time_range else None
@@ -569,8 +714,8 @@ class MemoryManager:
                 keywords = query.text.lower().split()
                 
                 for message in messages:
-                    content = (message.get("content", "") + " " + 
-                              message.get("content_processed", "")).lower()
+                    content = ((message.get("content") or "") + " " +
+                              (message.get("content_processed") or "")).lower()
                     
                     # 檢查是否包含任何關鍵字
                     if any(keyword in content for keyword in keywords):
@@ -604,8 +749,8 @@ class MemoryManager:
         scores = []
         
         for message in messages:
-            content = (message.get("content", "") + " " + 
-                      message.get("content_processed", "")).lower()
+            content = ((message.get("content") or "") + " " +
+                      (message.get("content_processed") or "")).lower()
             
             # 計算關鍵字匹配分數
             matches = sum(1 for keyword in keywords if keyword in content)
@@ -649,9 +794,22 @@ class MemoryManager:
                 message_id = result.get("message_id")
                 if message_id in message_dict:
                     message = message_dict[message_id]
-                    # 添加相似度分數到訊息資料中
-                    message["similarity_score"] = result.get("similarity_score", 0.0)
-                    ordered_messages.append(message)
+                    
+                    # 過濾空內容的訊息
+                    content = message.get('content', '')
+                    content_processed = message.get('content_processed', '')
+                    
+                    # 檢查是否有有效內容（不為空且不只是空白）
+                    has_valid_content = (
+                        (content and content.strip()) or
+                        (content_processed and content_processed.strip() and content_processed != 'None')
+                    )
+                    
+                    if has_valid_content:
+                        message["similarity_score"] = result.get("similarity_score", 0.0)
+                        ordered_messages.append(message)
+                    else:
+                        self.logger.debug(f"記憶管理器跳過空內容訊息 ID: {message_id} (content: {repr(content)}, processed: {repr(content_processed)})")
             
             return ordered_messages
             
@@ -669,19 +827,8 @@ class MemoryManager:
             List[Dict[str, Any]]: 訊息資料列表
         """
         try:
-            # 暫時使用現有的方法，後續可以加入批次查詢優化
-            messages = []
-            for message_id in message_ids:
-                # 這裡需要資料庫支援根據訊息 ID 查詢
-                # 暫時返回基本資料結構
-                messages.append({
-                    "message_id": message_id,
-                    "content": "",  # 需要從資料庫查詢
-                    "timestamp": None,  # 需要從資料庫查詢
-                    "user_id": "",  # 需要從資料庫查詢
-                    "channel_id": ""  # 需要從資料庫查詢
-                })
-            return messages
+            # 使用資料庫管理器的正確實作
+            return self.db_manager.get_messages_by_ids(message_ids)
         except Exception as e:
             self.logger.error(f"批次查詢訊息失敗: {e}")
             return []
@@ -825,15 +972,60 @@ class MemoryManager:
             total_queries = self._cache_hits + self._cache_misses
             cache_hit_rate = self._cache_hits / total_queries if total_queries > 0 else 0.0
             
-            # TODO: 從資料庫查詢其他統計資料
+            # 從資料庫查詢統計資料
+            total_channels = 0
+            total_messages = 0
+            vector_enabled_channels = 0
+            storage_size_mb = 0.0
+            
+            if self.db_manager:
+                try:
+                    with self.db_manager.get_connection() as conn:
+                        # 查詢頻道總數
+                        try:
+                            cursor = conn.execute("SELECT COUNT(*) FROM channels")
+                            result = cursor.fetchone()
+                            total_channels = result[0] if result else 0
+                        except Exception as e:
+                            self.logger.warning(f"無法查詢頻道總數: {e}")
+                            total_channels = 0
+                        
+                        # 查詢訊息總數
+                        try:
+                            cursor = conn.execute("SELECT COUNT(*) FROM messages")
+                            result = cursor.fetchone()
+                            total_messages = result[0] if result else 0
+                        except Exception as e:
+                            self.logger.warning(f"無法查詢訊息總數: {e}")
+                            total_messages = 0
+                        
+                        # 查詢啟用向量搜尋的頻道數（有嵌入資料的頻道）
+                        try:
+                            cursor = conn.execute("SELECT COUNT(DISTINCT channel_id) FROM embeddings")
+                            result = cursor.fetchone()
+                            vector_enabled_channels = result[0] if result else 0
+                        except Exception as e:
+                            self.logger.warning(f"無法查詢向量啟用頻道數: {e}")
+                            vector_enabled_channels = 0
+                        
+                        # 計算資料庫檔案大小
+                        try:
+                            if self.db_manager.db_path.exists():
+                                storage_size_mb = self.db_manager.db_path.stat().st_size / (1024 * 1024)
+                        except Exception as e:
+                            self.logger.warning(f"無法計算資料庫檔案大小: {e}")
+                            storage_size_mb = 0.0
+                except Exception as e:
+                    self.logger.error(f"資料庫連接失敗: {e}")
+                    # 保持預設值 0
             
             return MemoryStats(
-                total_channels=0,  # TODO: 實作
-                total_messages=0,  # TODO: 實作
-                vector_enabled_channels=0,  # TODO: 實作
+                total_channels=total_channels,
+                total_messages=total_messages,
+                vector_enabled_channels=vector_enabled_channels,
                 average_query_time_ms=avg_query_time,
                 cache_hit_rate=cache_hit_rate,
-                storage_size_mb=0.0  # TODO: 實作
+                storage_size_mb=storage_size_mb
             )
             
         except Exception as e:
@@ -857,8 +1049,23 @@ class MemoryManager:
     async def cleanup(self) -> None:
         """清理資源"""
         try:
+            loop = asyncio.get_event_loop()
+            
+            # 在清理前先儲存所有索引檔案
+            if self.vector_manager:
+                try:
+                    self.logger.info("正在儲存所有向量索引檔案...")
+                    save_results = await loop.run_in_executor(
+                        None,
+                        self.vector_manager.save_all_indices
+                    )
+                    success_count = sum(save_results.values())
+                    total_count = len(save_results)
+                    self.logger.info(f"索引檔案儲存完成: {success_count}/{total_count} 個成功")
+                except Exception as e:
+                    self.logger.error(f"儲存索引檔案失敗: {e}")
+            
             if self.db_manager:
-                loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, self.db_manager.close_connections)
             
             # 清理向量組件
@@ -912,6 +1119,12 @@ class MemoryManager:
                 timestamp = datetime.now()
             
             # 準備訊息資料
+            metadata = message_data.get("metadata")
+            if metadata and isinstance(metadata, dict):
+                metadata = json.dumps(metadata, ensure_ascii=False)
+            elif metadata and not isinstance(metadata, str):
+                metadata = str(metadata)
+            
             processed_data = {
                 "message_id": str(message_data["message_id"]),
                 "channel_id": str(message_data["channel_id"]),
@@ -920,7 +1133,7 @@ class MemoryManager:
                 "timestamp": timestamp,
                 "message_type": message_data.get("message_type", "user"),
                 "content_processed": message_data.get("content_processed"),
-                "metadata": message_data.get("metadata")
+                "metadata": metadata
             }
             
             # 儲存到資料庫

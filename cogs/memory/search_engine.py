@@ -203,6 +203,7 @@ class SearchEngine:
         profile: MemoryProfile,
         embedding_service: EmbeddingService,
         vector_manager: VectorManager,
+        database_manager,
         enable_cache: bool = True
     ):
         """初始化搜尋引擎
@@ -211,12 +212,14 @@ class SearchEngine:
             profile: 記憶系統配置檔案
             embedding_service: 嵌入服務
             vector_manager: 向量管理器
+            database_manager: 資料庫管理器
             enable_cache: 是否啟用快取
         """
         self.logger = logging.getLogger(__name__)
         self.profile = profile
         self.embedding_service = embedding_service
         self.vector_manager = vector_manager
+        self.database_manager = database_manager
         
         # 初始化快取
         if enable_cache:
@@ -309,28 +312,66 @@ class SearchEngine:
         # 生成查詢向量
         query_vector = self.embedding_service.encode_text(query.text)
         
-        # 向量搜尋
+        # 向量搜尋 - 取更多結果以補償空內容過濾
         vector_results = self.vector_manager.search_similar(
             channel_id=query.channel_id,
             query_vector=query_vector,
-            k=query.limit * 2,  # 取更多結果用於後續過濾
+            k=query.limit * 3,  # 增加倍數以補償空內容過濾
             score_threshold=query.score_threshold
         )
         
-        # 轉換結果格式（這裡需要從資料庫取得完整訊息資料）
+        # 轉換結果格式（從資料庫取得完整訊息資料）
         messages = []
         scores = []
         
-        for message_id, similarity_score in vector_results:
-            # 這裡應該從資料庫取得完整的訊息資料
-            # 暫時使用簡化格式
-            message_data = {
-                "message_id": message_id,
-                "similarity_score": similarity_score,
-                # 其他欄位需要從資料庫查詢
-            }
-            messages.append(message_data)
-            scores.append(similarity_score)
+        if vector_results:
+            # 批次查詢訊息資料以提高效能
+            message_ids = [message_id for message_id, _ in vector_results]
+            try:
+                # 從資料庫取得完整訊息資料
+                db_messages = self.database_manager.get_messages_by_ids(message_ids)
+                
+                # 建立 message_id 到訊息資料的映射
+                message_map = {msg['message_id']: msg for msg in db_messages}
+                
+                # 按照向量搜尋結果的順序組織資料，並過濾空內容
+                for message_id, similarity_score in vector_results:
+                    if message_id in message_map:
+                        message_data = message_map[message_id].copy()
+                        
+                        # 過濾空內容的訊息
+                        content = message_data.get('content', '')
+                        content_processed = message_data.get('content_processed', '')
+                        
+                        # 檢查是否有有效內容（不為空且不只是空白）
+                        has_valid_content = (
+                            (content and content.strip()) or
+                            (content_processed and content_processed.strip() and content_processed != 'None')
+                        )
+                        
+                        if has_valid_content:
+                            message_data['similarity_score'] = similarity_score
+                            messages.append(message_data)
+                            scores.append(similarity_score)
+                        else:
+                            self.logger.debug(f"跳過空內容訊息 ID: {message_id} (content: {repr(content)}, processed: {repr(content_processed)})")
+                    else:
+                        self.logger.warning(f"在資料庫中找不到訊息 ID: {message_id}")
+                        
+            except Exception as e:
+                self.logger.error(f"從資料庫查詢訊息失敗: {e}")
+                # 降級處理：使用簡化格式
+                for message_id, similarity_score in vector_results:
+                    message_data = {
+                        "message_id": message_id,
+                        "similarity_score": similarity_score,
+                        "content": f"[無法載入訊息內容: {e}]",
+                        "user_id": "unknown",
+                        "channel_id": query.channel_id,
+                        "timestamp": None
+                    }
+                    messages.append(message_data)
+                    scores.append(similarity_score)
         
         # 應用時間過濾
         if query.time_range:
@@ -338,10 +379,29 @@ class SearchEngine:
             filtered_scores = []
             
             for msg, score in zip(messages, scores):
-                # 需要從訊息資料中取得時間戳記進行過濾
-                # 暫時跳過時間過濾
-                filtered_messages.append(msg)
-                filtered_scores.append(score)
+                # 從訊息資料中取得時間戳記進行過濾
+                try:
+                    if 'timestamp' in msg and msg['timestamp']:
+                        # 處理時間戳記格式
+                        if isinstance(msg['timestamp'], str):
+                            from datetime import datetime
+                            timestamp = datetime.fromisoformat(msg['timestamp'].replace('Z', '+00:00'))
+                        else:
+                            timestamp = msg['timestamp']
+                        
+                        # 檢查是否在時間範圍內
+                        if query.time_range.contains(timestamp):
+                            filtered_messages.append(msg)
+                            filtered_scores.append(score)
+                    else:
+                        # 如果沒有時間戳記，保留訊息（向後相容）
+                        filtered_messages.append(msg)
+                        filtered_scores.append(score)
+                except Exception as e:
+                    self.logger.warning(f"處理時間過濾失敗: {e}")
+                    # 發生錯誤時保留訊息
+                    filtered_messages.append(msg)
+                    filtered_scores.append(score)
             
             messages = filtered_messages
             scores = filtered_scores

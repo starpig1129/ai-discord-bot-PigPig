@@ -99,7 +99,7 @@ class MemoryCommands(commands.Cog):
                 channel_id=str(interaction.channel.id),
                 search_type=search_type_enum,
                 limit=limit,
-                threshold=0.6,
+                threshold=0.3,
                 time_range=time_range,
                 include_metadata=True
             )

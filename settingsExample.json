@@ -10,7 +10,7 @@
         "port": 8000,
         "enable": false
     },
-    "version": "v2.2.11",
+    "version": "v2.3.0",
     "mongodb": "mongodb://localhost:27017/",
     "music_temp_base": "./temp/music",
     "model_priority": ["gemini", "local", "openai", "claude"],
@@ -91,7 +91,7 @@
         "vector_enabled": false,
         "cpu_only_mode": false,
         "memory_threshold_mb": 2048,
-        "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "embedding_model": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
         "database_path": "data/memory/memory.db",
         "channel_settings": {
             "default_enabled": true,

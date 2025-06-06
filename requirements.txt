@@ -49,6 +49,7 @@ PyNaCl
 # Memory System Dependencies (智能頻道記憶系統)
 # ============================================================================
 # 向量搜尋和語義理解功能
+pynvml
 faiss-cpu>=1.7.4              # CPU 版本向量索引（記憶系統核心）
 # faiss-gpu>=1.7.0            # GPU 版本（可選，需要 CUDA）
 sentence-transformers>=2.2.2  # 語義嵌入模型（語義搜尋）
