@@ -882,7 +882,7 @@ class MigrationValidator:
     async def _validate_vector_indexes(self) -> Dict[str, Any]:
         """驗證向量索引"""
         try:
-            if not self.memory_manager.vector_enabled:
+            if not (self.memory_manager.current_profile and self.memory_manager.current_profile.vector_enabled):
                 return {
                     "passed": True,
                     "note": "向量搜尋未啟用，跳過檢查"

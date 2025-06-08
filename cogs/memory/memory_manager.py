@@ -7,6 +7,7 @@
 import asyncio
 import json
 import logging
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -21,7 +22,13 @@ from .database import DatabaseManager
 from .config import MemoryConfig, MemoryProfile
 from .embedding_service import EmbeddingService, embedding_service_manager
 from .vector_manager import VectorManager
-from .search_engine import SearchEngine, SearchQuery as EngineSearchQuery, SearchResult as EngineSearchResult, SearchType as EngineSearchType, TimeRange
+from .search_engine import SearchEngine, SearchQuery, SearchResult, SearchType, TimeRange
+from .segmentation_service import (
+    TextSegmentationService, 
+    SegmentationConfig, 
+    SegmentationStrategy,
+    initialize_segmentation_service
+)
 from .exceptions import (
     MemorySystemError,
     DatabaseError,
@@ -29,39 +36,6 @@ from .exceptions import (
     SearchError,
     VectorOperationError
 )
-
-
-class SearchType(Enum):
-    """搜尋類型枚舉"""
-    SEMANTIC = "semantic"      # 語義搜尋
-    KEYWORD = "keyword"        # 關鍵字搜尋
-    TEMPORAL = "temporal"      # 時間搜尋
-    HYBRID = "hybrid"          # 混合搜尋
-
-
-@dataclass
-class SearchQuery:
-    """搜尋查詢資料類別"""
-    text: str
-    channel_id: str
-    search_type: SearchType = SearchType.HYBRID
-    limit: int = 10
-    threshold: float = 0.7
-    time_range: Optional[Tuple[datetime, datetime]] = None
-    include_metadata: bool = False
-    user_id: Optional[str] = None
-
-
-@dataclass
-class SearchResult:
-    """搜尋結果資料類別"""
-    messages: List[Dict[str, Any]]
-    relevance_scores: List[float]
-    total_found: int
-    search_time_ms: int
-    search_method: str
-    cache_hit: bool = False
-    metadata: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -104,6 +78,10 @@ class MemoryManager:
         self.vector_manager: Optional[VectorManager] = None
         self.search_engine: Optional[SearchEngine] = None
         
+        # 文本分割組件
+        self.segmentation_service: Optional[TextSegmentationService] = None
+        self.segmentation_config: Optional[SegmentationConfig] = None
+        
         # 性能統計
         self._query_times: List[float] = []
         self._cache_hits = 0
@@ -143,6 +121,9 @@ class MemoryManager:
             
             # 初始化向量組件
             await self._initialize_vector_components()
+            
+            # 初始化分割服務
+            await self._initialize_segmentation_service()
             
             self._initialized = True
             self.logger.info(f"記憶系統初始化完成 (配置檔案: {self.current_profile.name})")
@@ -217,11 +198,16 @@ class MemoryManager:
                 self.embedding_service,
                 self.vector_manager,
                 self.db_manager,
-                memory_config.get("cache", {}).get("enabled", True)
+                memory_config.get("cache", {}).get("enabled", True),
+                memory_config.get("reranker", {}).get("enabled", True)  # 預設啟用重排序
             )
             
             # 預熱嵌入模型
             await loop.run_in_executor(None, self.embedding_service.warmup)
+            
+            # 預熱重排序模型
+            if hasattr(self.search_engine, 'warmup_reranker'):
+                await loop.run_in_executor(None, self.search_engine.warmup_reranker)
             
             # 載入現有的索引檔案
             await self._load_existing_indices()
@@ -234,7 +220,7 @@ class MemoryManager:
             self.current_profile.vector_enabled = False
     
     async def _load_existing_indices(self) -> None:
-        """載入現有的索引檔案到記憶體中"""
+        """載入現有的索引檔案到記憶體中（優化版本：分批載入）"""
         try:
             if not self.vector_manager or not self.current_profile.vector_enabled:
                 return
@@ -251,43 +237,254 @@ class MemoryManager:
                 self.logger.info("沒有找到現有的索引檔案")
                 return
             
-            self.logger.info(f"找到 {len(index_files)} 個現有索引檔案，開始載入...")
+            total_files = len(index_files)
+            self.logger.info(f"找到 {total_files} 個現有索引檔案，開始分批載入...")
             
-            # 載入索引檔案
-            loop = asyncio.get_event_loop()
+            # 分批載入配置
+            batch_size = 10  # 每批載入 10 個索引
+            max_concurrent = 3  # 最大同時載入數
             loaded_count = 0
             failed_count = 0
             
-            for index_file in index_files:
-                try:
-                    # 從檔案名稱取得頻道 ID
-                    channel_id = index_file.stem
-                    
-                    # 在執行緒池中載入索引
-                    success = await loop.run_in_executor(
-                        None,
-                        self.vector_manager.create_channel_index,
-                        channel_id
-                    )
-                    
-                    if success:
+            # 按檔案大小排序，優先載入小檔案
+            index_files_sorted = sorted(
+                index_files,
+                key=lambda f: f.stat().st_size if f.exists() else 0
+            )
+            
+            # 分批處理
+            for batch_start in range(0, total_files, batch_size):
+                batch_end = min(batch_start + batch_size, total_files)
+                batch_files = index_files_sorted[batch_start:batch_end]
+                
+                self.logger.info(
+                    f"載入批次 {batch_start//batch_size + 1}/{(total_files + batch_size - 1)//batch_size}："
+                    f"處理索引 {batch_start + 1}-{batch_end}"
+                )
+                
+                # 使用信號量限制並發數
+                semaphore = asyncio.Semaphore(max_concurrent)
+                
+                async def load_single_index(index_file):
+                    async with semaphore:
+                        try:
+                            # 從檔案名稱取得頻道 ID
+                            channel_id = index_file.stem
+                            
+                            # 在執行緒池中載入索引
+                            loop = asyncio.get_event_loop()
+                            success = await loop.run_in_executor(
+                                None,
+                                self.vector_manager.create_channel_index,
+                                channel_id
+                            )
+                            
+                            if success:
+                                self.logger.debug(f"成功載入頻道 {channel_id} 的索引")
+                                return True
+                            else:
+                                self.logger.warning(f"載入頻道 {channel_id} 的索引失敗")
+                                return False
+                                
+                        except Exception as e:
+                            self.logger.error(f"載入索引檔案 {index_file.name} 失敗: {e}")
+                            return False
+                
+                # 並發載入當前批次
+                batch_tasks = [load_single_index(f) for f in batch_files]
+                batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+                
+                # 統計結果
+                for result in batch_results:
+                    if isinstance(result, bool) and result:
                         loaded_count += 1
-                        self.logger.debug(f"成功載入頻道 {channel_id} 的索引")
                     else:
                         failed_count += 1
-                        self.logger.warning(f"載入頻道 {channel_id} 的索引失敗")
-                        
-                except Exception as e:
-                    failed_count += 1
-                    self.logger.error(f"載入索引檔案 {index_file.name} 失敗: {e}")
+                
+                # 批次間的記憶體清理
+                if self.vector_manager.gpu_memory_manager:
+                    self.vector_manager.gpu_memory_manager.clear_gpu_memory()
+                
+                # 短暫休息，讓系統穩定
+                await asyncio.sleep(0.5)
+                
+                self.logger.info(
+                    f"批次 {batch_start//batch_size + 1} 完成：已載入 {loaded_count}/{total_files} 個索引"
+                )
             
             self.logger.info(
                 f"索引載入完成: {loaded_count} 個成功，{failed_count} 個失敗，"
-                f"總共 {loaded_count + failed_count} 個索引檔案"
+                f"總共 {total_files} 個索引檔案"
             )
+            
+            # 最終記憶體優化
+            if self.vector_manager.gpu_memory_manager:
+                self.vector_manager.gpu_memory_manager.log_memory_stats()
             
         except Exception as e:
             self.logger.error(f"載入現有索引失敗: {e}")
+    
+    async def _initialize_segmentation_service(self) -> None:
+        """初始化文本分割服務"""
+        try:
+            # 載入分割配置
+            segmentation_config_data = self.config.get_segmentation_config()
+            
+            # 建立分割配置物件
+            self.segmentation_config = SegmentationConfig(
+                enabled=segmentation_config_data.get("enabled", True),
+                strategy=SegmentationStrategy(segmentation_config_data.get("strategy", "hybrid")),
+                min_interval_minutes=segmentation_config_data.get("dynamic_interval", {}).get("min_minutes", 5),
+                max_interval_minutes=segmentation_config_data.get("dynamic_interval", {}).get("max_minutes", 120),
+                base_interval_minutes=segmentation_config_data.get("dynamic_interval", {}).get("base_minutes", 30),
+                activity_multiplier=segmentation_config_data.get("dynamic_interval", {}).get("activity_multiplier", 0.2),
+                similarity_threshold=segmentation_config_data.get("semantic_threshold", {}).get("similarity_cutoff", 0.6),
+                min_messages_per_segment=segmentation_config_data.get("semantic_threshold", {}).get("min_messages_per_segment", 3),
+                max_messages_per_segment=segmentation_config_data.get("semantic_threshold", {}).get("max_messages_per_segment", 50),
+                batch_size=segmentation_config_data.get("processing", {}).get("batch_size", 20),
+                async_processing=segmentation_config_data.get("processing", {}).get("async_processing", True),
+                background_segmentation=segmentation_config_data.get("processing", {}).get("background_segmentation", True),
+                coherence_threshold=segmentation_config_data.get("quality_control", {}).get("coherence_threshold", 0.5),
+                merge_small_segments=segmentation_config_data.get("quality_control", {}).get("merge_small_segments", True),
+                split_large_segments=segmentation_config_data.get("quality_control", {}).get("split_large_segments", True)
+            )
+            
+            # 檢查是否啟用分割功能
+            if not self.segmentation_config.enabled:
+                self.logger.info("文本分割功能已停用")
+                return
+            
+            # 檢查必要組件是否可用
+            if not self.embedding_service:
+                self.logger.warning("嵌入服務未初始化，停用文本分割功能")
+                self.segmentation_config.enabled = False
+                return
+            
+            # 初始化分割服務
+            self.segmentation_service = initialize_segmentation_service(
+                db_manager=self.db_manager,
+                embedding_service=self.embedding_service,
+                config=self.segmentation_config,
+                profile=self.current_profile
+            )
+            
+            self.logger.info(f"文本分割服務初始化完成 (策略: {self.segmentation_config.strategy.value})")
+            
+        except Exception as e:
+            self.logger.error(f"初始化文本分割服務失敗: {e}")
+            # 不拋出例外，允許系統在無分割功能的情況下運行
+            if self.segmentation_config:
+                self.segmentation_config.enabled = False
+    
+    async def get_stats(self) -> MemoryStats:
+        """取得記憶系統統計資料
+        
+        Returns:
+            MemoryStats: 記憶系統統計資料
+        """
+        if not self._check_initialized():
+            return MemoryStats(
+                total_channels=0,
+                total_messages=0,
+                vector_enabled_channels=0,
+                average_query_time_ms=0.0,
+                cache_hit_rate=0.0,
+                storage_size_mb=0.0
+            )
+        
+        try:
+            # 在執行緒池中執行統計查詢
+            loop = asyncio.get_event_loop()
+            
+            # 取得基本統計
+            total_channels = await loop.run_in_executor(
+                None, self.db_manager.get_channel_count
+            )
+            
+            total_messages = await loop.run_in_executor(
+                None, self.db_manager.get_message_count
+            )
+            
+            # 計算向量啟用的頻道數
+            vector_enabled_channels = 0
+            if self.vector_manager:
+                memory_stats = self.vector_manager.get_memory_stats()
+                vector_enabled_channels = memory_stats.get("total_indices", 0)
+            
+            # 計算平均查詢時間
+            avg_query_time = (
+                sum(self._query_times) / len(self._query_times)
+                if self._query_times else 0.0
+            )
+            
+            # 計算快取命中率
+            total_queries = self._cache_hits + self._cache_misses
+            cache_hit_rate = (
+                self._cache_hits / total_queries * 100
+                if total_queries > 0 else 0.0
+            )
+            
+            # 計算儲存大小
+            storage_size_mb = await loop.run_in_executor(
+                None, self._calculate_storage_size
+            )
+            
+            return MemoryStats(
+                total_channels=total_channels,
+                total_messages=total_messages,
+                vector_enabled_channels=vector_enabled_channels,
+                average_query_time_ms=avg_query_time,
+                cache_hit_rate=cache_hit_rate,
+                storage_size_mb=storage_size_mb
+            )
+            
+        except Exception as e:
+            self.logger.error(f"取得記憶統計失敗: {e}")
+            return MemoryStats(
+                total_channels=0,
+                total_messages=0,
+                vector_enabled_channels=0,
+                average_query_time_ms=0.0,
+                cache_hit_rate=0.0,
+                storage_size_mb=0.0
+            )
+    
+    def _calculate_storage_size(self) -> float:
+        """計算儲存大小（MB）
+        
+        Returns:
+            float: 儲存大小（MB）
+        """
+        try:
+            total_size = 0
+            
+            # 計算資料庫大小
+            if self.db_manager and hasattr(self.db_manager, 'db_path'):
+                db_path = Path(self.db_manager.db_path)
+                if db_path.exists():
+                    total_size += db_path.stat().st_size
+            
+            # 計算索引檔案大小
+            if self.vector_manager and hasattr(self.vector_manager, 'storage_path'):
+                indices_path = self.vector_manager.storage_path
+                if indices_path.exists():
+                    for file_path in indices_path.rglob("*"):
+                        if file_path.is_file():
+                            total_size += file_path.stat().st_size
+            
+            return total_size / (1024 * 1024)  # 轉換為 MB
+            
+        except Exception as e:
+            self.logger.warning(f"計算儲存大小失敗: {e}")
+            return 0.0
+    
+    def _check_initialized(self) -> bool:
+        """檢查是否已初始化
+        
+        Returns:
+            bool: 是否已初始化
+        """
+        return self._initialized and self._enabled
     
     async def store_message(self, message: discord.Message) -> bool:
         """儲存 Discord 訊息
@@ -318,6 +515,12 @@ class MemoryManager:
                     # 如果啟用向量功能，生成並儲存嵌入向量
                     if self.current_profile.vector_enabled and self.embedding_service and self.vector_manager:
                         await self._store_message_vector(message_data)
+                    
+                    # 如果啟用分割功能，處理文本分割
+                    if (self.segmentation_config and 
+                        self.segmentation_config.enabled and 
+                        self.segmentation_service):
+                        await self._process_message_segmentation(message_data)
                     
                     self.logger.debug(f"成功儲存訊息: {message.id}")
                 
@@ -462,6 +665,9 @@ class MemoryManager:
             # 定期儲存索引檔案（每 50 個向量儲存一次）
             if faiss_success:
                 try:
+                    # 確保索引目錄存在
+                    await self._ensure_indices_directory()
+                    
                     # 取得頻道的向量統計
                     stats = self.vector_manager.get_index_stats(channel_id)
                     total_vectors = stats.get("total_vectors", 0)
@@ -477,8 +683,12 @@ class MemoryManager:
                             self.logger.debug(f"頻道 {channel_id} 索引檔案已儲存（向量數: {total_vectors}）")
                         else:
                             self.logger.warning(f"頻道 {channel_id} 索引檔案儲存失敗")
+                            # 檢查具體的儲存問題
+                            await self._diagnose_index_storage_issue(channel_id)
                 except Exception as e:
                     self.logger.warning(f"定期儲存索引檔案失敗: {e}")
+                    # 記錄詳細的錯誤資訊
+                    await self._diagnose_index_storage_issue(channel_id, str(e))
             
             if faiss_success and db_success:
                 self.logger.debug(f"向量嵌入已儲存到索引和資料庫: {message_id}")
@@ -492,6 +702,144 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"儲存訊息向量失敗: {e}")
             # 不拋出例外，避免影響主要的訊息儲存流程
+    
+    async def _process_message_segmentation(self, message_data: Dict[str, Any]) -> None:
+        """處理訊息的文本分割
+        
+        Args:
+            message_data: 訊息資料
+        """
+        try:
+            # 檢查是否有有效的內容
+            content = message_data.get("content_processed", "") or message_data.get("content", "")
+            if not content.strip():
+                return
+            
+            # 準備分割處理參數
+            message_id = message_data["message_id"]
+            channel_id = message_data["channel_id"]
+            user_id = message_data["user_id"]
+            timestamp = message_data["timestamp"]
+            
+            # 在背景執行分割處理
+            if self.segmentation_config.background_segmentation:
+                # 非同步處理，不等待結果
+                asyncio.create_task(
+                    self._process_segmentation_async(
+                        message_id, channel_id, content, timestamp, user_id
+                    )
+                )
+            else:
+                # 同步處理
+                await self._process_segmentation_async(
+                    message_id, channel_id, content, timestamp, user_id
+                )
+                
+        except Exception as e:
+            self.logger.error(f"處理訊息分割失敗: {e}")
+            # 不拋出例外，避免影響主要的訊息儲存流程
+    
+    async def _process_segmentation_async(
+        self,
+        message_id: str,
+        channel_id: str,
+        content: str,
+        timestamp: datetime,
+        user_id: str
+    ) -> None:
+        """非同步處理分割邏輯
+        
+        Args:
+            message_id: 訊息 ID
+            channel_id: 頻道 ID
+            content: 訊息內容
+            timestamp: 時間戳記
+            user_id: 使用者 ID
+        """
+        try:
+            # 呼叫分割服務處理新訊息
+            completed_segment = await self.segmentation_service.process_new_message(
+                message_id=message_id,
+                channel_id=channel_id,
+                content=content,
+                timestamp=timestamp,
+                user_id=user_id
+            )
+            
+            if completed_segment:
+                # 記錄完成的片段
+                self.logger.debug(
+                    f"完成對話片段: {completed_segment.segment_id}，"
+                    f"訊息數: {completed_segment.message_count}，"
+                    f"持續時間: {completed_segment.duration_minutes:.1f}分鐘"
+                )
+                
+                # 可以在這裡添加額外的後處理邏輯
+                await self._post_process_completed_segment(completed_segment)
+                
+        except Exception as e:
+            self.logger.error(f"非同步分割處理失敗: {e}")
+    
+    async def _post_process_completed_segment(self, segment) -> None:
+        """後處理已完成的片段
+        
+        Args:
+            segment: 完成的對話片段
+        """
+        try:
+            # 這裡可以添加額外的處理邏輯，例如：
+            # 1. 更新向量索引
+            # 2. 生成片段摘要
+            # 3. 發送通知
+            # 4. 更新統計資料
+            
+            # 更新片段的向量表示到向量索引（如果需要）
+            if (segment.vector_representation is not None and 
+                self.vector_manager and 
+                self.current_profile.vector_enabled):
+                
+                # 將片段向量添加到特殊的片段索引中
+                await self._add_segment_to_vector_index(segment)
+            
+        except Exception as e:
+            self.logger.warning(f"後處理片段失敗: {e}")
+    
+    async def _add_segment_to_vector_index(self, segment) -> None:
+        """將片段添加到向量索引
+        
+        Args:
+            segment: 對話片段
+        """
+        try:
+            if not segment.vector_representation.any():
+                return
+            
+            # 使用特殊的索引鍵來標識片段向量
+            segment_index_key = f"segments_{segment.channel_id}"
+            
+            # 在執行緒池中執行向量操作
+            loop = asyncio.get_event_loop()
+            
+            # 確保片段索引存在
+            await loop.run_in_executor(
+                None,
+                self.vector_manager.create_channel_index,
+                segment_index_key
+            )
+            
+            # 添加片段向量
+            await loop.run_in_executor(
+                None,
+                self.vector_manager.add_vectors,
+                segment_index_key,
+                segment.vector_representation.reshape(1, -1),
+                [segment.segment_id]
+            )
+            
+            self.logger.debug(f"片段向量已添加到索引: {segment.segment_id}")
+            
+        except Exception as e:
+            self.logger.warning(f"添加片段到向量索引失敗: {e}")
     
     def _store_embedding_to_database(
         self,
@@ -514,523 +862,27 @@ class MemoryManager:
             bool: 是否成功儲存
         """
         try:
-            # 生成嵌入 ID
-            embedding_id = f"{message_id}_{uuid.uuid4().hex[:8]}"
-            
             # 序列化向量資料
             vector_data = embedding.tobytes()
             
             with self.db_manager.get_connection() as conn:
+                # 適應現有資料庫結構：使用 id 作為主鍵（自動遞增）
+                # 添加 user_id 欄位以符合現有結構
                 conn.execute("""
-                    INSERT OR REPLACE INTO embeddings
-                    (embedding_id, message_id, channel_id, vector_data, model_version, dimension)
+                    INSERT INTO embeddings
+                    (message_id, channel_id, user_id, vector_data,
+                     model_version, dimension)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (embedding_id, message_id, channel_id, vector_data, model_version, dimension))
+                """, (message_id, channel_id, None, vector_data,
+                      model_version, dimension))
                 conn.commit()
             
-            self.logger.debug(f"嵌入向量已儲存到資料庫: {message_id}")
+            self.logger.debug(f"成功儲存嵌入向量到資料庫: message_id={message_id}")
             return True
             
         except Exception as e:
             self.logger.error(f"儲存嵌入向量到資料庫失敗: {e}")
             return False
-    
-    async def search_memory(self, query: SearchQuery) -> SearchResult:
-        """搜尋記憶
-        
-        Args:
-            query: 搜尋查詢
-            
-        Returns:
-            SearchResult: 搜尋結果
-        """
-        if not self._check_initialized():
-            return SearchResult(
-                messages=[],
-                relevance_scores=[],
-                total_found=0,
-                search_time_ms=0,
-                search_method="disabled"
-            )
-        
-        start_time = asyncio.get_event_loop().time()
-        
-        try:
-            # 目前階段只實作基本的關鍵字搜尋
-            # 後續階段會加入向量搜尋和混合搜尋
-            if query.search_type == SearchType.SEMANTIC and not self.current_profile.vector_enabled:
-                # 如果要求語義搜尋但向量功能未啟用，降級為關鍵字搜尋
-                query.search_type = SearchType.KEYWORD
-            
-            result = await self._perform_search(query)
-            
-            # 記錄搜尋時間
-            search_time_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
-            result.search_time_ms = search_time_ms
-            
-            self._query_times.append(search_time_ms)
-            if len(self._query_times) > 1000:  # 保持最近 1000 次查詢的記錄
-                self._query_times.pop(0)
-            
-            return result
-            
-        except Exception as e:
-            self.logger.error(f"搜尋記憶失敗: {e}")
-            raise SearchError(f"搜尋記憶失敗: {e}", search_type=query.search_type.value, query=query.text)
-    
-    async def _perform_search(self, query: SearchQuery) -> SearchResult:
-        """執行搜尋操作
-        
-        Args:
-            query: 搜尋查詢
-            
-        Returns:
-            SearchResult: 搜尋結果
-        """
-        # 如果有搜尋引擎且啟用向量功能，使用新的搜尋引擎
-        if self.search_engine and query.search_type in [SearchType.SEMANTIC, SearchType.HYBRID]:
-            return await self._semantic_search_with_engine(query)
-        
-        # 回退到基本搜尋
-        return await self._basic_search(query)
-    
-    async def _semantic_search_with_engine(self, query: SearchQuery) -> SearchResult:
-        """使用搜尋引擎執行語義搜尋
-        
-        Args:
-            query: 搜尋查詢
-            
-        Returns:
-            SearchResult: 搜尋結果
-        """
-        try:
-            # 轉換搜尋查詢格式，保持原有的搜尋類型
-            engine_search_type = EngineSearchType.SEMANTIC
-            if query.search_type == SearchType.HYBRID:
-                engine_search_type = EngineSearchType.HYBRID
-            
-            engine_query = EngineSearchQuery(
-                text=query.text,
-                channel_id=query.channel_id,
-                search_type=engine_search_type,
-                time_range=TimeRange(
-                    start_time=query.time_range[0] if query.time_range else None,
-                    end_time=query.time_range[1] if query.time_range else None
-                ) if query.time_range else None,
-                limit=query.limit,
-                score_threshold=query.threshold,
-                include_metadata=query.include_metadata
-            )
-            
-            # 在執行緒池中執行搜尋
-            loop = asyncio.get_event_loop()
-            engine_result = await loop.run_in_executor(
-                None,
-                self.search_engine.search,
-                engine_query
-            )
-            
-            # 從向量搜尋結果中取得完整的訊息資料
-            messages = await self._enrich_search_results(engine_result.messages)
-            
-            # 轉換回原有格式
-            return SearchResult(
-                messages=messages,
-                relevance_scores=engine_result.relevance_scores,
-                total_found=engine_result.total_found,
-                search_time_ms=int(engine_result.search_time_ms),
-                search_method=engine_result.search_method,
-                cache_hit=engine_result.cache_hit
-            )
-            
-        except Exception as e:
-            self.logger.error(f"語義搜尋失敗: {e}")
-            # 回退到關鍵字搜尋
-            fallback_query = SearchQuery(
-                text=query.text,
-                channel_id=query.channel_id,
-                search_type=SearchType.KEYWORD,
-                limit=query.limit,
-                threshold=query.threshold,
-                time_range=query.time_range,
-                include_metadata=query.include_metadata,
-                user_id=query.user_id
-            )
-            return await self._basic_search(fallback_query)
-    
-    async def _basic_search(self, query: SearchQuery) -> SearchResult:
-        """執行基本搜尋（關鍵字/時間）
-        
-        Args:
-            query: 搜尋查詢
-            
-        Returns:
-            SearchResult: 搜尋結果
-        """
-        # 執行關鍵字/時間搜尋
-        loop = asyncio.get_event_loop()
-        messages = await loop.run_in_executor(
-            None,
-            self._keyword_search_sync,
-            query
-        )
-        
-        # 計算簡單的相關性分數 (基於關鍵字匹配)
-        relevance_scores = self._calculate_keyword_relevance(messages, query.text)
-        
-        return SearchResult(
-            messages=messages,
-            relevance_scores=relevance_scores,
-            total_found=len(messages),
-            search_time_ms=0,  # 會在上層設定
-            search_method="keyword"
-        )
-    
-    def _keyword_search_sync(self, query: SearchQuery) -> List[Dict[str, Any]]:
-        """同步關鍵字搜尋
-        
-        Args:
-            query: 搜尋查詢
-            
-        Returns:
-            List[Dict[str, Any]]: 搜尋結果
-        """
-        try:
-            # 取得時間範圍
-            before = query.time_range[1] if query.time_range else None
-            after = query.time_range[0] if query.time_range else None
-            
-            # 從資料庫取得訊息
-            messages = self.db_manager.get_messages(
-                channel_id=query.channel_id,
-                limit=query.limit * 2,  # 取更多訊息進行過濾
-                before=before,
-                after=after
-            )
-            
-            # 過濾包含關鍵字的訊息
-            if query.text.strip():
-                filtered_messages = []
-                keywords = query.text.lower().split()
-                
-                for message in messages:
-                    content = ((message.get("content") or "") + " " +
-                              (message.get("content_processed") or "")).lower()
-                    
-                    # 檢查是否包含任何關鍵字
-                    if any(keyword in content for keyword in keywords):
-                        filtered_messages.append(message)
-                        
-                        if len(filtered_messages) >= query.limit:
-                            break
-                
-                return filtered_messages
-            
-            return messages[:query.limit]
-            
-        except Exception as e:
-            self.logger.error(f"關鍵字搜尋失敗: {e}")
-            return []
-    
-    def _calculate_keyword_relevance(self, messages: List[Dict[str, Any]], query_text: str) -> List[float]:
-        """計算關鍵字相關性分數
-        
-        Args:
-            messages: 訊息列表
-            query_text: 查詢文字
-            
-        Returns:
-            List[float]: 相關性分數列表
-        """
-        if not query_text.strip():
-            return [1.0] * len(messages)
-        
-        keywords = query_text.lower().split()
-        scores = []
-        
-        for message in messages:
-            content = ((message.get("content") or "") + " " +
-                      (message.get("content_processed") or "")).lower()
-            
-            # 計算關鍵字匹配分數
-            matches = sum(1 for keyword in keywords if keyword in content)
-            score = matches / len(keywords) if keywords else 0.0
-            scores.append(min(score, 1.0))
-        
-        return scores
-    
-    async def _enrich_search_results(self, vector_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """豐富向量搜尋結果，從資料庫取得完整訊息資料
-        
-        Args:
-            vector_results: 向量搜尋結果
-            
-        Returns:
-            List[Dict[str, Any]]: 完整的訊息資料
-        """
-        if not vector_results:
-            return []
-        
-        try:
-            # 提取訊息 ID
-            message_ids = [result.get("message_id") for result in vector_results if result.get("message_id")]
-            
-            if not message_ids:
-                return []
-            
-            # 從資料庫批次查詢訊息
-            loop = asyncio.get_event_loop()
-            enriched_messages = await loop.run_in_executor(
-                None,
-                self._get_messages_by_ids,
-                message_ids
-            )
-            
-            # 保持原有的排序（按相似度）
-            message_dict = {msg["message_id"]: msg for msg in enriched_messages}
-            ordered_messages = []
-            
-            for result in vector_results:
-                message_id = result.get("message_id")
-                if message_id in message_dict:
-                    message = message_dict[message_id]
-                    
-                    # 過濾空內容的訊息
-                    content = message.get('content', '')
-                    content_processed = message.get('content_processed', '')
-                    
-                    # 檢查是否有有效內容（不為空且不只是空白）
-                    has_valid_content = (
-                        (content and content.strip()) or
-                        (content_processed and content_processed.strip() and content_processed != 'None')
-                    )
-                    
-                    if has_valid_content:
-                        message["similarity_score"] = result.get("similarity_score", 0.0)
-                        ordered_messages.append(message)
-                    else:
-                        self.logger.debug(f"記憶管理器跳過空內容訊息 ID: {message_id} (content: {repr(content)}, processed: {repr(content_processed)})")
-            
-            return ordered_messages
-            
-        except Exception as e:
-            self.logger.error(f"豐富搜尋結果失敗: {e}")
-            return []
-    
-    def _get_messages_by_ids(self, message_ids: List[str]) -> List[Dict[str, Any]]:
-        """根據訊息 ID 批次查詢訊息
-        
-        Args:
-            message_ids: 訊息 ID 列表
-            
-        Returns:
-            List[Dict[str, Any]]: 訊息資料列表
-        """
-        try:
-            # 使用資料庫管理器的正確實作
-            return self.db_manager.get_messages_by_ids(message_ids)
-        except Exception as e:
-            self.logger.error(f"批次查詢訊息失敗: {e}")
-            return []
-    
-    async def search_similar_messages(
-        self, 
-        channel_id: str, 
-        query_text: str, 
-        limit: int = 10,
-        threshold: float = 0.7
-    ) -> List[Tuple[Dict[str, Any], float]]:
-        """搜尋相似訊息（語義搜尋）
-        
-        Args:
-            channel_id: 頻道 ID
-            query_text: 查詢文本
-            limit: 結果數量限制
-            threshold: 相似度閾值
-            
-        Returns:
-            List[Tuple[Dict[str, Any], float]]: [(訊息資料, 相似度分數), ...]
-        """
-        if not self._check_initialized() or not self.current_profile.vector_enabled:
-            self.logger.debug("向量搜尋功能未啟用")
-            return []
-        
-        try:
-            # 建立語義搜尋查詢
-            query = SearchQuery(
-                text=query_text,
-                channel_id=channel_id,
-                search_type=SearchType.SEMANTIC,
-                limit=limit,
-                threshold=threshold
-            )
-            
-            # 執行搜尋
-            result = await self.search_memory(query)
-            
-            # 組合結果
-            similar_messages = []
-            for message, score in zip(result.messages, result.relevance_scores):
-                similar_messages.append((message, score))
-            
-            return similar_messages
-            
-        except Exception as e:
-            self.logger.error(f"搜尋相似訊息失敗: {e}")
-            return []
-    
-    async def get_context(self, channel_id: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """取得頻道上下文
-        
-        Args:
-            channel_id: 頻道 ID
-            limit: 數量限制
-            
-        Returns:
-            List[Dict[str, Any]]: 訊息列表
-        """
-        if not self._check_initialized():
-            return []
-        
-        try:
-            loop = asyncio.get_event_loop()
-            messages = await loop.run_in_executor(
-                None,
-                self.db_manager.get_messages,
-                channel_id,
-                limit
-            )
-            
-            return messages
-            
-        except Exception as e:
-            self.logger.error(f"取得頻道上下文失敗: {e}")
-            return []
-    
-    async def initialize_channel(self, channel_id: str, guild_id: str) -> bool:
-        """初始化頻道記憶
-        
-        Args:
-            channel_id: 頻道 ID
-            guild_id: 伺服器 ID
-            
-        Returns:
-            bool: 是否成功初始化
-        """
-        if not self._check_initialized():
-            return False
-        
-        try:
-            loop = asyncio.get_event_loop()
-            success = await loop.run_in_executor(
-                None,
-                self.db_manager.create_channel,
-                channel_id,
-                guild_id,
-                self.current_profile.vector_enabled,
-                self.current_profile.name
-            )
-            
-            if success and self.vector_manager:
-                # 同時建立向量索引
-                await loop.run_in_executor(
-                    None,
-                    self.vector_manager.create_channel_index,
-                    channel_id
-                )
-            
-            if success:
-                self.logger.info(f"頻道記憶初始化完成: {channel_id}")
-            
-            return success
-            
-        except Exception as e:
-            self.logger.error(f"頻道記憶初始化失敗: {e}")
-            return False
-    
-    async def get_stats(self) -> MemoryStats:
-        """取得記憶系統統計資料
-        
-        Returns:
-            MemoryStats: 統計資料
-        """
-        if not self._check_initialized():
-            return MemoryStats(
-                total_channels=0,
-                total_messages=0,
-                vector_enabled_channels=0,
-                average_query_time_ms=0.0,
-                cache_hit_rate=0.0,
-                storage_size_mb=0.0
-            )
-        
-        try:
-            # 計算平均查詢時間
-            avg_query_time = sum(self._query_times) / len(self._query_times) if self._query_times else 0.0
-            
-            # 計算快取命中率
-            total_queries = self._cache_hits + self._cache_misses
-            cache_hit_rate = self._cache_hits / total_queries if total_queries > 0 else 0.0
-            
-            # 從資料庫查詢統計資料
-            total_channels = 0
-            total_messages = 0
-            vector_enabled_channels = 0
-            storage_size_mb = 0.0
-            
-            if self.db_manager:
-                try:
-                    with self.db_manager.get_connection() as conn:
-                        # 查詢頻道總數
-                        try:
-                            cursor = conn.execute("SELECT COUNT(*) FROM channels")
-                            result = cursor.fetchone()
-                            total_channels = result[0] if result else 0
-                        except Exception as e:
-                            self.logger.warning(f"無法查詢頻道總數: {e}")
-                            total_channels = 0
-                        
-                        # 查詢訊息總數
-                        try:
-                            cursor = conn.execute("SELECT COUNT(*) FROM messages")
-                            result = cursor.fetchone()
-                            total_messages = result[0] if result else 0
-                        except Exception as e:
-                            self.logger.warning(f"無法查詢訊息總數: {e}")
-                            total_messages = 0
-                        
-                        # 查詢啟用向量搜尋的頻道數（有嵌入資料的頻道）
-                        try:
-                            cursor = conn.execute("SELECT COUNT(DISTINCT channel_id) FROM embeddings")
-                            result = cursor.fetchone()
-                            vector_enabled_channels = result[0] if result else 0
-                        except Exception as e:
-                            self.logger.warning(f"無法查詢向量啟用頻道數: {e}")
-                            vector_enabled_channels = 0
-                        
-                        # 計算資料庫檔案大小
-                        try:
-                            if self.db_manager.db_path.exists():
-                                storage_size_mb = self.db_manager.db_path.stat().st_size / (1024 * 1024)
-                        except Exception as e:
-                            self.logger.warning(f"無法計算資料庫檔案大小: {e}")
-                            storage_size_mb = 0.0
-                except Exception as e:
-                    self.logger.error(f"資料庫連接失敗: {e}")
-                    # 保持預設值 0
-            
-            return MemoryStats(
-                total_channels=total_channels,
-                total_messages=total_messages,
-                vector_enabled_channels=vector_enabled_channels,
-                average_query_time_ms=avg_query_time,
-                cache_hit_rate=cache_hit_rate,
-                storage_size_mb=storage_size_mb
-            )
-            
-        except Exception as e:
-            self.logger.error(f"取得統計資料失敗: {e}")
-            return MemoryStats(0, 0, 0, 0.0, 0.0, 0.0)
     
     def _check_initialized(self) -> bool:
         """檢查是否已初始化
@@ -1038,179 +890,264 @@ class MemoryManager:
         Returns:
             bool: 是否已初始化且啟用
         """
-        if not self._initialized or not self._enabled:
-            if not self._initialized:
-                self.logger.warning("記憶系統尚未初始化")
-            else:
-                self.logger.debug("記憶系統已停用")
+        if not self._initialized:
+            self.logger.warning("記憶系統未初始化")
             return False
+        
+        if not self._enabled:
+            self.logger.debug("記憶系統已停用")
+            return False
+        
         return True
-    
-    async def cleanup(self) -> None:
-        """清理資源"""
-        try:
-            loop = asyncio.get_event_loop()
-            
-            # 在清理前先儲存所有索引檔案
-            if self.vector_manager:
-                try:
-                    self.logger.info("正在儲存所有向量索引檔案...")
-                    save_results = await loop.run_in_executor(
-                        None,
-                        self.vector_manager.save_all_indices
-                    )
-                    success_count = sum(save_results.values())
-                    total_count = len(save_results)
-                    self.logger.info(f"索引檔案儲存完成: {success_count}/{total_count} 個成功")
-                except Exception as e:
-                    self.logger.error(f"儲存索引檔案失敗: {e}")
-            
-            if self.db_manager:
-                await loop.run_in_executor(None, self.db_manager.close_connections)
-            
-            # 清理向量組件
-            if self.embedding_service:
-                await loop.run_in_executor(None, self.embedding_service.clear_cache)
-            
-            if self.vector_manager:
-                await loop.run_in_executor(None, self.vector_manager.clear_cache)
-            
-            if self.search_engine:
-                await loop.run_in_executor(None, self.search_engine.clear_cache)
-            
-            self.logger.info("記憶系統資源清理完成")
-            
-        except Exception as e:
-            self.logger.error(f"清理記憶系統資源失敗: {e}")
     
     @property
     def is_enabled(self) -> bool:
-        """記憶系統是否啟用"""
+        """記憶系統是否啟用
+        
+        Returns:
+            bool: 是否啟用
+        """
         return self._enabled and self._initialized
     
-    @property
-    def vector_enabled(self) -> bool:
-        """向量搜尋是否啟用"""
-        return (self.current_profile and
-                self.current_profile.vector_enabled and
-                self.is_enabled)
-    
-    async def store_message_from_dict(self, message_data: Dict[str, Any]) -> bool:
-        """從字典資料儲存訊息（用於資料轉移）
+    async def _ensure_indices_directory(self) -> bool:
+        """確保索引目錄存在並有寫入權限
         
-        Args:
-            message_data: 標準化的訊息資料字典
-            
         Returns:
-            bool: 是否成功儲存
+            bool: 目錄是否可用
         """
         try:
-            # 確保必要欄位存在
-            required_fields = ["message_id", "channel_id", "user_id", "content", "timestamp"]
-            for field in required_fields:
-                if field not in message_data:
-                    raise ValueError(f"缺少必要欄位: {field}")
+            if not self.vector_manager:
+                return False
             
-            # 轉換時間戳記格式
-            timestamp = message_data["timestamp"]
-            if isinstance(timestamp, str):
-                timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-            elif not isinstance(timestamp, datetime):
-                timestamp = datetime.now()
+            indices_path = self.vector_manager.storage_path
             
-            # 準備訊息資料
-            metadata = message_data.get("metadata")
-            if metadata and isinstance(metadata, dict):
-                metadata = json.dumps(metadata, ensure_ascii=False)
-            elif metadata and not isinstance(metadata, str):
-                metadata = str(metadata)
-            
-            processed_data = {
-                "message_id": str(message_data["message_id"]),
-                "channel_id": str(message_data["channel_id"]),
-                "user_id": str(message_data["user_id"]),
-                "content": str(message_data["content"]),
-                "timestamp": timestamp,
-                "message_type": message_data.get("message_type", "user"),
-                "content_processed": message_data.get("content_processed"),
-                "metadata": metadata
-            }
-            
-            # 儲存到資料庫
+            # 創建目錄（如果不存在）
             loop = asyncio.get_event_loop()
-            success = await loop.run_in_executor(
+            await loop.run_in_executor(
                 None,
-                self._store_message_sync,
-                processed_data
+                lambda: indices_path.mkdir(parents=True, exist_ok=True)
             )
             
-            if success and self.vector_enabled:
-                # 非同步儲存向量嵌入
-                asyncio.create_task(self._store_message_vector(processed_data))
-            
-            return success
-            
-        except Exception as e:
-            self.logger.error(f"從字典儲存訊息失敗: {e}")
-            return False
-    
-    async def clear_channel_memory(self, channel_id: str) -> bool:
-        """清除頻道記憶
-        
-        Args:
-            channel_id: 頻道 ID
-            
-        Returns:
-            bool: 是否成功清除
-        """
-        if not self._check_initialized():
-            return False
-        
-        try:
-            loop = asyncio.get_event_loop()
-            
-            # 清除資料庫記錄
-            success = await loop.run_in_executor(
-                None,
-                self._clear_channel_database,
-                channel_id
-            )
-            
-            if success and self.vector_manager:
-                # 清除向量索引
-                await loop.run_in_executor(
-                    None,
-                    self.vector_manager.delete_channel_index,
-                    channel_id
-                )
-            
-            if success:
-                self.logger.info(f"頻道記憶已清除: {channel_id}")
-            
-            return success
-            
-        except Exception as e:
-            self.logger.error(f"清除頻道記憶失敗: {e}")
-            return False
-    
-    def _clear_channel_database(self, channel_id: str) -> bool:
-        """清除頻道的資料庫記錄
-        
-        Args:
-            channel_id: 頻道 ID
-            
-        Returns:
-            bool: 是否成功清除
-        """
-        try:
-            with self.db_manager.get_connection() as conn:
-                # 由於外鍵約束，刪除頻道會級聯刪除相關的訊息和嵌入
-                conn.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
-                conn.commit()
+            # 檢查寫入權限
+            test_file = indices_path / ".write_test"
+            await loop.run_in_executor(None, test_file.touch)
+            await loop.run_in_executor(None, test_file.unlink)
             
             return True
             
         except Exception as e:
-            self.logger.error(f"清除頻道資料庫記錄失敗: {e}")
+            self.logger.error(f"確保索引目錄失敗: {e}")
             return False
     
+    async def _diagnose_index_storage_issue(self, channel_id: str, error_msg: str = None) -> None:
+        """診斷索引儲存問題
+        
+        Args:
+            channel_id: 頻道 ID
+            error_msg: 錯誤訊息（可選）
+        """
+        try:
+            if not self.vector_manager:
+                self.logger.error("向量管理器未初始化")
+                return
+            
+            indices_path = self.vector_manager.storage_path
+            
+            # 檢查目錄是否存在
+            if not indices_path.exists():
+                self.logger.error(f"索引目錄不存在: {indices_path}")
+                return
+            
+            # 檢查目錄權限
+            if not indices_path.is_dir():
+                self.logger.error(f"索引路徑不是目錄: {indices_path}")
+                return
+            
+            # 檢查寫入權限
+            try:
+                test_file = indices_path / f".write_test_{channel_id}"
+                test_file.touch()
+                test_file.unlink()
+                self.logger.debug(f"索引目錄寫入權限正常: {indices_path}")
+            except Exception as perm_e:
+                self.logger.error(f"索引目錄無寫入權限: {indices_path}, 錯誤: {perm_e}")
+                return
+            
+            # 檢查索引是否存在於記憶體中
+            with self.vector_manager._indices_lock:
+                if channel_id not in self.vector_manager._indices:
+                    self.logger.error(f"頻道 {channel_id} 的索引不在記憶體中")
+                    return
+            
+            # 檢查磁盤空間
+            try:
+                import shutil
+                total, used, free = shutil.disk_usage(indices_path)
+                free_mb = free // (1024 * 1024)
+                if free_mb < 100:  # 少於 100MB
+                    self.logger.error(f"磁盤空間不足: 剩餘 {free_mb}MB")
+                else:
+                    self.logger.debug(f"磁盤空間足夠: 剩餘 {free_mb}MB")
+            except Exception as disk_e:
+                self.logger.warning(f"無法檢查磁盤空間: {disk_e}")
+            
+            # 記錄詳細錯誤
+            if error_msg:
+                self.logger.error(f"索引儲存失敗的具體錯誤: {error_msg}")
+            else:
+                self.logger.warning(f"頻道 {channel_id} 索引儲存失敗，但未提供具體錯誤訊息")
+                
+        except Exception as e:
+            self.logger.error(f"診斷索引儲存問題時發生錯誤: {e}")
+
+    async def search_memory(self, search_query) -> 'SearchResult':
+        """搜尋相關記憶（包裝器方法）
+        
+        Args:
+            search_query: 搜尋查詢物件
+            
+        Returns:
+            SearchResult: 搜尋結果
+            
+        Raises:
+            MemorySystemError: 當搜尋系統未初始化或搜尋失敗時
+        """
+        if not self._check_initialized():
+            raise MemorySystemError("記憶系統未初始化或已停用")
+        
+        if not self.search_engine:
+            raise MemorySystemError("搜尋引擎未初始化")
+        
+        try:
+            start_time = time.time()
+            
+            # 在執行緒池中執行搜尋
+            loop = asyncio.get_event_loop()
+            search_result = await loop.run_in_executor(
+                None,
+                self.search_engine.search,
+                search_query
+            )
+            
+            # 記錄查詢時間統計
+            query_time_ms = (time.time() - start_time) * 1000
+            self._query_times.append(query_time_ms)
+            
+            # 限制統計資料大小
+            if len(self._query_times) > 1000:
+                self._query_times = self._query_times[-500:]
+            
+            # 更新快取統計
+            if search_result.cache_hit:
+                self._cache_hits += 1
+            else:
+                self._cache_misses += 1
+            
+            self.logger.debug(
+                f"搜尋完成: 查詢時間 {query_time_ms:.1f}ms, "
+                f"結果數量 {len(search_result.messages)}, "
+                f"快取命中: {search_result.cache_hit}"
+            )
+            
+            return search_result
+            
+        except Exception as e:
+            self.logger.error(f"搜尋相關記憶時發生未預期錯誤: {e}")
+            raise SearchError(f"搜尋相關記憶失敗: {e}")
+    
+    async def cleanup(self) -> None:
+        """清理記憶體資源和快取
+        
+        執行完整的清理作業，釋放所有組件的資源和記憶體。
+        """
+        try:
+            self.logger.info("開始記憶體系統清理...")
+            
+            # 清理向量管理器
+            if hasattr(self, 'vector_manager') and self.vector_manager:
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, self.vector_manager.cleanup)
+                    self.logger.info("向量管理器已清理")
+                except Exception as e:
+                    self.logger.error(f"清理向量管理器時發生錯誤: {e}")
+            
+            # 清理搜尋引擎
+            if hasattr(self, 'search_engine') and self.search_engine:
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, self.search_engine.cleanup)
+                    self.logger.info("搜尋引擎已清理")
+                except Exception as e:
+                    self.logger.error(f"清理搜尋引擎時發生錯誤: {e}")
+            
+            # 清理嵌入服務
+            if hasattr(self, 'embedding_service') and self.embedding_service:
+                try:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, self.embedding_service.cleanup)
+                    self.logger.info("嵌入服務已清理")
+                except Exception as e:
+                    self.logger.error(f"清理嵌入服務時發生錯誤: {e}")
+            
+            # 清理分割服務
+            if hasattr(self, 'segmentation_service') and self.segmentation_service:
+                try:
+                    # 分割服務可能有需要清理的資源
+                    if hasattr(self.segmentation_service, 'cleanup'):
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(None, self.segmentation_service.cleanup)
+                    self.logger.info("分割服務已清理")
+                except Exception as e:
+                    self.logger.error(f"清理分割服務時發生錯誤: {e}")
+            
+            # 清理資料庫連接
+            if hasattr(self, 'db_manager') and self.db_manager:
+                try:
+                    # 資料庫管理器可能有連接池需要關閉
+                    if hasattr(self.db_manager, 'close'):
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(None, self.db_manager.close)
+                    elif hasattr(self.db_manager, 'cleanup'):
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(None, self.db_manager.cleanup)
+                    self.logger.info("資料庫連接已清理")
+                except Exception as e:
+                    self.logger.error(f"清理資料庫時發生錯誤: {e}")
+            
+            # 清理統計資料
+            self._query_times.clear()
+            self._cache_hits = 0
+            self._cache_misses = 0
+            
+            # 強制垃圾回收
+            import gc
+            gc.collect()
+            
+            # 釋放 GPU 記憶體（如果有使用）
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                    self.logger.info("GPU 記憶體已清理")
+            except ImportError:
+                pass
+            except Exception as e:
+                self.logger.warning(f"清理 GPU 記憶體時發生錯誤: {e}")
+            
+            # 標記為未初始化狀態
+            self._initialized = False
+            
+            self.logger.info("記憶體系統清理完成")
+            
+        except Exception as e:
+            self.logger.error(f"記憶體清理時發生嚴重錯誤: {e}")
+            # 即使發生錯誤也要嘗試強制清理
+            try:
+                import gc
+                gc.collect()
+                if hasattr(torch, 'cuda') and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass

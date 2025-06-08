@@ -171,8 +171,14 @@ class HardwareDetector:
         """
         hardware = self.detect_hardware()
         
-        # 按效能從高到低排序
-        profile_order = ["high_performance", "medium_performance", "low_performance"]
+        # 按效能從高到低排序，優先使用 Qwen3 模型
+        profile_order = [
+            "qwen3_high_performance",
+            "qwen3_medium_performance",
+            "high_performance",
+            "medium_performance",
+            "low_performance"
+        ]
         
         for profile_name in profile_order:
             if profile_name in profiles:
@@ -223,6 +229,38 @@ class MemoryConfig:
         
         # 預設配置檔案
         self.default_profiles = {
+            "qwen3_high_performance": MemoryProfile(
+                name="qwen3_high_performance",
+                min_ram_gb=12.0,
+                gpu_required=True,
+                vector_enabled=True,
+                embedding_dimension=1024,
+                cache_size_mb=1024,
+                batch_size=32,
+                max_concurrent_queries=12,
+                embedding_model="Qwen/Qwen3-Embedding-0.6B",
+                device="cuda" if _is_cuda_available() else "cpu",
+                cpu_only=False,
+                memory_threshold_mb=4096,
+                gpu_memory_limit_mb=1536,
+                gpu_temp_memory_mb=384
+            ),
+            "qwen3_medium_performance": MemoryProfile(
+                name="qwen3_medium_performance",
+                min_ram_gb=8.0,
+                gpu_required=False,
+                vector_enabled=True,
+                embedding_dimension=1024,
+                cache_size_mb=1024,
+                batch_size=32,
+                max_concurrent_queries=12,
+                embedding_model="Qwen/Qwen3-Embedding-0.6B",
+                device="cuda" if _is_cuda_available() else "cpu",
+                cpu_only=not _is_cuda_available(),
+                memory_threshold_mb=4096,
+                gpu_memory_limit_mb=2048,
+                gpu_temp_memory_mb=512
+            ),
             "high_performance": MemoryProfile(
                 name="high_performance",
                 min_ram_gb=8.0,
@@ -330,10 +368,10 @@ class MemoryConfig:
                 profile_name = self.hardware_detector.recommend_profile(self.default_profiles)
             else:
                 # 使用手動指定的配置檔案
-                profile_name = memory_config.get("profile", "medium_performance")
+                profile_name = memory_config.get("profile", "qwen3_medium_performance")
             
             if profile_name not in self.default_profiles:
-                profile_name = "medium_performance"
+                profile_name = "qwen3_medium_performance"
             
             self._current_profile = self.default_profiles[profile_name]
             self.logger.info(f"使用配置檔案: {profile_name}")
@@ -353,7 +391,7 @@ class MemoryConfig:
                 "vector_enabled": True,
                 "cpu_only_mode": False,
                 "memory_threshold_mb": 2048,
-                "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
                 "database_path": "data/memory/memory.db",
                 "index_optimization": {
                     "enabled": True,
@@ -369,6 +407,31 @@ class MemoryConfig:
                     "max_concurrent_queries": 10,
                     "query_timeout_seconds": 30,
                     "batch_size": 50
+                },
+                "text_segmentation": {
+                    "enabled": True,
+                    "strategy": "hybrid",
+                    "dynamic_interval": {
+                        "min_minutes": 5,
+                        "max_minutes": 120,
+                        "base_minutes": 30,
+                        "activity_multiplier": 0.2
+                    },
+                    "semantic_threshold": {
+                        "similarity_cutoff": 0.6,
+                        "min_messages_per_segment": 3,
+                        "max_messages_per_segment": 50
+                    },
+                    "processing": {
+                        "batch_size": 20,
+                        "async_processing": True,
+                        "background_segmentation": True
+                    },
+                    "quality_control": {
+                        "coherence_threshold": 0.5,
+                        "merge_small_segments": True,
+                        "split_large_segments": True
+                    }
                 }
             }
         }
@@ -405,3 +468,38 @@ class MemoryConfig:
                     raise ConfigurationError("max_concurrent_queries 必須為正整數")
         
         self.logger.info("配置檔案驗證通過")
+    
+    def get_segmentation_config(self) -> Dict[str, Any]:
+        """取得文本分割配置
+        
+        Returns:
+            Dict[str, Any]: 分割配置
+        """
+        memory_config = self.get_memory_config()
+        default_segmentation_config = {
+            "enabled": True,
+            "strategy": "hybrid",
+            "dynamic_interval": {
+                "min_minutes": 5,
+                "max_minutes": 120,
+                "base_minutes": 30,
+                "activity_multiplier": 0.2
+            },
+            "semantic_threshold": {
+                "similarity_cutoff": 0.6,
+                "min_messages_per_segment": 3,
+                "max_messages_per_segment": 50
+            },
+            "processing": {
+                "batch_size": 20,
+                "async_processing": True,
+                "background_segmentation": True
+            },
+            "quality_control": {
+                "coherence_threshold": 0.5,
+                "merge_small_segments": True,
+                "split_large_segments": True
+            }
+        }
+        
+        return memory_config.get("text_segmentation", default_segmentation_config)

@@ -131,15 +131,15 @@ class DatabaseManager:
         # 向量嵌入表
         conn.execute("""
             CREATE TABLE IF NOT EXISTS embeddings (
-                embedding_id TEXT PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 message_id TEXT NOT NULL,
                 channel_id TEXT NOT NULL,
-                vector_data BLOB,
-                model_version TEXT,
-                dimension INTEGER,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE,
-                FOREIGN KEY (channel_id) REFERENCES channels(channel_id) ON DELETE CASCADE
+                user_id TEXT,
+                vector_data BLOB NOT NULL,
+                model_version TEXT NOT NULL,
+                dimension INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
             )
         """)
         
@@ -161,6 +161,38 @@ class DatabaseManager:
                 metric_type TEXT NOT NULL,
                 value REAL NOT NULL,
                 metadata TEXT
+            )
+        """)
+        
+        # 對話片段表
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_segments (
+                segment_id TEXT PRIMARY KEY,
+                channel_id TEXT NOT NULL,
+                start_time DATETIME NOT NULL,
+                end_time DATETIME NOT NULL,
+                message_count INTEGER NOT NULL,
+                semantic_coherence_score REAL DEFAULT 0.0,
+                activity_level REAL DEFAULT 0.0,
+                segment_summary TEXT,
+                vector_data BLOB,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                metadata TEXT,
+                FOREIGN KEY (channel_id) REFERENCES channels(channel_id) ON DELETE CASCADE
+            )
+        """)
+        
+        # 片段訊息關聯表
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS segment_messages (
+                segment_id TEXT NOT NULL,
+                message_id TEXT NOT NULL,
+                position_in_segment INTEGER NOT NULL,
+                semantic_contribution_score REAL DEFAULT 0.0,
+                PRIMARY KEY (segment_id, message_id),
+                FOREIGN KEY (segment_id) REFERENCES conversation_segments(segment_id) ON DELETE CASCADE,
+                FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE
             )
         """)
     
@@ -189,6 +221,18 @@ class DatabaseManager:
             # 效能指標索引
             "CREATE INDEX IF NOT EXISTS idx_performance_metrics_type ON performance_metrics(metric_type)",
             "CREATE INDEX IF NOT EXISTS idx_performance_metrics_timestamp ON performance_metrics(timestamp)",
+            
+            # 對話片段索引
+            "CREATE INDEX IF NOT EXISTS idx_conversation_segments_channel_id ON conversation_segments(channel_id)",
+            "CREATE INDEX IF NOT EXISTS idx_conversation_segments_start_time ON conversation_segments(start_time)",
+            "CREATE INDEX IF NOT EXISTS idx_conversation_segments_end_time ON conversation_segments(end_time)",
+            "CREATE INDEX IF NOT EXISTS idx_conversation_segments_time_range ON conversation_segments(channel_id, start_time, end_time)",
+            "CREATE INDEX IF NOT EXISTS idx_conversation_segments_coherence ON conversation_segments(semantic_coherence_score)",
+            
+            # 片段訊息關聯索引
+            "CREATE INDEX IF NOT EXISTS idx_segment_messages_segment_id ON segment_messages(segment_id)",
+            "CREATE INDEX IF NOT EXISTS idx_segment_messages_message_id ON segment_messages(message_id)",
+            "CREATE INDEX IF NOT EXISTS idx_segment_messages_position ON segment_messages(segment_id, position_in_segment)",
         ]
         
         for index_sql in indexes:
@@ -543,6 +587,99 @@ class DatabaseManager:
             self.logger.error(f"清理舊資料失敗: {e}")
             raise DatabaseError(f"清理舊資料失敗: {e}", operation="cleanup", table="performance_metrics")
     
+    def get_channel_count(self) -> int:
+        """取得頻道總數
+        
+        Returns:
+            int: 頻道總數
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("SELECT COUNT(DISTINCT channel_id) FROM channels")
+                result = cursor.fetchone()
+                return result[0] if result else 0
+                
+        except Exception as e:
+            self.logger.error(f"取得頻道總數失敗: {e}")
+            return 0
+    
+    def get_message_count(self, channel_id: Optional[str] = None) -> int:
+        """取得訊息總數
+        
+        Args:
+            channel_id: 指定頻道 ID（可選）
+            
+        Returns:
+            int: 訊息總數
+        """
+        try:
+            with self.get_connection() as conn:
+                if channel_id:
+                    cursor = conn.execute(
+                        "SELECT COUNT(*) FROM messages WHERE channel_id = ?",
+                        (channel_id,)
+                    )
+                else:
+                    cursor = conn.execute("SELECT COUNT(*) FROM messages")
+                
+                result = cursor.fetchone()
+                return result[0] if result else 0
+                
+        except Exception as e:
+            self.logger.error(f"取得訊息總數失敗: {e}")
+            return 0
+    
+    def get_database_stats(self) -> Dict[str, Any]:
+        """取得資料庫統計資訊
+        
+        Returns:
+            Dict[str, Any]: 統計資訊
+        """
+        try:
+            with self.get_connection() as conn:
+                stats = {}
+                
+                # 基本計數統計
+                cursor = conn.execute("SELECT COUNT(DISTINCT channel_id) FROM channels")
+                stats['total_channels'] = cursor.fetchone()[0]
+                
+                cursor = conn.execute("SELECT COUNT(*) FROM messages")
+                stats['total_messages'] = cursor.fetchone()[0]
+                
+                # 活躍統計（最近30天）
+                cursor = conn.execute("""
+                    SELECT COUNT(DISTINCT channel_id)
+                    FROM messages
+                    WHERE timestamp > datetime('now', '-30 days')
+                """)
+                stats['active_channels_30d'] = cursor.fetchone()[0]
+                
+                # 訊息類型統計
+                cursor = conn.execute("""
+                    SELECT message_type, COUNT(*)
+                    FROM messages
+                    GROUP BY message_type
+                """)
+                message_type_stats = dict(cursor.fetchall())
+                stats['message_types'] = message_type_stats
+                
+                # 資料庫大小（近似值）
+                cursor = conn.execute("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")
+                result = cursor.fetchone()
+                stats['database_size_bytes'] = result[0] if result else 0
+                
+                return stats
+                
+        except Exception as e:
+            self.logger.error(f"取得資料庫統計失敗: {e}")
+            return {
+                'total_channels': 0,
+                'total_messages': 0,
+                'active_channels_30d': 0,
+                'message_types': {},
+                'database_size_bytes': 0
+            }
+
     def close_connections(self) -> None:
         """關閉所有資料庫連接"""
         with self._lock:
@@ -554,4 +691,215 @@ class DatabaseManager:
             
             self._connections.clear()
         
+        self.logger.info("所有資料庫連接已關閉")
+    
+    # 對話片段操作方法
+    def create_conversation_segment(
+        self,
+        segment_id: str,
+        channel_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        message_count: int,
+        semantic_coherence_score: float = 0.0,
+        activity_level: float = 0.0,
+        segment_summary: Optional[str] = None,
+        vector_data: Optional[bytes] = None,
+        metadata: Optional[str] = None
+    ) -> bool:
+        """建立對話片段
+        
+        Args:
+            segment_id: 片段 ID
+            channel_id: 頻道 ID
+            start_time: 開始時間
+            end_time: 結束時間
+            message_count: 訊息數量
+            semantic_coherence_score: 語義連貫性分數
+            activity_level: 活躍度
+            segment_summary: 片段摘要
+            vector_data: 向量資料
+            metadata: 元資料
+            
+        Returns:
+            bool: 是否成功建立
+        """
+        try:
+            with self.get_connection() as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO conversation_segments 
+                    (segment_id, channel_id, start_time, end_time, message_count,
+                     semantic_coherence_score, activity_level, segment_summary,
+                     vector_data, metadata, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (segment_id, channel_id, start_time, end_time, message_count,
+                      semantic_coherence_score, activity_level, segment_summary,
+                      vector_data, metadata))
+                conn.commit()
+            
+            self.logger.debug(f"建立對話片段: {segment_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"建立對話片段失敗: {e}")
+            raise DatabaseError(f"建立對話片段失敗: {e}", operation="create_segment", table="conversation_segments")
+    
+    def get_conversation_segments(
+        self,
+        channel_id: str,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """取得對話片段
+        
+        Args:
+            channel_id: 頻道 ID
+            start_time: 開始時間篩選
+            end_time: 結束時間篩選
+            limit: 返回數量限制
+            
+        Returns:
+            List[Dict[str, Any]]: 片段列表
+        """
+        try:
+            with self.get_connection() as conn:
+                query = "SELECT * FROM conversation_segments WHERE channel_id = ?"
+                params = [channel_id]
+                
+                if start_time:
+                    query += " AND end_time >= ?"
+                    params.append(start_time)
+                
+                if end_time:
+                    query += " AND start_time <= ?"
+                    params.append(end_time)
+                
+                query += " ORDER BY start_time DESC LIMIT ?"
+                params.append(limit)
+                
+                cursor = conn.execute(query, params)
+                rows = cursor.fetchall()
+                
+                return [dict(row) for row in rows]
+                
+        except Exception as e:
+            self.logger.error(f"取得對話片段失敗: {e}")
+            raise DatabaseError(f"取得對話片段失敗: {e}", operation="get_segments", table="conversation_segments")
+    
+    def add_message_to_segment(
+        self,
+        segment_id: str,
+        message_id: str,
+        position_in_segment: int,
+        semantic_contribution_score: float = 0.0
+    ) -> bool:
+        """將訊息新增到片段
+        
+        Args:
+            segment_id: 片段 ID
+            message_id: 訊息 ID
+            position_in_segment: 在片段中的位置
+            semantic_contribution_score: 語義貢獻分數
+            
+        Returns:
+            bool: 是否成功新增
+        """
+        try:
+            with self.get_connection() as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO segment_messages 
+                    (segment_id, message_id, position_in_segment, semantic_contribution_score)
+                    VALUES (?, ?, ?, ?)
+                """, (segment_id, message_id, position_in_segment, semantic_contribution_score))
+                conn.commit()
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"新增訊息到片段失敗: {e}")
+            raise DatabaseError(f"新增訊息到片段失敗: {e}", operation="add_message_to_segment", table="segment_messages")
+    
+    def get_segment_messages(self, segment_id: str) -> List[Dict[str, Any]]:
+        """取得片段中的訊息
+        
+        Args:
+            segment_id: 片段 ID
+            
+        Returns:
+            List[Dict[str, Any]]: 訊息列表
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("""
+                    SELECT m.*, sm.position_in_segment, sm.semantic_contribution_score
+                    FROM messages m
+                    JOIN segment_messages sm ON m.message_id = sm.message_id
+                    WHERE sm.segment_id = ?
+                    ORDER BY sm.position_in_segment
+                """, (segment_id,))
+                rows = cursor.fetchall()
+                
+                return [dict(row) for row in rows]
+                
+        except Exception as e:
+            self.logger.error(f"取得片段訊息失敗: {e}")
+            raise DatabaseError(f"取得片段訊息失敗: {e}", operation="get_segment_messages", table="segment_messages")
+    
+    def update_segment_coherence(self, segment_id: str, coherence_score: float) -> bool:
+        """更新片段語義連貫性分數
+        
+        Args:
+            segment_id: 片段 ID
+            coherence_score: 連貫性分數
+            
+        Returns:
+            bool: 是否成功更新
+        """
+        try:
+            with self.get_connection() as conn:
+                conn.execute("""
+                    UPDATE conversation_segments 
+                    SET semantic_coherence_score = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE segment_id = ?
+                """, (coherence_score, segment_id))
+                conn.commit()
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"更新片段連貫性分數失敗: {e}")
+            raise DatabaseError(f"更新片段連貫性分數失敗: {e}", operation="update_coherence", table="conversation_segments")
+    
+    def get_overlapping_segments(
+        self,
+        channel_id: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[Dict[str, Any]]:
+        """取得重疊的對話片段
+        
+        Args:
+            channel_id: 頻道 ID
+            start_time: 開始時間
+            end_time: 結束時間
+            
+        Returns:
+            List[Dict[str, Any]]: 重疊的片段列表
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("""
+                    SELECT * FROM conversation_segments
+                    WHERE channel_id = ? 
+                    AND NOT (end_time <= ? OR start_time >= ?)
+                    ORDER BY start_time
+                """, (channel_id, start_time, end_time))
+                rows = cursor.fetchall()
+                
+                return [dict(row) for row in rows]
+                
+        except Exception as e:
+            self.logger.error(f"取得重疊片段失敗: {e}")
+            raise DatabaseError(f"取得重疊片段失敗: {e}", operation="get_overlapping_segments", table="conversation_segments")
         self.logger.info("所有資料庫連接已關閉")

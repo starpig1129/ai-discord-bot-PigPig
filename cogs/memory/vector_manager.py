@@ -116,13 +116,51 @@ class GPUMemoryManager:
                         self.logger.warning("GPU 記憶體不足，無法建立 GPU 資源")
                         return None
                     
-                    self._gpu_resource = faiss.StandardGpuResources()
+                    self.logger.info(f"開始建立 GPU 資源，記憶體限制: {self.max_memory_mb}MB")
+                    
+                    # 添加超時保護的 GPU 資源建立
+                    import signal
+                    import threading
+                    
+                    def timeout_handler(signum, frame):
+                        raise TimeoutError("GPU 資源建立超時")
+                    
+                    def create_gpu_resource():
+                        return faiss.StandardGpuResources()
+                    
+                    # 使用執行緒方式避免信號干擾
+                    result = [None]
+                    exception = [None]
+                    
+                    def worker():
+                        try:
+                            result[0] = create_gpu_resource()
+                        except Exception as e:
+                            exception[0] = e
+                    
+                    thread = threading.Thread(target=worker)
+                    thread.daemon = True
+                    thread.start()
+                    thread.join(timeout=30.0)  # 30秒超時
+                    
+                    if thread.is_alive():
+                        self.logger.error("GPU 資源建立超時（30秒），放棄建立")
+                        return None
+                    
+                    if exception[0]:
+                        raise exception[0]
+                    
+                    if result[0] is None:
+                        self.logger.error("GPU 資源建立失敗，結果為空")
+                        return None
+                    
+                    self._gpu_resource = result[0]
                     
                     # 設定記憶體限制
-                    temp_memory_mb = min(self.max_memory_mb, 512)  # 限制暫存記憶體
+                    temp_memory_mb = min(self.max_memory_mb // 4, 512)  # 更保守的暫存記憶體
                     self._gpu_resource.setTempMemory(temp_memory_mb * 1024 * 1024)
                     
-                    self.logger.info(f"建立 GPU 資源，記憶體限制: {self.max_memory_mb}MB，暫存: {temp_memory_mb}MB")
+                    self.logger.info(f"GPU 資源建立成功，記憶體限制: {self.max_memory_mb}MB，暫存: {temp_memory_mb}MB")
                     
                 except Exception as e:
                     self.logger.error(f"建立 GPU 資源失敗: {e}")
@@ -438,8 +476,8 @@ class VectorIndex:
             return False
     
     def search(
-        self, 
-        query_vector: np.ndarray, 
+        self,
+        query_vector: np.ndarray,
         k: int = 10
     ) -> Tuple[List[float], List[str]]:
         """搜尋相似向量
@@ -452,10 +490,50 @@ class VectorIndex:
             Tuple[List[float], List[str]]: (距離列表, ID 列表)
         """
         try:
+            # 驗證查詢向量
+            if query_vector is None or query_vector.size == 0:
+                self.logger.error("查詢向量為空或無效")
+                return [], []
+            
+            # 確保向量維度正確
+            if query_vector.shape[0] != self.dimension:
+                self.logger.error(
+                    f"查詢向量維度不匹配: 期望 {self.dimension}, 實際 {query_vector.shape[0]}"
+                )
+                return [], []
+            
             query_vector = query_vector.astype('float32').reshape(1, -1)
             index = self.get_index()
             
-            distances, indices = index.search(query_vector, min(k, index.ntotal))
+            # 檢查索引狀態
+            if not hasattr(index, 'ntotal'):
+                self.logger.error("索引物件無效，缺少 ntotal 屬性")
+                return [], []
+            
+            if index.ntotal == 0:
+                self.logger.warning("索引為空，沒有可搜尋的向量")
+                return [], []
+            
+            # 檢查索引維度
+            if hasattr(index, 'd') and index.d != self.dimension:
+                self.logger.error(
+                    f"索引維度不匹配: 期望 {self.dimension}, 索引 {index.d}"
+                )
+                return [], []
+            
+            # 確保 k 值合理
+            search_k = min(k, index.ntotal)
+            if search_k <= 0:
+                self.logger.warning("搜尋數量無效")
+                return [], []
+            
+            self.logger.debug(
+                f"開始向量搜尋: 查詢維度={query_vector.shape}, "
+                f"索引向量數={index.ntotal}, k={search_k}"
+            )
+            
+            # 執行搜尋
+            distances, indices = index.search(query_vector, search_k)
             
             # 轉換結果
             result_distances = []
@@ -465,11 +543,23 @@ class VectorIndex:
                 if idx != -1 and idx in self._id_map:  # -1 表示無效結果
                     result_distances.append(float(dist))
                     result_ids.append(self._id_map[idx])
+                elif idx != -1:
+                    self.logger.warning(f"找到向量索引 {idx} 但無對應的 ID 映射")
             
+            self.logger.debug(f"向量搜尋完成，返回 {len(result_ids)} 個結果")
             return result_distances, result_ids
             
         except Exception as e:
-            self.logger.error(f"向量搜尋失敗: {e}")
+            # 提供詳細的錯誤資訊
+            error_details = {
+                "error": str(e),
+                "query_vector_shape": getattr(query_vector, 'shape', 'unknown'),
+                "index_ntotal": getattr(index, 'ntotal', 'unknown') if 'index' in locals() else 'not_created',
+                "index_dimension": getattr(index, 'd', 'unknown') if 'index' in locals() else 'not_created',
+                "expected_dimension": self.dimension,
+                "id_map_size": len(self._id_map)
+            }
+            self.logger.error(f"向量搜尋失敗: {error_details}")
             return [], []
     
     def get_stats(self) -> Dict[str, Union[int, str, bool]]:
@@ -689,10 +779,39 @@ class VectorManager:
                     # 嘗試載入現有索引
                     index_file = self.storage_path / f"{channel_id}.index"
                     if index_file.exists():
-                        if index.load(index_file):
-                            self.logger.info(f"已載入頻道 {channel_id} 的現有索引")
-                        else:
-                            self.logger.warning(f"載入頻道 {channel_id} 索引失敗，建立新索引")
+                        # 先檢查索引維度相容性
+                        try:
+                            import faiss
+                            temp_index = faiss.read_index(str(index_file))
+                            if hasattr(temp_index, 'd') and temp_index.d != self.profile.embedding_dimension:
+                                self.logger.warning(
+                                    f"頻道 {channel_id} 索引維度不匹配 "
+                                    f"(索引: {temp_index.d}, 期望: {self.profile.embedding_dimension})，重建索引"
+                                )
+                                # 備份舊索引
+                                backup_file = index_file.with_suffix(f'.backup_dimension_mismatch_{int(time.time())}')
+                                index_file.rename(backup_file)
+                                self.logger.info(f"維度不匹配的舊索引已備份至: {backup_file}")
+                                
+                                # 同時備份映射檔案
+                                mapping_file = index_file.with_suffix('.mapping')
+                                if mapping_file.exists():
+                                    backup_mapping = mapping_file.with_suffix(f'.backup_dimension_mismatch_{int(time.time())}')
+                                    mapping_file.rename(backup_mapping)
+                            else:
+                                # 維度匹配，嘗試正常載入
+                                if index.load(index_file):
+                                    self.logger.info(f"已載入頻道 {channel_id} 的現有索引")
+                                else:
+                                    self.logger.warning(f"載入頻道 {channel_id} 索引失敗，建立新索引")
+                        except Exception as e:
+                            self.logger.warning(f"檢查頻道 {channel_id} 索引時出錯: {e}，嘗試正常載入")
+                            if index.load(index_file):
+                                self.logger.info(f"已載入頻道 {channel_id} 的現有索引")
+                            else:
+                                self.logger.warning(f"載入頻道 {channel_id} 索引失敗，建立新索引")
+                    else:
+                        self.logger.debug(f"頻道 {channel_id} 沒有現有索引檔案，建立新索引")
                     
                     self._indices[channel_id] = index
                     self.logger.info(f"頻道 {channel_id} 的向量索引已準備就緒")
@@ -750,9 +869,9 @@ class VectorManager:
             return False
     
     def search_similar(
-        self, 
-        channel_id: str, 
-        query_vector: np.ndarray, 
+        self,
+        channel_id: str,
+        query_vector: np.ndarray,
         k: int = 10,
         score_threshold: float = None
     ) -> List[Tuple[str, float]]:
@@ -773,11 +892,49 @@ class VectorManager:
         try:
             with self._indices_lock:
                 if channel_id not in self._indices:
-                    self.logger.debug(f"頻道 {channel_id} 沒有向量索引")
-                    return []
+                    self.logger.debug(f"頻道 {channel_id} 沒有向量索引，嘗試建立")
+                    if not self.create_channel_index(channel_id):
+                        self.logger.error(f"無法為頻道 {channel_id} 建立索引")
+                        return []
                 
                 index = self._indices[channel_id]
+                
+                # 檢查索引狀態並嘗試修復
+                index_stats = index.get_stats()
+                total_vectors = index_stats.get("total_vectors", 0)
+                
+                if total_vectors == 0:
+                    self.logger.warning(f"頻道 {channel_id} 的索引為空，嘗試重建")
+                    if self._try_rebuild_index(channel_id):
+                        # 重新獲取索引
+                        index = self._indices[channel_id]
+                        index_stats = index.get_stats()
+                        total_vectors = index_stats.get("total_vectors", 0)
+                    
+                    if total_vectors == 0:
+                        self.logger.warning(f"頻道 {channel_id} 重建後索引仍為空，嘗試從資料庫重新生成向量")
+                        # 嘗試從資料庫重新生成向量資料
+                        if self._try_regenerate_vectors(channel_id):
+                            # 重新檢查索引
+                            index = self._indices[channel_id]
+                            index_stats = index.get_stats()
+                            total_vectors = index_stats.get("total_vectors", 0)
+                            if total_vectors > 0:
+                                self.logger.info(f"頻道 {channel_id} 向量重新生成成功，現有 {total_vectors} 個向量")
+                            else:
+                                self.logger.warning(f"頻道 {channel_id} 向量重新生成後仍為空，可能該頻道無有效訊息資料")
+                                return []
+                        else:
+                            self.logger.warning(f"頻道 {channel_id} 向量重新生成失敗")
+                            return []
+                
                 distances, message_ids = index.search(query_vector, k)
+                
+                # 如果搜尋返回空結果但索引不為空，記錄警告
+                if not distances and total_vectors > 0:
+                    self.logger.warning(
+                        f"頻道 {channel_id} 索引有 {total_vectors} 個向量但搜尋返回空結果"
+                    )
                 
                 # 轉換距離為相似度分數（L2 距離轉換）
                 results = []
@@ -788,10 +945,21 @@ class VectorManager:
                     if score_threshold is None or similarity >= score_threshold:
                         results.append((message_id, similarity))
                 
+                self.logger.debug(f"頻道 {channel_id} 搜尋完成，返回 {len(results)} 個結果")
                 return results
                 
         except Exception as e:
             self.logger.error(f"搜尋頻道 {channel_id} 向量失敗: {e}")
+            # 嘗試索引修復
+            try:
+                self.logger.info(f"嘗試修復頻道 {channel_id} 的索引")
+                if self._try_rebuild_index(channel_id):
+                    self.logger.info(f"頻道 {channel_id} 索引修復成功，請重試搜尋")
+                else:
+                    self.logger.error(f"頻道 {channel_id} 索引修復失敗")
+            except Exception as repair_error:
+                self.logger.error(f"索引修復過程出錯: {repair_error}")
+            
             return []
     
     def get_index_stats(self, channel_id: str) -> Dict[str, Union[int, str, bool]]:
@@ -982,6 +1150,193 @@ class VectorManager:
         except Exception as e:
             self.logger.error(f"索引降級失敗: {e}")
     
+    def _try_rebuild_index(self, channel_id: str) -> bool:
+        """嘗試重建頻道索引
+        
+        Args:
+            channel_id: 頻道 ID
+            
+        Returns:
+            bool: 是否成功重建
+        """
+        try:
+            self.logger.info(f"開始重建頻道 {channel_id} 的索引")
+            
+            # 檢查索引檔案
+            index_file = self.storage_path / f"{channel_id}.index"
+            rebuild_reason = None
+            
+            if index_file.exists():
+                file_size = index_file.stat().st_size
+                
+                # 檢查檔案大小
+                if file_size <= 45:
+                    rebuild_reason = f"檔案大小異常 ({file_size} bytes)"
+                else:
+                    # 檢查維度相容性
+                    try:
+                        # 嘗試載入索引檢查維度
+                        import faiss
+                        temp_index = faiss.read_index(str(index_file))
+                        if hasattr(temp_index, 'd') and temp_index.d != self.profile.embedding_dimension:
+                            rebuild_reason = f"維度不匹配 (索引: {temp_index.d}, 期望: {self.profile.embedding_dimension})"
+                    except Exception as e:
+                        rebuild_reason = f"索引檔案損壞: {e}"
+                
+                if rebuild_reason:
+                    self.logger.warning(f"檢測到問題索引 - {rebuild_reason}，開始重建")
+                    try:
+                        # 備份舊索引（以防需要恢復）
+                        backup_file = index_file.with_suffix(f'.backup_{int(time.time())}')
+                        index_file.rename(backup_file)
+                        self.logger.info(f"舊索引已備份至: {backup_file}")
+                        
+                        # 同時處理映射檔案
+                        mapping_file = index_file.with_suffix('.mapping')
+                        if mapping_file.exists():
+                            backup_mapping = mapping_file.with_suffix(f'.backup_{int(time.time())}')
+                            mapping_file.rename(backup_mapping)
+                            
+                    except Exception as e:
+                        self.logger.warning(f"備份舊索引失敗: {e}")
+                        # 即使備份失敗也繼續重建
+                        try:
+                            index_file.unlink()
+                            mapping_file = index_file.with_suffix('.mapping')
+                            if mapping_file.exists():
+                                mapping_file.unlink()
+                        except Exception as e2:
+                            self.logger.warning(f"刪除舊索引失敗: {e2}")
+            
+            # 移除記憶體中的索引
+            with self._indices_lock:
+                if channel_id in self._indices:
+                    try:
+                        self._indices[channel_id].clear_gpu_resources()
+                    except Exception as e:
+                        self.logger.warning(f"清理 GPU 資源失敗: {e}")
+                    del self._indices[channel_id]
+            
+            # 重新建立索引
+            if self.create_channel_index(channel_id):
+                if rebuild_reason:
+                    self.logger.info(f"頻道 {channel_id} 索引重建成功 (原因: {rebuild_reason})")
+                else:
+                    self.logger.info(f"頻道 {channel_id} 索引重建成功")
+                return True
+            else:
+                self.logger.error(f"頻道 {channel_id} 索引重建失敗")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"重建頻道 {channel_id} 索引時發生錯誤: {e}")
+            return False
+    
+    def _try_regenerate_vectors(self, channel_id: str) -> bool:
+        """嘗試從資料庫重新生成向量資料
+        
+        Args:
+            channel_id: 頻道 ID
+            
+        Returns:
+            bool: 是否成功重新生成
+        """
+        try:
+            self.logger.info(f"開始為頻道 {channel_id} 重新生成向量資料")
+            
+            # 檢查是否有資料庫管理器可用
+            # 這需要從外部傳入或透過某種方式獲取資料庫連接
+            # 由於 VectorManager 通常不直接持有資料庫連接，
+            # 我們先檢查是否有現有的訊息資料可以處理
+            
+            # 首先檢查資料庫檔案是否存在
+            from pathlib import Path
+            db_path = Path("data/memory/memory.db")
+            if not db_path.exists():
+                self.logger.warning(f"資料庫檔案不存在，無法重新生成頻道 {channel_id} 的向量")
+                return False
+            
+            # 嘗試載入資料庫管理器
+            try:
+                from .database import DatabaseManager
+                db_manager = DatabaseManager(str(db_path))
+                
+                # 檢查頻道是否存在訊息
+                message_count = db_manager.get_message_count(channel_id)
+                self.logger.info(f"頻道 {channel_id} 在資料庫中有 {message_count} 條訊息")
+                
+                if message_count == 0:
+                    self.logger.info(f"頻道 {channel_id} 沒有訊息資料，無法生成向量")
+                    return True  # 這不是錯誤，只是沒有資料
+                
+                # 獲取最近的一些訊息進行向量生成
+                # 限制數量避免記憶體問題
+                limit = min(message_count, 100)  # 先處理最近的 100 條訊息
+                
+                messages = db_manager.get_messages(
+                    channel_id=channel_id,
+                    limit=limit
+                )
+                
+                if not messages:
+                    self.logger.warning(f"無法從資料庫獲取頻道 {channel_id} 的訊息")
+                    return False
+                
+                # 嘗試載入 embedding service
+                from .embedding_service import embedding_service_manager
+                embedding_service = embedding_service_manager.get_service(self.profile)
+                
+                if not embedding_service:
+                    self.logger.error(f"無法初始化 embedding service，無法生成向量")
+                    return False
+                
+                # 過濾有效訊息並生成向量
+                valid_messages = []
+                vectors_list = []
+                
+                for msg in messages:
+                    content = msg.get('content', '').strip()
+                    content_processed = msg.get('content_processed', '').strip()
+                    
+                    # 選擇最佳的內容進行向量化
+                    text_to_embed = content_processed if content_processed and content_processed != 'None' else content
+                    
+                    if text_to_embed and len(text_to_embed) > 0:
+                        try:
+                            vector = embedding_service.encode_text(text_to_embed)
+                            if vector is not None and vector.size > 0:
+                                valid_messages.append(msg)
+                                vectors_list.append(vector)
+                        except Exception as e:
+                            self.logger.warning(f"生成訊息 {msg.get('message_id')} 向量失敗: {e}")
+                            continue
+                
+                if not valid_messages:
+                    self.logger.warning(f"頻道 {channel_id} 沒有可生成向量的有效訊息")
+                    return True  # 不是錯誤，只是沒有有效內容
+                
+                # 將向量添加到索引
+                import numpy as np
+                vectors_array = np.array(vectors_list).astype('float32')
+                message_ids = [msg['message_id'] for msg in valid_messages]
+                
+                success = self.add_vectors(channel_id, vectors_array, message_ids)
+                
+                if success:
+                    self.logger.info(f"成功為頻道 {channel_id} 重新生成 {len(message_ids)} 個向量")
+                    return True
+                else:
+                    self.logger.error(f"為頻道 {channel_id} 添加重新生成的向量失敗")
+                    return False
+                
+            except Exception as e:
+                self.logger.error(f"重新生成頻道 {channel_id} 向量時資料庫操作失敗: {e}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"重新生成頻道 {channel_id} 向量失敗: {e}")
+            return False
+    
     def clear_channel_mapping(self, channel_id: str) -> bool:
         """清除特定頻道的 ID 映射（用於強制重建）
         
@@ -1020,3 +1375,41 @@ class VectorManager:
             for channel_id in self._indices:
                 stats[channel_id] = self.get_index_stats(channel_id)
         return stats
+    
+    def cleanup(self) -> None:
+        """清理向量管理器資源和快取
+        
+        執行完整的清理作業，儲存所有索引並釋放記憶體資源。
+        """
+        try:
+            self.logger.info("開始向量管理器清理...")
+            
+            # 首先儲存所有索引
+            try:
+                save_results = self.save_all_indices()
+                success_count = sum(save_results.values())
+                self.logger.info(f"向量索引儲存: {success_count}/{len(save_results)} 個成功")
+            except Exception as e:
+                self.logger.error(f"儲存索引時發生錯誤: {e}")
+            
+            # 清理所有快取和 GPU 資源
+            self.clear_cache()
+            
+            # 額外的記憶體優化
+            try:
+                self.optimize_memory_usage()
+            except Exception as e:
+                self.logger.warning(f"記憶體優化失敗: {e}")
+            
+            # 清理 GPU 記憶體管理器
+            if self.gpu_memory_manager is not None:
+                try:
+                    self.gpu_memory_manager.clear_gpu_memory()
+                    self.gpu_memory_manager = None
+                except Exception as e:
+                    self.logger.warning(f"清理 GPU 記憶體管理器失敗: {e}")
+            
+            self.logger.info("向量管理器清理完成")
+            
+        except Exception as e:
+            self.logger.error(f"向量管理器清理時發生錯誤: {e}")

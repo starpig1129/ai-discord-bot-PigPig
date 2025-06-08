@@ -18,12 +18,14 @@ from .config import MemoryProfile
 from .embedding_service import EmbeddingService
 from .exceptions import SearchError
 from .vector_manager import VectorManager
+from .reranker_service import RerankerService, reranker_service_manager
 
 
 class SearchType(Enum):
     """搜尋類型枚舉"""
     SEMANTIC = "semantic"  # 語義搜尋
     KEYWORD = "keyword"    # 關鍵字搜尋
+    TEMPORAL = "temporal"  # 時間搜尋
     HYBRID = "hybrid"      # 混合搜尋
 
 
@@ -60,6 +62,8 @@ class SearchQuery:
     score_threshold: float = 0.0
     include_metadata: bool = False
     filters: Dict[str, Any] = field(default_factory=dict)
+    threshold: float = 0.7
+    user_id: Optional[str] = None
     
     def get_cache_key(self) -> str:
         """產生快取鍵值
@@ -67,18 +71,21 @@ class SearchQuery:
         Returns:
             str: 快取鍵值
         """
+        threshold_value = getattr(self, 'threshold', self.score_threshold)
+        
         # 建立查詢的唯一標識
         query_data = {
             "text": self.text,
             "channel_id": self.channel_id,
             "search_type": self.search_type.value,
             "limit": self.limit,
-            "score_threshold": self.score_threshold,
+            "score_threshold": threshold_value,
             "time_range": {
                 "start": self.time_range.start_time.isoformat() if self.time_range and self.time_range.start_time else None,
                 "end": self.time_range.end_time.isoformat() if self.time_range and self.time_range.end_time else None
             } if self.time_range else None,
-            "filters": sorted(self.filters.items()) if self.filters else []
+            "filters": sorted(self.filters.items()) if self.filters else [],
+            "user_id": getattr(self, 'user_id', None)  # 兼容性字段
         }
         
         query_str = str(query_data)
@@ -195,7 +202,7 @@ class SearchCache:
 class SearchEngine:
     """搜尋引擎核心類別
     
-    整合語義搜尋、向量管理和結果處理功能。
+    整合語義搜尋、向量管理、重排序和結果處理功能。
     """
     
     def __init__(
@@ -204,7 +211,8 @@ class SearchEngine:
         embedding_service: EmbeddingService,
         vector_manager: VectorManager,
         database_manager,
-        enable_cache: bool = True
+        enable_cache: bool = True,
+        enable_reranker: bool = True
     ):
         """初始化搜尋引擎
         
@@ -214,12 +222,27 @@ class SearchEngine:
             vector_manager: 向量管理器
             database_manager: 資料庫管理器
             enable_cache: 是否啟用快取
+            enable_reranker: 是否啟用重排序
         """
         self.logger = logging.getLogger(__name__)
         self.profile = profile
         self.embedding_service = embedding_service
         self.vector_manager = vector_manager
         self.database_manager = database_manager
+        
+        # 初始化重排序服務
+        self.enable_reranker = enable_reranker and profile.vector_enabled
+        if self.enable_reranker:
+            try:
+                self.reranker_service = reranker_service_manager.get_service(profile)
+                self.logger.info("重排序服務已啟用")
+            except Exception as e:
+                self.logger.warning(f"重排序服務初始化失敗，已停用: {e}")
+                self.enable_reranker = False
+                self.reranker_service = None
+        else:
+            self.reranker_service = None
+            self.logger.info("重排序服務已停用")
         
         # 初始化快取
         if enable_cache:
@@ -232,8 +255,12 @@ class SearchEngine:
         self._search_count = 0
         self._total_search_time = 0.0
         self._cache_hits = 0
+        self._rerank_count = 0
         
-        self.logger.info(f"搜尋引擎初始化完成 - 快取: {enable_cache}")
+        self.logger.info(
+            f"搜尋引擎初始化完成 - 快取: {enable_cache}, "
+            f"重排序: {self.enable_reranker}"
+        )
     
     def search(self, query: SearchQuery) -> SearchResult:
         """執行搜尋
@@ -263,6 +290,8 @@ class SearchEngine:
                 result = self._semantic_search(query)
             elif query.search_type == SearchType.KEYWORD:
                 result = self._keyword_search(query)
+            elif query.search_type == SearchType.TEMPORAL:
+                result = self._temporal_search(query)
             elif query.search_type == SearchType.HYBRID:
                 result = self._hybrid_search(query)
             else:
@@ -406,7 +435,39 @@ class SearchEngine:
             messages = filtered_messages
             scores = filtered_scores
         
-        # 限制結果數量
+        # 應用重排序（在限制結果數量之前）
+        if self.enable_reranker and self.reranker_service and messages:
+            try:
+                # 取更多結果用於重排序（最多 query.limit * 2）
+                rerank_count = min(len(messages), query.limit * 2)
+                rerank_messages = messages[:rerank_count]
+                
+                # 執行重排序
+                reranked_messages = self.reranker_service.rerank_results(
+                    query=query.text,
+                    candidates=rerank_messages,
+                    score_field="content_processed" if (rerank_messages and
+                                                       isinstance(rerank_messages[0], dict) and
+                                                       rerank_messages[0].get("content_processed")) else "content",
+                    top_k=query.limit
+                )
+                
+                # 更新消息和分數
+                messages = reranked_messages
+                scores = [msg.get("rerank_score", msg.get("similarity_score", 0.0)) for msg in messages]
+                
+                self._rerank_count += 1
+                search_method = "semantic_with_rerank"
+                
+                self.logger.debug(f"重排序完成，處理了 {rerank_count} 個候選，返回 {len(messages)} 個結果")
+                
+            except Exception as e:
+                self.logger.warning(f"重排序失敗，使用原始結果: {e}")
+                search_method = "semantic"
+        else:
+            search_method = "semantic"
+        
+        # 限制結果數量（如果重排序沒有限制的話）
         if len(messages) > query.limit:
             messages = messages[:query.limit]
             scores = scores[:query.limit]
@@ -416,7 +477,7 @@ class SearchEngine:
             relevance_scores=scores,
             total_found=len(vector_results),
             search_time_ms=0.0,  # 將在主搜尋函數中設定
-            search_method="semantic",
+            search_method=search_method,
             query_vector=query_vector
         )
     
@@ -442,6 +503,25 @@ class SearchEngine:
             search_method="keyword_placeholder"
         )
     
+    def _temporal_search(self, query: SearchQuery) -> SearchResult:
+        """執行時間搜尋
+        
+        Args:
+            query: 搜尋查詢
+            
+        Returns:
+            SearchResult: 搜尋結果
+        """
+        # 時間搜尋主要基於時間範圍篩選
+        # 可以結合關鍵字或語義搜尋
+        
+        if query.time_range:
+            # 如果有時間範圍，執行時間篩選的語義搜尋
+            return self._semantic_search(query)
+        else:
+            # 如果沒有時間範圍，回退到語義搜尋
+            self.logger.warning("時間搜尋但沒有提供時間範圍，回退到語義搜尋")
+            return self._semantic_search(query)
     def _hybrid_search(self, query: SearchQuery) -> SearchResult:
         """執行混合搜尋
         
@@ -457,13 +537,48 @@ class SearchEngine:
         semantic_result = self._semantic_search(query)
         # keyword_result = self._keyword_search(query)
         
-        # 合併和排序結果（在第三階段完整實作）
+        # 混合搜尋：結合語義搜尋和重排序
+        if self.enable_reranker and self.reranker_service and semantic_result.messages:
+            try:
+                # 對語義搜尋結果進行重排序
+                reranked_messages = self.reranker_service.rerank_results(
+                    query=query.text,
+                    candidates=semantic_result.messages,
+                    score_field="content_processed" if (semantic_result.messages and
+                                                       isinstance(semantic_result.messages[0], dict) and
+                                                       semantic_result.messages[0].get("content_processed")) else "content",
+                    top_k=query.limit
+                )
+                
+                # 計算混合分數（結合語義分數和重排序分數）
+                hybrid_scores = []
+                for msg in reranked_messages:
+                    semantic_score = msg.get("similarity_score", 0.0)
+                    rerank_score = msg.get("rerank_score", 0.0)
+                    # 加權組合：70% 重排序分數 + 30% 語義分數
+                    hybrid_score = 0.7 * rerank_score + 0.3 * semantic_score
+                    hybrid_scores.append(hybrid_score)
+                
+                self._rerank_count += 1
+                
+                return SearchResult(
+                    messages=reranked_messages,
+                    relevance_scores=hybrid_scores,
+                    total_found=semantic_result.total_found,
+                    search_time_ms=0.0,
+                    search_method="hybrid_with_rerank"
+                )
+                
+            except Exception as e:
+                self.logger.warning(f"混合搜尋重排序失敗，使用語義結果: {e}")
+        
+        # 降級處理：返回語義搜尋結果
         return SearchResult(
             messages=semantic_result.messages,
             relevance_scores=semantic_result.relevance_scores,
             total_found=semantic_result.total_found,
             search_time_ms=0.0,
-            search_method="hybrid_partial"
+            search_method="hybrid_semantic_only"
         )
     
     def calculate_similarity(
@@ -528,12 +643,19 @@ class SearchEngine:
             "total_search_time_ms": self._total_search_time,
             "average_search_time_ms": avg_search_time,
             "cache_hits": self._cache_hits,
-            "cache_hit_rate": cache_hit_rate
+            "cache_hit_rate": cache_hit_rate,
+            "rerank_enabled": self.enable_reranker,
+            "total_reranks": self._rerank_count
         }
         
         # 加入快取統計
         if self.cache:
             stats.update(self.cache.get_stats())
+        
+        # 加入重排序統計
+        if self.enable_reranker and self.reranker_service:
+            reranker_stats = self.reranker_service.get_statistics()
+            stats["reranker_stats"] = reranker_stats
         
         return stats
     
@@ -542,6 +664,11 @@ class SearchEngine:
         if self.cache:
             self.cache.clear()
             self.logger.info("搜尋引擎快取已清除")
+        
+        # 清除重排序快取
+        if self.enable_reranker and self.reranker_service:
+            self.reranker_service.clear_cache()
+            self.logger.info("重排序服務快取已清除")
     
     def optimize_performance(self) -> Dict[str, Any]:
         """優化搜尋效能
@@ -579,3 +706,70 @@ class SearchEngine:
             optimization_report["error"] = str(e)
         
         return optimization_report
+    
+    def warmup_reranker(self) -> None:
+        """預熱重排序模型"""
+        if self.enable_reranker and self.reranker_service:
+            try:
+                self.reranker_service.warmup()
+                self.logger.info("重排序模型預熱完成")
+            except Exception as e:
+                self.logger.warning(f"重排序模型預熱失敗: {e}")
+        else:
+            self.logger.debug("重排序服務未啟用，跳過預熱")
+    
+    def set_reranker_enabled(self, enabled: bool) -> None:
+        """動態啟用/停用重排序功能
+        
+        Args:
+            enabled: 是否啟用重排序
+        """
+        if enabled and not self.enable_reranker and self.profile.vector_enabled:
+            try:
+                self.reranker_service = reranker_service_manager.get_service(self.profile)
+                self.enable_reranker = True
+                self.logger.info("重排序服務已啟用")
+            except Exception as e:
+                self.logger.error(f"啟用重排序服務失敗: {e}")
+        elif not enabled and self.enable_reranker:
+            self.enable_reranker = False
+            if self.reranker_service:
+                self.reranker_service.clear_cache()
+            self.logger.info("重排序服務已停用")
+    
+    def cleanup(self) -> None:
+        """清理搜尋引擎資源和快取
+        
+        執行完整的清理作業，清除快取並釋放相關資源。
+        """
+        try:
+            self.logger.info("開始搜尋引擎清理...")
+            
+            # 清除搜尋快取
+            self.clear_cache()
+            
+            # 清理重排序服務
+            if self.enable_reranker and self.reranker_service:
+                try:
+                    if hasattr(self.reranker_service, 'cleanup'):
+                        self.reranker_service.cleanup()
+                    else:
+                        self.reranker_service.clear_cache()
+                    self.logger.info("重排序服務已清理")
+                except Exception as e:
+                    self.logger.warning(f"清理重排序服務失敗: {e}")
+            
+            # 重置統計資料
+            self._search_count = 0
+            self._total_search_time = 0.0
+            self._cache_hits = 0
+            self._rerank_count = 0
+            
+            # 強制垃圾回收
+            import gc
+            gc.collect()
+            
+            self.logger.info("搜尋引擎清理完成")
+            
+        except Exception as e:
+            self.logger.error(f"搜尋引擎清理時發生錯誤: {e}")

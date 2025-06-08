@@ -214,7 +214,8 @@ class MemoryCommands(commands.Cog):
             
             # 系統狀態
             memory_enabled = self.is_memory_enabled()
-            vector_enabled = memory_manager.vector_enabled if memory_manager else False
+            vector_enabled = (memory_manager.current_profile.vector_enabled
+                            if memory_manager and memory_manager.current_profile else False)
             
             embed.add_field(
                 name="系統狀態",
