@@ -18,6 +18,7 @@ import numpy as np
 
 from .config import MemoryProfile
 from .exceptions import VectorOperationError
+from .startup_logger import get_startup_logger
 
 # 嘗試導入 GPU 記憶體監控模組
 try:
@@ -185,20 +186,26 @@ class GPUMemoryManager:
             # 強制垃圾回收
             gc.collect()
             
-            self.logger.info("GPU 記憶體已清除")
-            
         except Exception as e:
             self.logger.error(f"清除 GPU 記憶體失敗: {e}")
     
-    def log_memory_stats(self) -> None:
+    def log_memory_stats(self, force_log: bool = False) -> None:
         """記錄記憶體統計資訊"""
         try:
             total_mb, free_mb, used_percent = self.get_gpu_memory_info()
             if total_mb > 0:
-                self.logger.info(
-                    f"GPU 記憶體狀態: 總計 {total_mb}MB, "
-                    f"可用 {free_mb}MB, 使用率 {used_percent:.1f}%"
-                )
+                # 嘗試使用啟動日誌管理器
+                startup_logger = get_startup_logger()
+                if startup_logger and startup_logger.is_startup_mode:
+                    startup_logger.log_gpu_memory_check(
+                        total_mb, free_mb, used_percent, force_log
+                    )
+                else:
+                    # 正常模式或無啟動日誌管理器時使用原始日誌
+                    self.logger.info(
+                        f"GPU 記憶體狀態: 總計 {total_mb}MB, "
+                        f"可用 {free_mb}MB, 使用率 {used_percent:.1f}%"
+                    )
         except Exception as e:
             self.logger.error(f"記錄記憶體統計失敗: {e}")
 
@@ -325,7 +332,13 @@ class VectorIndex:
             
             # 移至 GPU
             self._gpu_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self._index)
-            self.logger.info(f"索引已移至 GPU（預估記憶體: {estimated_memory_mb}MB）")
+            
+            # 使用啟動日誌管理器記錄 GPU 遷移
+            startup_logger = get_startup_logger()
+            if startup_logger and startup_logger.is_startup_mode:
+                startup_logger.log_gpu_index_migration("unknown", estimated_memory_mb)
+            else:
+                self.logger.info(f"索引已移至 GPU（預估記憶體: {estimated_memory_mb}MB）")
             
             # 記錄記憶體狀態
             if self.gpu_memory_manager is not None:
@@ -675,7 +688,6 @@ class VectorIndex:
             if self.use_gpu and faiss.get_num_gpus() > 0:
                 self._try_move_to_gpu()
             
-            self.logger.info(f"索引已從 {file_path} 載入")
             return True
             
         except Exception as e:
@@ -800,9 +812,7 @@ class VectorManager:
                                     mapping_file.rename(backup_mapping)
                             else:
                                 # 維度匹配，嘗試正常載入
-                                if index.load(index_file):
-                                    self.logger.info(f"已載入頻道 {channel_id} 的現有索引")
-                                else:
+                                if not index.load(index_file):
                                     self.logger.warning(f"載入頻道 {channel_id} 索引失敗，建立新索引")
                         except Exception as e:
                             self.logger.warning(f"檢查頻道 {channel_id} 索引時出錯: {e}，嘗試正常載入")
@@ -814,7 +824,14 @@ class VectorManager:
                         self.logger.debug(f"頻道 {channel_id} 沒有現有索引檔案，建立新索引")
                     
                     self._indices[channel_id] = index
-                    self.logger.info(f"頻道 {channel_id} 的向量索引已準備就緒")
+                    
+                    # 使用啟動日誌管理器記錄索引準備狀態
+                    startup_logger = get_startup_logger()
+                    if startup_logger and startup_logger.is_startup_mode:
+                        is_new = not index_file.exists()
+                        startup_logger.log_channel_index_ready(channel_id, is_new)
+                    else:
+                        self.logger.info(f"頻道 {channel_id} 的向量索引已準備就緒")
             
             return True
             

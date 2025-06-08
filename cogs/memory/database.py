@@ -34,11 +34,22 @@ class DatabaseManager:
         self._lock = threading.RLock()
         self._connections: Dict[int, sqlite3.Connection] = {}
         
+        # 延遲初始化使用者管理器（避免循環導入）
+        self._user_manager = None
+        
         # 確保資料庫目錄存在
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         
         # 初始化資料庫
         self._initialize_database()
+    
+    @property
+    def user_manager(self):
+        """取得使用者管理器（延遲初始化）"""
+        if self._user_manager is None:
+            from .user_manager import SQLiteUserManager
+            self._user_manager = SQLiteUserManager(self)
+        return self._user_manager
     
     def _initialize_database(self) -> None:
         """初始化資料庫結構"""
@@ -143,6 +154,31 @@ class DatabaseManager:
             )
         """)
         
+        # 使用者基本資料表 (新增)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,
+                discord_id TEXT UNIQUE NOT NULL,
+                display_name TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
+                user_data TEXT,
+                preferences TEXT
+            )
+        """)
+        
+        # 使用者詳細檔案表 (新增)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                profile_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                profile_data TEXT,
+                interaction_history TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            )
+        """)
+        
         # 系統配置表
         conn.execute("""
             CREATE TABLE IF NOT EXISTS memory_config (
@@ -217,6 +253,11 @@ class DatabaseManager:
             # 頻道表索引
             "CREATE INDEX IF NOT EXISTS idx_channels_guild_id ON channels(guild_id)",
             "CREATE INDEX IF NOT EXISTS idx_channels_last_active ON channels(last_active)",
+            
+            # 使用者表索引 (新增)
+            "CREATE INDEX IF NOT EXISTS idx_users_discord_id ON users(discord_id)",
+            "CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active)",
+            "CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id)",
             
             # 效能指標索引
             "CREATE INDEX IF NOT EXISTS idx_performance_metrics_type ON performance_metrics(metric_type)",
@@ -602,9 +643,9 @@ class DatabaseManager:
             conn: 資料庫連接
             channel_id: 頻道 ID
         """
-        cursor = conn.execute("SELECT 1 FROM channels WHERE channel_id = ?", (channel_id,))
+        cursor = conn.execute("SELECT channel_id FROM channels WHERE channel_id = ?", (channel_id,))
         if not cursor.fetchone():
-            # 建立基本頻道記錄
+            # 建立預設頻道記錄
             conn.execute("""
                 INSERT INTO channels (channel_id, guild_id)
                 VALUES (?, ?)
@@ -635,7 +676,7 @@ class DatabaseManager:
             
         except Exception as e:
             self.logger.error(f"設定配置失敗: {e}")
-            raise DatabaseError(f"設定配置失敗: {e}", operation="set_config", table="memory_config")
+            return False
     
     def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """取得配置值
@@ -645,7 +686,7 @@ class DatabaseManager:
             default: 預設值
             
         Returns:
-            Optional[str]: 配置值
+            Optional[str]: 配置值，若不存在則返回預設值
         """
         try:
             with self.get_connection() as conn:
@@ -661,9 +702,9 @@ class DatabaseManager:
                 
         except Exception as e:
             self.logger.error(f"取得配置失敗: {e}")
-            raise DatabaseError(f"取得配置失敗: {e}", operation="get_config", table="memory_config")
+            return default
     
-    # 效能指標方法
+    # 效能指標操作方法
     def record_metric(
         self,
         metric_type: str,
@@ -695,8 +736,9 @@ class DatabaseManager:
             
         except Exception as e:
             self.logger.error(f"記錄效能指標失敗: {e}")
-            raise DatabaseError(f"記錄效能指標失敗: {e}", operation="record_metric", table="performance_metrics")
+            return False
     
+    # 清理和維護方法
     def cleanup_old_data(self, retention_days: int = 90) -> int:
         """清理舊資料
         
@@ -704,52 +746,61 @@ class DatabaseManager:
             retention_days: 保留天數
             
         Returns:
-            int: 清理的記錄數
+            int: 清理的記錄數量
         """
+        cutoff_date = datetime.now().timestamp() - (retention_days * 24 * 3600)
+        
         try:
-            cutoff_date = datetime.now().timestamp() - (retention_days * 24 * 3600)
+            deleted_count = 0
             
             with self.get_connection() as conn:
-                # 清理舊的效能指標
+                # 清理舊訊息（將自動清理相關的嵌入記錄）
+                cursor = conn.execute("""
+                    DELETE FROM messages 
+                    WHERE timestamp < datetime(?, 'unixepoch')
+                """, (cutoff_date,))
+                deleted_count += cursor.rowcount
+                
+                # 清理舊效能指標
                 cursor = conn.execute("""
                     DELETE FROM performance_metrics 
                     WHERE timestamp < datetime(?, 'unixepoch')
                 """, (cutoff_date,))
+                deleted_count += cursor.rowcount
                 
-                deleted_count = cursor.rowcount
                 conn.commit()
             
-            self.logger.info(f"清理 {deleted_count} 筆舊資料")
+            self.logger.info(f"清理舊資料完成，刪除 {deleted_count} 條記錄")
             return deleted_count
             
         except Exception as e:
             self.logger.error(f"清理舊資料失敗: {e}")
-            raise DatabaseError(f"清理舊資料失敗: {e}", operation="cleanup", table="performance_metrics")
+            return 0
     
+    # 統計和查詢方法
     def get_channel_count(self) -> int:
         """取得頻道總數
         
         Returns:
-            int: 頻道總數
+            int: 頻道數量
         """
         try:
             with self.get_connection() as conn:
-                cursor = conn.execute("SELECT COUNT(DISTINCT channel_id) FROM channels")
-                result = cursor.fetchone()
-                return result[0] if result else 0
+                cursor = conn.execute("SELECT COUNT(*) FROM channels")
+                return cursor.fetchone()[0]
                 
         except Exception as e:
-            self.logger.error(f"取得頻道總數失敗: {e}")
+            self.logger.error(f"取得頻道數量失敗: {e}")
             return 0
     
     def get_message_count(self, channel_id: Optional[str] = None) -> int:
         """取得訊息總數
         
         Args:
-            channel_id: 指定頻道 ID（可選）
+            channel_id: 頻道 ID（可選）
             
         Returns:
-            int: 訊息總數
+            int: 訊息數量
         """
         try:
             with self.get_connection() as conn:
@@ -761,11 +812,10 @@ class DatabaseManager:
                 else:
                     cursor = conn.execute("SELECT COUNT(*) FROM messages")
                 
-                result = cursor.fetchone()
-                return result[0] if result else 0
+                return cursor.fetchone()[0]
                 
         except Exception as e:
-            self.logger.error(f"取得訊息總數失敗: {e}")
+            self.logger.error(f"取得訊息數量失敗: {e}")
             return 0
     
     def get_database_stats(self) -> Dict[str, Any]:
@@ -778,47 +828,27 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 stats = {}
                 
-                # 基本計數統計
-                cursor = conn.execute("SELECT COUNT(DISTINCT channel_id) FROM channels")
-                stats['total_channels'] = cursor.fetchone()[0]
+                # 表格行數統計
+                tables = ['channels', 'messages', 'embeddings', 'users', 'user_profiles', 
+                         'conversation_segments', 'performance_metrics']
+                for table in tables:
+                    cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
+                    stats[f"{table}_count"] = cursor.fetchone()[0]
                 
-                cursor = conn.execute("SELECT COUNT(*) FROM messages")
-                stats['total_messages'] = cursor.fetchone()[0]
+                # 資料庫檔案大小
+                stats['database_size_bytes'] = self.db_path.stat().st_size
                 
-                # 活躍統計（最近30天）
-                cursor = conn.execute("""
-                    SELECT COUNT(DISTINCT channel_id)
-                    FROM messages
-                    WHERE timestamp > datetime('now', '-30 days')
-                """)
-                stats['active_channels_30d'] = cursor.fetchone()[0]
-                
-                # 訊息類型統計
-                cursor = conn.execute("""
-                    SELECT message_type, COUNT(*)
-                    FROM messages
-                    GROUP BY message_type
-                """)
-                message_type_stats = dict(cursor.fetchall())
-                stats['message_types'] = message_type_stats
-                
-                # 資料庫大小（近似值）
-                cursor = conn.execute("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()")
+                # 最新活動時間
+                cursor = conn.execute("SELECT MAX(last_active) FROM channels")
                 result = cursor.fetchone()
-                stats['database_size_bytes'] = result[0] if result else 0
+                stats['last_activity'] = result[0] if result[0] else None
                 
                 return stats
                 
         except Exception as e:
             self.logger.error(f"取得資料庫統計失敗: {e}")
-            return {
-                'total_channels': 0,
-                'total_messages': 0,
-                'active_channels_30d': 0,
-                'message_types': {},
-                'database_size_bytes': 0
-            }
-
+            return {}
+    
     def close_connections(self) -> None:
         """關閉所有資料庫連接"""
         with self._lock:
@@ -826,11 +856,8 @@ class DatabaseManager:
                 try:
                     conn.close()
                 except Exception as e:
-                    self.logger.warning(f"關閉連接時發生錯誤: {e}")
-            
+                    self.logger.warning(f"關閉資料庫連接時發生錯誤: {e}")
             self._connections.clear()
-        
-        self.logger.info("所有資料庫連接已關閉")
     
     # 對話片段操作方法
     def create_conversation_segment(
@@ -855,7 +882,7 @@ class DatabaseManager:
             end_time: 結束時間
             message_count: 訊息數量
             semantic_coherence_score: 語義連貫性分數
-            activity_level: 活躍度
+            activity_level: 活動級別
             segment_summary: 片段摘要
             vector_data: 向量資料
             metadata: 元資料
@@ -869,11 +896,12 @@ class DatabaseManager:
                     INSERT OR REPLACE INTO conversation_segments 
                     (segment_id, channel_id, start_time, end_time, message_count,
                      semantic_coherence_score, activity_level, segment_summary,
-                     vector_data, metadata, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                     vector_data, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (segment_id, channel_id, start_time, end_time, message_count,
                       semantic_coherence_score, activity_level, segment_summary,
                       vector_data, metadata))
+                
                 conn.commit()
             
             self.logger.debug(f"建立對話片段: {segment_id}")
@@ -881,7 +909,7 @@ class DatabaseManager:
             
         except Exception as e:
             self.logger.error(f"建立對話片段失敗: {e}")
-            raise DatabaseError(f"建立對話片段失敗: {e}", operation="create_segment", table="conversation_segments")
+            return False
     
     def get_conversation_segments(
         self,
@@ -894,12 +922,12 @@ class DatabaseManager:
         
         Args:
             channel_id: 頻道 ID
-            start_time: 開始時間篩選
-            end_time: 結束時間篩選
+            start_time: 開始時間過濾
+            end_time: 結束時間過濾
             limit: 返回數量限制
             
         Returns:
-            List[Dict[str, Any]]: 片段列表
+            List[Dict[str, Any]]: 對話片段列表
         """
         try:
             with self.get_connection() as conn:
@@ -907,11 +935,11 @@ class DatabaseManager:
                 params = [channel_id]
                 
                 if start_time:
-                    query += " AND end_time >= ?"
+                    query += " AND start_time >= ?"
                     params.append(start_time)
                 
                 if end_time:
-                    query += " AND start_time <= ?"
+                    query += " AND end_time <= ?"
                     params.append(end_time)
                 
                 query += " ORDER BY start_time DESC LIMIT ?"
@@ -924,7 +952,7 @@ class DatabaseManager:
                 
         except Exception as e:
             self.logger.error(f"取得對話片段失敗: {e}")
-            raise DatabaseError(f"取得對話片段失敗: {e}", operation="get_segments", table="conversation_segments")
+            return []
     
     def add_message_to_segment(
         self,
@@ -951,13 +979,14 @@ class DatabaseManager:
                     (segment_id, message_id, position_in_segment, semantic_contribution_score)
                     VALUES (?, ?, ?, ?)
                 """, (segment_id, message_id, position_in_segment, semantic_contribution_score))
+                
                 conn.commit()
             
             return True
             
         except Exception as e:
             self.logger.error(f"新增訊息到片段失敗: {e}")
-            raise DatabaseError(f"新增訊息到片段失敗: {e}", operation="add_message_to_segment", table="segment_messages")
+            return False
     
     def get_segment_messages(self, segment_id: str) -> List[Dict[str, Any]]:
         """取得片段中的訊息
@@ -966,24 +995,24 @@ class DatabaseManager:
             segment_id: 片段 ID
             
         Returns:
-            List[Dict[str, Any]]: 訊息列表
+            List[Dict[str, Any]]: 訊息列表，按位置排序
         """
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute("""
                     SELECT m.*, sm.position_in_segment, sm.semantic_contribution_score
-                    FROM messages m
-                    JOIN segment_messages sm ON m.message_id = sm.message_id
+                    FROM segment_messages sm
+                    JOIN messages m ON sm.message_id = m.message_id
                     WHERE sm.segment_id = ?
                     ORDER BY sm.position_in_segment
                 """, (segment_id,))
-                rows = cursor.fetchall()
                 
+                rows = cursor.fetchall()
                 return [dict(row) for row in rows]
                 
         except Exception as e:
             self.logger.error(f"取得片段訊息失敗: {e}")
-            raise DatabaseError(f"取得片段訊息失敗: {e}", operation="get_segment_messages", table="segment_messages")
+            return []
     
     def update_segment_coherence(self, segment_id: str, coherence_score: float) -> bool:
         """更新片段語義連貫性分數
@@ -1002,13 +1031,14 @@ class DatabaseManager:
                     SET semantic_coherence_score = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE segment_id = ?
                 """, (coherence_score, segment_id))
+                
                 conn.commit()
             
             return True
             
         except Exception as e:
             self.logger.error(f"更新片段連貫性分數失敗: {e}")
-            raise DatabaseError(f"更新片段連貫性分數失敗: {e}", operation="update_coherence", table="conversation_segments")
+            return False
     
     def get_overlapping_segments(
         self,
@@ -1024,21 +1054,24 @@ class DatabaseManager:
             end_time: 結束時間
             
         Returns:
-            List[Dict[str, Any]]: 重疊的片段列表
+            List[Dict[str, Any]]: 重疊的對話片段
         """
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute("""
-                    SELECT * FROM conversation_segments
+                    SELECT * FROM conversation_segments 
                     WHERE channel_id = ? 
-                    AND NOT (end_time <= ? OR start_time >= ?)
+                    AND (
+                        (start_time <= ? AND end_time >= ?) OR
+                        (start_time <= ? AND end_time >= ?) OR
+                        (start_time >= ? AND end_time <= ?)
+                    )
                     ORDER BY start_time
-                """, (channel_id, start_time, end_time))
-                rows = cursor.fetchall()
+                """, (channel_id, start_time, start_time, end_time, end_time, start_time, end_time))
                 
+                rows = cursor.fetchall()
                 return [dict(row) for row in rows]
                 
         except Exception as e:
             self.logger.error(f"取得重疊片段失敗: {e}")
-            raise DatabaseError(f"取得重疊片段失敗: {e}", operation="get_overlapping_segments", table="conversation_segments")
-        self.logger.info("所有資料庫連接已關閉")
+            return []

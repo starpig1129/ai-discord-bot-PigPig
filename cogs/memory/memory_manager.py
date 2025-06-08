@@ -24,8 +24,8 @@ from .embedding_service import EmbeddingService, embedding_service_manager
 from .vector_manager import VectorManager
 from .search_engine import SearchEngine, SearchQuery, SearchResult, SearchType, TimeRange
 from .segmentation_service import (
-    TextSegmentationService, 
-    SegmentationConfig, 
+    TextSegmentationService,
+    SegmentationConfig,
     SegmentationStrategy,
     initialize_segmentation_service
 )
@@ -36,6 +36,7 @@ from .exceptions import (
     SearchError,
     VectorOperationError
 )
+from .startup_logger import get_startup_logger, StartupLoggerManager
 
 
 @dataclass
@@ -100,6 +101,11 @@ class MemoryManager:
             return True
         
         try:
+            # 初始化啟動日誌管理器
+            startup_logger = StartupLoggerManager.get_instance(self.logger)
+            if startup_logger:
+                startup_logger.start_startup_phase()
+            
             self.logger.info("開始初始化記憶系統...")
             
             # 載入配置
@@ -111,6 +117,8 @@ class MemoryManager:
             
             if not self._enabled:
                 self.logger.info("記憶系統已停用")
+                if startup_logger:
+                    startup_logger.end_startup_phase()
                 return False
             
             # 初始化資料庫
@@ -126,11 +134,22 @@ class MemoryManager:
             await self._initialize_segmentation_service()
             
             self._initialized = True
+            
+            # 結束啟動階段並輸出摘要
+            if startup_logger:
+                startup_logger.end_startup_phase()
+            
             self.logger.info(f"記憶系統初始化完成 (配置檔案: {self.current_profile.name})")
             
             return True
             
         except Exception as e:
+            # 確保啟動階段結束
+            startup_logger = get_startup_logger()
+            if startup_logger:
+                startup_logger.log_error(f"記憶系統初始化失敗: {e}")
+                startup_logger.end_startup_phase()
+            
             self.logger.error(f"記憶系統初始化失敗: {e}")
             raise MemorySystemError(f"記憶系統初始化失敗: {e}")
     
@@ -233,12 +252,20 @@ class MemoryManager:
             
             # 搜尋所有 .index 檔案
             index_files = list(indices_path.glob("*.index"))
-            if not index_files:
+            total_files = len(index_files)
+            
+            # 使用啟動日誌管理器記錄索引載入開始
+            startup_logger = get_startup_logger()
+            if startup_logger:
+                startup_logger.log_index_loading_start(total_files)
+            elif total_files == 0:
                 self.logger.info("沒有找到現有的索引檔案")
                 return
+            else:
+                self.logger.info(f"找到 {total_files} 個現有索引檔案，開始分批載入...")
             
-            total_files = len(index_files)
-            self.logger.info(f"找到 {total_files} 個現有索引檔案，開始分批載入...")
+            if total_files == 0:
+                return
             
             # 分批載入配置
             batch_size = 10  # 每批載入 10 個索引
@@ -252,15 +279,13 @@ class MemoryManager:
                 key=lambda f: f.stat().st_size if f.exists() else 0
             )
             
+            total_batches = (total_files + batch_size - 1) // batch_size
+            
             # 分批處理
             for batch_start in range(0, total_files, batch_size):
                 batch_end = min(batch_start + batch_size, total_files)
                 batch_files = index_files_sorted[batch_start:batch_end]
-                
-                self.logger.info(
-                    f"載入批次 {batch_start//batch_size + 1}/{(total_files + batch_size - 1)//batch_size}："
-                    f"處理索引 {batch_start + 1}-{batch_end}"
-                )
+                current_batch = batch_start // batch_size + 1
                 
                 # 使用信號量限制並發數
                 semaphore = asyncio.Semaphore(max_concurrent)
@@ -294,12 +319,26 @@ class MemoryManager:
                 batch_tasks = [load_single_index(f) for f in batch_files]
                 batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
                 
-                # 統計結果
+                # 統計當前批次結果
+                batch_loaded = 0
+                batch_failed = 0
                 for result in batch_results:
                     if isinstance(result, bool) and result:
                         loaded_count += 1
+                        batch_loaded += 1
                     else:
                         failed_count += 1
+                        batch_failed += 1
+                
+                # 使用啟動日誌管理器記錄批次進度
+                if startup_logger:
+                    startup_logger.log_batch_progress(
+                        current_batch, total_batches, batch_loaded, batch_failed
+                    )
+                else:
+                    self.logger.info(
+                        f"批次 {current_batch} 完成：已載入 {loaded_count}/{total_files} 個索引"
+                    )
                 
                 # 批次間的記憶體清理
                 if self.vector_manager.gpu_memory_manager:
@@ -307,19 +346,17 @@ class MemoryManager:
                 
                 # 短暫休息，讓系統穩定
                 await asyncio.sleep(0.5)
-                
-                self.logger.info(
-                    f"批次 {batch_start//batch_size + 1} 完成：已載入 {loaded_count}/{total_files} 個索引"
-                )
             
-            self.logger.info(
-                f"索引載入完成: {loaded_count} 個成功，{failed_count} 個失敗，"
-                f"總共 {total_files} 個索引檔案"
-            )
+            # 最終摘要（僅在非啟動模式或作為後備）
+            if not startup_logger or not startup_logger.is_startup_mode:
+                self.logger.info(
+                    f"索引載入完成: {loaded_count} 個成功，{failed_count} 個失敗，"
+                    f"總共 {total_files} 個索引檔案"
+                )
             
             # 最終記憶體優化
             if self.vector_manager.gpu_memory_manager:
-                self.vector_manager.gpu_memory_manager.log_memory_stats()
+                self.vector_manager.gpu_memory_manager.log_memory_stats(force_log=True)
             
         except Exception as e:
             self.logger.error(f"載入現有索引失敗: {e}")

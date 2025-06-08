@@ -19,8 +19,9 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
 import re
-from pymongo import MongoClient
+import logging
 from discord.ext import commands
 from discord import app_commands
 import discord
@@ -38,6 +39,7 @@ FALLBACK_TRANSLATIONS = {
     "data_not_found": "找不到用戶 <@{user_id}> 的資料。",
     "data_updated": "已更新用戶 <@{user_id}> 的資料：{data}",
     "data_created": "已為用戶 <@{user_id}> 創建資料：{data}",
+    "sqlite_not_available": "SQLite 使用者管理系統未初始化",
     "invalid_action": "無效的操作。請使用 '讀取' 或 '保存'。",
     "database_error": "資料庫操作錯誤：{error}",
     "ai_processing_failed": "AI 處理用戶資料時發生錯誤：{error}",
@@ -46,14 +48,13 @@ FALLBACK_TRANSLATIONS = {
     "invalid_user": "無效的用戶 ID"
 }
 
+
 class UserDataCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.settings = Settings()
-        self.client = MongoClient(self.settings.mongodb_uri)
-        self.db = self.client["user_data"]
-        self.collection = self.db["users"]
         self.lang_manager: Optional[LanguageManager] = None
+        self.logger = logging.getLogger(__name__)
 
     def _translate(self, guild_id: str, *path, fallback_key: str = None, **kwargs) -> str:
         """統一的翻譯方法，包含備用機制"""
@@ -77,24 +78,53 @@ class UserDataCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
+    @property
+    def user_manager(self):
+        """取得 SQLite 使用者管理器"""
+        if hasattr(self.bot, 'memory_manager') and self.bot.memory_manager:
+            return self.bot.memory_manager.db_manager.user_manager
+        return None
+
     @app_commands.command(name="userdata", description="管理用戶數據")
     @app_commands.choices(action=[
         app_commands.Choice(name="讀取", value="read"),
         app_commands.Choice(name="保存", value="save")
     ])
-    async def userdata_command(self, interaction: discord.Interaction, action: str, user: discord.User = None, user_data: str = None):
+    async def userdata_command(self, interaction: discord.Interaction, 
+                              action: str, 
+                              user: discord.User = None, 
+                              user_data: str = None):
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
 
         await interaction.response.defer(thinking=True)
         guild_id = str(interaction.guild_id)
-        result = await self.manage_user_data(interaction, user or interaction.user, user_data, action, guild_id=guild_id)
+        
+        result = await self.manage_user_data(
+            interaction, user or interaction.user, user_data, action, guild_id=guild_id
+        )
+        
         await interaction.followup.send(result)
 
-    async def manage_user_data(self, interaction, user: discord.User, user_data: str = None, action: str = 'read', message_to_edit: discord.Message = None, guild_id: str = None):
+    async def manage_user_data(self, interaction, user: discord.User, 
+                              user_data: str = None, action: str = 'read', 
+                              message_to_edit: discord.Message = None, 
+                              guild_id: str = None):
+        """管理使用者資料（使用 SQLite）"""
         # 確保 LanguageManager 已初始化
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
+        
+        # 檢查 SQLite 使用者管理器是否可用
+        if not self.user_manager:
+            return self._translate(
+                guild_id,
+                "system",
+                "userdata",
+                "errors",
+                "sqlite_not_available",
+                fallback_key="sqlite_not_available"
+            )
         
         user_id = str(user.id)
         if message_to_edit:
@@ -110,9 +140,8 @@ class UserDataCog(commands.Cog):
 
         if action == 'read':
             try:
-                document = self.collection.find_one({"user_id": user_id})
-                if document:
-                    data = document["user_data"]
+                user_info = await self.user_manager.get_user_info(user_id)
+                if user_info and user_info.user_data:
                     return self._translate(
                         guild_id,
                         "commands",
@@ -121,7 +150,7 @@ class UserDataCog(commands.Cog):
                         "data_found",
                         fallback_key="data_found",
                         user_id=user_id,
-                        data=data
+                        data=user_info.user_data
                     )
                 else:
                     return self._translate(
@@ -157,15 +186,18 @@ class UserDataCog(commands.Cog):
                     )
                     await message_to_edit.edit(content=updating_message)
                 
-                document = self.collection.find_one({"user_id": user_id})
-                if document:
-                    existing_data = document["user_data"]
+                # 取得現有資料
+                user_info = await self.user_manager.get_user_info(user_id)
+                
+                if user_info and user_info.user_data:
+                    # 使用 AI 合併新舊資料
+                    existing_data = user_info.user_data
                     prompt = f"Current original data: {existing_data}\nnew data: {user_data}"
                     system_prompt = 'Return user data based on original data and new data.'
                     
                     try:
                         thread, streamer = await generate_response(prompt, system_prompt)
-                        new_data = ''.join([response for response in streamer]).replace("<|eot_id|>","")
+                        new_data = ''.join([response for response in streamer]).replace("<|eot_id|>", "")
                         thread.join()
                     except Exception as e:
                         return self._translate(
@@ -178,53 +210,60 @@ class UserDataCog(commands.Cog):
                             error=str(e)
                         )
                     
-                    try:
-                        self.collection.update_one({"user_id": user_id}, {"$set": {"user_data": new_data}})
-                    except Exception as e:
+                    # 更新使用者資料
+                    success = await self.user_manager.update_user_data(
+                        user_id, new_data, user.display_name
+                    )
+                    
+                    if success:
+                        return self._translate(
+                            guild_id,
+                            "commands",
+                            "userdata",
+                            "responses",
+                            "data_updated",
+                            fallback_key="data_updated",
+                            user_id=user_id,
+                            data=new_data
+                        )
+                    else:
                         return self._translate(
                             guild_id,
                             "system",
                             "userdata",
                             "errors",
-                            "database_error",
-                            fallback_key="database_error",
-                            error=str(e)
+                            "update_failed",
+                            fallback_key="update_failed",
+                            error="資料庫更新失敗"
                         )
-                    
-                    return self._translate(
-                        guild_id,
-                        "commands",
-                        "userdata",
-                        "responses",
-                        "data_updated",
-                        fallback_key="data_updated",
-                        user_id=user_id,
-                        data=new_data
-                    )
                 else:
-                    try:
-                        self.collection.insert_one({"user_id": user_id, "user_data": user_data})
-                    except Exception as e:
+                    # 建立新使用者資料
+                    success = await self.user_manager.update_user_data(
+                        user_id, user_data, user.display_name
+                    )
+                    
+                    if success:
+                        return self._translate(
+                            guild_id,
+                            "commands",
+                            "userdata",
+                            "responses",
+                            "data_created",
+                            fallback_key="data_created",
+                            user_id=user_id,
+                            data=user_data
+                        )
+                    else:
                         return self._translate(
                             guild_id,
                             "system",
                             "userdata",
                             "errors",
-                            "database_error",
-                            fallback_key="database_error",
-                            error=str(e)
+                            "update_failed",
+                            fallback_key="update_failed",
+                            error="資料庫建立失敗"
                         )
-                    
-                    return self._translate(
-                        guild_id,
-                        "commands",
-                        "userdata",
-                        "responses",
-                        "data_created",
-                        fallback_key="data_created",
-                        user_id=user_id,
-                        data=user_data
-                    )
+                        
             except Exception as e:
                 return self._translate(
                     guild_id,
@@ -246,7 +285,9 @@ class UserDataCog(commands.Cog):
                 fallback_key="invalid_action"
             )
 
-    async def manage_user_data_message(self, message, user_id=None, user_data=None, action='read',message_to_edit: discord.Message = None):
+    async def manage_user_data_message(self, message, user_id=None, user_data=None, 
+                                     action='read', message_to_edit: discord.Message = None):
+        """從訊息管理使用者資料"""
         guild_id = str(message.guild.id) if message.guild else None
         
         try:
@@ -268,7 +309,9 @@ class UserDataCog(commands.Cog):
                     fallback_key="invalid_user"
                 )
             
-            result = await self.manage_user_data(message, user, user_data, action, message_to_edit, guild_id=guild_id)
+            result = await self.manage_user_data(
+                message, user, user_data, action, message_to_edit, guild_id=guild_id
+            )
             return result
             
         except Exception as e:
@@ -281,6 +324,29 @@ class UserDataCog(commands.Cog):
                 fallback_key="analysis_failed",
                 error=str(e)
             )
+
+    async def get_user_statistics(self) -> dict:
+        """取得使用者統計資訊"""
+        if not self.user_manager:
+            return {"error": "使用者管理器未初始化"}
+        
+        try:
+            return await self.user_manager.get_user_statistics()
+        except Exception as e:
+            self.logger.error(f"取得使用者統計失敗: {e}")
+            return {"error": str(e)}
+
+    async def update_user_activity(self, user_id: str, display_name: str = None) -> bool:
+        """更新使用者活躍狀態"""
+        if not self.user_manager:
+            return False
+        
+        try:
+            return await self.user_manager.update_user_activity(user_id, display_name)
+        except Exception as e:
+            self.logger.error(f"更新使用者活躍狀態失敗: {e}")
+            return False
+
 
 async def setup(bot):
     await bot.add_cog(UserDataCog(bot))

@@ -12,6 +12,7 @@
 - reranker_service: Qwen3 重排序服務
 - search_engine: 搜尋引擎
 - vector_manager: 向量管理
+- startup_logger: 啟動日誌優化管理器
 - exceptions: 自定義例外類別
 """
 
@@ -22,6 +23,7 @@ from .embedding_service import EmbeddingService, embedding_service_manager
 from .reranker_service import RerankerService, reranker_service_manager
 from .vector_manager import VectorManager
 from .search_engine import SearchEngine, SearchQuery, SearchResult, SearchType, TimeRange
+from .startup_logger import StartupLogger, StartupLoggerManager, get_startup_logger
 from .exceptions import (
     MemorySystemError,
     DatabaseError,
@@ -56,6 +58,11 @@ __all__ = [
     "SearchResult",
     "SearchType",
     "TimeRange",
+    
+    # 啟動日誌管理
+    "StartupLogger",
+    "StartupLoggerManager",
+    "get_startup_logger",
     
     # 例外類別
     "MemorySystemError",

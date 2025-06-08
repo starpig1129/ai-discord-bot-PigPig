@@ -386,13 +386,149 @@ async def process_tenor_tags(text: str, channel: discord.TextChannel) -> list:
     
     return gif_tasks
 
+
+def extract_participant_ids(message, conversation_history: List[Dict] = None) -> set:
+    """提取對話參與者 ID
+    
+    Args:
+        message: Discord 訊息物件
+        conversation_history: 對話歷史（可選）
+        
+    Returns:
+        set: 參與者 ID 集合
+    """
+    participant_ids = {str(message.author.id)}
+    
+    # 從 @mentions 提取
+    if hasattr(message, 'mentions'):
+        for mention in message.mentions:
+            participant_ids.add(str(mention.id))
+    
+    # 從近期對話歷史提取
+    if conversation_history:
+        for msg in conversation_history[-10:]:  # 最近10條訊息
+            if isinstance(msg, dict) and 'user_id' in msg:
+                participant_ids.add(str(msg['user_id']))
+            elif hasattr(msg, 'author'):
+                participant_ids.add(str(msg.author.id))
+    
+    return participant_ids
+
+
+async def build_intelligent_context(
+    bot: discord.Client,
+    message: discord.Message,
+    query_text: str,
+    conversation_history: List[Dict] = None
+) -> str:
+    """建構智慧背景知識上下文
+    
+    Args:
+        bot: Discord bot 實例
+        message: Discord 訊息物件
+        query_text: 查詢文字
+        conversation_history: 對話歷史
+        
+    Returns:
+        str: 結構化的背景知識上下文
+    """
+    try:
+        # 檢查是否有記憶管理器和智慧背景知識系統
+        memory_manager = getattr(bot, 'memory_manager', None)
+        if not memory_manager or not getattr(bot, 'memory_enabled', False):
+            logging.debug("記憶管理器未啟用，跳過智慧背景知識建構")
+            return ""
+        
+        # 取得必要的組件
+        user_manager = memory_manager.db_manager.user_manager
+        if not user_manager:
+            logging.warning("使用者管理器未初始化")
+            return ""
+        
+        # 提取參與者
+        participant_ids = extract_participant_ids(message, conversation_history)
+        logging.info(f"偵測到對話參與者: {participant_ids}")
+        
+        # 更新當前使用者活躍狀態
+        await user_manager.update_user_activity(
+            str(message.author.id), 
+            message.author.display_name
+        )
+        
+        # 批量取得參與者資訊
+        user_info_dict = await user_manager.get_multiple_users(list(participant_ids))
+        
+        if not user_info_dict:
+            logging.debug("未找到參與者資訊")
+            return ""
+        
+        # 動態導入增強器和建構器
+        try:
+            from cogs.memory.conversation_segment_enhancer import (
+                ConversationSegmentEnhancer, create_search_context
+            )
+            from cogs.memory.structured_context_builder import (
+                StructuredContextBuilder, create_context_options
+            )
+        except ImportError as e:
+            logging.error(f"無法導入智慧背景知識組件: {e}")
+            return ""
+        
+        # 建立增強器和建構器
+        enhancer = ConversationSegmentEnhancer(memory_manager)
+        builder = StructuredContextBuilder()
+        
+        # 建立搜尋上下文
+        search_context = create_search_context(
+            query=query_text,
+            channel_id=str(message.channel.id),
+            participant_context=user_info_dict,
+            search_options={
+                'limit': 5,
+                'threshold': 0.3,
+                'search_type': SearchType.HYBRID
+            }
+        )
+        
+        # 搜尋增強的對話片段
+        conversation_segments = await enhancer.search_enhanced_segments(search_context)
+        
+        # 建構結構化上下文
+        context_options = create_context_options(
+            include_user_data=True,
+            include_preferences=False,
+            max_segments=5,
+            max_total_length=1500  # 限制長度以適應 Discord
+        )
+        
+        structured_context = builder.build_enhanced_context(
+            user_info=user_info_dict,
+            conversation_segments=conversation_segments,
+            current_message=message,
+            options=context_options
+        )
+        
+        if structured_context:
+            logging.info(f"成功建構智慧背景知識上下文，長度: {len(structured_context)} 字元")
+            return structured_context
+        else:
+            logging.debug("未產生有效的背景知識上下文")
+            return ""
+            
+    except Exception as e:
+        logging.error(f"建構智慧背景知識上下文失敗: {e}")
+        import traceback
+        logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
+        return ""
+
+
 async def search_relevant_memory(
     bot: discord.Client,
     channel_id: str,
     query_text: str,
     limit: int = 5
 ) -> List[Dict[str, Any]]:
-    """搜尋相關的記憶內容
+    """搜尋相關的記憶內容（保留向後相容性）
     
     Args:
         bot: Discord bot 實例
@@ -449,7 +585,7 @@ async def search_relevant_memory(
 
 
 def format_memory_context(memories: List[Dict[str, Any]]) -> str:
-    """格式化記憶內容為上下文字串
+    """格式化記憶內容為上下文字串（保留向後相容性）
     
     Args:
         memories: 記憶內容列表
@@ -461,8 +597,8 @@ def format_memory_context(memories: List[Dict[str, Any]]) -> str:
         return ""
     
     context_parts = ["[相關歷史對話]"]
-    
-    for memory in memories[:3]:  # 限制最多3條記憶
+
+    for memory in memories[:10]:  # 限制最多10條記憶
         content = memory.get("content", "").strip()
         if content and len(content) > 10:  # 過濾太短的內容
             # 限制每條記憶的長度
@@ -506,16 +642,35 @@ async def gpt_message(
     # 組合資料
     user_id = str(message.author.id)
     
-    # 搜尋相關記憶
+    # 取得機器人實例
     bot = message.guild.me._state._get_client()
-    relevant_memories = await search_relevant_memory(bot, channel_id, prompt)
     
-    # 構建增強的提示
-    memory_context = format_memory_context(relevant_memories)
-    if memory_context:
-        combined_prompt = f"{memory_context}\n\n[user_id: {user_id}] {prompt}"
+    # 優先使用智慧背景知識系統
+    # 處理 history_dict 可能是 list 或 dict 的情況
+    if isinstance(history_dict, dict):
+        conversation_history = history_dict.get('messages', [])
+    elif isinstance(history_dict, list):
+        conversation_history = history_dict
     else:
-        combined_prompt = f"[user_id: {user_id}] {prompt}"
+        conversation_history = []
+    
+    intelligent_context = await build_intelligent_context(
+        bot, message, prompt, conversation_history
+    )
+    
+    # 如果智慧背景知識系統失敗，降級到傳統記憶搜尋
+    if not intelligent_context:
+        logging.info("降級到傳統記憶搜尋系統")
+        relevant_memories = await search_relevant_memory(bot, channel_id, prompt)
+        memory_context = format_memory_context(relevant_memories)
+        if memory_context:
+            combined_prompt = f"{memory_context}\n\n[user_id: {user_id}] {prompt}"
+        else:
+            combined_prompt = f"[user_id: {user_id}] {prompt}"
+    else:
+        # 使用智慧背景知識上下文
+        combined_prompt = f"{intelligent_context}\n\n[user_id: {user_id}] {prompt}"
+        logging.info("使用智慧背景知識系統建構的上下文")
     
     try:
         responses = ""
@@ -598,18 +753,18 @@ async def gpt_message(
                             lang = lang_manager.get_server_lang(guild_id)
                             converter = get_converter(lang)
                             if converter:
-                                converted_text = converter.convert(responses)
+                                converted_response = converter.convert(responses)
                             else:
-                                converted_text = responses
-                            current_message = await channel.send(converted_text)
+                                converted_response = responses
                         else:
-                            current_message = await channel.send(responses)
+                            converted_response = responses
                     else:
-                        current_message = await channel.send(responses)
+                        converted_response = responses
+                    # 創建新消息
+                    current_message = await channel.send(converted_response)
                 else:
                     responsesall += responses
                     cleaned_response = responsesall.replace('<|eot_id|>', "")
-                    # 使用正確的語言轉換器
                     if message and message.guild:
                         bot = message.guild.me._state._get_client()
                         if lang_manager := bot.get_cog("LanguageManager"):
@@ -626,31 +781,19 @@ async def gpt_message(
                         converted_response = cleaned_response
                     await current_message.edit(content=converted_response)
                     
-                    # 處理最後回應中的GIF標籤
+                    # 檢查是否需要發送GIF
                     gif_tasks = await process_tenor_tags(converted_response, channel)
                     if gif_tasks:
                         for task in gif_tasks:
                             await task
-                
-            await asyncio.sleep(0)  # 確保最後的響應也能正確處理
-            return message_result
-        except Exception as e:
-            logging.error(f"處理最終響應時發生錯誤: {str(e)}")
-            if message_result:
-                return message_result
-            raise
+        
+        except Exception as cleanup_error:
+            logging.warning(f"處理剩餘回應時發生錯誤: {cleanup_error}")
+        
+        return message_result.replace("<|eot_id|>", "")
+        
     except Exception as e:
-        logging.error(f"生成回應時發生錯誤: {e}")
-        await message_to_edit.edit(content="抱歉，我不會講話了。")
+        logging.error(f"生成 GPT 回應時發生錯誤: {e}")
+        import traceback
+        logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
         return None
-    finally:
-        if thread is not None:  # 只在線程存在時調用 join
-            thread.join()
-
-
-__all__ = [
-    'gpt_message',
-    'get_system_prompt',
-    'get_channel_system_prompt',
-    'clear_system_prompt_cache'
-]

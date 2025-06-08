@@ -226,11 +226,20 @@ class PigPig(commands.Bot):
     async def setup_hook(self) -> None:
         # Loading all the module in `cogs` folder
         for module in os.listdir(func.ROOT_DIR + '/cogs'):
-            if module.endswith('.py'):
+            # 過濾條件：
+            # 1. 必須是 .py 文件
+            # 2. 排除 __init__.py（包初始化文件）
+            # 3. 排除以 _ 開頭的文件（私有模組）
+            # 4. 排除以 . 開頭的文件（隱藏文件）
+            if (module.endswith('.py') and
+                module != '__init__.py' and
+                not module.startswith('_') and
+                not module.startswith('.')):
                 try:
                     await self.load_extension(f"cogs.{module[:-3]}")
                     print(f"Loaded {module[:-3]}")
                 except Exception as e:
+                    print(f"Failed to load {module[:-3]}: {e}")
                     print(traceback.format_exc())
 
         # 初始化記憶系統

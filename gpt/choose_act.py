@@ -69,7 +69,7 @@ class ActionHandler:
                 prompt += f"\n{current_image_data}"
         
         # 讀取歷史訊息
-        async for msg in message.channel.history(limit=5):
+        async for msg in message.channel.history(limit=10):
             if msg.id != message.id:
                 history.append(msg)
                 if msg.attachments:
