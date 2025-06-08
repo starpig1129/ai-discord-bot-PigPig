@@ -456,6 +456,145 @@ class DatabaseManager:
             self.logger.error(f"批次查詢訊息失敗: {e}")
             raise DatabaseError(f"批次查詢訊息失敗: {e}", operation="get_messages_by_ids", table="messages")
     
+    def search_messages_by_keywords(
+        self,
+        channel_id: str,
+        keywords: List[str],
+        limit: int = 10,
+        before: Optional[datetime] = None,
+        after: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
+        """根據關鍵字搜尋訊息
+        
+        Args:
+            channel_id: 頻道 ID
+            keywords: 關鍵字列表
+            limit: 返回數量限制
+            before: 在此時間之前
+            after: 在此時間之後
+            
+        Returns:
+            List[Dict[str, Any]]: 匹配的訊息列表，包含匹配分數
+        """
+        if not keywords:
+            return []
+        
+        try:
+            with self.get_connection() as conn:
+                # 建立基本查詢
+                query_parts = ["SELECT *, 0 as match_score FROM messages WHERE channel_id = ?"]
+                params = [channel_id]
+                
+                # 添加關鍵字搜尋條件
+                keyword_conditions = []
+                for keyword in keywords:
+                    # 搜尋原始內容和處理後內容
+                    keyword_conditions.append(
+                        "(content LIKE ? OR content_processed LIKE ?)"
+                    )
+                    keyword_param = f"%{keyword}%"
+                    params.extend([keyword_param, keyword_param])
+                
+                if keyword_conditions:
+                    query_parts.append("AND (" + " OR ".join(keyword_conditions) + ")")
+                
+                # 添加時間過濾
+                if before:
+                    query_parts.append("AND timestamp < ?")
+                    params.append(before)
+                
+                if after:
+                    query_parts.append("AND timestamp > ?")
+                    params.append(after)
+                
+                # 排序和限制
+                query_parts.append("ORDER BY timestamp DESC LIMIT ?")
+                params.append(limit)
+                
+                query = " ".join(query_parts)
+                
+                self.logger.debug(f"關鍵字搜尋查詢: {query}")
+                self.logger.debug(f"搜尋參數: 關鍵字={keywords}, 頻道={channel_id}")
+                
+                cursor = conn.execute(query, params)
+                rows = cursor.fetchall()
+                
+                # 轉換為字典並計算匹配分數
+                messages = []
+                for row in rows:
+                    message_dict = dict(row)
+                    
+                    # 計算關鍵字匹配分數
+                    content = message_dict.get('content', '') or ''
+                    content_processed = message_dict.get('content_processed', '') or ''
+                    
+                    match_score = self._calculate_keyword_match_score(
+                        content, content_processed, keywords
+                    )
+                    message_dict['match_score'] = match_score
+                    
+                    messages.append(message_dict)
+                
+                # 按匹配分數排序
+                messages.sort(key=lambda x: x['match_score'], reverse=True)
+                
+                self.logger.info(f"關鍵字搜尋完成: 找到 {len(messages)} 個結果")
+                return messages
+                
+        except Exception as e:
+            self.logger.error(f"關鍵字搜尋失敗: {e}")
+            raise DatabaseError(f"關鍵字搜尋失敗: {e}", operation="search_messages_by_keywords", table="messages")
+    
+    def _calculate_keyword_match_score(
+        self,
+        content: str,
+        content_processed: str,
+        keywords: List[str]
+    ) -> float:
+        """計算關鍵字匹配分數
+        
+        Args:
+            content: 原始內容
+            content_processed: 處理後內容
+            keywords: 關鍵字列表
+            
+        Returns:
+            float: 匹配分數 (0.0-1.0)
+        """
+        if not keywords:
+            return 0.0
+        
+        # 合併內容進行搜尋
+        combined_content = f"{content} {content_processed}".lower()
+        
+        if not combined_content.strip():
+            return 0.0
+        
+        total_score = 0.0
+        content_length = len(combined_content)
+        
+        for keyword in keywords:
+            keyword_lower = keyword.lower()
+            
+            # 計算關鍵字出現次數
+            count = combined_content.count(keyword_lower)
+            if count > 0:
+                # 基礎分數：出現次數 / 內容長度
+                base_score = min(count * len(keyword_lower) / content_length, 0.5)
+                
+                # 完整匹配加分
+                if keyword_lower in combined_content:
+                    base_score += 0.3
+                
+                # 開頭匹配加分
+                if combined_content.startswith(keyword_lower):
+                    base_score += 0.2
+                
+                total_score += base_score
+        
+        # 正規化分數
+        return min(total_score / len(keywords), 1.0)
+    
     def _ensure_channel_exists(self, conn: sqlite3.Connection, channel_id: str) -> None:
         """確保頻道記錄存在
         
