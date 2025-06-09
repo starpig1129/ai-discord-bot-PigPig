@@ -22,13 +22,14 @@
 
 import re
 import logging
+import json
 from discord.ext import commands
 from discord import app_commands
 import discord
 from gpt.gpt_response_gen import generate_response
 from addons.settings import Settings
 
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from .language_manager import LanguageManager
 
 # 備用翻譯字典
@@ -190,15 +191,57 @@ class UserDataCog(commands.Cog):
                 user_info = await self.user_manager.get_user_info(user_id)
                 
                 if user_info and user_info.user_data:
-                    # 使用 AI 合併新舊資料
+                    # 使用 AI 智慧合併新舊資料（已升級至 Google Gemini API 官方標準）
                     existing_data = user_info.user_data
-                    prompt = f"Current original data: {existing_data}\nnew data: {user_data}"
-                    system_prompt = 'Return user data based on original data and new data.'
+                    system_prompt = '''You are a professional user data management assistant.
+                                    Intelligently merge existing user data with new data to return complete and accurate user information.
+                                    Maintain data integrity and consistency while avoiding duplicate information.
+                                    Always respond in Traditional Chinese.'''
                     
                     try:
-                        thread, streamer = await generate_response(prompt, system_prompt)
-                        new_data = ''.join([response for response in streamer]).replace("<|eot_id|>", "")
-                        thread.join()
+                        # === Google Gemini API 官方格式標準升級 ===
+                        # 建構符合官方 role + parts 格式的結構化對話歷史
+                        # 使用 function 角色格式化現有資料（符合新的工具調用標準）
+                        dialogue_history = [
+                            {
+                                "role": "function",
+                                "name": "existing_user_data",
+                                "content": json.dumps({
+                                    "existing_data": existing_data,
+                                    "data_type": "user_profile",
+                                    "last_updated": "previous_session"
+                                }, ensure_ascii=False, indent=2)
+                            },
+                            {
+                                "role": "function",
+                                "name": "new_user_data",
+                                "content": json.dumps({
+                                    "new_data": user_data,
+                                    "data_type": "user_profile_update",
+                                    "action": "merge_and_update"
+                                }, ensure_ascii=False, indent=2)
+                            }
+                        ]
+                        
+                        # 使用官方標準格式調用 generate_response
+                        # 符合新的智慧上下文建構和工具調用標準
+                        thread, streamer = await generate_response(
+                            inst="Based on the provided existing user data and new data, intelligently merge them and return complete user information.",
+                            system_prompt=system_prompt,
+                            dialogue_history=dialogue_history
+                        )
+                        
+                        # 使用 async for 收集串流回應（符合新的非同步處理標準）
+                        response_chunks = []
+                        async for chunk in streamer:
+                            response_chunks.append(chunk)
+                        
+                        # 清理回應內容並移除特殊標記
+                        new_data = ''.join(response_chunks).replace("<|eot_id|>", "").strip()
+                        
+                        # 等待執行緒完成（向後相容性處理）
+                        if thread:
+                            thread.join()
                     except Exception as e:
                         return self._translate(
                             guild_id,

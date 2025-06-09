@@ -1,5 +1,7 @@
 import discord
 import asyncio
+import json
+from typing import Dict, Any, List
 from cogs.eat.db.db import DB
 from cogs.eat.providers.googlemap_crawler import GoogleMapCrawler
 from cogs.eat.embeds import mapEmbed, menuEmbed
@@ -78,38 +80,80 @@ class EatWhatView(discord.ui.View):
             print('EatWatchView regenerate:',e)
     @discord.ui.button(label="查看評論", emoji="📰")
     async def review(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """美食評論功能按鈕 - 已升級至 Google Gemini API 官方標準
+        
+        主要改進：
+        1. 使用官方 role + parts 格式建構對話歷史
+        2. 採用 function 角色格式化店家資訊（符合工具調用標準）
+        3. 改用 async for 處理串流回應
+        4. 加強錯誤處理和中文註解
+        """
         try:
-            system_prompt = '''You are a food critic and make a complete evaluation and explanation of the store based on the information provided.
-                            You are talking in a funny way to a human(user).
-                            Always answer in Traditional Chinese.'''  # 设置系统提示（如果需要）
-            prompt=f''' 店名:{self.result[0]}
-                        評價:{self.result[1]},滿分為5
-                        分類:{self.result[2]}
-                        地址:淡水區{self.result[3]}
-                        評論:{self.result[5]}'''
-            # 发送初始消息，用于后续编辑
-            await interaction.response.send_message("評價中...", ephemeral=True)
-            message_to_edit = await interaction.followup.send("...", ephemeral=True)
-            # 生成文字
-            thread, streamer = await generate_response(prompt, system_prompt)
-            buffer_size = 40  # 设置缓冲区大小
+            # === Google Gemini API 官方標準系統提示 (優化為英文) ===
+            system_prompt = '''You are a professional and witty food critic who excels at writing vivid and interesting reviews based on restaurant information.
+                            Interact with users in a humorous yet professional tone, providing valuable dining recommendations.
+                            Your reviews should include comprehensive analysis of food quality, atmosphere, and service standards.
+                            Always respond in Traditional Chinese and use emojis appropriately to add fun and engagement.'''
+            
+            # === 結構化店家資訊（符合官方格式標準） ===
+            store_info = {
+                "restaurant_name": self.result[0],
+                "rating": f"{self.result[1]}/5.0",
+                "category": self.result[2],
+                "address": f"{self.result[3]}",
+                "reviews": self.result[5],
+                "data_source": "google_maps_crawler"
+            }
+            
+            # === 使用官方 function 角色格式建構對話歷史 ===
+            # 符合新的工具調用和智慧上下文建構標準
+            dialogue_history = [
+                {
+                    "role": "function",
+                    "name": "restaurant_data_retrieval",
+                    "content": json.dumps({
+                        "restaurant_info": store_info,
+                        "analysis_type": "comprehensive_review",
+                        "review_style": "professional_humorous"
+                    }, ensure_ascii=False, indent=2)
+                }
+            ]
+            
+            # 發送初始訊息，用於後續即時更新
+            await interaction.response.send_message("🍽️ AI 美食評論家正在分析中...", ephemeral=True)
+            message_to_edit = await interaction.followup.send("📝 準備撰寫專業評論...", ephemeral=True)
+            
+            # === 使用新的 Google Gemini API 官方格式標準生成評論 ===
+            # 符合升級後的 generate_response 函數規範
+            thread, streamer = await generate_response(
+                inst="Based on the provided restaurant information, write a professional and witty food review.",
+                system_prompt=system_prompt,
+                dialogue_history=dialogue_history
+            )
+            
+            # === 優化的串流回應處理 ===
+            buffer_size = 40  # 設置緩衝區大小，提供流暢的即時顯示
             responses = ""
             responsesall = ""
-            for response in streamer:
-                print(response, end="", flush=True)
+            
+            # 使用 async for 處理串流回應（符合新的非同步處理標準）
+            async for response in streamer:
+                print(response, end="", flush=True)  # 終端輸出調試
                 responses += response
 
+                # 達到緩衝區大小時即時更新 Discord 訊息
                 if len(responses) >= buffer_size:
-                    responsesall+=responses
-                    #responsesall = convert(responsesall, 'zh-tw')
-                    await message_to_edit.edit(content=responsesall)  # 修改消息内容
-                    responses = ""  # 清空 responses 变量
+                    responsesall += responses
+                    await message_to_edit.edit(content=responsesall)
+                    responses = ""  # 清空緩衝區
 
-            # 处理剩余的文本
-            responsesall+=responses
-            # responsesall = convert(responsesall, 'zh-tw')
-            responsesall = responsesall.replace('<|eot_id|>',"")
-            await message_to_edit.edit(content=responsesall)  # 修改消息内容
-            thread.join()
+            # 處理剩餘的回應內容並清理特殊標記
+            responsesall += responses
+            responsesall = responsesall.replace('<|eot_id|>', "").strip()
+            await message_to_edit.edit(content=responsesall)
+            
+            # 等待執行緒完成（向後相容性處理）
+            if thread:
+                thread.join()
         except Exception as e:
             print(e)
