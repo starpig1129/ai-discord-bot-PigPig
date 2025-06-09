@@ -70,7 +70,36 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
         elif audio_input:
             messages.append({'role': 'user', 'content': f"Audio input is not supported by OpenAI API"})
         elif image_input:
-            messages.append({'role': 'user', 'content': f"Image: {image_input}"})
+            # 處理圖片輸入 - 使用 OpenAI Vision API 格式
+            if isinstance(image_input, list):
+                # 處理多張圖片
+                content = [{"type": "text", "text": inst}]
+                for img in image_input:
+                    from gpt.vision_tool import image_to_base64
+                    img_base64 = image_to_base64(img)
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{img_base64}"
+                        }
+                    })
+                messages[-1] = {'role': 'user', 'content': content}
+            else:
+                # 處理單張圖片
+                from gpt.vision_tool import image_to_base64
+                img_base64 = image_to_base64(image_input)
+                messages[-1] = {
+                    'role': 'user',
+                    'content': [
+                        {"type": "text", "text": inst},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{img_base64}"
+                            }
+                        }
+                    ]
+                }
     except Exception as e:
         raise OpenAIError(f"OpenAI API 影像處理錯誤: {str(e)}")
 
@@ -82,10 +111,13 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
     async def run_generation():
         try:
             client = OpenAI(api_key=tokens.openai_api_key)
+            # 檢查是否有圖片輸入，決定使用的模型
+            model_name = "gpt-4o" if image_input else "gpt-4o-mini"
+            
             stream = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=model_name,
                     messages=messages,
                     max_tokens=4096,
                     temperature=0.5,

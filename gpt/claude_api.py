@@ -13,10 +13,10 @@ from PIL import Image
 from moviepy.editor import VideoFileClip
 import tempfile
 import librosa
-
+from addons.settings import TOKENS
 class ClaudeError(Exception):
     pass
-
+tokens = TOKENS()
 def extract_video_frames(video_path, num_frames=5):
     """從視頻中提取關鍵幀。
     
@@ -67,7 +67,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
 
     async def run_generation():
         try:
-            async with AsyncAnthropic as client:
+            async with AsyncAnthropic(api_key=tokens.anthropic_api_key) as client:
                 response_stream = await client.completions.create(
                     model="claude-3-5-sonnet-20240620",
                     prompt=full_prompt,
