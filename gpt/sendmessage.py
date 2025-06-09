@@ -25,6 +25,7 @@ import logging
 import opencc
 import asyncio
 import re
+import datetime
 from PIL import Image
 import requests
 from io import BytesIO
@@ -415,6 +416,89 @@ def extract_participant_ids(message, conversation_history: List[Dict] = None) ->
     return participant_ids
 
 
+def format_intelligent_context(context_data: Dict[str, Any]) -> Dict[str, Any]:
+    """將智慧上下文格式化為 Google Gemini API 官方工具資訊格式
+    
+    根據 Google Gemini API 官方文檔，背景知識資訊應格式化為工具調用結果的形式：
+    - role: "function" (官方工具角色)
+    - name: "memory_search" (記憶搜尋工具名稱)
+    - content: JSON 格式的上下文資料
+    
+    Args:
+        context_data: 智慧上下文資料字典
+        
+    Returns:
+        Dict[str, Any]: 符合官方標準的工具資訊格式
+    """
+    try:
+        return {
+            "role": "function",
+            "name": "memory_search",
+            "content": json.dumps(context_data, ensure_ascii=False, indent=2)
+        }
+    except Exception as e:
+        logging.error(f"格式化智慧上下文失敗: {e}")
+        return {
+            "role": "function",
+            "name": "memory_search",
+            "content": json.dumps({"error": f"上下文格式化錯誤: {str(e)}"}, ensure_ascii=False)
+        }
+
+
+def format_memory_context_structured(memories: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """將記憶內容格式化為結構化的工具資訊格式
+    
+    Args:
+        memories: 記憶內容列表
+        
+    Returns:
+        Dict[str, Any]: 符合官方標準的工具資訊格式
+    """
+    if not memories:
+        return {
+            "role": "function",
+            "name": "memory_retrieval",
+            "content": json.dumps({"memories": [], "message": "無相關歷史記憶"}, ensure_ascii=False)
+        }
+    
+    try:
+        # 結構化記憶資料
+        structured_memories = []
+        for memory in memories[:10]:  # 限制最多10條記憶
+            content = memory.get("content", "").strip()
+            if content and len(content) > 10:  # 過濾太短的內容
+                # 限制每條記憶的長度
+                if len(content) > 150:
+                    content = content[:150] + "..."
+                
+                structured_memories.append({
+                    "content": content,
+                    "user_id": memory.get("user_id", ""),
+                    "timestamp": memory.get("timestamp", ""),
+                    "relevance": memory.get("relevance", 0.0)
+                })
+        
+        memory_data = {
+            "memories": structured_memories,
+            "total_count": len(structured_memories),
+            "message": f"找到 {len(structured_memories)} 條相關歷史記憶"
+        }
+        
+        return {
+            "role": "function",
+            "name": "memory_retrieval",
+            "content": json.dumps(memory_data, ensure_ascii=False, indent=2)
+        }
+        
+    except Exception as e:
+        logging.error(f"格式化記憶上下文失敗: {e}")
+        return {
+            "role": "function",
+            "name": "memory_retrieval",
+            "content": json.dumps({"error": f"記憶格式化錯誤: {str(e)}"}, ensure_ascii=False)
+        }
+
+
 async def build_intelligent_context(
     bot: discord.Client,
     message: discord.Message,
@@ -509,11 +593,22 @@ async def build_intelligent_context(
         )
         
         if structured_context:
-            logging.info(f"成功建構智慧背景知識上下文，長度: {len(structured_context)} 字元")
-            return structured_context
+            # 建構結構化的上下文資料
+            context_data = {
+                "type": "intelligent_context",
+                "participants": list(participant_ids),
+                "context_content": structured_context,
+                "segments_count": len(conversation_segments),
+                "user_info_count": len(user_info_dict),
+                "channel_id": str(message.channel.id),
+                "timestamp": datetime.datetime.now().isoformat()
+            }
+            
+            logging.info(f"成功建構智慧背景知識上下文，參與者: {len(participant_ids)}, 片段: {len(conversation_segments)}")
+            return context_data
         else:
             logging.debug("未產生有效的背景知識上下文")
-            return ""
+            return {}
             
     except Exception as e:
         logging.error(f"建構智慧背景知識上下文失敗: {e}")
@@ -658,26 +753,41 @@ async def gpt_message(
         bot, message, prompt, conversation_history
     )
     
+    # 準備結構化的對話歷史，符合 Google Gemini API 官方格式
+    structured_history = []
+    
     # 如果智慧背景知識系統失敗，降級到傳統記憶搜尋
     if not intelligent_context:
         logging.info("降級到傳統記憶搜尋系統")
         relevant_memories = await search_relevant_memory(bot, channel_id, prompt)
-        memory_context = format_memory_context(relevant_memories)
-        if memory_context:
-            combined_prompt = f"{memory_context}\n\n[user_id: {user_id}] {prompt}"
-        else:
-            combined_prompt = f"[user_id: {user_id}] {prompt}"
+        if relevant_memories:
+            # 使用結構化的記憶格式
+            memory_tool_result = format_memory_context_structured(relevant_memories)
+            structured_history.append(memory_tool_result)
+            logging.info(f"添加了 {len(relevant_memories)} 條結構化記憶到對話歷史")
+        
+        combined_prompt = f"[user_id: {user_id}] {prompt}"
     else:
-        # 使用智慧背景知識上下文
-        combined_prompt = f"{intelligent_context}\n\n[user_id: {user_id}] {prompt}"
-        logging.info("使用智慧背景知識系統建構的上下文")
+        # 使用智慧背景知識上下文的結構化格式
+        context_tool_result = format_intelligent_context(intelligent_context)
+        structured_history.append(context_tool_result)
+        combined_prompt = f"[user_id: {user_id}] {prompt}"
+        logging.info("使用智慧背景知識系統建構的結構化上下文")
+    
+    # 將結構化歷史合併到 history_dict 中
+    if isinstance(history_dict, list):
+        # 在使用者訊息前插入工具結果
+        enhanced_history = structured_history + history_dict
+    else:
+        # 如果是字典格式，需要適當處理
+        enhanced_history = structured_history + conversation_history
     
     try:
         responses = ""
         responsesall = ""
         message_result = ""
         bot_system_prompt = get_system_prompt(str(message.guild.me.id), message)
-        thread, streamer = await generate_response(combined_prompt, bot_system_prompt, history_dict, image_input=image_data)
+        thread, streamer = await generate_response(combined_prompt, bot_system_prompt, enhanced_history, image_input=image_data)
         buffer_size = 40  # 設置緩衝區大小
         current_message = message_to_edit
         

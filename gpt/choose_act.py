@@ -48,6 +48,48 @@ class ActionHandler:
         }
 
     @staticmethod
+    def format_tool_result(tool_name: str, result: Any) -> Dict[str, Any]:
+        """格式化工具結果為 Google Gemini API 官方標準格式
+        
+        根據 Google Gemini API 官方文檔，工具調用結果應使用 function 角色格式：
+        - role: "function" (官方工具角色)
+        - name: 工具名稱
+        - content: 工具回應內容
+        
+        Args:
+            tool_name: 工具名稱
+            result: 工具執行結果
+            
+        Returns:
+            Dict[str, Any]: 符合官方標準的工具結果格式
+        """
+        try:
+            # 處理不同類型的工具結果
+            if isinstance(result, (dict, list)):
+                # 結構化資料轉為 JSON 字串
+                content = json.dumps(result, ensure_ascii=False, indent=2)
+            elif isinstance(result, io.BytesIO):
+                # 圖片生成結果
+                content = f"已生成圖片 (工具: {tool_name})"
+            elif result is None:
+                content = f"工具 {tool_name} 執行完成，無返回值"
+            else:
+                content = str(result)
+            
+            return {
+                "role": "function",  # 官方工具角色標準
+                "name": tool_name,   # 工具名稱
+                "content": content   # 工具回應內容
+            }
+        except Exception as e:
+            logging.error(f"格式化工具結果失敗 (工具: {tool_name}): {e}")
+            return {
+                "role": "function",
+                "name": tool_name,
+                "content": f"工具執行時發生錯誤: {str(e)}"
+            }
+
+    @staticmethod
     def _load_system_prompt() -> str:
         with open('./choseAct_system_prompt.txt', 'r') as f:
             return f.read()
@@ -133,18 +175,13 @@ class ActionHandler:
                     # 創建 Discord File 對象並傳送
                     file = discord.File(result, filename="generated_image.png")
                     await message.channel.send(content=f"生成的圖片：", file=file)
-                    history_dict.append({
-                        "role": "tool",
-                        "content": "已生成圖片",
-                        "user_id": f"{tool_name}"
-                    })
+                    # 使用官方標準格式化工具結果
+                    formatted_result = self.format_tool_result(tool_name, result)
+                    history_dict.append(formatted_result)
                 else:
-                    # 處理其他類型的結果
-                    history_dict.append({
-                        "role": "tool",
-                        "content": str(result),
-                        "user_id": f"{tool_name}"
-                    })
+                    # 使用官方標準格式化所有其他工具結果
+                    formatted_result = self.format_tool_result(tool_name, result)
+                    history_dict.append(formatted_result)
             
             # 生成 GPT 回應
             gptresponses = await gpt_message(message_to_edit, message, original_prompt, history_dict, image_data)
