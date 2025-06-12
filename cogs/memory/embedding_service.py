@@ -541,6 +541,7 @@ class EmbeddingService:
                     # 釋放 GPU 記憶體
                     if self._device == "cuda":
                         torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
                         
             except Exception as e:
                 self.logger.error(f"Qwen3 批次編碼失敗: {e}")
@@ -588,8 +589,13 @@ class EmbeddingService:
             embeddings.append(batch_embeddings)
             
             # 釋放 GPU 記憶體
-            if self._device != "cpu":
-                torch.cuda.empty_cache() if self._device == "cuda" else None
+            if self._device == "cuda":
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            elif self._device == "mps":
+                # Apple Silicon MPS 記憶體清理
+                if hasattr(torch.mps, 'empty_cache'):
+                    torch.mps.empty_cache()
         
         # 合併結果
         return np.vstack(embeddings) if embeddings else np.array([])

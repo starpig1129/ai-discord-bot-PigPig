@@ -89,14 +89,21 @@ class GPUMemoryManager:
         try:
             _, free_mb, used_percent = self.get_gpu_memory_info()
             
-            # 檢查可用記憶體和使用率
+            # 檢查可用記憶體和使用率 - 降低閾值至70-75%
             if free_mb < required_mb:
                 self.logger.warning(f"GPU 記憶體不足: 需要 {required_mb}MB，可用 {free_mb}MB")
                 return False
             
-            if used_percent > 85.0:  # 使用率超過 85% 時警告
+            # 降低使用率閾值至75%，更積極地觸發記憶體清理
+            if used_percent > 75.0:
                 self.logger.warning(f"GPU 記憶體使用率過高: {used_percent:.1f}%")
-                return False
+                # 主動觸發記憶體清理
+                self._trigger_memory_cleanup()
+                
+                # 再次檢查記憶體狀態
+                _, free_mb_after, used_percent_after = self.get_gpu_memory_info()
+                if used_percent_after > 75.0:
+                    return False
                 
             return True
         except Exception as e:
@@ -186,8 +193,61 @@ class GPUMemoryManager:
             # 強制垃圾回收
             gc.collect()
             
+            self.logger.info("GPU 記憶體清理完成")
+            
         except Exception as e:
             self.logger.error(f"清除 GPU 記憶體失敗: {e}")
+    
+    def _trigger_memory_cleanup(self) -> None:
+        """主動觸發記憶體清理機制"""
+        try:
+            self.logger.info("觸發主動記憶體清理")
+            
+            # 清除 PyTorch GPU 快取
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            
+            # 強制垃圾回收
+            gc.collect()
+            
+            # 記錄清理後的記憶體狀態
+            total_mb, free_mb, used_percent = self.get_gpu_memory_info()
+            self.logger.info(f"記憶體清理後狀態: 總計 {total_mb}MB, 可用 {free_mb}MB, 使用率 {used_percent:.1f}%")
+            
+        except Exception as e:
+            self.logger.error(f"主動記憶體清理失敗: {e}")
+    
+    def force_cleanup_fallback(self) -> bool:
+        """強制清理fallback機制"""
+        try:
+            self.logger.warning("執行強制記憶體清理fallback")
+            
+            # 重置GPU資源
+            with self._memory_lock:
+                self._gpu_resource = None
+            
+            # 多次清理GPU快取
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                for _ in range(3):
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                    gc.collect()
+            
+            # 檢查清理效果
+            _, _, used_percent = self.get_gpu_memory_info()
+            success = used_percent < 70.0
+            
+            if success:
+                self.logger.info(f"強制清理成功，使用率降至 {used_percent:.1f}%")
+            else:
+                self.logger.warning(f"強制清理後使用率仍為 {used_percent:.1f}%")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"強制清理fallback失敗: {e}")
+            return False
     
     def log_memory_stats(self, force_log: bool = False) -> None:
         """記錄記憶體統計資訊"""

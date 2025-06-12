@@ -36,6 +36,15 @@ from gpt.gpt_response_gen import get_model_and_tokenizer
 from logs import TimedRotatingFileHandler
 from cogs.memory.memory_manager import MemoryManager
 from cogs.memory.exceptions import MemorySystemError
+
+# 導入優化模組
+from gpt.optimization_integration import (
+    initialize_optimization_from_file,
+    get_optimized_bot,
+    process_optimized_request,
+    get_optimization_status
+)
+from gpt.optimization_config_manager import is_optimization_enabled
 # 配置 logging
 def setup_logger(server_name):
     logger = logging.getLogger(server_name)
@@ -56,6 +65,10 @@ class PigPig(commands.Bot):
         # 記憶系統初始化
         self.memory_manager: Optional[MemoryManager] = None
         self.memory_enabled = False
+        
+        # 優化系統初始化
+        self.optimization_enabled = False
+        self.optimized_bot = None
 
     def setup_logger_for_guild(self, guild_name):
         if guild_name not in self.loggers:
@@ -105,6 +118,34 @@ class PigPig(commands.Bot):
         except Exception as e:
             print(f"記憶系統初始化失敗: {e}")
             self.memory_enabled = False
+    
+    async def initialize_optimization_system(self):
+        """初始化優化系統"""
+        try:
+            # 檢查優化功能是否啟用
+            if not is_optimization_enabled():
+                print("優化系統已在配置中停用")
+                return
+            
+            # 初始化優化系統
+            self.optimized_bot = initialize_optimization_from_file()
+            self.optimization_enabled = True
+            
+            print("優化系統初始化成功")
+            
+            # 顯示優化狀態
+            status = get_optimization_status()
+            config = status.get('config', {})
+            print(f"  - Gemini 快取: {'✓' if config.get('gemini_cache') else '✗'}")
+            print(f"  - 處理快取: {'✓' if config.get('processing_cache') else '✗'}")
+            print(f"  - 記憶快取: {'✓' if config.get('memory_cache') else '✗'}")
+            print(f"  - 並行工具: {'✓' if config.get('parallel_tools') else '✗'}")
+            print(f"  - 性能監控: {'✓' if config.get('performance_monitoring') else '✗'}")
+            
+        except Exception as e:
+            print(f"優化系統初始化失敗: {e}")
+            print("將使用傳統處理方式")
+            self.optimization_enabled = False
     
     async def store_message_to_memory(self, message: discord.Message):
         """將訊息儲存到記憶系統"""
@@ -244,6 +285,9 @@ class PigPig(commands.Bot):
 
         # 初始化記憶系統
         await self.initialize_memory_system()
+        
+        # 初始化優化系統
+        await self.initialize_optimization_system()
 
         if func.settings.ipc_server.get("enable", False):
             await self.ipc.start()
@@ -289,17 +333,20 @@ class PigPig(commands.Bot):
             await asyncio.sleep(5)
     
     async def close(self):
-        """優雅關閉機器人和記憶系統"""
+        """優雅關閉機器人和所有系統"""
         try:
             # 關閉記憶系統
             if self.memory_manager:
                 await self.memory_manager.cleanup()
                 print("記憶系統已優雅關閉")
             
+            # 關閉優化系統
+            if self.optimization_enabled and self.optimized_bot:
+                await self.optimized_bot.shutdown()
+                print("優化系統已優雅關閉")
+            
             # 關閉父類
             await super().close()
             
         except Exception as e:
             print(f"關閉機器人時發生錯誤: {e}")
-            await self.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name=f"泥巴在{len(self.guilds)}個伺服器中"))
-            await asyncio.sleep(5)
