@@ -13,6 +13,8 @@ import logging
 import hashlib
 import time
 import datetime
+import pathlib
+import httpx
 from typing import Optional, Dict, Any, List
 
 # Initialize the Gemini model
@@ -465,6 +467,124 @@ def get_cache_manager() -> Optional[GeminiCacheManager]:
         cache_manager = initialize_cache_manager()
     return cache_manager
 
+def _download_and_process_pdf(pdf_url_or_path: str) -> pathlib.Path:
+    """下載並處理 PDF 檔案
+    
+    Args:
+        pdf_url_or_path: PDF 檔案的 URL 或本地路徑
+        
+    Returns:
+        pathlib.Path: 本地 PDF 檔案路徑
+        
+    Raises:
+        Exception: 如果下載或處理失敗
+    """
+    try:
+        # 檢查是否為 URL
+        if pdf_url_or_path.startswith(('http://', 'https://')):
+            # 從 URL 下載 PDF
+            logger.info(f"正在從 URL 下載 PDF: {pdf_url_or_path}")
+            
+            # 產生暫存檔案名稱
+            url_hash = hashlib.md5(pdf_url_or_path.encode()).hexdigest()[:8]
+            temp_filename = f"pdf_{url_hash}_{int(time.time())}.pdf"
+            file_path = pathlib.Path(tempfile.gettempdir()) / temp_filename
+            
+            # 使用 httpx 下載檔案
+            with httpx.Client(timeout=30.0) as client:
+                response = client.get(pdf_url_or_path)
+                response.raise_for_status()
+                
+                # 驗證內容類型
+                content_type = response.headers.get('content-type', '').lower()
+                if 'pdf' not in content_type and not pdf_url_or_path.lower().endswith('.pdf'):
+                    logger.warning(f"檔案可能不是 PDF 格式，Content-Type: {content_type}")
+                
+                # 寫入檔案
+                file_path.write_bytes(response.content)
+                logger.info(f"PDF 下載成功，儲存至: {file_path}")
+                
+        else:
+            # 本地檔案路徑
+            file_path = pathlib.Path(pdf_url_or_path)
+            if not file_path.exists():
+                raise FileNotFoundError(f"PDF 檔案不存在: {pdf_url_or_path}")
+            if not file_path.suffix.lower() == '.pdf':
+                raise ValueError(f"檔案不是 PDF 格式: {pdf_url_or_path}")
+                
+        return file_path
+        
+    except httpx.RequestError as e:
+        raise Exception(f"下載 PDF 檔案失敗: {str(e)}")
+    except httpx.HTTPStatusError as e:
+        raise Exception(f"HTTP 錯誤 {e.response.status_code}: 無法下載 PDF 檔案")
+    except Exception as e:
+        raise Exception(f"處理 PDF 檔案失敗: {str(e)}")
+
+async def _upload_pdf_files(pdf_inputs) -> List[Any]:
+    """處理 PDF 檔案上傳（異步版本）
+    
+    Args:
+        pdf_inputs: PDF 輸入（URL、本地路徑或列表）
+        
+    Returns:
+        list: 上傳後的檔案物件列表
+    """
+    uploaded_files = []
+    temp_files = []
+    
+    try:
+        # 統一處理為列表
+        if not isinstance(pdf_inputs, list):
+            pdf_inputs = [pdf_inputs]
+        
+        # 並行處理：先下載並準備所有 PDF 檔案
+        for i, pdf_input in enumerate(pdf_inputs):
+            logger.info(f"正在處理 PDF {i+1}/{len(pdf_inputs)}")
+            
+            # 下載並處理 PDF（保持同步，因為涉及檔案系統操作）
+            local_pdf_path = _download_and_process_pdf(pdf_input)
+            temp_files.append(local_pdf_path)
+        
+        # 使用 asyncio.to_thread() 並行上傳所有 PDF 檔案
+        async def upload_single_pdf(pdf_path, index):
+            """上傳單個 PDF 檔案的異步包裝函數"""
+            try:
+                # 將同步的上傳操作轉為異步
+                uploaded_file = await asyncio.to_thread(client.files.upload, file=pdf_path)
+                logger.info(f"PDF {index+1} 已成功上傳到 Gemini Files API")
+                return uploaded_file
+            except Exception as e:
+                logger.error(f"PDF {index+1} 上傳失敗: {str(e)}")
+                raise
+        
+        # 並行上傳所有 PDF 檔案
+        upload_tasks = [
+            upload_single_pdf(pdf_path, i)
+            for i, pdf_path in enumerate(temp_files)
+        ]
+        
+        # 等待所有上傳完成
+        uploaded_files = await asyncio.gather(*upload_tasks)
+        logger.info(f"所有 PDF 檔案已並行上傳完成，共 {len(uploaded_files)} 個")
+            
+    except Exception as e:
+        logger.error(f"PDF 上傳失敗: {str(e)}")
+        raise
+    finally:
+        # 清理暫存檔案（如果是下載的）
+        import os
+        for temp_path in temp_files:
+            try:
+                # 只清理暫存目錄中的檔案，避免誤刪用戶檔案
+                if str(temp_path).startswith(tempfile.gettempdir()):
+                    os.unlink(temp_path)
+                    logger.debug(f"已清理暫存 PDF 檔案: {temp_path}")
+            except Exception as cleanup_error:
+                logger.warning(f"清理暫存 PDF 檔案失敗: {cleanup_error}")
+    
+    return uploaded_files
+
 def _save_media_to_temp_file(media_data, media_type, index=0):
     """將媒體資料儲存到臨時檔案並返回檔案路徑
     
@@ -526,16 +646,20 @@ def _save_media_to_temp_file(media_data, media_type, index=0):
     else:
         raise ValueError(f"不支援的媒體類型: {media_type}")
 
-def _upload_media_files(media_inputs, media_type):
-    """統一處理多媒體檔案上傳
+async def _upload_media_files(media_inputs, media_type):
+    """統一處理多媒體檔案上傳（異步版本）
     
     Args:
         media_inputs: 媒體輸入（單個物件或列表）
-        media_type: 媒體類型 ('image', 'audio', 'video')
+        media_type: 媒體類型 ('image', 'audio', 'video', 'pdf')
         
     Returns:
         list: 上傳後的檔案物件列表
     """
+    # PDF 檔案使用專用的處理函數
+    if media_type == 'pdf':
+        return await _upload_pdf_files(media_inputs)
+    
     uploaded_files = []
     temp_files = []
     
@@ -544,17 +668,33 @@ def _upload_media_files(media_inputs, media_type):
         if not isinstance(media_inputs, list):
             media_inputs = [media_inputs]
         
+        # 並行處理：先創建所有臨時檔案
         for i, media_data in enumerate(media_inputs):
-            # 儲存到臨時檔案
             temp_path = _save_media_to_temp_file(media_data, media_type, i)
             temp_files.append(temp_path)
-            
-            # 上傳到 Gemini Files API
-            uploaded_file = client.files.upload(file=temp_path)
-            uploaded_files.append(uploaded_file)
-            
-            logger.info(f"已上傳{media_type} {i+1} 到 Gemini Files API")
-            
+        
+        # 使用 asyncio.to_thread() 並行上傳所有檔案
+        async def upload_single_file(temp_path, index):
+            """上傳單個檔案的異步包裝函數"""
+            try:
+                # 將同步的上傳操作轉為異步
+                uploaded_file = await asyncio.to_thread(client.files.upload, file=temp_path)
+                logger.info(f"已上傳{media_type} {index+1} 到 Gemini Files API")
+                return uploaded_file
+            except Exception as e:
+                logger.error(f"{media_type} {index+1} 上傳失敗: {str(e)}")
+                raise
+        
+        # 並行上傳所有檔案
+        upload_tasks = [
+            upload_single_file(temp_path, i)
+            for i, temp_path in enumerate(temp_files)
+        ]
+        
+        # 等待所有上傳完成
+        uploaded_files = await asyncio.gather(*upload_tasks)
+        logger.info(f"所有 {media_type} 檔案已並行上傳完成，共 {len(uploaded_files)} 個")
+        
     except Exception as e:
         logger.error(f"{media_type}上傳失敗: {str(e)}")
         raise
@@ -569,7 +709,7 @@ def _upload_media_files(media_inputs, media_type):
     
     return uploaded_files
 
-async def _build_conversation_contents(inst, dialogue_history=None, image_input=None, audio_input=None, video_input=None):
+async def _build_conversation_contents(inst, dialogue_history=None, image_input=None, audio_input=None, video_input=None, pdf_input=None):
     """建構符合官方規範的對話內容結構。
     
     根據 Gemini API 官方文檔建議，使用結構化的對話格式：
@@ -580,8 +720,9 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
         inst: 當前用戶輸入
         dialogue_history: 對話歷史
         image_input: 圖片輸入
-        audio_input: 音頻輸入  
+        audio_input: 音頻輸入
         video_input: 視頻輸入
+        pdf_input: PDF 檔案輸入
         
     Returns:
         list: 符合官方格式的對話內容列表
@@ -629,12 +770,25 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
     current_parts = []
     
     # 處理多媒體輸入 - 使用統一的處理方式
-    # 按優先級處理多媒體（影片 > 音訊 > 圖片）
-    if video_input:
+    # 按優先級處理多媒體（PDF > 影片 > 音訊 > 圖片）
+    if pdf_input:
         current_parts.append({"text": inst})
         try:
             # 使用統一的多媒體處理函數
-            uploaded_videos = _upload_media_files(video_input, 'video')
+            uploaded_pdfs = await _upload_media_files(pdf_input, 'pdf')
+            for uploaded_pdf in uploaded_pdfs:
+                current_parts.append(uploaded_pdf)
+            logger.info("PDF 檔案已添加到對話內容中")
+        except Exception as e:
+            logger.error(f"PDF 處理失敗，使用降級方案: {str(e)}")
+            # 降級：修改文字提示
+            current_parts[0] = {"text": f"{inst}\n\n注意: PDF 處理發生錯誤，無法直接分析 PDF 內容"}
+            
+    elif video_input:
+        current_parts.append({"text": inst})
+        try:
+            # 使用統一的多媒體處理函數
+            uploaded_videos = await _upload_media_files(video_input, 'video')
             for uploaded_video in uploaded_videos:
                 current_parts.append(uploaded_video)
             logger.info("影片已添加到對話內容中")
@@ -647,7 +801,7 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
         current_parts.append({"text": f"請分析這個音訊檔案: {inst}"})
         try:
             # 使用統一的多媒體處理函數
-            uploaded_audios = _upload_media_files(audio_input, 'audio')
+            uploaded_audios = await _upload_media_files(audio_input, 'audio')
             for uploaded_audio in uploaded_audios:
                 current_parts.append(uploaded_audio)
             logger.info("音訊已添加到對話內容中")
@@ -659,7 +813,7 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
         current_parts.append({"text": inst})
         try:
             # 使用統一的多媒體處理函數
-            uploaded_images = _upload_media_files(image_input, 'image')
+            uploaded_images = await _upload_media_files(image_input, 'image')
             for uploaded_image in uploaded_images:
                 current_parts.append(uploaded_image)
             logger.info("圖片已添加到對話內容中")
@@ -693,7 +847,7 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
     
     return contents
 
-async def generate_response_with_cache(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None, use_cache=True, cache_ttl="3600s"):
+async def generate_response_with_cache(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None, pdf_input=None, use_cache=True, cache_ttl="3600s"):
     """帶快取功能的 Gemini API 回應生成器
     
     主要功能:
@@ -709,6 +863,7 @@ async def generate_response_with_cache(inst, system_prompt, dialogue_history=Non
         image_input: 圖片輸入
         audio_input: 音頻輸入
         video_input: 視頻輸入
+        pdf_input: PDF 檔案輸入（URL 或本地路徑）
         use_cache: 是否使用快取（預設啟用）
         cache_ttl: 快取存留時間（預設1小時）
         
@@ -723,21 +878,32 @@ async def generate_response_with_cache(inst, system_prompt, dialogue_history=Non
         contents = []
         media_files = []
         
-        # 按優先級處理多媒體（影片 > 音訊 > 圖片）
-        if video_input:
+        # 按優先級處理多媒體（PDF > 影片 > 音訊 > 圖片）
+        if pdf_input:
             try:
-                uploaded_videos = _upload_media_files(video_input, 'video')
+                uploaded_pdfs = await _upload_media_files(pdf_input, 'pdf')
+                media_files.extend(uploaded_pdfs)
+                contents.append(inst)
+                contents.extend(uploaded_pdfs)
+                logger.info("PDF 上傳成功，使用官方 Files API")
+            except Exception as e:
+                logger.error(f"PDF 上傳失敗，降級處理: {str(e)}")
+                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
+        
+        elif video_input:
+            try:
+                uploaded_videos = await _upload_media_files(video_input, 'video')
                 media_files.extend(uploaded_videos)
                 contents.append(inst)
                 contents.extend(uploaded_videos)
                 logger.info("影片上傳成功，使用官方 Files API")
             except Exception as e:
                 logger.error(f"影片上傳失敗，降級處理: {str(e)}")
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input)
+                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
         
         elif audio_input:
             try:
-                uploaded_audios = _upload_media_files(audio_input, 'audio')
+                uploaded_audios = await _upload_media_files(audio_input, 'audio')
                 media_files.extend(uploaded_audios)
                 contents.append("請分析這個音訊檔案: " + inst)
                 contents.extend(uploaded_audios)
@@ -748,19 +914,19 @@ async def generate_response_with_cache(inst, system_prompt, dialogue_history=Non
         
         elif image_input:
             try:
-                uploaded_images = _upload_media_files(image_input, 'image')
+                uploaded_images = await _upload_media_files(image_input, 'image')
                 media_files.extend(uploaded_images)
                 contents.append(inst)
                 contents.extend(uploaded_images)
                 logger.info("圖片上傳成功，使用官方 Files API")
             except Exception as e:
                 logger.error(f"圖片上傳失敗，降級處理: {str(e)}")
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input)
+                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
         
         # 純文字輸入
         else:
             if dialogue_history:
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input)
+                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
             else:
                 contents.append(inst)
         
@@ -900,7 +1066,7 @@ async def generate_response_with_cache(inst, system_prompt, dialogue_history=Non
     except Exception as e:
         raise GeminiError(f"Gemini API 初始化錯誤: {str(e)}")
 
-async def generate_response(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None):
+async def generate_response(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None, pdf_input=None):
     """根據 Gemini API 官方最佳實踐生成回應。
     
     主要改進:
@@ -908,14 +1074,16 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
     2. 採用官方推薦的 client.files.upload() 處理多媒體檔案
     3. 使用簡化的 contents 格式，符合官方範例
     4. 遵循 Google Code Style Guide
+    5. 支援 PDF 檔案處理
     
     Args:
         inst: 用戶輸入訊息
         system_prompt: 系統提示詞（將使用 system_instruction 參數）
         dialogue_history: 多輪對話歷史列表
         image_input: 圖片輸入（支援單張或多張圖片）
-        audio_input: 音頻輸入（目前不支援）
+        audio_input: 音頻輸入
         video_input: 視頻輸入
+        pdf_input: PDF 檔案輸入（URL 或本地路徑）
         
     Returns:
         tuple: (None, async_generator) 用於流式回應
@@ -927,10 +1095,22 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
         # 統一處理多媒體輸入
         media_files = []
         
-        # 按優先級處理多媒體（影片 > 音訊 > 圖片）
-        if video_input:
+        # 按優先級處理多媒體（PDF > 影片 > 音訊 > 圖片）
+        if pdf_input:
             try:
-                uploaded_videos = _upload_media_files(video_input, 'video')
+                uploaded_pdfs = await _upload_media_files(pdf_input, 'pdf')
+                media_files.extend(uploaded_pdfs)
+                contents.append(inst)
+                contents.extend(uploaded_pdfs)
+                logger.info("PDF 上傳成功，使用官方 Files API")
+            except Exception as e:
+                logger.error(f"PDF 上傳失敗，降級處理: {str(e)}")
+                # 降級到結構化內容格式
+                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
+        
+        elif video_input:
+            try:
+                uploaded_videos = await _upload_media_files(video_input, 'video')
                 media_files.extend(uploaded_videos)
                 contents.append(inst)
                 contents.extend(uploaded_videos)
@@ -938,11 +1118,11 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
             except Exception as e:
                 logger.error(f"影片上傳失敗，降級處理: {str(e)}")
                 # 降級到結構化內容格式
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input)
+                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
         
         elif audio_input:
             try:
-                uploaded_audios = _upload_media_files(audio_input, 'audio')
+                uploaded_audios = await _upload_media_files(audio_input, 'audio')
                 media_files.extend(uploaded_audios)
                 contents.append("請分析這個音訊檔案: " + inst)
                 contents.extend(uploaded_audios)
@@ -953,7 +1133,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
         
         elif image_input:
             try:
-                uploaded_images = _upload_media_files(image_input, 'image')
+                uploaded_images = await _upload_media_files(image_input, 'image')
                 media_files.extend(uploaded_images)
                 contents.append(inst)
                 contents.extend(uploaded_images)
@@ -961,13 +1141,13 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
             except Exception as e:
                 logger.error(f"圖片上傳失敗，降級處理: {str(e)}")
                 # 降級到結構化內容格式
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input)
+                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
         
         # 純文字輸入
         else:
             # 如果有對話歷史，需要使用結構化格式
             if dialogue_history:
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input)
+                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
             else:
                 contents.append(inst)
         
