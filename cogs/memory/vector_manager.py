@@ -10,6 +10,8 @@ import os
 import pickle
 import threading
 import time
+import tempfile
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -17,7 +19,7 @@ import faiss
 import numpy as np
 
 from .config import MemoryProfile
-from .exceptions import VectorOperationError
+from .exceptions import VectorOperationError, IndexIntegrityError
 from .startup_logger import get_startup_logger
 
 # 嘗試導入 GPU 記憶體監控模組
@@ -304,6 +306,7 @@ class VectorIndex:
         self._reverse_id_map: Dict[str, int] = {}  # 實際 ID -> FAISS ID 映射
         self._next_id = 0
         self._gpu_fallback_warned = False  # GPU 降級警告標記
+        self._needs_mapping_rebuild = False  # 標記是否需要重建映射
         self.logger = logging.getLogger(__name__)
     
     def _create_index(self) -> faiss.Index:
@@ -600,24 +603,49 @@ class VectorIndex:
                 self.logger.warning("搜尋數量無效")
                 return [], []
             
+            # 執行完整性檢查
+            integrity_issues = self._check_index_integrity()
+            if integrity_issues:
+                self.logger.warning(f"檢測到索引完整性問題: {integrity_issues}")
+                # 嘗試自動修復
+                if self._attempt_auto_repair():
+                    self.logger.info("索引完整性問題已自動修復")
+                    # 重新獲取索引
+                    index = self.get_index()
+                else:
+                    self.logger.error("索引完整性問題修復失敗")
+            
             self.logger.debug(
                 f"開始向量搜尋: 查詢維度={query_vector.shape}, "
-                f"索引向量數={index.ntotal}, k={search_k}"
+                f"索引向量數={index.ntotal}, k={search_k}, "
+                f"映射數量={len(self._id_map)}"
             )
             
             # 執行搜尋
             distances, indices = index.search(query_vector, search_k)
             
-            # 轉換結果
+            # 轉換結果並處理缺失映射
             result_distances = []
             result_ids = []
+            missing_mappings = []
             
             for dist, idx in zip(distances[0], indices[0]):
-                if idx != -1 and idx in self._id_map:  # -1 表示無效結果
+                if idx == -1:  # 無效結果
+                    continue
+                elif idx in self._id_map:
                     result_distances.append(float(dist))
                     result_ids.append(self._id_map[idx])
-                elif idx != -1:
-                    self.logger.warning(f"找到向量索引 {idx} 但無對應的 ID 映射")
+                else:
+                    # 記錄缺失的映射用於診斷
+                    missing_mappings.append(idx)
+                    self.logger.warning(
+                        f"找到向量索引 {idx} 但無對應的 ID 映射，"
+                        f"索引向量總數: {index.ntotal}, 映射總數: {len(self._id_map)}"
+                    )
+            
+            # 如果有大量缺失映射，記錄詳細診斷資訊
+            if missing_mappings:
+                self._log_mapping_diagnostics(missing_mappings, index)
             
             self.logger.debug(f"向量搜尋完成，返回 {len(result_ids)} 個結果")
             return result_distances, result_ids
@@ -630,7 +658,8 @@ class VectorIndex:
                 "index_ntotal": getattr(index, 'ntotal', 'unknown') if 'index' in locals() else 'not_created',
                 "index_dimension": getattr(index, 'd', 'unknown') if 'index' in locals() else 'not_created',
                 "expected_dimension": self.dimension,
-                "id_map_size": len(self._id_map)
+                "id_map_size": len(self._id_map),
+                "reverse_map_size": len(self._reverse_id_map)
             }
             self.logger.error(f"向量搜尋失敗: {error_details}")
             return [], []
@@ -652,7 +681,7 @@ class VectorIndex:
         }
     
     def save(self, file_path: Path) -> bool:
-        """儲存索引到檔案
+        """儲存索引到檔案（原子性操作）
         
         Args:
             file_path: 儲存路徑
@@ -679,48 +708,231 @@ class VectorIndex:
                 # 使用 CPU 索引
                 index_to_save = self._index
             
-            if index_to_save is not None:
-                # 儲存 FAISS 索引
-                faiss.write_index(index_to_save, str(file_path))
-                
-                # 儲存 ID 映射
-                mapping_path = file_path.with_suffix('.mapping')
-                with open(mapping_path, 'wb') as f:
-                    pickle.dump({
-                        'id_map': self._id_map,
-                        'reverse_id_map': self._reverse_id_map,
-                        'next_id': self._next_id,
-                        'dimension': self.dimension,
-                        'index_type': self.index_type,
-                        'metric': self.metric
-                    }, f)
-                
-                # 驗證儲存的檔案大小
-                file_size = file_path.stat().st_size
-                vector_count = index_to_save.ntotal
-                self.logger.info(
-                    f"索引已儲存到: {file_path} "
-                    f"(檔案大小: {file_size} bytes, 向量數量: {vector_count})"
-                )
-                
-                # 檢查是否為空索引
-                if file_size <= 45 and vector_count > 0:
-                    self.logger.error(
-                        f"警告：索引檔案大小異常小 ({file_size} bytes)，"
-                        f"但索引包含 {vector_count} 個向量"
-                    )
-                
-                return True
+            if index_to_save is None:
+                self.logger.error("沒有可用的索引進行儲存")
+                return False
             
-            self.logger.error("沒有可用的索引進行儲存")
-            return False
+            # 使用原子性操作儲存檔案
+            return self._atomic_save(file_path, index_to_save)
             
         except Exception as e:
             self.logger.error(f"儲存索引失敗: {e}")
             return False
     
+    def _atomic_save(self, file_path: Path, index: faiss.Index) -> bool:
+        """原子性儲存索引和映射檔案
+        
+        Args:
+            file_path: 目標檔案路徑
+            index: 要儲存的索引
+            
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            # 使用臨時檔案進行原子性寫入
+            with tempfile.TemporaryDirectory(prefix="vector_save_") as temp_dir:
+                temp_dir_path = Path(temp_dir)
+                
+                # 臨時檔案路徑
+                temp_index_path = temp_dir_path / f"{file_path.name}.tmp"
+                temp_mapping_path = temp_dir_path / f"{file_path.name}.mapping.tmp"
+                
+                # 儲存索引到臨時檔案
+                self.logger.debug(f"儲存索引到臨時檔案: {temp_index_path}")
+                faiss.write_index(index, str(temp_index_path))
+                
+                # 儲存映射到臨時檔案
+                mapping_data = {
+                    'id_map': self._id_map,
+                    'reverse_id_map': self._reverse_id_map,
+                    'next_id': self._next_id,
+                    'dimension': self.dimension,
+                    'index_type': self.index_type,
+                    'metric': self.metric,
+                    'timestamp': time.time(),  # 添加時間戳
+                    'checksum': self._calculate_mapping_checksum()  # 添加校驗和
+                }
+                
+                self.logger.debug(f"儲存映射到臨時檔案: {temp_mapping_path}")
+                with open(temp_mapping_path, 'wb') as f:
+                    pickle.dump(mapping_data, f)
+                
+                # 驗證臨時檔案
+                if not self._validate_saved_files(temp_index_path, temp_mapping_path, index):
+                    self.logger.error("臨時檔案驗證失敗")
+                    return False
+                
+                # 原子性移動檔案到最終位置
+                final_mapping_path = file_path.with_suffix('.mapping')
+                
+                # 如果目標檔案存在，先備份
+                backup_paths = []
+                if file_path.exists():
+                    backup_index = file_path.with_suffix(f'.backup_{int(time.time())}')
+                    shutil.move(str(file_path), str(backup_index))
+                    backup_paths.append(backup_index)
+                    self.logger.debug(f"備份舊索引檔案: {backup_index}")
+                
+                if final_mapping_path.exists():
+                    backup_mapping = final_mapping_path.with_suffix(f'.backup_{int(time.time())}')
+                    shutil.move(str(final_mapping_path), str(backup_mapping))
+                    backup_paths.append(backup_mapping)
+                    self.logger.debug(f"備份舊映射檔案: {backup_mapping}")
+                
+                try:
+                    # 原子性移動檔案
+                    shutil.move(str(temp_index_path), str(file_path))
+                    shutil.move(str(temp_mapping_path), str(final_mapping_path))
+                    
+                    # 驗證最終檔案
+                    file_size = file_path.stat().st_size
+                    vector_count = index.ntotal
+                    mapping_size = len(self._id_map)
+                    
+                    self.logger.info(
+                        f"索引已原子性儲存到: {file_path} "
+                        f"(檔案大小: {file_size} bytes, 向量數量: {vector_count}, 映射數量: {mapping_size})"
+                    )
+                    
+                    # 檢查檔案完整性
+                    if file_size <= 45 and vector_count > 0:
+                        self.logger.warning(
+                            f"索引檔案大小異常小 ({file_size} bytes)，"
+                            f"但索引包含 {vector_count} 個向量"
+                        )
+                    
+                    # 清理備份檔案（保留最近的幾個）
+                    self._cleanup_old_backups(file_path, max_backups=3)
+                    
+                    return True
+                    
+                except Exception as e:
+                    # 恢復備份檔案
+                    self.logger.error(f"原子性移動失敗，恢復備份: {e}")
+                    for backup_path in backup_paths:
+                        if backup_path.name.endswith('.backup_' + str(int(time.time()))):
+                            if 'mapping' in backup_path.name:
+                                shutil.move(str(backup_path), str(final_mapping_path))
+                            else:
+                                shutil.move(str(backup_path), str(file_path))
+                    raise
+                    
+        except Exception as e:
+            self.logger.error(f"原子性儲存失敗: {e}")
+            return False
+    
+    def _calculate_mapping_checksum(self) -> str:
+        """計算映射資料的校驗和
+        
+        Returns:
+            str: 校驗和字串
+        """
+        try:
+            import hashlib
+            
+            # 建立可重現的字串表示
+            data_str = f"{len(self._id_map)},{len(self._reverse_id_map)},{self._next_id}"
+            
+            # 添加映射內容的摘要
+            if self._id_map:
+                sorted_items = sorted(self._id_map.items())
+                for faiss_id, real_id in sorted_items[:10]:  # 只取前10個避免過大
+                    data_str += f",{faiss_id}:{real_id}"
+            
+            return hashlib.md5(data_str.encode()).hexdigest()
+            
+        except Exception as e:
+            self.logger.warning(f"計算校驗和失敗: {e}")
+            return "unknown"
+    
+    def _validate_saved_files(self, index_path: Path, mapping_path: Path, original_index: faiss.Index) -> bool:
+        """驗證儲存的檔案
+        
+        Args:
+            index_path: 索引檔案路徑
+            mapping_path: 映射檔案路徑
+            original_index: 原始索引
+            
+        Returns:
+            bool: 是否驗證通過
+        """
+        try:
+            # 檢查檔案是否存在
+            if not index_path.exists() or not mapping_path.exists():
+                self.logger.error("儲存的檔案不存在")
+                return False
+            
+            # 檢查索引檔案大小
+            index_size = index_path.stat().st_size
+            if index_size == 0:
+                self.logger.error("索引檔案為空")
+                return False
+            
+            # 嘗試載入索引進行驗證
+            try:
+                test_index = faiss.read_index(str(index_path))
+                if test_index.ntotal != original_index.ntotal:
+                    self.logger.error(f"索引大小不匹配: 期望 {original_index.ntotal}, 實際 {test_index.ntotal}")
+                    return False
+            except Exception as e:
+                self.logger.error(f"無法載入儲存的索引進行驗證: {e}")
+                return False
+            
+            # 檢查映射檔案
+            try:
+                with open(mapping_path, 'rb') as f:
+                    mapping_data = pickle.load(f)
+                
+                required_keys = ['id_map', 'reverse_id_map', 'next_id']
+                for key in required_keys:
+                    if key not in mapping_data:
+                        self.logger.error(f"映射檔案缺少必要鍵: {key}")
+                        return False
+                
+                # 驗證映射大小
+                if len(mapping_data['id_map']) != len(self._id_map):
+                    self.logger.error("映射大小不匹配")
+                    return False
+                    
+            except Exception as e:
+                self.logger.error(f"無法載入儲存的映射進行驗證: {e}")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"檔案驗證過程中發生錯誤: {e}")
+            return False
+    
+    def _cleanup_old_backups(self, file_path: Path, max_backups: int = 3) -> None:
+        """清理舊的備份檔案
+        
+        Args:
+            file_path: 主檔案路徑
+            max_backups: 保留的最大備份數量
+        """
+        try:
+            # 尋找備份檔案
+            backup_pattern = f"{file_path.stem}.backup_*"
+            backup_files = list(file_path.parent.glob(backup_pattern))
+            
+            # 按修改時間排序（最新的在前）
+            backup_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+            
+            # 刪除超過限制的舊備份
+            for old_backup in backup_files[max_backups:]:
+                try:
+                    old_backup.unlink()
+                    self.logger.debug(f"已刪除舊備份: {old_backup}")
+                except Exception as e:
+                    self.logger.warning(f"刪除舊備份失敗: {old_backup}, {e}")
+                    
+        except Exception as e:
+            self.logger.warning(f"清理舊備份時發生錯誤: {e}")
+    
     def load(self, file_path: Path) -> bool:
-        """從檔案載入索引
+        """從檔案載入索引（帶完整性檢查）
         
         Args:
             file_path: 索引檔案路徑
@@ -730,19 +942,106 @@ class VectorIndex:
         """
         try:
             if not file_path.exists():
+                self.logger.warning(f"索引檔案不存在: {file_path}")
                 return False
             
+            # 載入前先記錄狀態
+            self.logger.info(f"開始載入索引檔案: {file_path}")
+            
             # 載入 FAISS 索引
-            self._index = faiss.read_index(str(file_path))
+            temp_index = faiss.read_index(str(file_path))
             
             # 載入 ID 映射
             mapping_path = file_path.with_suffix('.mapping')
+            temp_id_map = {}
+            temp_reverse_id_map = {}
+            temp_next_id = 0
+            mapping_checksum = None
+            
             if mapping_path.exists():
-                with open(mapping_path, 'rb') as f:
-                    data = pickle.load(f)
-                    self._id_map = data['id_map']
-                    self._reverse_id_map = data['reverse_id_map']
-                    self._next_id = data['next_id']
+                self.logger.debug(f"載入映射檔案: {mapping_path}")
+                try:
+                    with open(mapping_path, 'rb') as f:
+                        data = pickle.load(f)
+                        temp_id_map = data.get('id_map', {})
+                        temp_reverse_id_map = data.get('reverse_id_map', {})
+                        temp_next_id = data.get('next_id', 0)
+                        mapping_checksum = data.get('checksum')
+                        
+                        # 檢查維度相容性
+                        if 'dimension' in data and data['dimension'] != self.dimension:
+                            self.logger.warning(
+                                f"映射檔案維度({data['dimension']})與當前配置({self.dimension})不匹配"
+                            )
+                except Exception as e:
+                    self.logger.error(f"載入映射檔案失敗: {e}")
+                    # 繼續載入但使用空映射
+                    temp_id_map = {}
+                    temp_reverse_id_map = {}
+                    temp_next_id = 0
+            else:
+                self.logger.warning(f"映射檔案不存在: {mapping_path}")
+            
+            # 執行載入前的完整性檢查
+            load_validation_result = self._validate_loaded_data(
+                temp_index, temp_id_map, temp_reverse_id_map, temp_next_id, mapping_checksum
+            )
+            
+            if not load_validation_result['valid']:
+                self.logger.warning(f"載入檔案完整性檢查失敗: {load_validation_result['issues']}")
+                
+                # 嘗試自動修復
+                if load_validation_result['repairable']:
+                    self.logger.info("嘗試自動修復載入的資料")
+                    repaired_data = self._repair_loaded_data(
+                        temp_index, temp_id_map, temp_reverse_id_map, temp_next_id
+                    )
+                    if repaired_data:
+                        temp_id_map = repaired_data['id_map']
+                        temp_reverse_id_map = repaired_data['reverse_id_map']
+                        temp_next_id = repaired_data['next_id']
+                        self.logger.info("載入資料自動修復成功")
+                    else:
+                        self.logger.error("載入資料自動修復失敗")
+                        return False
+                else:
+                    self.logger.error("載入資料無法自動修復，建議重建索引")
+                    return False
+            
+            # 將載入的資料設定到實例
+            self._index = temp_index
+            self._id_map = temp_id_map
+            self._reverse_id_map = temp_reverse_id_map
+            self._next_id = temp_next_id
+            
+            # 檢查是否使用了佔位符映射
+            placeholder_count = sum(1 for real_id in self._reverse_id_map.keys()
+                                  if real_id.startswith('missing_'))
+            
+            if placeholder_count > 0:
+                self.logger.warning(f"檢測到 {placeholder_count} 個佔位符映射，嘗試從資料庫重建真實映射")
+                # 這裡我們需要知道頻道 ID 來重建映射，但在 VectorIndex 層級我們沒有這個資訊
+                # 所以我們標記這個索引需要後續重建
+                self._needs_mapping_rebuild = True
+            
+            # 執行載入後的完整性檢查
+            post_load_issues = self._check_index_integrity()
+            if post_load_issues:
+                self.logger.warning(f"載入後檢測到完整性問題: {post_load_issues}")
+                
+                # 嘗試自動修復
+                if self._attempt_auto_repair():
+                    self.logger.info("載入後完整性問題已自動修復")
+                else:
+                    self.logger.warning("載入後完整性問題修復失敗，但繼續使用")
+            
+            # 記錄載入結果
+            index_size = self._index.ntotal if self._index else 0
+            mapping_size = len(self._id_map)
+            self.logger.info(
+                f"索引載入完成 - 向量數量: {index_size}, 映射數量: {mapping_size}, "
+                f"完整性: {'正常' if not post_load_issues else '有問題但已處理'}"
+            )
             
             # 嘗試移至 GPU（使用優化的記憶體管理）
             if self.use_gpu and faiss.get_num_gpus() > 0:
@@ -752,7 +1051,230 @@ class VectorIndex:
             
         except Exception as e:
             self.logger.error(f"載入索引失敗: {e}")
+            # 清理可能部分載入的資料
+            self._index = None
+            self._gpu_index = None
+            self._id_map.clear()
+            self._reverse_id_map.clear()
+            self._next_id = 0
             return False
+    
+    def _validate_loaded_data(
+        self,
+        index: faiss.Index,
+        id_map: Dict[int, str],
+        reverse_id_map: Dict[str, int],
+        next_id: int,
+        checksum: Optional[str]
+    ) -> Dict[str, any]:
+        """驗證載入的資料完整性
+        
+        Args:
+            index: 載入的索引
+            id_map: 載入的 ID 映射
+            reverse_id_map: 載入的反向映射
+            next_id: 載入的下一個 ID
+            checksum: 載入的校驗和
+            
+        Returns:
+            Dict[str, any]: 驗證結果
+        """
+        result = {
+            'valid': True,
+            'issues': [],
+            'repairable': True
+        }
+        
+        try:
+            # 檢查索引基本屬性
+            if not hasattr(index, 'ntotal'):
+                result['issues'].append("索引缺少 ntotal 屬性")
+                result['valid'] = False
+                result['repairable'] = False
+                return result
+            
+            # 檢查維度匹配
+            if hasattr(index, 'd') and index.d != self.dimension:
+                result['issues'].append(f"索引維度不匹配: 期望 {self.dimension}, 實際 {index.d}")
+                result['valid'] = False
+                result['repairable'] = False
+                return result
+            
+            index_size = index.ntotal
+            mapping_size = len(id_map)
+            reverse_mapping_size = len(reverse_id_map)
+            
+            # 檢查大小匹配
+            if index_size != mapping_size:
+                result['issues'].append(f"索引大小({index_size})與映射數量({mapping_size})不匹配")
+                result['valid'] = False
+                # 這種情況可以嘗試修復
+            
+            if mapping_size != reverse_mapping_size:
+                result['issues'].append(f"正向映射({mapping_size})與反向映射({reverse_mapping_size})不匹配")
+                result['valid'] = False
+                # 這種情況可以嘗試修復
+            
+            # 檢查映射完整性
+            mapping_issues = 0
+            for faiss_id, real_id in id_map.items():
+                if real_id not in reverse_id_map:
+                    mapping_issues += 1
+                elif reverse_id_map[real_id] != faiss_id:
+                    mapping_issues += 1
+                
+                # 不檢查所有映射，避免載入時間過長
+                if mapping_issues > 10:
+                    break
+            
+            if mapping_issues > 0:
+                result['issues'].append(f"檢測到 {mapping_issues}+ 個映射不一致問題")
+                result['valid'] = False
+            
+            # 檢查 next_id 合理性
+            if id_map and next_id <= max(id_map.keys()):
+                result['issues'].append(f"next_id({next_id})不合理")
+                result['valid'] = False
+            
+            # 驗證校驗和（如果有）
+            if checksum and checksum != "unknown":
+                current_checksum = self._calculate_temp_checksum(id_map, reverse_id_map, next_id)
+                if current_checksum != checksum:
+                    result['issues'].append("映射校驗和不匹配")
+                    result['valid'] = False
+            
+        except Exception as e:
+            result['issues'].append(f"驗證過程中發生錯誤: {e}")
+            result['valid'] = False
+            result['repairable'] = False
+        
+        return result
+    
+    def _calculate_temp_checksum(self, id_map: Dict[int, str], reverse_id_map: Dict[str, int], next_id: int) -> str:
+        """計算臨時映射資料的校驗和
+        
+        Args:
+            id_map: ID 映射
+            reverse_id_map: 反向映射
+            next_id: 下一個 ID
+            
+        Returns:
+            str: 校驗和
+        """
+        try:
+            import hashlib
+            
+            data_str = f"{len(id_map)},{len(reverse_id_map)},{next_id}"
+            
+            if id_map:
+                sorted_items = sorted(id_map.items())
+                for faiss_id, real_id in sorted_items[:10]:
+                    data_str += f",{faiss_id}:{real_id}"
+            
+            return hashlib.md5(data_str.encode()).hexdigest()
+            
+        except Exception:
+            return "unknown"
+    
+    def _repair_loaded_data(
+        self,
+        index: faiss.Index,
+        id_map: Dict[int, str],
+        reverse_id_map: Dict[str, int],
+        next_id: int
+    ) -> Optional[Dict[str, any]]:
+        """修復載入的資料
+        
+        Args:
+            index: 索引
+            id_map: ID 映射
+            reverse_id_map: 反向映射
+            next_id: 下一個 ID
+            
+        Returns:
+            Optional[Dict[str, any]]: 修復後的資料或 None
+        """
+        try:
+            index_size = index.ntotal
+            mapping_size = len(id_map)
+            
+            # 修復大小不匹配
+            if index_size != mapping_size:
+                if index_size > mapping_size:
+                    # 索引更大，嘗試重建映射
+                    if mapping_size == 0:
+                        # 映射完全遺失，創建佔位符映射
+                        self.logger.warning(f"映射完全遺失，為 {index_size} 個向量創建佔位符映射")
+                        new_id_map = {}
+                        new_reverse_map = {}
+                        
+                        # 創建佔位符 ID：使用時間戳和索引
+                        import time
+                        timestamp = int(time.time())
+                        
+                        for i in range(index_size):
+                            placeholder_id = f"missing_{timestamp}_{i}"
+                            new_id_map[i] = placeholder_id
+                            new_reverse_map[placeholder_id] = i
+                        
+                        id_map = new_id_map
+                        reverse_id_map = new_reverse_map
+                        
+                        self.logger.info(f"已創建 {len(new_id_map)} 個佔位符映射，索引可正常使用")
+                    else:
+                        # 部分映射遺失，保留現有映射但警告
+                        self.logger.warning(f"部分映射遺失：索引 {index_size} vs 映射 {mapping_size}")
+                        # 為缺失的索引項創建佔位符
+                        import time
+                        timestamp = int(time.time())
+                        
+                        # 找出已使用的 FAISS ID
+                        used_faiss_ids = set(id_map.keys())
+                        
+                        # 為缺失的 FAISS ID 創建佔位符
+                        for i in range(index_size):
+                            if i not in used_faiss_ids:
+                                placeholder_id = f"missing_{timestamp}_{i}"
+                                id_map[i] = placeholder_id
+                                reverse_id_map[placeholder_id] = i
+                        
+                        self.logger.info(f"已為 {index_size - mapping_size} 個缺失映射創建佔位符")
+                else:
+                    # 映射更大，清理多餘的映射
+                    sorted_ids = sorted(id_map.keys())
+                    valid_ids = sorted_ids[:index_size]
+                    
+                    new_id_map = {}
+                    new_reverse_map = {}
+                    
+                    for faiss_id in valid_ids:
+                        if faiss_id in id_map:
+                            real_id = id_map[faiss_id]
+                            new_id_map[faiss_id] = real_id
+                            new_reverse_map[real_id] = faiss_id
+                    
+                    id_map = new_id_map
+                    reverse_id_map = new_reverse_map
+                    
+                    self.logger.info(f"已清理多餘映射，保留 {len(new_id_map)} 個有效映射")
+            
+            # 修復映射不一致
+            corrected_reverse_map = {}
+            for faiss_id, real_id in id_map.items():
+                corrected_reverse_map[real_id] = faiss_id
+            
+            # 修復 next_id
+            corrected_next_id = max(id_map.keys()) + 1 if id_map else 0
+            
+            return {
+                'id_map': id_map,
+                'reverse_id_map': corrected_reverse_map,
+                'next_id': corrected_next_id
+            }
+            
+        except Exception as e:
+            self.logger.error(f"修復載入資料失敗: {e}")
+            return None
     
     def clear_gpu_resources(self) -> None:
         """清除 GPU 資源"""
@@ -769,6 +1291,367 @@ class VectorIndex:
             
         except Exception as e:
             self.logger.error(f"清除 GPU 資源失敗: {e}")
+    
+    def _check_index_integrity(self) -> List[str]:
+        """檢查索引與映射的完整性
+        
+        Returns:
+            List[str]: 發現的問題列表
+        """
+        issues = []
+        
+        try:
+            # 檢查索引是否存在
+            if self._index is None and self._gpu_index is None:
+                issues.append("索引物件不存在")
+                return issues
+            
+            # 獲取當前索引
+            current_index = self._gpu_index if self._gpu_index is not None else self._index
+            if current_index is None:
+                issues.append("無法獲取有效索引")
+                return issues
+            
+            # 檢查索引大小與映射數量是否匹配
+            index_size = current_index.ntotal
+            mapping_size = len(self._id_map)
+            reverse_mapping_size = len(self._reverse_id_map)
+            
+            if index_size != mapping_size:
+                issues.append(f"索引大小({index_size})與 ID 映射數量({mapping_size})不匹配")
+            
+            if mapping_size != reverse_mapping_size:
+                issues.append(f"正向映射({mapping_size})與反向映射({reverse_mapping_size})數量不匹配")
+            
+            # 檢查映射的 ID 範圍是否有效
+            if self._id_map:
+                max_faiss_id = max(self._id_map.keys())
+                if max_faiss_id >= index_size:
+                    issues.append(f"最大 FAISS ID({max_faiss_id})超出索引範圍({index_size})")
+            
+            # 檢查映射一致性
+            for faiss_id, real_id in self._id_map.items():
+                if real_id not in self._reverse_id_map:
+                    issues.append(f"正向映射 {faiss_id}->{real_id} 在反向映射中不存在")
+                elif self._reverse_id_map[real_id] != faiss_id:
+                    issues.append(f"映射不一致: {faiss_id}->{real_id}, 但反向映射為 {self._reverse_id_map[real_id]}")
+            
+            # 檢查 next_id 是否合理
+            if self._id_map and self._next_id <= max(self._id_map.keys()):
+                issues.append(f"next_id({self._next_id})小於等於最大現有 ID({max(self._id_map.keys())})")
+                
+        except Exception as e:
+            issues.append(f"完整性檢查過程中發生錯誤: {e}")
+        
+        return issues
+    
+    def _attempt_auto_repair(self) -> bool:
+        """嘗試自動修復索引映射不匹配問題
+        
+        Returns:
+            bool: 是否修復成功
+        """
+        try:
+            self.logger.info("開始自動修復索引映射問題")
+            
+            # 獲取當前索引
+            current_index = self._gpu_index if self._gpu_index is not None else self._index
+            if current_index is None:
+                self.logger.error("無法獲取索引進行修復")
+                return False
+            
+            index_size = current_index.ntotal
+            mapping_size = len(self._id_map)
+            
+            # 情況 1: 索引比映射大（可能是映射丟失）
+            if index_size > mapping_size:
+                self.logger.warning(f"索引大小({index_size})大於映射數量({mapping_size})，嘗試清理多餘索引")
+                return self._repair_oversized_index(current_index, mapping_size)
+            
+            # 情況 2: 映射比索引大（可能是索引部分丟失）
+            elif mapping_size > index_size:
+                self.logger.warning(f"映射數量({mapping_size})大於索引大小({index_size})，嘗試清理多餘映射")
+                return self._repair_oversized_mapping(index_size)
+            
+            # 情況 3: 大小相等但 ID 範圍不匹配
+            else:
+                self.logger.info("索引與映射大小相等，檢查 ID 範圍")
+                return self._repair_id_range_mismatch()
+                
+        except Exception as e:
+            self.logger.error(f"自動修復過程中發生錯誤: {e}")
+            return False
+    
+    def _repair_oversized_index(self, index: faiss.Index, target_size: int) -> bool:
+        """修復索引過大的問題
+        
+        Args:
+            index: 當前索引
+            target_size: 目標大小
+            
+        Returns:
+            bool: 是否修復成功
+        """
+        try:
+            # 如果映射為空，清空整個索引
+            if target_size == 0:
+                self.logger.info("映射為空，重建空索引")
+                self._index = self._create_index()
+                self._gpu_index = None
+                return True
+            
+            # 對於非空映射，重建索引（這需要原始向量資料）
+            self.logger.warning("無法直接修復過大索引，建議重新載入資料")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"修復過大索引失敗: {e}")
+            return False
+    
+    def _repair_oversized_mapping(self, target_size: int) -> bool:
+        """修復映射過大的問題
+        
+        Args:
+            target_size: 目標大小
+            
+        Returns:
+            bool: 是否修復成功
+        """
+        try:
+            if target_size == 0:
+                # 清空所有映射
+                self._id_map.clear()
+                self._reverse_id_map.clear()
+                self._next_id = 0
+                self.logger.info("已清空所有映射")
+                return True
+            
+            # 保留前 target_size 個映射
+            sorted_faiss_ids = sorted(self._id_map.keys())
+            valid_faiss_ids = sorted_faiss_ids[:target_size]
+            
+            # 重建映射
+            new_id_map = {}
+            new_reverse_map = {}
+            
+            for faiss_id in valid_faiss_ids:
+                if faiss_id in self._id_map:
+                    real_id = self._id_map[faiss_id]
+                    new_id_map[faiss_id] = real_id
+                    new_reverse_map[real_id] = faiss_id
+            
+            self._id_map = new_id_map
+            self._reverse_id_map = new_reverse_map
+            self._next_id = max(valid_faiss_ids) + 1 if valid_faiss_ids else 0
+            
+            self.logger.info(f"已修復映射，保留 {len(new_id_map)} 個有效映射")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"修復過大映射失敗: {e}")
+            return False
+    
+    def _repair_id_range_mismatch(self) -> bool:
+        """修復 ID 範圍不匹配的問題
+        
+        Returns:
+            bool: 是否修復成功
+        """
+        try:
+            if not self._id_map:
+                self._next_id = 0
+                return True
+            
+            # 重新整理 ID 範圍
+            max_id = max(self._id_map.keys())
+            self._next_id = max_id + 1
+            
+            # 檢查並修復映射一致性
+            fixed_mappings = 0
+            for faiss_id, real_id in list(self._id_map.items()):
+                if real_id not in self._reverse_id_map:
+                    self._reverse_id_map[real_id] = faiss_id
+                    fixed_mappings += 1
+                elif self._reverse_id_map[real_id] != faiss_id:
+                    # 移除不一致的映射
+                    del self._id_map[faiss_id]
+                    fixed_mappings += 1
+            
+            if fixed_mappings > 0:
+                self.logger.info(f"修復了 {fixed_mappings} 個映射不一致問題")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"修復 ID 範圍不匹配失敗: {e}")
+            return False
+    
+    def _log_mapping_diagnostics(self, missing_mappings: List[int], index: faiss.Index) -> None:
+        """記錄映射診斷資訊
+        
+        Args:
+            missing_mappings: 缺失的映射 ID 列表
+            index: 當前索引
+        """
+        try:
+            # 統計資訊
+            total_missing = len(missing_mappings)
+            index_size = index.ntotal
+            mapping_size = len(self._id_map)
+            
+            # 分析缺失模式
+            missing_range = f"{min(missing_mappings)}-{max(missing_mappings)}" if missing_mappings else "無"
+            
+            diagnostic_info = {
+                "缺失映射數量": total_missing,
+                "索引總大小": index_size,
+                "映射總數量": mapping_size,
+                "缺失映射範圍": missing_range,
+                "缺失比例": f"{(total_missing / index_size * 100):.1f}%" if index_size > 0 else "N/A",
+                "映射完整性": f"{((mapping_size - total_missing) / index_size * 100):.1f}%" if index_size > 0 else "N/A"
+            }
+            
+            self.logger.error(f"映射診斷報告: {diagnostic_info}")
+            
+            # 如果缺失比例過高，建議重建
+            if index_size > 0 and (total_missing / index_size) > 0.1:
+                self.logger.critical(
+                    f"映射缺失比例過高({total_missing}/{index_size} = "
+                    f"{(total_missing / index_size * 100):.1f}%)，強烈建議重建索引"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"記錄映射診斷資訊失敗: {e}")
+        try:
+            # 如果映射為空，清空整個索引
+            if target_size == 0:
+                self.logger.info("映射為空，重建空索引")
+                self._index = self._create_index()
+                self._gpu_index = None
+                return True
+            
+            # 對於非空映射，重建索引（這需要原始向量資料）
+            self.logger.warning("無法直接修復過大索引，建議重新載入資料")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"修復過大索引失敗: {e}")
+            return False
+    
+    def _repair_oversized_mapping(self, target_size: int) -> bool:
+        """修復映射過大的問題
+        
+        Args:
+            target_size: 目標大小
+            
+        Returns:
+            bool: 是否修復成功
+        """
+        try:
+            if target_size == 0:
+                # 清空所有映射
+                self._id_map.clear()
+                self._reverse_id_map.clear()
+                self._next_id = 0
+                self.logger.info("已清空所有映射")
+                return True
+            
+            # 保留前 target_size 個映射
+            sorted_faiss_ids = sorted(self._id_map.keys())
+            valid_faiss_ids = sorted_faiss_ids[:target_size]
+            
+            # 重建映射
+            new_id_map = {}
+            new_reverse_map = {}
+            
+            for faiss_id in valid_faiss_ids:
+                if faiss_id in self._id_map:
+                    real_id = self._id_map[faiss_id]
+                    new_id_map[faiss_id] = real_id
+                    new_reverse_map[real_id] = faiss_id
+            
+            self._id_map = new_id_map
+            self._reverse_id_map = new_reverse_map
+            self._next_id = max(valid_faiss_ids) + 1 if valid_faiss_ids else 0
+            
+            self.logger.info(f"已修復映射，保留 {len(new_id_map)} 個有效映射")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"修復過大映射失敗: {e}")
+            return False
+    
+    def _repair_id_range_mismatch(self) -> bool:
+        """修復 ID 範圍不匹配的問題
+        
+        Returns:
+            bool: 是否修復成功
+        """
+        try:
+            if not self._id_map:
+                self._next_id = 0
+                return True
+            
+            # 重新整理 ID 範圍
+            max_id = max(self._id_map.keys())
+            self._next_id = max_id + 1
+            
+            # 檢查並修復映射一致性
+            fixed_mappings = 0
+            for faiss_id, real_id in list(self._id_map.items()):
+                if real_id not in self._reverse_id_map:
+                    self._reverse_id_map[real_id] = faiss_id
+                    fixed_mappings += 1
+                elif self._reverse_id_map[real_id] != faiss_id:
+                    # 移除不一致的映射
+                    del self._id_map[faiss_id]
+                    fixed_mappings += 1
+            
+            if fixed_mappings > 0:
+                self.logger.info(f"修復了 {fixed_mappings} 個映射不一致問題")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"修復 ID 範圍不匹配失敗: {e}")
+            return False
+    
+    def _log_mapping_diagnostics(self, missing_mappings: List[int], index: faiss.Index) -> None:
+        """記錄映射診斷資訊
+        
+        Args:
+            missing_mappings: 缺失的映射 ID 列表
+            index: 當前索引
+        """
+        try:
+            # 統計資訊
+            total_missing = len(missing_mappings)
+            index_size = index.ntotal
+            mapping_size = len(self._id_map)
+            
+            # 分析缺失模式
+            missing_range = f"{min(missing_mappings)}-{max(missing_mappings)}" if missing_mappings else "無"
+            
+            diagnostic_info = {
+                "缺失映射數量": total_missing,
+                "索引總大小": index_size,
+                "映射總數量": mapping_size,
+                "缺失映射範圍": missing_range,
+                "缺失比例": f"{(total_missing / index_size * 100):.1f}%" if index_size > 0 else "N/A",
+                "映射完整性": f"{((mapping_size - total_missing) / index_size * 100):.1f}%" if index_size > 0 else "N/A"
+            }
+            
+            self.logger.error(f"映射診斷報告: {diagnostic_info}")
+            
+            # 如果缺失比例過高，建議重建
+            if index_size > 0 and (total_missing / index_size) > 0.1:
+                self.logger.critical(
+                    f"映射缺失比例過高({total_missing}/{index_size} = "
+                    f"{(total_missing / index_size * 100):.1f}%)，強烈建議重建索引"
+                )
+                
+        except Exception as e:
+            self.logger.error(f"記錄映射診斷資訊失敗: {e}")
 
 
 class VectorManager:
@@ -882,6 +1765,17 @@ class VectorManager:
                                 self.logger.warning(f"載入頻道 {channel_id} 索引失敗，建立新索引")
                     else:
                         self.logger.debug(f"頻道 {channel_id} 沒有現有索引檔案，建立新索引")
+                    
+                    # 檢查是否需要重建映射（當使用了佔位符映射時）
+                    if hasattr(index, '_needs_mapping_rebuild') and index._needs_mapping_rebuild:
+                        self.logger.info(f"頻道 {channel_id} 需要重建映射，嘗試從資料庫恢復真實映射關係")
+                        
+                        # 嘗試從資料庫重建映射
+                        if self._try_rebuild_mapping_from_database(channel_id, index):
+                            self.logger.info(f"頻道 {channel_id} 映射重建成功")
+                            index._needs_mapping_rebuild = False
+                        else:
+                            self.logger.warning(f"頻道 {channel_id} 映射重建失敗，將繼續使用佔位符映射")
                     
                     self._indices[channel_id] = index
                     
@@ -1414,6 +2308,103 @@ class VectorManager:
             self.logger.error(f"重新生成頻道 {channel_id} 向量失敗: {e}")
             return False
     
+    def _try_rebuild_mapping_from_database(self, channel_id: str, index: 'VectorIndex') -> bool:
+        """嘗試從資料庫重建索引的真實映射關係
+        
+        Args:
+            channel_id: 頻道 ID
+            index: 向量索引物件
+            
+        Returns:
+            bool: 是否成功重建映射
+        """
+        try:
+            self.logger.info(f"開始從資料庫重建頻道 {channel_id} 的映射關係")
+            
+            # 檢查資料庫檔案是否存在
+            from pathlib import Path
+            db_path = Path("data/memory/memory.db")
+            if not db_path.exists():
+                self.logger.warning(f"資料庫檔案不存在，無法重建頻道 {channel_id} 的映射")
+                return False
+            
+            # 嘗試載入資料庫管理器
+            try:
+                from .database import DatabaseManager
+                db_manager = DatabaseManager(str(db_path))
+                
+                # 獲取頻道中的所有訊息 ID（按時間排序）
+                # 先獲取訊息總數
+                message_count = db_manager.get_message_count(channel_id)
+                
+                # 使用足夠大的 limit 來獲取所有訊息（默認已按 timestamp DESC 排序）
+                messages = db_manager.get_messages(
+                    channel_id=channel_id,
+                    limit=max(message_count, 10000)  # 使用較大的 limit 確保獲取所有訊息
+                )
+                
+                # 由於資料庫返回的是按時間倒序，我們需要反轉以獲得正序
+                messages = list(reversed(messages))
+                
+                if not messages:
+                    self.logger.warning(f"頻道 {channel_id} 沒有訊息資料，無法重建映射")
+                    return False
+                
+                # 檢查索引大小是否與訊息數量匹配
+                index_size = index.get_index().ntotal
+                message_count = len(messages)
+                
+                self.logger.info(f"頻道 {channel_id} - 索引大小: {index_size}, 資料庫訊息數: {message_count}")
+                
+                # 如果數量不匹配，我們只能嘗試重建部分映射
+                messages_to_map = messages[:index_size] if message_count > index_size else messages
+                
+                # 重建映射
+                new_id_map = {}
+                new_reverse_map = {}
+                
+                for faiss_id, message in enumerate(messages_to_map):
+                    message_id = message['message_id']
+                    new_id_map[faiss_id] = message_id
+                    new_reverse_map[message_id] = faiss_id
+                
+                # 檢查是否成功重建了大部分映射
+                rebuilt_count = len(new_id_map)
+                if rebuilt_count < index_size * 0.8:  # 至少重建 80% 的映射
+                    self.logger.warning(
+                        f"重建映射數量不足: {rebuilt_count}/{index_size} "
+                        f"({rebuilt_count/index_size*100:.1f}%)，可能需要完整重建索引"
+                    )
+                    # 仍然使用重建的映射，但發出警告
+                
+                # 更新索引的映射
+                index._id_map = new_id_map
+                index._reverse_id_map = new_reverse_map
+                index._next_id = len(new_id_map)
+                
+                self.logger.info(
+                    f"成功重建頻道 {channel_id} 的映射: {rebuilt_count} 個映射關係 "
+                    f"({rebuilt_count/index_size*100:.1f}% 完整性)"
+                )
+                
+                # 儲存重建的映射
+                index_file = self.storage_path / f"{channel_id}.index"
+                if index_file.exists():
+                    if index.save(index_file):
+                        self.logger.info(f"已儲存重建的映射到: {index_file}")
+                    else:
+                        self.logger.warning(f"儲存重建的映射失敗: {index_file}")
+                
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"從資料庫重建頻道 {channel_id} 映射時資料庫操作失敗: {e}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"重建頻道 {channel_id} 映射失敗: {e}")
+            return False
+    
     def clear_channel_mapping(self, channel_id: str) -> bool:
         """清除特定頻道的 ID 映射（用於強制重建）
         
@@ -1453,6 +2444,217 @@ class VectorManager:
                 stats[channel_id] = self.get_index_stats(channel_id)
         return stats
     
+    def check_and_repair_all_indices(self) -> Dict[str, Dict[str, any]]:
+        """檢查並修復所有頻道索引的完整性
+        
+        Returns:
+            Dict[str, Dict[str, any]]: 各頻道的檢查和修復結果
+        """
+        results = {}
+        
+        try:
+            self.logger.info("開始檢查所有頻道索引的完整性")
+            
+            with self._indices_lock:
+                for channel_id, index in self._indices.items():
+                    try:
+                        self.logger.debug(f"檢查頻道 {channel_id} 的索引完整性")
+                        
+                        # 執行完整性檢查
+                        integrity_issues = index._check_index_integrity()
+                        
+                        result = {
+                            'channel_id': channel_id,
+                            'has_issues': bool(integrity_issues),
+                            'issues': integrity_issues,
+                            'repair_attempted': False,
+                            'repair_successful': False,
+                            'index_stats': index.get_stats()
+                        }
+                        
+                        if integrity_issues:
+                            self.logger.warning(f"頻道 {channel_id} 檢測到完整性問題: {integrity_issues}")
+                            
+                            # 嘗試自動修復
+                            result['repair_attempted'] = True
+                            repair_success = index._attempt_auto_repair()
+                            result['repair_successful'] = repair_success
+                            
+                            if repair_success:
+                                self.logger.info(f"頻道 {channel_id} 完整性問題已修復")
+                                
+                                # 重新檢查修復效果
+                                post_repair_issues = index._check_index_integrity()
+                                result['post_repair_issues'] = post_repair_issues
+                                
+                                if not post_repair_issues:
+                                    self.logger.info(f"頻道 {channel_id} 修復後完整性正常")
+                                else:
+                                    self.logger.warning(f"頻道 {channel_id} 修復後仍有問題: {post_repair_issues}")
+                            else:
+                                self.logger.error(f"頻道 {channel_id} 完整性問題修復失敗")
+                        else:
+                            self.logger.debug(f"頻道 {channel_id} 完整性檢查通過")
+                        
+                        results[channel_id] = result
+                        
+                    except Exception as e:
+                        self.logger.error(f"檢查頻道 {channel_id} 時發生錯誤: {e}")
+                        results[channel_id] = {
+                            'channel_id': channel_id,
+                            'error': str(e),
+                            'has_issues': True,
+                            'issues': [f"檢查過程中發生錯誤: {e}"],
+                            'repair_attempted': False,
+                            'repair_successful': False
+                        }
+            
+            # 生成總結報告
+            total_channels = len(results)
+            channels_with_issues = sum(1 for r in results.values() if r.get('has_issues', False))
+            repairs_attempted = sum(1 for r in results.values() if r.get('repair_attempted', False))
+            repairs_successful = sum(1 for r in results.values() if r.get('repair_successful', False))
+            
+            self.logger.info(
+                f"完整性檢查完成 - 總頻道: {total_channels}, "
+                f"有問題: {channels_with_issues}, "
+                f"嘗試修復: {repairs_attempted}, "
+                f"修復成功: {repairs_successful}"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"完整性檢查過程中發生嚴重錯誤: {e}")
+            results['_error'] = str(e)
+        
+        return results
+    
+    def force_rebuild_problematic_indices(self, check_results: Dict[str, Dict[str, any]]) -> Dict[str, bool]:
+        """強制重建有問題的索引
+        
+        Args:
+            check_results: 完整性檢查結果
+            
+        Returns:
+            Dict[str, bool]: 各頻道的重建結果
+        """
+        rebuild_results = {}
+        
+        try:
+            # 找出需要重建的頻道
+            channels_to_rebuild = [
+                channel_id for channel_id, result in check_results.items()
+                if (result.get('has_issues', False) and
+                    not result.get('repair_successful', False) and
+                    not channel_id.startswith('_'))
+            ]
+            
+            if not channels_to_rebuild:
+                self.logger.info("沒有需要強制重建的索引")
+                return rebuild_results
+            
+            self.logger.info(f"開始強制重建 {len(channels_to_rebuild)} 個問題索引")
+            
+            for channel_id in channels_to_rebuild:
+                try:
+                    self.logger.info(f"開始重建頻道 {channel_id} 的索引")
+                    
+                    # 使用現有的重建方法
+                    rebuild_success = self._try_rebuild_index(channel_id)
+                    rebuild_results[channel_id] = rebuild_success
+                    
+                    if rebuild_success:
+                        self.logger.info(f"頻道 {channel_id} 索引重建成功")
+                    else:
+                        self.logger.error(f"頻道 {channel_id} 索引重建失敗")
+                        
+                        # 嘗試從資料庫重新生成
+                        self.logger.info(f"嘗試從資料庫重新生成頻道 {channel_id} 的向量")
+                        regenerate_success = self._try_regenerate_vectors(channel_id)
+                        
+                        if regenerate_success:
+                            self.logger.info(f"頻道 {channel_id} 向量重新生成成功")
+                            rebuild_results[channel_id] = True
+                        else:
+                            self.logger.error(f"頻道 {channel_id} 向量重新生成也失敗")
+                    
+                except Exception as e:
+                    self.logger.error(f"重建頻道 {channel_id} 索引時發生錯誤: {e}")
+                    rebuild_results[channel_id] = False
+            
+            # 統計重建結果
+            successful_rebuilds = sum(rebuild_results.values())
+            total_rebuilds = len(rebuild_results)
+            
+            self.logger.info(f"強制重建完成: {successful_rebuilds}/{total_rebuilds} 個成功")
+            
+        except Exception as e:
+            self.logger.error(f"強制重建過程中發生錯誤: {e}")
+            
+        return rebuild_results
+    
+    def comprehensive_integrity_check_and_repair(self) -> Dict[str, any]:
+        """執行綜合的完整性檢查和修復
+        
+        Returns:
+            Dict[str, any]: 完整的檢查和修復報告
+        """
+        try:
+            self.logger.info("開始綜合完整性檢查和修復")
+            
+            # 第一階段：檢查並修復現有索引
+            check_results = self.check_and_repair_all_indices()
+            
+            # 第二階段：對無法修復的索引進行重建
+            rebuild_results = self.force_rebuild_problematic_indices(check_results)
+            
+            # 第三階段：最終驗證
+            final_check_results = {}
+            if rebuild_results:
+                self.logger.info("對重建的索引進行最終驗證")
+                for channel_id in rebuild_results.keys():
+                    if channel_id in self._indices:
+                        try:
+                            final_issues = self._indices[channel_id]._check_index_integrity()
+                            final_check_results[channel_id] = {
+                                'final_issues': final_issues,
+                                'final_status': 'healthy' if not final_issues else 'problematic'
+                            }
+                        except Exception as e:
+                            final_check_results[channel_id] = {
+                                'final_error': str(e),
+                                'final_status': 'error'
+                            }
+            
+            # 生成綜合報告
+            report = {
+                'timestamp': time.time(),
+                'initial_check': check_results,
+                'rebuild_results': rebuild_results,
+                'final_verification': final_check_results,
+                'summary': {
+                    'total_channels_checked': len([k for k in check_results.keys() if not k.startswith('_')]),
+                    'channels_with_initial_issues': len([k for k, v in check_results.items()
+                                                       if v.get('has_issues', False) and not k.startswith('_')]),
+                    'channels_auto_repaired': len([k for k, v in check_results.items()
+                                                 if v.get('repair_successful', False)]),
+                    'channels_force_rebuilt': len([k for k, v in rebuild_results.items() if v]),
+                    'final_healthy_channels': len([k for k, v in final_check_results.items()
+                                                 if v.get('final_status') == 'healthy'])
+                }
+            }
+            
+            self.logger.info(f"綜合完整性檢查和修復完成: {report['summary']}")
+            
+            return report
+            
+        except Exception as e:
+            self.logger.error(f"綜合完整性檢查和修復過程中發生嚴重錯誤: {e}")
+            return {
+                'error': str(e),
+                'timestamp': time.time(),
+                'status': 'failed'
+            }
+
     def cleanup(self) -> None:
         """清理向量管理器資源和快取
         
