@@ -126,7 +126,7 @@ class GPUMemoryManager:
                         self.logger.warning("GPU 記憶體不足，無法建立 GPU 資源")
                         return None
                     
-                    self.logger.info(f"開始建立 GPU 資源，記憶體限制: {self.max_memory_mb}MB")
+                    self.logger.debug(f"開始建立 GPU 資源，記憶體限制: {self.max_memory_mb}MB")
                     
                     # 添加超時保護的 GPU 資源建立
                     import signal
@@ -170,7 +170,7 @@ class GPUMemoryManager:
                     temp_memory_mb = min(self.max_memory_mb // 4, 512)  # 更保守的暫存記憶體
                     self._gpu_resource.setTempMemory(temp_memory_mb * 1024 * 1024)
                     
-                    self.logger.info(f"GPU 資源建立成功，記憶體限制: {self.max_memory_mb}MB，暫存: {temp_memory_mb}MB")
+                    self.logger.debug(f"GPU 資源建立成功，記憶體限制: {self.max_memory_mb}MB，暫存: {temp_memory_mb}MB")
                     
                 except Exception as e:
                     self.logger.error(f"建立 GPU 資源失敗: {e}")
@@ -195,7 +195,7 @@ class GPUMemoryManager:
             # 強制垃圾回收
             gc.collect()
             
-            self.logger.info("GPU 記憶體清理完成")
+            self.logger.debug("GPU 記憶體清理完成")
             
         except Exception as e:
             self.logger.error(f"清除 GPU 記憶體失敗: {e}")
@@ -790,7 +790,7 @@ class VectorIndex:
                     vector_count = index.ntotal
                     mapping_size = len(self._id_map)
                     
-                    self.logger.info(
+                    self.logger.debug(
                         f"索引已原子性儲存到: {file_path} "
                         f"(檔案大小: {file_size} bytes, 向量數量: {vector_count}, 映射數量: {mapping_size})"
                     )
@@ -946,7 +946,7 @@ class VectorIndex:
                 return False
             
             # 載入前先記錄狀態
-            self.logger.info(f"開始載入索引檔案: {file_path}")
+            self.logger.debug(f"開始載入索引檔案: {file_path}")
             
             # 載入 FAISS 索引
             temp_index = faiss.read_index(str(file_path))
@@ -1038,7 +1038,7 @@ class VectorIndex:
             # 記錄載入結果
             index_size = self._index.ntotal if self._index else 0
             mapping_size = len(self._id_map)
-            self.logger.info(
+            self.logger.debug(
                 f"索引載入完成 - 向量數量: {index_size}, 映射數量: {mapping_size}, "
                 f"完整性: {'正常' if not post_load_issues else '有問題但已處理'}"
             )
@@ -2688,7 +2688,7 @@ class VectorManager:
                 except Exception as e:
                     self.logger.warning(f"清理 GPU 記憶體管理器失敗: {e}")
             
-            self.logger.info("向量管理器清理完成")
+            self.logger.debug("向量管理器清理完成")
             
         except Exception as e:
             self.logger.error(f"向量管理器清理時發生錯誤: {e}")

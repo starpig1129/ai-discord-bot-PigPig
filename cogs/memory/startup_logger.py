@@ -139,7 +139,7 @@ class StartupLogger:
         # 只在關鍵節點記錄進度（避免過多日誌）
         if batch_num == 1 or batch_num == total_batches or batch_num % 5 == 0:
             progress_percent = (batch_num / total_batches) * 100
-            self.logger.info(
+            self.logger.debug(
                 f"📊 載入進度: {batch_num}/{total_batches} 批次 "
                 f"({progress_percent:.0f}%) - "
                 f"成功 {self.metrics.loaded_indices}，"
@@ -219,7 +219,7 @@ class StartupLogger:
         
         # 索引載入摘要
         if self.metrics.total_indices > 0:
-            self.logger.info(
+            self.logger.debug(
                 f"📋 索引載入摘要: "
                 f"{self.metrics.loaded_indices}/{self.metrics.total_indices} 成功 "
                 f"({success_rate:.1f}%)，"
@@ -230,7 +230,7 @@ class StartupLogger:
             
         # GPU 記憶體摘要
         if self.metrics.gpu_memory_checks > 0:
-            self.logger.info(
+            self.logger.debug(
                 f"🔧 GPU 記憶體檢查: {self.metrics.gpu_memory_checks} 次，"
                 f"警告: {self.metrics.gpu_memory_warnings} 次"
             )

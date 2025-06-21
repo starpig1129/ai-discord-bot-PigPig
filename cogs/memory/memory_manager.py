@@ -17,6 +17,7 @@ from enum import Enum
 
 import discord
 import numpy as np
+import tqdm
 
 from .database import DatabaseManager
 from .config import MemoryConfig, MemoryProfile
@@ -239,122 +240,72 @@ class MemoryManager:
             self.current_profile.vector_enabled = False
     
     async def _load_existing_indices(self) -> None:
-        """載入現有的索引檔案到記憶體中（優化版本：分批載入）"""
+        """載入現有的索引檔案到記憶體中（使用 tqdm 進度條）"""
         try:
             if not self.vector_manager or not self.current_profile.vector_enabled:
                 return
-            
-            # 取得索引目錄
+
             indices_path = self.vector_manager.storage_path
             if not indices_path.exists():
                 self.logger.info("索引目錄不存在，跳過載入現有索引")
                 return
-            
-            # 搜尋所有 .index 檔案
+
             index_files = list(indices_path.glob("*.index"))
             total_files = len(index_files)
-            
-            # 使用啟動日誌管理器記錄索引載入開始
-            startup_logger = get_startup_logger()
-            if startup_logger:
-                startup_logger.log_index_loading_start(total_files)
-            elif total_files == 0:
+
+            if total_files == 0:
                 self.logger.info("沒有找到現有的索引檔案")
                 return
-            else:
-                self.logger.info(f"找到 {total_files} 個現有索引檔案，開始分批載入...")
-            
-            if total_files == 0:
-                return
-            
-            # 分批載入配置
-            batch_size = 10  # 每批載入 10 個索引
-            max_concurrent = 3  # 最大同時載入數
+
+            self.logger.debug(f"找到 {total_files} 個現有索引檔案，開始載入...")
+
             loaded_count = 0
             failed_count = 0
-            
-            # 按檔案大小排序，優先載入小檔案
+
             index_files_sorted = sorted(
                 index_files,
                 key=lambda f: f.stat().st_size if f.exists() else 0
             )
-            
-            total_batches = (total_files + batch_size - 1) // batch_size
-            
-            # 分批處理
-            for batch_start in range(0, total_files, batch_size):
-                batch_end = min(batch_start + batch_size, total_files)
-                batch_files = index_files_sorted[batch_start:batch_end]
-                current_batch = batch_start // batch_size + 1
-                
-                # 使用信號量限制並發數
-                semaphore = asyncio.Semaphore(max_concurrent)
-                
-                async def load_single_index(index_file):
-                    async with semaphore:
-                        try:
-                            # 從檔案名稱取得頻道 ID
-                            channel_id = index_file.stem
-                            
-                            # 在執行緒池中載入索引
-                            loop = asyncio.get_event_loop()
-                            success = await loop.run_in_executor(
-                                None,
-                                self.vector_manager.create_channel_index,
-                                channel_id
-                            )
-                            
-                            if success:
-                                self.logger.debug(f"成功載入頻道 {channel_id} 的索引")
-                                return True
-                            else:
-                                self.logger.warning(f"載入頻道 {channel_id} 的索引失敗")
-                                return False
-                                
-                        except Exception as e:
-                            self.logger.error(f"載入索引檔案 {index_file.name} 失敗: {e}")
+
+            semaphore = asyncio.Semaphore(5)  # 增加並發數以加快速度
+
+            async def load_single_index(index_file, pbar):
+                async with semaphore:
+                    try:
+                        channel_id = index_file.stem
+                        loop = asyncio.get_event_loop()
+                        success = await loop.run_in_executor(
+                            None,
+                            self.vector_manager.create_channel_index,
+                            channel_id
+                        )
+                        pbar.update(1)
+                        if success:
+                            self.logger.debug(f"成功載入頻道 {channel_id} 的索引")
+                            return True
+                        else:
+                            self.logger.warning(f"載入頻道 {channel_id} 的索引失敗")
                             return False
-                
-                # 並發載入當前批次
-                batch_tasks = [load_single_index(f) for f in batch_files]
-                batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
-                
-                # 統計當前批次結果
-                batch_loaded = 0
-                batch_failed = 0
-                for result in batch_results:
+                    except Exception as e:
+                        self.logger.error(f"載入索引檔案 {index_file.name} 失敗: {e}")
+                        pbar.update(1)
+                        return False
+
+            with tqdm.tqdm(total=total_files, desc="載入記憶體索引", unit="file") as pbar:
+                tasks = [load_single_index(f, pbar) for f in index_files_sorted]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                for result in results:
                     if isinstance(result, bool) and result:
                         loaded_count += 1
-                        batch_loaded += 1
                     else:
                         failed_count += 1
-                        batch_failed += 1
-                
-                # 使用啟動日誌管理器記錄批次進度
-                if startup_logger:
-                    startup_logger.log_batch_progress(
-                        current_batch, total_batches, batch_loaded, batch_failed
-                    )
-                else:
-                    self.logger.info(
-                        f"批次 {current_batch} 完成：已載入 {loaded_count}/{total_files} 個索引"
-                    )
-                
-                # 批次間的記憶體清理
-                if self.vector_manager.gpu_memory_manager:
-                    self.vector_manager.gpu_memory_manager.clear_gpu_memory()
-                
-                # 短暫休息，讓系統穩定
-                await asyncio.sleep(0.5)
-            
-            # 最終摘要（僅在非啟動模式或作為後備）
-            if not startup_logger or not startup_logger.is_startup_mode:
-                self.logger.info(
-                    f"索引載入完成: {loaded_count} 個成功，{failed_count} 個失敗，"
-                    f"總共 {total_files} 個索引檔案"
-                )
-            
-            # 最終記憶體優化
+
+            self.logger.info(
+                f"索引載入完成: {loaded_count} 個成功，{failed_count} 個失敗，"
+                f"總共 {total_files} 個索引檔案"
+            )
+
             if self.vector_manager.gpu_memory_manager:
                 self.vector_manager.gpu_memory_manager.log_memory_stats(force_log=True)
             
@@ -1093,75 +1044,46 @@ class MemoryManager:
             raise SearchError(f"搜尋相關記憶失敗: {e}")
     
     async def cleanup(self) -> None:
-        """清理記憶體資源和快取
-        
-        執行完整的清理作業，釋放所有組件的資源和記憶體。
-        """
+        """清理記憶體資源和快取（使用 tqdm 進度條）"""
         try:
             self.logger.info("開始記憶體系統清理...")
-            
-            # 清理向量管理器
+            loop = asyncio.get_event_loop()
+
+            cleanup_tasks = []
             if hasattr(self, 'vector_manager') and self.vector_manager:
-                try:
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, self.vector_manager.cleanup)
-                    self.logger.info("向量管理器已清理")
-                except Exception as e:
-                    self.logger.error(f"清理向量管理器時發生錯誤: {e}")
-            
-            # 清理搜尋引擎
+                cleanup_tasks.append(("向量管理器", lambda: loop.run_in_executor(None, self.vector_manager.cleanup)))
             if hasattr(self, 'search_engine') and self.search_engine:
-                try:
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, self.search_engine.cleanup)
-                    self.logger.info("搜尋引擎已清理")
-                except Exception as e:
-                    self.logger.error(f"清理搜尋引擎時發生錯誤: {e}")
-            
-            # 清理嵌入服務
+                cleanup_tasks.append(("搜尋引擎", lambda: loop.run_in_executor(None, self.search_engine.cleanup)))
             if hasattr(self, 'embedding_service') and self.embedding_service:
-                try:
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, self.embedding_service.cleanup)
-                    self.logger.info("嵌入服務已清理")
-                except Exception as e:
-                    self.logger.error(f"清理嵌入服務時發生錯誤: {e}")
-            
-            # 清理分割服務
-            if hasattr(self, 'segmentation_service') and self.segmentation_service:
-                try:
-                    # 分割服務可能有需要清理的資源
-                    if hasattr(self.segmentation_service, 'cleanup'):
-                        loop = asyncio.get_event_loop()
-                        await loop.run_in_executor(None, self.segmentation_service.cleanup)
-                    self.logger.info("分割服務已清理")
-                except Exception as e:
-                    self.logger.error(f"清理分割服務時發生錯誤: {e}")
-            
-            # 清理資料庫連接
+                cleanup_tasks.append(("嵌入服務", lambda: loop.run_in_executor(None, self.embedding_service.cleanup)))
+            if hasattr(self, 'segmentation_service') and self.segmentation_service and hasattr(self.segmentation_service, 'cleanup'):
+                cleanup_tasks.append(("分割服務", lambda: loop.run_in_executor(None, self.segmentation_service.cleanup)))
             if hasattr(self, 'db_manager') and self.db_manager:
-                try:
-                    # 資料庫管理器可能有連接池需要關閉
-                    if hasattr(self.db_manager, 'close'):
-                        loop = asyncio.get_event_loop()
-                        await loop.run_in_executor(None, self.db_manager.close)
-                    elif hasattr(self.db_manager, 'cleanup'):
-                        loop = asyncio.get_event_loop()
-                        await loop.run_in_executor(None, self.db_manager.cleanup)
-                    self.logger.info("資料庫連接已清理")
-                except Exception as e:
-                    self.logger.error(f"清理資料庫時發生錯誤: {e}")
-            
+                db_cleanup = getattr(self.db_manager, 'close', getattr(self.db_manager, 'cleanup', None))
+                if db_cleanup:
+                    cleanup_tasks.append(("資料庫", lambda: loop.run_in_executor(None, db_cleanup)))
+
+            with tqdm.tqdm(total=len(cleanup_tasks), desc="清理記憶體資源", unit="task") as pbar:
+                for name, task in cleanup_tasks:
+                    try:
+                        pbar.set_postfix_str(name)
+                        await task()
+                        self.logger.debug(f"{name} 已清理")
+                    except Exception as e:
+                        self.logger.error(f"清理 {name} 時發生錯誤: {e}")
+                    finally:
+                        pbar.update(1)
+
             # 清理統計資料
             self._query_times.clear()
             self._cache_hits = 0
             self._cache_misses = 0
-            
+
             # 強制垃圾回收
             import gc
             gc.collect()
-            
-            # 釋放 GPU 記憶體（如果有使用）
+
+            # 釋放 GPU 記憶體
             try:
                 import torch
                 if torch.cuda.is_available():
@@ -1172,10 +1094,8 @@ class MemoryManager:
                 pass
             except Exception as e:
                 self.logger.warning(f"清理 GPU 記憶體時發生錯誤: {e}")
-            
-            # 標記為未初始化狀態
+
             self._initialized = False
-            
             self.logger.info("記憶體系統清理完成")
             
         except Exception as e:
