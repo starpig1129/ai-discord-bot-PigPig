@@ -267,7 +267,9 @@ class MemoryManager:
                 key=lambda f: f.stat().st_size if f.exists() else 0
             )
 
-            semaphore = asyncio.Semaphore(5)  # 增加並發數以加快速度
+            memory_config = self.config.get_memory_config()
+            max_concurrent = memory_config.get("performance", {}).get("max_concurrent_index_loads", 3)
+            semaphore = asyncio.Semaphore(max_concurrent)
 
             async def load_single_index(index_file, pbar):
                 async with semaphore:

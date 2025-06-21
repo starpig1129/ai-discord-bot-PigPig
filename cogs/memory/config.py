@@ -8,6 +8,7 @@ import json
 import logging
 import platform
 import psutil
+import sys
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -344,15 +345,33 @@ class MemoryConfig:
             raise ConfigurationError(f"載入配置檔案失敗: {e}")
     
     def get_memory_config(self) -> Dict[str, Any]:
-        """取得記憶系統配置
+        """取得記憶系統配置，並根據作業系統動態調整預設值。
         
+        此方法會檢查 'max_concurrent_index_loads' 是否已設定。
+        如果未設定，它會根據作業系統提供一個智慧預設值
+        (Windows 為 1，其他系統為 3) 以提升穩定性，同時允許使用者手動覆寫。
+    
         Returns:
             Dict[str, Any]: 記憶系統配置
         """
         if self._config is None:
             self._config = self.load_config()
         
-        return self._config.get("memory_system", {})
+        memory_config_data = self._config.get("memory_system", {})
+        performance_config = memory_config_data.setdefault("performance", {})
+    
+        # 如果使用者未手動設定 max_concurrent_index_loads，則提供智慧預設值
+        if 'max_concurrent_index_loads' not in performance_config:
+            # 判斷作業系統來決定預設值
+            default_concurrency = 1 if sys.platform == 'win32' else 3
+            self.logger.info(
+                f"未手動設定 'max_concurrent_index_loads'。 "
+                f"根據作業系統 ({sys.platform}) 自動設定預設值為: {default_concurrency}。"
+                "若需調整，請在 settings.json 的 memory_system.performance 中設定此值。"
+            )
+            performance_config['max_concurrent_index_loads'] = default_concurrency
+            
+        return memory_config_data
     
     def get_current_profile(self) -> MemoryProfile:
         """取得當前配置檔案
