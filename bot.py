@@ -161,7 +161,7 @@ class PigPig(commands.Bot):
             channel_manager = self.get_cog('ChannelManager')
             if channel_manager:
                 guild_id = str(message.guild.id)
-                is_allowed, _ = channel_manager.is_allowed_channel(message.channel, guild_id)
+                is_allowed, _, __ = channel_manager.is_allowed_channel(message.channel, guild_id)
                 if not is_allowed:
                     return
             
@@ -199,11 +199,18 @@ class PigPig(commands.Bot):
         
         channel_manager = self.get_cog('ChannelManager')
         if channel_manager:
-            is_allowed, auto_response_enabled = channel_manager.is_allowed_channel(message.channel, guild_id)
+            is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(message.channel, guild_id)
             if not is_allowed:
                 return
-            
-        
+
+            # 如果是故事模式，將訊息交給 StoryManagerCog 處理
+            if channel_mode == 'story':
+                story_cog = self.get_cog('StoryManagerCog')
+                if story_cog:
+                    # 使用 asyncio.create_task 在背景處理，避免阻塞 on_message
+                    asyncio.create_task(story_cog.handle_story_message(message))
+                return # 中斷後續的標準對話流程
+
         # 實現生成回應的邏輯
         if (self.user.id in message.raw_mentions and not message.mention_everyone) or auto_response_enabled:
             # 發送初始訊息
@@ -238,7 +245,8 @@ class PigPig(commands.Bot):
         guild_id = str(after.guild.id)
         channel_manager = self.get_cog('ChannelManager')
         if channel_manager:
-            if not channel_manager.is_allowed_channel(after.channel, guild_id):
+            is_allowed, _, __ = channel_manager.is_allowed_channel(after.channel, guild_id)
+            if not is_allowed:
                 return
 
         try:

@@ -15,6 +15,7 @@ data/schedule_data/
 data/schedule/*.yaml
 data/serverconfig
 data/memory
+data/story
 !data/schedule/template.yaml
 
 # 忽略模型與日誌檔案

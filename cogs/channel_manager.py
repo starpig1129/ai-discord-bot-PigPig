@@ -35,6 +35,12 @@ class ChannelManager(commands.Cog):
                 # 確保必要的鍵值存在
                 if "auto_response" not in config:
                     config["auto_response"] = {}
+                # --- Migration/Validation Step ---
+                if "channel_modes" not in config:
+                    config["channel_modes"] = {}
+                if "mode" not in config:
+                    config["mode"] = "unrestricted"
+                # --- End Migration ---
                 return config
             except (json.JSONDecodeError, UnicodeDecodeError):
                 return self._get_default_config()
@@ -44,10 +50,11 @@ class ChannelManager(commands.Cog):
     def _get_default_config(self):
         """取得預設配置"""
         return {
-            "mode": "unrestricted",
+            "mode": "unrestricted", # Server-wide mode
             "whitelist": [],
             "blacklist": [],
-            "auto_response": {}
+            "auto_response": {},
+            "channel_modes": {} # Per-channel mode overrides
         }
 
     def save_config(self, guild_id, config):
@@ -80,14 +87,14 @@ class ChannelManager(commands.Cog):
         await interaction.response.send_message(error_message, ephemeral=True)
         return False
 
-    @app_commands.command(name="set_channel_mode", description="設定頻道回應模式")
+    @app_commands.command(name="set_server_mode", description="設定整個伺服器的回應模式 (白名單/黑名單)")
     @app_commands.choices(mode=[
         app_commands.Choice(name="無限制", value="unrestricted"),
         app_commands.Choice(name="白名單", value="whitelist"),
         app_commands.Choice(name="黑名單", value="blacklist")
     ])
-    async def set_mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
-        # 檢查權限
+    async def set_server_mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
+        """Sets the server-wide response mode."""
         if not await self.check_admin_permissions(interaction):
             return
             
@@ -96,29 +103,36 @@ class ChannelManager(commands.Cog):
         config["mode"] = mode.value
         self.save_config(guild_id, config)
         
-        # 使用翻譯系統
-        if self.lang_manager:
-            # 獲取模式的翻譯名稱
-            mode_name = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "set_channel_mode",
-                "choices",
-                mode.value
-            )
-            success_message = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "set_channel_mode",
-                "responses",
-                "success",
-                mode=mode_name
-            )
+        # This part can be simplified or use the translation system as before
+        await interaction.response.send_message(f"已將 **整個伺服器** 的回應模式設定為：{mode.name}")
+
+    @app_commands.command(name="set_channel_mode", description="為特定頻道設定特殊模式 (例如：故事模式)")
+    @app_commands.describe(channel="要設定的頻道", mode="要為此頻道設定的模式")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="預設 (遵從伺服器設定)", value="default"),
+        app_commands.Choice(name="故事模式", value="story")
+    ])
+    async def set_channel_mode(self, interaction: discord.Interaction, channel: discord.TextChannel, mode: app_commands.Choice[str]):
+        """Sets a special mode for a specific channel."""
+        if not await self.check_admin_permissions(interaction):
+            return
+
+        guild_id = str(interaction.guild_id)
+        config = self.load_config(guild_id)
+        channel_id = str(channel.id)
+
+        if mode.value == "default":
+            if channel_id in config["channel_modes"]:
+                del config["channel_modes"][channel_id]
+                message = f"已將頻道 {channel.mention} 的模式重設為預設（遵從伺服器設定）。"
+            else:
+                message = f"頻道 {channel.mention} 已經在使用預設模式了。"
         else:
-            # 備用訊息
-            success_message = f"已將頻道回應模式設定為：{mode.name}"
-        
-        await interaction.response.send_message(success_message)
+            config["channel_modes"][channel_id] = mode.value
+            message = f"已將頻道 {channel.mention} 的模式設定為：**{mode.name}**。"
+
+        self.save_config(guild_id, config)
+        await interaction.response.send_message(message)
 
     @app_commands.command(name="add_channel", description="新增頻道到白名單或黑名單")
     @app_commands.choices(list_type=[
@@ -269,19 +283,37 @@ class ChannelManager(commands.Cog):
         
         await interaction.response.send_message(success_message)
 
-    def is_allowed_channel(self, channel: discord.TextChannel, guild_id: str):
+    def is_allowed_channel(self, channel: discord.TextChannel, guild_id: str) -> Tuple[bool, bool, Optional[str]]:
+        """
+        Checks if the bot is allowed to respond in a channel and gets the channel mode.
+
+        Returns:
+            A tuple containing:
+            - bool: Whether the bot is allowed to respond.
+            - bool: Whether auto-response is enabled.
+            - Optional[str]: The effective mode of the channel.
+        """
         config = self.load_config(guild_id)
         channel_id = str(channel.id)
-        mode = config.get("mode", "unrestricted")
-        auto_response_enabled = config["auto_response"].get(channel_id, False)
+        auto_response_enabled = config.get("auto_response", {}).get(channel_id, False)
 
-        if mode == "unrestricted":
-            return True, auto_response_enabled
-        elif mode == "whitelist":
-            return channel_id in config.get("whitelist", []), auto_response_enabled
-        elif mode == "blacklist":
-            return channel_id not in config.get("blacklist", []), auto_response_enabled
-        return False, False
+        # 1. Check for a channel-specific mode override
+        channel_mode = config.get("channel_modes", {}).get(channel_id)
+        if channel_mode: # e.g., 'story'
+            return True, auto_response_enabled, channel_mode
+
+        # 2. If no override, use the server-wide mode
+        server_mode = config.get("mode", "unrestricted")
+        if server_mode == "unrestricted":
+            return True, auto_response_enabled, server_mode
+        elif server_mode == "whitelist":
+            is_allowed = channel_id in config.get("whitelist", [])
+            return is_allowed, auto_response_enabled, server_mode
+        elif server_mode == "blacklist":
+            is_allowed = channel_id not in config.get("blacklist", [])
+            return is_allowed, auto_response_enabled, server_mode
+            
+        return False, False, server_mode
 
 
 async def setup(bot):
