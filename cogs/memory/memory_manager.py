@@ -242,7 +242,7 @@ class MemoryManager:
             self.current_profile.vector_enabled = False
     
     async def _load_existing_indices(self) -> None:
-        """載入現有的索引檔案到記憶體中，並根據檔案數量採用適應性載入策略。"""
+        """以非阻塞方式逐一載入所有現有的索引檔案到記憶體中。"""
         try:
             if not self.vector_manager or not self.current_profile.vector_enabled:
                 return
@@ -259,80 +259,43 @@ class MemoryManager:
                 self.logger.info("沒有找到現有的索引檔案")
                 return
 
-            self.logger.info(f"找到 {total_files} 個現有索引檔案，開始載入...")
+            self.logger.info(f"找到 {total_files} 個現有索引檔案，開始非阻塞載入...")
 
             loaded_count = 0
             failed_count = 0
 
+            # 根據檔案大小排序，優先載入較小的索引
             index_files_sorted = sorted(
                 index_files,
                 key=lambda f: f.stat().st_size if f.exists() else 0
             )
 
-            # 適應性載入策略：根據檔案數量選擇循序或並行載入
-            if total_files < self.INDEX_LOAD_CONCURRENCY_THRESHOLD:
-                # --- 循序載入：適用於少量索引，避免並行開銷 ---
-                self.logger.info(f"索引數量 ({total_files}) 小於閾值 ({self.INDEX_LOAD_CONCURRENCY_THRESHOLD})，使用循序載入。")
-                with tqdm.tqdm(total=total_files, desc="循序載入記憶體索引", unit="file") as pbar:
-                    for index_file in index_files_sorted:
-                        try:
-                            channel_id = index_file.stem
-                            loop = asyncio.get_event_loop()
-                            # 雖然是循序，但 create_channel_index 是同步函數，仍需在 executor 中運行以防阻塞
-                            success = await loop.run_in_executor(
-                                None,
-                                self.vector_manager.create_channel_index,
-                                channel_id
-                            )
-                            if success:
-                                self.logger.debug(f"成功載入頻道 {channel_id} 的索引")
-                                loaded_count += 1
-                            else:
-                                self.logger.warning(f"載入頻道 {channel_id} 的索引失敗")
-                                failed_count += 1
-                        except Exception as e:
-                            self.logger.error(f"載入索引檔案 {index_file.name} 失敗: {e}")
-                            failed_count += 1
-                        finally:
-                            pbar.update(1)
-            else:
-                # --- 並行載入：適用於大量索引，利用多核心優勢 ---
-                self.logger.info(f"索引數量 ({total_files}) 大於等於閾值 ({self.INDEX_LOAD_CONCURRENCY_THRESHOLD})，使用並行載入。")
-                memory_config = self.config.get_memory_config()
-                max_concurrent = memory_config.get("performance", {}).get("max_concurrent_index_loads", 3)
-                semaphore = asyncio.Semaphore(max_concurrent)
-
-                async def load_single_index(index_file, pbar):
-                    async with semaphore:
-                        try:
-                            channel_id = index_file.stem
-                            loop = asyncio.get_event_loop()
-                            success = await loop.run_in_executor(
-                                None,
-                                self.vector_manager.create_channel_index,
-                                channel_id
-                            )
-                            pbar.update(1)
-                            if success:
-                                self.logger.debug(f"成功載入頻道 {channel_id} 的索引")
-                                return True
-                            else:
-                                self.logger.warning(f"載入頻道 {channel_id} 的索引失敗")
-                                return False
-                        except Exception as e:
-                            self.logger.error(f"載入索引檔案 {index_file.name} 失敗: {e}")
-                            pbar.update(1)
-                            return False
-
-                with tqdm.tqdm(total=total_files, desc="並行載入記憶體索引", unit="file") as pbar:
-                    tasks = [load_single_index(f, pbar) for f in index_files_sorted]
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                    for result in results:
-                        if isinstance(result, bool) and result:
+            loop = asyncio.get_event_loop()
+            with tqdm.tqdm(total=total_files, desc="載入記憶體索引", unit="file") as pbar:
+                for index_file in index_files_sorted:
+                    try:
+                        channel_id = index_file.stem
+                        
+                        # 在獨立的執行緒中執行阻塞的檔案 I/O 和反序列化操作
+                        success = await loop.run_in_executor(
+                            None,
+                            self.vector_manager.create_channel_index,
+                            channel_id
+                        )
+                        
+                        if success:
+                            self.logger.debug(f"成功載入頻道 {channel_id} 的索引")
                             loaded_count += 1
                         else:
+                            self.logger.warning(f"載入頻道 {channel_id} 的索引失敗")
                             failed_count += 1
+                            
+                    except Exception as e:
+                        self.logger.error(f"處理索引檔案 {index_file.name} 時發生嚴重錯誤: {e}")
+                        failed_count += 1
+                    finally:
+                        # 確保無論成功或失敗，進度條都會更新
+                        pbar.update(1)
 
             self.logger.info(
                 f"索引載入完成: {loaded_count} 個成功，{failed_count} 個失敗，"
@@ -343,7 +306,7 @@ class MemoryManager:
                 self.vector_manager.gpu_memory_manager.log_memory_stats(force_log=True)
             
         except Exception as e:
-            self.logger.error(f"載入現有索引失敗: {e}")
+            self.logger.error(f"載入現有索引時發生未預期的錯誤: {e}")
     
     async def _initialize_segmentation_service(self) -> None:
         """初始化文本分割服務"""
