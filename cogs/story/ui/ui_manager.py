@@ -5,6 +5,8 @@ from typing import Optional
 
 from ..manager import StoryManager
 from .views import InitialStoryView, ActiveStoryView
+from .modals import CharacterCreateModal
+from cogs.system_prompt.manager import SystemPromptManager
 
 
 class UIManager:
@@ -15,9 +17,10 @@ class UIManager:
     採用臨時性 (ephemeral) 介面設計，降低狀態管理複雜度。
     """
     
-    def __init__(self, bot: commands.Bot, story_manager: StoryManager):
+    def __init__(self, bot: commands.Bot, story_manager: StoryManager, system_prompt_manager: SystemPromptManager):
         self.bot = bot
         self.story_manager = story_manager
+        self.system_prompt_manager = system_prompt_manager
         self.logger = logging.getLogger(__name__)
         
     async def show_main_menu(self, interaction: discord.Interaction):
@@ -60,7 +63,7 @@ class UIManager:
                 )
             else:
                 # 顯示故事開始前的準備介面
-                view = InitialStoryView(self.story_manager, interaction.channel_id, interaction.guild_id)
+                view = InitialStoryView(self.story_manager, interaction.channel_id, interaction.guild_id, self)
                 
                 # 動態載入世界選單選項
                 await self._update_world_select_options(view, interaction.guild_id)
@@ -169,3 +172,51 @@ class UIManager:
                     
         except Exception as e:
             self.logger.error(f"更新世界選單選項錯誤: {e}", exc_info=True)
+
+    async def handle_load_default_character(self, interaction: discord.Interaction):
+        """處理從頻道預設設定載入角色的請求"""
+        try:
+            if not interaction.guild_id or not interaction.channel_id:
+                # 在私訊等情境下可能沒有 guild_id，直接返回
+                await interaction.response.send_message("❌ 此指令無法在目前位置使用。", ephemeral=True)
+                return
+            
+            config = self.system_prompt_manager.get_channel_prompt_config(
+                str(interaction.guild_id), str(interaction.channel_id)
+            )
+
+            if not config or "base_prompt" not in config:
+                await interaction.response.send_message(
+                    "ℹ️ 這個頻道沒有設定預設角色。請管理員使用 `/system_prompt` 進行設定。",
+                    ephemeral=True
+                )
+                return
+
+            # 提取名稱和描述
+            char_name = config.get("profile", {}).get("name") or config.get("name", "")
+            char_description = config.get("base_prompt", "")
+
+            await self.show_character_create_modal(
+                interaction,
+                name=char_name,
+                description=char_description
+            )
+
+        except Exception as e:
+            self.logger.error(f"載入預設角色時發生錯誤: {e}", exc_info=True)
+            error_message = "❌ 處理請求時發生嚴重錯誤。"
+            if interaction.response.is_done():
+                await interaction.followup.send(error_message, ephemeral=True)
+            else:
+                await interaction.response.send_message(error_message, ephemeral=True)
+
+    async def show_character_create_modal(self, interaction: discord.Interaction, name: str = "", description: str = ""):
+        """顯示角色創建 Modal，可選填預設值"""
+        modal = CharacterCreateModal(
+            self.story_manager,
+            interaction.guild_id,
+            world_name=None,  # 讓 Modal 自行處理 world_name 為 None 的情況
+            name=name,
+            description=description
+        )
+        await interaction.response.send_modal(modal)

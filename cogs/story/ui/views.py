@@ -1,11 +1,15 @@
+from __future__ import annotations
 import discord
 from discord.ext import commands
 import logging
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from ..manager import StoryManager
 from ..models import StoryInstance, StoryWorld
 from .modals import WorldCreateModal, CharacterCreateModal
+
+if TYPE_CHECKING:
+    from .ui_manager import UIManager
 
 
 class InitialStoryView(discord.ui.View):
@@ -19,9 +23,10 @@ class InitialStoryView(discord.ui.View):
     - 開始故事按鈕
     """
     
-    def __init__(self, story_manager: StoryManager, channel_id: int, guild_id: int):
+    def __init__(self, story_manager: StoryManager, channel_id: int, guild_id: int, ui_manager: UIManager):
         super().__init__(timeout=300)  # 5分鐘超時
         self.story_manager = story_manager
+        self.ui_manager = ui_manager
         self.channel_id = channel_id
         self.guild_id = guild_id
         self.selected_world: Optional[str] = None
@@ -68,7 +73,7 @@ class InitialStoryView(discord.ui.View):
             self.logger.error(f"世界選擇錯誤: {e}", exc_info=True)
             await interaction.response.send_message("❌ 載入世界資訊時發生錯誤", ephemeral=True)
     
-    @discord.ui.button(label="🌍 創建新世界", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🌍 創建新世界", style=discord.ButtonStyle.primary, row=0)
     async def create_world_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """創建世界按鈕"""
         try:
@@ -82,7 +87,7 @@ class InitialStoryView(discord.ui.View):
         except Exception as e:
             self.logger.error(f"創建世界按鈕錯誤: {e}", exc_info=True)
     
-    @discord.ui.button(label="👤 創建角色", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="👤 創建角色", style=discord.ButtonStyle.secondary, row=1)
     async def create_character_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """創建角色按鈕"""
         try:
@@ -92,6 +97,16 @@ class InitialStoryView(discord.ui.View):
             
         except Exception as e:
             self.logger.error(f"創建角色按鈕錯誤: {e}", exc_info=True)
+
+    @discord.ui.button(label="📥 從預設載入角色", style=discord.ButtonStyle.secondary, row=1)
+    async def load_default_character_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """從預設載入角色按鈕"""
+        try:
+            await self.ui_manager.handle_load_default_character(interaction)
+        except Exception as e:
+            self.logger.error(f"載入預設角色按鈕錯誤: {e}", exc_info=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ 載入預設角色時發生錯誤", ephemeral=True)
     
     @discord.ui.button(
         label="🎬 開始故事", 

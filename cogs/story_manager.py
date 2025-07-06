@@ -5,6 +5,7 @@ import logging
 
 from .story.manager import StoryManager
 from .story.ui import UIManager
+from .system_prompt.manager import SystemPromptManager
 
 
 class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
@@ -20,9 +21,22 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
-        self.story_manager = StoryManager(bot)
-        self.ui_manager = UIManager(bot, self.story_manager)
+        
+        system_prompt_manager_cog = bot.get_cog("SystemPromptManagerCog")
+        if not system_prompt_manager_cog:
+            raise RuntimeError("SystemPromptManagerCog not found!")
+        system_prompt_manager = system_prompt_manager_cog.manager
+
+        self.story_manager = StoryManager(bot, system_prompt_manager)
+        self.ui_manager = UIManager(bot, self.story_manager, system_prompt_manager)
         self.logger.info("StoryManagerCog (UI版本) 已初始化")
+
+    async def cog_load(self):
+        """
+        非同步初始化 Cog 及其管理器。
+        """
+        await self.story_manager.initialize()
+        self.logger.info("StoryManagerCog has been loaded and initialized.")
 
     @app_commands.command(name="story", description="🎭 開啟故事管理選單")
     async def story_menu(self, interaction: discord.Interaction):

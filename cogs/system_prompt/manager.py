@@ -258,6 +258,27 @@ class SystemPromptManager:
             # 降級到 YAML 提示
             return self._get_yaml_prompt(guild_id, message)
     
+    def get_channel_prompt_config(self, guild_id: str, channel_id: str) -> Optional[Dict[str, Any]]:
+        """
+        取得指定頻道的原始系統提示設定。
+
+        這個方法會直接從設定檔中讀取並回傳該頻道的設定字典，
+        而不會進行繼承合併或變數替換。
+
+        Args:
+            guild_id: 伺服器 ID。
+            channel_id: 頻道 ID。
+
+        Returns:
+            包含頻道設定的字典，如果不存在則回傳 None。
+        """
+        try:
+            config = self._load_guild_config(guild_id)
+            return config.get('system_prompts', {}).get('channels', {}).get(channel_id)
+        except Exception as e:
+            self.logger.error(f"取得頻道 {channel_id} 的原始設定時發生錯誤: {e}")
+            return None
+    
     def set_channel_prompt(self, guild_id: str, channel_id: str, 
                           prompt_data: Dict[str, Any], user_id: str) -> bool:
         """

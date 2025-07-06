@@ -9,16 +9,18 @@ from .prompt_engine import StoryPromptEngine
 from .state_manager import StoryStateManager
 from cogs.memory.memory_manager import MemoryManager
 from gpt.gpt_response_gen import generate_response
+from cogs.system_prompt.manager import SystemPromptManager
 
 class StoryManager:
     """
-    The core manager for story logic. It coordinates the database, state, 
+    The core manager for story logic. It coordinates the database, state,
     and prompt engine to generate story progression.
     """
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot, system_prompt_manager: SystemPromptManager):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
+        self.system_prompt_manager = system_prompt_manager
         self._initialized = False
         self.db_instances: Dict[int, StoryDB] = {}
         self.prompt_engine = StoryPromptEngine(bot)
@@ -52,7 +54,7 @@ class StoryManager:
         db = self._get_db(guild_id)
 
         # 1. Get StoryInstance and related data
-        story_instance = await db.get_story_instance(channel_id)
+        story_instance = db.get_story_instance(channel_id)
         if not story_instance:
             await message.reply("這個頻道還沒有開始任何故事！請管理員使用 `/story start` 來開啟一段新的冒險。")
             return
@@ -61,7 +63,7 @@ class StoryManager:
             await message.reply("這個頻道的故事已經結束了。")
             return
 
-        world = await db.get_world(story_instance.world_name)
+        world = db.get_world(story_instance.world_name)
         if not world:
             await message.reply(f"錯誤：找不到與此故事關聯的世界 `{story_instance.world_name}`。")
             return
@@ -69,7 +71,7 @@ class StoryManager:
         # Load active characters for this story
         characters: List[StoryCharacter] = []
         for character_id in story_instance.active_characters:
-            character = await db.get_character(character_id)
+            character = db.get_character(character_id)
             if character:
                 characters.append(character)
 

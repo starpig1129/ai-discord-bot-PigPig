@@ -106,27 +106,32 @@ class CharacterCreateModal(discord.ui.Modal):
     提供表單介面讓使用者創建新角色
     """
     
-    def __init__(self, story_manager: StoryManager, guild_id: int, world_name: Optional[str] = None):
+    def __init__(self, story_manager: StoryManager, guild_id: int, world_name: Optional[str] = None, name: str = "", description: str = ""):
         super().__init__(title="👤 創建新角色")
         self.story_manager = story_manager
         self.guild_id = guild_id
         self.world_name = world_name
         self.logger = logging.getLogger(__name__)
-    
-    character_name = discord.ui.TextInput(
-        label="角色名稱",
-        placeholder="輸入你的角色名稱",
-        max_length=50,
-        required=True
-    )
-    
-    description = discord.ui.TextInput(
-        label="角色描述",
-        placeholder="描述角色的外觀、背景、性格等...",
-        style=discord.TextStyle.paragraph,
-        max_length=800,
-        required=True
-    )
+
+        self.character_name = discord.ui.TextInput(
+            label="角色名稱",
+            placeholder="輸入你的角色名稱",
+            max_length=50,
+            required=True,
+            default=name
+        )
+        
+        self.description = discord.ui.TextInput(
+            label="角色描述",
+            placeholder="描述角色的外觀、背景、性格等...",
+            style=discord.TextStyle.paragraph,
+            max_length=800,
+            required=True,
+            default=description
+        )
+        
+        self.add_item(self.character_name)
+        self.add_item(self.description)
     
     async def on_submit(self, interaction: discord.Interaction):
         """處理角色創建表單提交"""
@@ -134,11 +139,11 @@ class CharacterCreateModal(discord.ui.Modal):
             await interaction.response.defer(ephemeral=True)
             
             db = self.story_manager._get_db(self.guild_id)
-            await db.initialize()
+            db.initialize()
             
             # 如果沒有指定世界，需要使用者選擇
             if not self.world_name:
-                worlds = await db.get_all_worlds()
+                worlds = db.get_all_worlds()
                 if not worlds:
                     await interaction.followup.send(
                         "❌ 沒有可用的世界。請先創建一個世界後再創建角色。",
