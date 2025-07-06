@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 
 from ..manager import StoryManager
-from ..models import StoryWorld, StoryCharacter
+from ..models import StoryWorld, StoryCharacter, StoryInstance
 
 
 class WorldCreateModal(discord.ui.Modal):
@@ -129,9 +129,17 @@ class CharacterCreateModal(discord.ui.Modal):
             required=True,
             default=description
         )
+
+        self.webhook_url = discord.ui.TextInput(
+            label="角色 Webhook 網址 (選填)",
+            placeholder="請貼上 Discord Webhook 的 URL...",
+            required=False,
+            style=discord.TextStyle.short
+        )
         
         self.add_item(self.character_name)
         self.add_item(self.description)
+        self.add_item(self.webhook_url)
     
     async def on_submit(self, interaction: discord.Interaction):
         """處理角色創建表單提交"""
@@ -172,6 +180,7 @@ class CharacterCreateModal(discord.ui.Modal):
                 world_name=self.world_name,
                 name=self.character_name.value,
                 description=self.description.value,
+                webhook_url=self.webhook_url.value or None,
                 is_pc=True,  # 玩家角色
                 user_id=interaction.user.id
             )
@@ -220,3 +229,100 @@ class CharacterCreateModal(discord.ui.Modal):
                 )
         except:
             pass
+
+
+class StoryStartModal(discord.ui.Modal):
+    """
+    故事開始 Modal
+
+    收集故事開始時的初始世界狀態
+    """
+
+    def __init__(self, story_manager: StoryManager, guild_id: int, channel_id: int, world_name: str):
+        super().__init__(title="🎬 設定故事初始狀態")
+        self.story_manager = story_manager
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.world_name = world_name
+        self.logger = logging.getLogger(__name__)
+
+    initial_date = discord.ui.TextInput(
+        label="初始日期",
+        placeholder="例如：晴天，2024年7月7日",
+        required=True
+    )
+
+    initial_time = discord.ui.TextInput(
+        label="初始時間",
+        placeholder="例如：上午9:00",
+        required=True
+    )
+
+    initial_location = discord.ui.TextInput(
+        label="初始地點",
+        placeholder="例如：寧靜的森林小徑上",
+        required=True,
+        style=discord.TextStyle.paragraph
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """處理表單提交，創建故事實例"""
+        try:
+            await interaction.response.defer(ephemeral=True)
+            
+            db = self.story_manager._get_db(self.guild_id)
+            db.initialize()
+
+            # 創建新的故事實例
+            new_instance = StoryInstance(
+                channel_id=self.channel_id,
+                guild_id=self.guild_id,
+                world_name=self.world_name,
+                current_date=self.initial_date.value,
+                current_time=self.initial_time.value,
+                current_location=self.initial_location.value
+            )
+            
+            # 初始化預設狀態
+            new_instance = self.story_manager.state_manager.initialize_default_state(new_instance)
+            db.save_story_instance(new_instance)
+
+            # 載入世界資訊
+            world = db.get_world(self.world_name)
+            
+            # 發送成功訊息到頻道（公開）
+            embed = discord.Embed(
+                title="🎬 故事開始！",
+                description=f"**{self.world_name}** 的冒險篇章已在此頻道開啟！",
+                color=discord.Color.gold()
+            )
+            embed.add_field(
+                name="🌍 世界背景",
+                value=world.background[:800] + ("..." if len(world.background) > 800 else ""),
+                inline=False
+            )
+            embed.add_field(name="📅 日期", value=self.initial_date.value, inline=True)
+            embed.add_field(name="⏰ 時間", value=self.initial_time.value, inline=True)
+            embed.add_field(name="📍 地點", value=self.initial_location.value, inline=False)
+            embed.set_footer(text="💡 在此頻道輸入訊息來與故事互動")
+            
+            await interaction.channel.send(embed=embed)
+            
+            # 私人確認訊息
+            await interaction.followup.send(
+                f"✅ 故事已成功在此頻道開始！\n🌍 世界：**{self.world_name}**",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            self.logger.error(f"開始故事時發生錯誤: {e}", exc_info=True)
+            await interaction.followup.send(
+                "❌ 開始故事時發生錯誤，請稍後再試。",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        """處理 Modal 錯誤"""
+        self.logger.error(f"StoryStartModal 錯誤: {error}", exc_info=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message("❌ 處理請求時發生錯誤", ephemeral=True)

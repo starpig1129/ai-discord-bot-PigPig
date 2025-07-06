@@ -1,10 +1,11 @@
 import discord
 from discord.ext import commands
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
+import aiohttp
 
 from .database import StoryDB
-from .models import StoryInstance, StoryWorld, StoryCharacter
+from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationship
 from .prompt_engine import StoryPromptEngine
 from .state_manager import StoryStateManager
 from cogs.memory.memory_manager import MemoryManager
@@ -39,6 +40,63 @@ class StoryManager:
         """
         self._initialized = True
         self.logger.info("StoryManager initialized.")
+
+    async def _send_story_response(
+        self,
+        channel: discord.TextChannel,
+        character: Optional[StoryCharacter],
+        story_instance: StoryInstance,
+        content: str,
+    ):
+        """
+        Constructs and sends the story response as an embed, using a webhook if available.
+        """
+        db = self._get_db(channel.guild.id)
+        embed = discord.Embed(description=content, color=discord.Color.blurple())
+
+        # Add world state fields
+        embed.add_field(name="📍 地點", value=story_instance.current_location or "未知", inline=True)
+        embed.add_field(name="📅 日期", value=story_instance.current_date or "未知", inline=True)
+        embed.add_field(name="⏰ 時間", value=story_instance.current_time or "未知", inline=True)
+
+        # Fetch and add player relationships
+        relationships = db.get_relationships_for_story(story_instance.channel_id)
+        if relationships:
+            relationship_lines = []
+            for rel in relationships:
+                char = db.get_character(rel.character_id)
+                try:
+                    user = await self.bot.fetch_user(rel.user_id)
+                    user_name = user.display_name
+                except discord.NotFound:
+                    user_name = f"用戶(ID:{rel.user_id})"
+                
+                if char:
+                    relationship_lines.append(f"**{user_name}** 與 **{char.name}**: {rel.description}")
+
+            if relationship_lines:
+                embed.add_field(
+                    name="🤝 人際關係",
+                    value="\n".join(relationship_lines),
+                    inline=False,
+                )
+
+        # Send the message
+        if character and character.webhook_url:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    webhook = discord.Webhook.from_url(character.webhook_url, session=session)
+                    avatar_url = character.attributes.get("image_url")
+                    await webhook.send(
+                        embed=embed,
+                        username=character.name,
+                        avatar_url=avatar_url,
+                    )
+            except Exception as e:
+                self.logger.error(f"Webhook send failed for character {character.name}: {e}. Falling back to channel.send.")
+                await channel.send(embed=embed)
+        else:
+            await channel.send(embed=embed)
 
     async def process_story_message(self, message: discord.Message):
         """
@@ -79,10 +137,12 @@ class StoryManager:
         
         async with message.channel.typing():
             # 2. Build prompt using PromptEngine
+            relationships = db.get_relationships_for_story(channel_id)
             prompt = await self.prompt_engine.build_story_prompt(
                 instance=story_instance,
                 world=world,
                 characters=characters,
+                relationships=relationships,
                 user_input=message.content
             )
 
@@ -124,5 +184,25 @@ class StoryManager:
                 self.logger.info(f"Would store to memory: {event_summary}")
 
 
-            # 6. Send response
-            await message.reply(llm_response)
+            # 6. Determine speaking character and send response
+            speaking_character: Optional[StoryCharacter] = None
+            response_content = llm_response
+
+            # Check if the response is from a specific character
+            for char in characters:
+                if llm_response.startswith(f"{char.name}：") or llm_response.startswith(f"{char.name}:"):
+                    speaking_character = char
+                    # Strip character name and colon from the content
+                    temp_content = llm_response[len(char.name):].lstrip()
+                    if temp_content.startswith((':', '：')):
+                        response_content = temp_content[1:].lstrip()
+                    else:
+                        response_content = temp_content
+                    break
+            
+            await self._send_story_response(
+                channel=message.channel,
+                character=speaking_character,
+                story_instance=updated_instance,
+                content=response_content,
+            )

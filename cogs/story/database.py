@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, List
 import threading
 
-from .models import StoryWorld, StoryCharacter, StoryInstance
+from .models import StoryWorld, StoryCharacter, StoryInstance, PlayerRelationship
 
 class StoryDB:
     """Handles all database operations for the story module."""
@@ -54,6 +54,7 @@ class StoryDB:
                             description TEXT,
                             is_pc BOOLEAN,
                             user_id INTEGER,
+                            webhook_url TEXT,
                             attributes TEXT,
                             inventory TEXT,
                             status TEXT,
@@ -66,10 +67,24 @@ class StoryDB:
                             guild_id INTEGER,
                             world_name TEXT,
                             is_active BOOLEAN,
+                            current_date TEXT,
+                            current_time TEXT,
+                            current_location TEXT,
                             active_characters TEXT,
                             current_state TEXT,
                             event_log TEXT,
                             FOREIGN KEY (world_name) REFERENCES worlds (world_name)
+                        )
+                    """)
+                    db.execute("""
+                        CREATE TABLE IF NOT EXISTS player_relationships (
+                            relationship_id TEXT PRIMARY KEY,
+                            story_id INTEGER,
+                            character_id TEXT,
+                            user_id INTEGER,
+                            description TEXT,
+                            FOREIGN KEY (story_id) REFERENCES instances (channel_id),
+                            FOREIGN KEY (character_id) REFERENCES characters (character_id)
                         )
                     """)
                     db.commit()
@@ -142,11 +157,12 @@ class StoryDB:
         with self._get_connection() as db:
             db.execute(
                 """
-                INSERT INTO characters (character_id, world_name, name, description, is_pc, user_id, attributes, inventory, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO characters (character_id, world_name, name, description, is_pc, user_id, webhook_url, attributes, inventory, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(character_id) DO UPDATE SET
                     name=excluded.name,
                     description=excluded.description,
+                    webhook_url=excluded.webhook_url,
                     attributes=excluded.attributes,
                     inventory=excluded.inventory,
                     status=excluded.status
@@ -158,6 +174,7 @@ class StoryDB:
                     character.description,
                     character.is_pc,
                     character.user_id,
+                    character.webhook_url,
                     json.dumps(character.attributes),
                     json.dumps(character.inventory),
                     character.status,
@@ -169,21 +186,22 @@ class StoryDB:
         """Retrieves a character by ID."""
         with self._get_connection() as db:
             cursor = db.execute(
-                "SELECT world_name, name, description, is_pc, user_id, attributes, inventory, status, character_id FROM characters WHERE character_id = ?",
+                "SELECT world_name, name, description, is_pc, user_id, webhook_url, attributes, inventory, status, character_id FROM characters WHERE character_id = ?",
                 (character_id,),
             )
             row = cursor.fetchone()
             if row:
                 return StoryCharacter(
-                    world_name=row[0],
-                    name=row[1],
-                    description=row[2],
-                    is_pc=row[3],
-                    user_id=row[4],
-                    attributes=json.loads(row[5]),
-                    inventory=json.loads(row[6]),
-                    status=row[7],
-                    character_id=row[8],
+                    world_name=row['world_name'],
+                    name=row['name'],
+                    description=row['description'],
+                    is_pc=row['is_pc'],
+                    user_id=row['user_id'],
+                    webhook_url=row['webhook_url'],
+                    attributes=json.loads(row['attributes']),
+                    inventory=json.loads(row['inventory']),
+                    status=row['status'],
+                    character_id=row['character_id'],
                 )
             return None
 
@@ -191,22 +209,23 @@ class StoryDB:
         """Retrieves all characters created by a user in a specific world."""
         with self._get_connection() as db:
             cursor = db.execute(
-                "SELECT world_name, name, description, is_pc, user_id, attributes, inventory, status, character_id FROM characters WHERE user_id = ? AND world_name = ?",
+                "SELECT world_name, name, description, is_pc, user_id, webhook_url, attributes, inventory, status, character_id FROM characters WHERE user_id = ? AND world_name = ?",
                 (user_id, world_name),
             )
             rows = cursor.fetchall()
             characters = []
             for row in rows:
                 characters.append(StoryCharacter(
-                    world_name=row[0],
-                    name=row[1],
-                    description=row[2],
-                    is_pc=row[3],
-                    user_id=row[4],
-                    attributes=json.loads(row[5]),
-                    inventory=json.loads(row[6]),
-                    status=row[7],
-                    character_id=row[8],
+                    world_name=row['world_name'],
+                    name=row['name'],
+                    description=row['description'],
+                    is_pc=row['is_pc'],
+                    user_id=row['user_id'],
+                    webhook_url=row['webhook_url'],
+                    attributes=json.loads(row['attributes']),
+                    inventory=json.loads(row['inventory']),
+                    status=row['status'],
+                    character_id=row['character_id'],
                 ))
             return characters
 
@@ -215,11 +234,14 @@ class StoryDB:
         with self._get_connection() as db:
             db.execute(
                 """
-                INSERT INTO instances (channel_id, guild_id, world_name, is_active, active_characters, current_state, event_log)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO instances (channel_id, guild_id, world_name, is_active, current_date, current_time, current_location, active_characters, current_state, event_log)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(channel_id) DO UPDATE SET
                     world_name=excluded.world_name,
                     is_active=excluded.is_active,
+                    current_date=excluded.current_date,
+                    current_time=excluded.current_time,
+                    current_location=excluded.current_location,
                     active_characters=excluded.active_characters,
                     current_state=excluded.current_state,
                     event_log=excluded.event_log
@@ -229,6 +251,9 @@ class StoryDB:
                     instance.guild_id,
                     instance.world_name,
                     instance.is_active,
+                    instance.current_date,
+                    instance.current_time,
+                    instance.current_location,
                     json.dumps(instance.active_characters),
                     json.dumps(instance.current_state),
                     json.dumps(instance.event_log),
@@ -240,18 +265,78 @@ class StoryDB:
         """Retrieves a story instance by channel ID."""
         with self._get_connection() as db:
             cursor = db.execute(
-                "SELECT channel_id, guild_id, world_name, is_active, active_characters, current_state, event_log FROM instances WHERE channel_id = ?",
+                "SELECT channel_id, guild_id, world_name, is_active, current_date, current_time, current_location, active_characters, current_state, event_log FROM instances WHERE channel_id = ?",
                 (channel_id,),
             )
             row = cursor.fetchone()
             if row:
                 return StoryInstance(
-                    channel_id=row[0],
-                    guild_id=row[1],
-                    world_name=row[2],
-                    is_active=row[3],
-                    active_characters=json.loads(row[4]),
-                    current_state=json.loads(row[5]),
-                    event_log=json.loads(row[6]),
+                    channel_id=row['channel_id'],
+                    guild_id=row['guild_id'],
+                    world_name=row['world_name'],
+                    is_active=row['is_active'],
+                    current_date=row['current_date'],
+                    current_time=row['current_time'],
+                    current_location=row['current_location'],
+                    active_characters=json.loads(row['active_characters']),
+                    current_state=json.loads(row['current_state']),
+                    event_log=json.loads(row['event_log']),
                 )
             return None
+
+    def save_player_relationship(self, relationship: PlayerRelationship):
+        """Saves or updates a player-NPC relationship."""
+        with self._get_connection() as db:
+            db.execute(
+                """
+                INSERT INTO player_relationships (relationship_id, story_id, character_id, user_id, description)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(relationship_id) DO UPDATE SET
+                    description=excluded.description
+                """,
+                (
+                    relationship.relationship_id,
+                    relationship.story_id,
+                    relationship.character_id,
+                    relationship.user_id,
+                    relationship.description,
+                ),
+            )
+            db.commit()
+
+    def get_player_relationship(self, relationship_id: str) -> Optional[PlayerRelationship]:
+        """Retrieves a player-NPC relationship by ID."""
+        with self._get_connection() as db:
+            cursor = db.execute(
+                "SELECT relationship_id, story_id, character_id, user_id, description FROM player_relationships WHERE relationship_id = ?",
+                (relationship_id,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return PlayerRelationship(
+                    relationship_id=row['relationship_id'],
+                    story_id=row['story_id'],
+                    character_id=row['character_id'],
+                    user_id=row['user_id'],
+                    description=row['description'],
+                )
+            return None
+
+    def get_relationships_for_story(self, story_id: int) -> List[PlayerRelationship]:
+        """Retrieves all relationships for a given story instance."""
+        with self._get_connection() as db:
+            cursor = db.execute(
+                "SELECT relationship_id, story_id, character_id, user_id, description FROM player_relationships WHERE story_id = ?",
+                (story_id,),
+            )
+            rows = cursor.fetchall()
+            return [
+                PlayerRelationship(
+                    relationship_id=row['relationship_id'],
+                    story_id=row['story_id'],
+                    character_id=row['character_id'],
+                    user_id=row['user_id'],
+                    description=row['description'],
+                )
+                for row in rows
+            ]

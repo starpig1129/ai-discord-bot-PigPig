@@ -123,80 +123,52 @@ class InitialStoryView(discord.ui.View):
                     ephemeral=True
                 )
                 return
-            
-            await interaction.response.defer(ephemeral=True)
-            
+
             # 檢查頻道模式
             channel_manager = interaction.client.get_cog('ChannelManager')
             if not channel_manager:
-                await interaction.followup.send("❌ 系統錯誤：無法找到頻道管理器", ephemeral=True)
+                await interaction.response.send_message("❌ 系統錯誤：無法找到頻道管理器", ephemeral=True)
                 return
             
             is_allowed, _, channel_mode = channel_manager.is_allowed_channel(
-                interaction.channel, 
+                interaction.channel,
                 str(interaction.guild_id)
             )
             
             if not is_allowed or channel_mode != 'story':
-                await interaction.followup.send(
+                await interaction.response.send_message(
                     "❌ 請先由管理員使用 `/set_channel_mode` 將此頻道設定為 **故事模式**",
                     ephemeral=True
                 )
                 return
-            
+
             # 檢查是否已有故事在進行
             db = self.story_manager._get_db(self.guild_id)
             existing_instance = db.get_story_instance(self.channel_id)
             if existing_instance and existing_instance.is_active:
-                await interaction.followup.send(
+                await interaction.response.send_message(
                     "❌ 這個頻道已經有一個正在進行的故事了！",
                     ephemeral=True
                 )
                 return
-            
-            # 創建新的故事實例
-            from ..models import StoryInstance
-            new_instance = StoryInstance(
-                channel_id=self.channel_id,
+
+            # 彈出 Modal 收集初始狀態
+            from .modals import StoryStartModal
+            modal = StoryStartModal(
+                story_manager=self.story_manager,
                 guild_id=self.guild_id,
+                channel_id=self.channel_id,
                 world_name=self.selected_world
             )
-            
-            # 初始化預設狀態
-            new_instance = self.story_manager.state_manager.initialize_default_state(new_instance)
-            db.save_story_instance(new_instance)
+            await interaction.response.send_modal(modal)
 
-            # 載入世界資訊
-            world = db.get_world(self.selected_world)
-            
-            # 發送成功訊息到頻道（公開）
-            embed = discord.Embed(
-                title="🎬 故事開始！",
-                description=f"**{self.selected_world}** 的冒險篇章已在此頻道開啟！",
-                color=discord.Color.gold()
-            )
-            embed.add_field(
-                name="🌍 世界背景",
-                value=world.background[:800] + ("..." if len(world.background) > 800 else ""),
-                inline=False
-            )
-            embed.set_footer(text="💡 在此頻道輸入訊息來與故事互動")
-            
-            # 發送到頻道
-            await interaction.channel.send(embed=embed)
-            
-            # 私人確認訊息
-            await interaction.followup.send(
-                f"✅ 故事已成功在此頻道開始！\n🌍 世界：**{self.selected_world}**",
-                ephemeral=True
-            )
-            
         except Exception as e:
-            self.logger.error(f"開始故事錯誤: {e}", exc_info=True)
-            await interaction.followup.send(
-                "❌ 開始故事時發生錯誤，請稍後再試",
-                ephemeral=True
-            )
+            self.logger.error(f"開始故事按鈕錯誤: {e}", exc_info=True)
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ 準備開始故事時發生錯誤，請稍後再試",
+                    ephemeral=True
+                )
     
     async def _refresh_world_select(self):
         """重新整理世界選擇選單"""
