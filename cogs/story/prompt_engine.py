@@ -5,42 +5,10 @@ from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel, Field
 from enum import Enum
 
-from .models import StoryInstance, StoryWorld, StoryCharacter, Location
+from .models import (
+    StoryInstance, StoryWorld, StoryCharacter, Location, DialogueContext
+)
 from cogs.system_prompt.manager import SystemPromptManager
-
-# --- Pydantic Schemas for Structured Output ---
-
-class ActionType(str, Enum):
-    NARRATE = "NARRATE"
-    DIALOGUE = "DIALOGUE"
-
-class DialogueContext(BaseModel):
-    speaker_name: str = Field(..., description="The name of the character who is speaking.")
-    motivation: str = Field(..., description="The character's goal or reason for this dialogue.")
-    emotional_state: str = Field(..., description="The character's current emotional state (e.g., angry, happy, curious).")
-
-class StateUpdate(BaseModel):
-    location: Optional[str] = Field(None, description="The new location name, if it changes.")
-    date: Optional[str] = Field(None, description="The new date, if it changes.")
-    time: Optional[str] = Field(None, description="The new time, if it changes.")
-
-class RelationshipUpdate(BaseModel):
-    character_name: str = Field(..., description="The name of the NPC whose relationship is changing.")
-    user_name: str = Field(..., description="The display name of the player involved.")
-    description: str = Field(..., description="The new, updated description of the relationship.")
-
-class GMActionPlan(BaseModel):
-    """
-    The Game Master's action plan, defining the next step in the story.
-    This structure is used for the AI's structured output.
-    """
-    action_type: ActionType = Field(..., description="The type of action to be taken.")
-    event_title: str = Field(..., description="A short, concise title for this event, suitable for memory logs.")
-    event_summary: str = Field(..., description="A one-sentence summary of this event for long-term memory.")
-    narration_content: Optional[str] = Field(None, description="The narration text, required if action_type is NARRATE.")
-    dialogue_context: Optional[DialogueContext] = Field(None, description="Context for the Character Agent, required if action_type is DIALOGUE.")
-    state_update: Optional[StateUpdate] = Field(None, description="Include this object ONLY if the world state changes.")
-    relationships_update: Optional[List[RelationshipUpdate]] = Field(None, description="Include this array ONLY if player-NPC relationships change.")
 
 
 class StoryPromptEngine:
@@ -180,7 +148,7 @@ class StoryPromptEngine:
 現在，請根據提供的上下文和玩家行動，生成你的 `GMActionPlan`。"""
 
     async def build_character_prompt(
-        self, character: StoryCharacter, gm_context: Dict[str, Any]
+        self, character: StoryCharacter, gm_context: "DialogueContext"
     ) -> Tuple[str, str]:
         """
         Constructs the prompts for the Character Agent.
@@ -194,7 +162,9 @@ class StoryPromptEngine:
         system_prompt_parts.append(f"You are **{character.name}**.")
         system_prompt_parts.append(f"**Your Background & Personality:** {character.description}")
         if character.attributes:
-            attrs = ", ".join(f"{k}: {v}" for k, v in character.attributes.items())
+            # Ensure attributes are serializable
+            safe_attrs = {k: str(v) for k, v in character.attributes.items()}
+            attrs = ", ".join(f"{k}: {v}" for k, v in safe_attrs.items())
             system_prompt_parts.append(f"**Your Traits:** {attrs}")
 
         system_prompt_parts.append("## Core Instructions")
@@ -210,8 +180,8 @@ class StoryPromptEngine:
         # --- User Prompt: Dynamic, Situational Context ---
         user_prompt_parts = []
         user_prompt_parts.append("## Current Situation & Task")
-        user_prompt_parts.append(f"Your current motivation is: **{gm_context.get('motivation', 'Not specified.')}**")
-        user_prompt_parts.append(f"Your current emotional state is: **{gm_context.get('emotional_state', 'Neutral.')}**")
+        user_prompt_parts.append(f"Your current motivation is: **{gm_context.motivation}**")
+        user_prompt_parts.append(f"Your current emotional state is: **{gm_context.emotional_state}**")
         user_prompt_parts.append("Based on this situation, please provide your line of dialogue now.")
 
         user_prompt = "\n\n".join(user_prompt_parts)

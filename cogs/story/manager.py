@@ -8,11 +8,11 @@ import datetime
 from pydantic import ValidationError
 
 from .database import StoryDB, CharacterDB
-from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationship, Event, Location
-from .prompt_engine import StoryPromptEngine, GMActionPlan, RelationshipUpdate
+from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationship, Event, Location, GMActionPlan, RelationshipUpdate
+from .prompt_engine import StoryPromptEngine
 from .state_manager import StoryStateManager
 from cogs.memory.memory_manager import MemoryManager
-from gpt.gemini_api import generate_response_with_cache, generate_structured_response, GeminiError
+from gpt.gemini_api import generate_response_with_cache, GeminiError
 from cogs.system_prompt.manager import SystemPromptManager
 
 
@@ -203,7 +203,7 @@ class StoryManager:
                 gm_prompt = await self.prompt_engine.build_gm_prompt(story_instance, world, characters, message.content)
                 
                 # Use the new structured response function to get the GM plan directly.
-                gm_plan = await generate_structured_response(
+                _, gm_plan = await generate_response_with_cache(
                     inst=gm_prompt,
                     system_prompt="You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.",
                     response_schema=GMActionPlan
@@ -233,12 +233,12 @@ class StoryManager:
                         # Step 3B: Build separated prompts and call Character Agent
                         char_system_prompt, char_user_prompt = await self.prompt_engine.build_character_prompt(
                             character=speaking_character,
-                            gm_context=gm_plan.dialogue_context.model_dump(),
+                            gm_context=gm_plan.dialogue_context,
                         )
                         
                         _, char_response_gen = await generate_response_with_cache(
                             inst=char_user_prompt,
-                            system_prompt=char_system_prompt,
+                            system_prompt=char_system_prompt
                         )
                         
                         response_content = "".join([chunk async for chunk in char_response_gen]).strip()
@@ -362,11 +362,23 @@ class StoryManager:
                 gm_prompt = await self.prompt_engine.build_story_start_prompt(story_instance, world, characters)
 
                 # --- Step 2: Call GM Agent for a structured plan ---
-                gm_plan = await generate_structured_response(
+                _, gm_plan = await generate_response_with_cache(
                     inst=gm_prompt,
                     system_prompt="You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.",
                     response_schema=GMActionPlan
                 )
+
+                # Defensive coding: Handle if the API returns a generator function due to hot-reload issues
+                if callable(gm_plan):
+                    self.logger.warning("GM plan is a callable, processing as a stream.")
+                    full_response_text = "".join([chunk async for chunk in gm_plan()])
+                    
+                    # Manually parse the JSON string to the Pydantic model
+                    try:
+                        gm_plan = GMActionPlan.model_validate_json(full_response_text)
+                        self.logger.info("Successfully parsed streamed response into GMActionPlan.")
+                    except Exception as e:
+                        raise GeminiError(f"Failed to parse streamed JSON response: {e}\nContent: {full_response_text}")
 
                 if not gm_plan or gm_plan.action_type != "NARRATE" or not gm_plan.narration_content:
                     raise GeminiError("Failed to generate a valid opening narration plan.")

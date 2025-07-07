@@ -1,6 +1,5 @@
 import logging
-from .models import StoryInstance
-from .prompt_engine import GMActionPlan
+from .models import StoryInstance, GMActionPlan
 
 class StoryStateManager:
     """Manages story state updates based on structured GM Action Plans."""

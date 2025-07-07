@@ -3,10 +3,7 @@ from google.genai import types
 from google.genai.types import Tool, GenerateContentConfig, GoogleSearch
 import asyncio
 from addons.settings import TOKENS
-import numpy as np
-from PIL import Image
 from gpt.vision_tool import image_to_base64
-import io
 import tempfile
 import logging
 import hashlib
@@ -14,7 +11,7 @@ import time
 import datetime
 import pathlib
 import httpx
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Type
 from pydantic import BaseModel
 
 # Initialize the Gemini model
@@ -182,25 +179,19 @@ class GeminiCacheManager:
     
     def generate_with_cache(self,
                            model: str,
-                           cache: Any,
                            contents: Any,
-                           **kwargs) -> Any:
+                           config: types.GenerateContentConfig) -> Any:
         """使用快取生成內容
         
         Args:
             model: 模型名稱
-            cache: 快取物件
             contents: 用戶輸入內容
-            **kwargs: 其他生成參數
+            config: 生成配置（包含快取名稱等）
             
         Returns:
             生成的回應流
         """
         try:
-            config = types.GenerateContentConfig(
-                cached_content=cache.name,
-                **kwargs
-            )
             
             return self.client.models.generate_content(
                 model=model,
@@ -214,26 +205,20 @@ class GeminiCacheManager:
     
     def generate_stream_with_cache(self,
                                   model: str,
-                                  cache: Any,
                                   contents: Any,
-                                  **kwargs) -> Any:
+                                  config: types.GenerateContentConfig) -> Any:
         """使用快取生成流式內容
         
         Args:
             model: 模型名稱
-            cache: 快取物件
             contents: 用戶輸入內容
-            **kwargs: 其他生成參數
+            config: 生成配置（包含快取名稱等）
             
         Returns:
             生成的回應流
         """
         try:
-            config = types.GenerateContentConfig(
-                cached_content=cache.name,
-                **kwargs
-            )
-            
+
             return self.client.models.generate_content_stream(
                 model=model,
                 contents=contents,
@@ -847,7 +832,16 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
     
     return contents
 
-async def generate_response_with_cache(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None, pdf_input=None, use_cache=True, cache_ttl="3600s"):
+async def generate_response_with_cache(inst: str,
+                                       system_prompt: str,
+                                       response_schema: Optional[Type[BaseModel]] = None,
+                                       dialogue_history=None,
+                                       image_input=None,
+                                       audio_input=None,
+                                       video_input=None,
+                                       pdf_input=None,
+                                       use_cache=True,
+                                       cache_ttl="3600s"):
     """帶快取功能的 Gemini API 回應生成器
     
     主要功能:
@@ -866,9 +860,11 @@ async def generate_response_with_cache(inst, system_prompt, dialogue_history=Non
         pdf_input: PDF 檔案輸入（URL 或本地路徑）
         use_cache: 是否使用快取（預設啟用）
         cache_ttl: 快取存留時間（預設1小時）
-        
+        response_schema: 用於結構化輸出的 Pydantic 模型。如果提供，將返回 JSON 物件。
     Returns:
-        tuple: (None, async_generator) 用於流式回應
+        tuple: 返回值的格式會根據 response_schema 是否提供而變化
+            - 若 response_schema is None: (None, async_generator) 用於流式文字回應
+            - 若 response_schema is not None: (None, parsed_pydantic_object) 包含已解析的 Pydantic 物件
     """
     try:
         # 獲取快取管理器
@@ -930,6 +926,20 @@ async def generate_response_with_cache(inst, system_prompt, dialogue_history=Non
             else:
                 contents.append(inst)
         
+        generation_config_args = {}
+        
+        if response_schema:
+            is_streaming = False
+            # 根據官方最新用法，啟用 JSON 模式
+            generation_config_args["response_mime_type"] = "application/json"
+            generation_config_args["response_schema"] = response_schema
+            logger.info(f"啟用結構化輸出 (JSON mode)，Schema: {response_schema.__name__}")
+        else:
+            is_streaming = True
+            # 保持原有的流式文字輸出設定
+            generation_config_args["tools"] = [google_search_tool]
+            generation_config_args["response_modalities"] = ["TEXT"]
+            
         # 嘗試使用快取
         cache = None
         if use_cache and cache_mgr:
@@ -942,7 +952,7 @@ async def generate_response_with_cache(inst, system_prompt, dialogue_history=Non
                     # 對於系統指令快取，我們只快取系統指令本身
                     cache_contents = media_files if media_files else []
                     cache = cache_mgr.create_cache(
-                        model='models/gemini-2.0-flash',
+                        model=model_id,
                         system_instruction=system_prompt,
                         contents=cache_contents,
                         ttl=cache_ttl,
@@ -950,15 +960,26 @@ async def generate_response_with_cache(inst, system_prompt, dialogue_history=Non
                     )
                 
                 if cache:
-                    logger.info("使用快取模式生成回應")
-                    # 使用快取生成流式回應
-                    response_stream = cache_mgr.generate_stream_with_cache(
-                        model='models/gemini-2.0',
-                        cache=cache,
-                        contents=contents,
-                        tools=[google_search_tool],
-                        response_modalities=["TEXT"]
-                    )
+                    config=types.GenerateContentConfig(
+                                cached_content=cache.name, 
+                                **generation_config_args
+                            )
+                    if response_schema:
+                        # 如果有結構化輸出，使用快取生成結構化回應
+                        logger.info("使用快取模式生成結構化回應")
+                        response_object = cache_mgr.generate_with_cache(
+                            model=model_id,
+                            contents=contents,
+                            config=config
+                        )
+                    else:
+                        logger.info("使用快取模式生成回應")
+                        # 使用快取生成流式回應
+                        response_object = cache_mgr.generate_stream_with_cache(
+                            model=model_id,
+                            contents=contents,
+                            config=config
+                        )
                 else:
                     logger.warning("快取創建失敗，使用傳統模式")
                     use_cache = False
@@ -970,102 +991,111 @@ async def generate_response_with_cache(inst, system_prompt, dialogue_history=Non
         # 如果沒有使用快取，則使用傳統模式
         if not use_cache or cache is None:
             logger.info("使用傳統模式生成回應")
-            config = GenerateContentConfig(
-                system_instruction=system_prompt,
-                tools=[google_search_tool],
-                response_modalities=["TEXT"],
-            )
-            
-            response_stream = client.models.generate_content_stream(
-                model=model_id,
-                contents=contents,
-                config=config
-            )
-        
-        async def async_generator():
-            try:
-                accumulated_text = ""
-                chunk_count = 0
-                
+            config = GenerateContentConfig(system_instruction=system_prompt, **generation_config_args)
+            if is_streaming:
+                response_object = client.models.generate_content_stream(
+                    model=model_id,
+                    contents=contents,
+                    config=config
+                )
+            else:
+                response_object = client.models.generate_content(
+                    model=model_id,
+                    contents=contents,
+                    config=config
+                )
+        if is_streaming:
+            async def async_generator():
                 try:
-                    for chunk in response_stream:
-                        chunk_count += 1
-                        if chunk and hasattr(chunk, 'text') and chunk.text:
-                            chunk_text = chunk.text.strip()
-                            if chunk_text:
-                                accumulated_text += chunk_text
-                                yield chunk_text
-                                await asyncio.sleep(0.01)
-                        elif chunk is None:
-                            break
-                except StopIteration:
-                    pass
-                except Exception as stream_error:
-                    error_message = str(stream_error)
+                    accumulated_text = ""
+                    chunk_count = 0
                     
-                    if "Response not read" in error_message or "400 Bad Request" in error_message:
-                        if accumulated_text:
-                            yield accumulated_text
-                            return
-                        else:
-                            # 降級到非流式調用
-                            try:
-                                if cache and use_cache:
-                                    fallback_response = cache_mgr.generate_with_cache(
-                                        model='models/gemini-2.0-flash',
-                                        cache=cache,
-                                        contents=contents,
-                                        tools=[google_search_tool],
-                                        response_modalities=["TEXT"]
-                                    )
-                                else:
-                                    fallback_config = GenerateContentConfig(
-                                        system_instruction=system_prompt,
-                                        tools=[google_search_tool],
-                                        response_modalities=["TEXT"],
-                                    )
+                    try:
+                        for chunk in response_object:
+                            chunk_count += 1
+                            if chunk and hasattr(chunk, 'text') and chunk.text:
+                                chunk_text = chunk.text.strip()
+                                if chunk_text:
+                                    accumulated_text += chunk_text
+                                    yield chunk_text
+                                    await asyncio.sleep(0.01)
+                            elif chunk is None:
+                                break
+                    except StopIteration:
+                        pass
+                    except Exception as stream_error:
+                        error_message = str(stream_error)
+                        
+                        if "Response not read" in error_message or "400 Bad Request" in error_message:
+                            if accumulated_text:
+                                yield accumulated_text
+                                return
+                            else:
+                                # 降級到非流式調用
+                                try:
+                                    if cache and use_cache:
+                                        fallback_response = cache_mgr.generate_with_cache(
+                                            model='models/gemini-2.0-flash',
+                                            cache=cache,
+                                            contents=contents,
+                                            tools=[google_search_tool],
+                                            response_modalities=["TEXT"]
+                                        )
+                                    else:
+                                        fallback_config = GenerateContentConfig(
+                                            system_instruction=system_prompt,
+                                            tools=[google_search_tool],
+                                            response_modalities=["TEXT"],
+                                        )
+                                        
+                                        fallback_response = client.models.generate_content(
+                                            model=model_id,
+                                            contents=contents,
+                                            config=fallback_config
+                                        )
                                     
-                                    fallback_response = client.models.generate_content(
-                                        model=model_id,
-                                        contents=contents,
-                                        config=fallback_config
-                                    )
-                                
-                                if fallback_response and fallback_response.text:
-                                    yield fallback_response.text
-                                    return
-                                else:
-                                    raise GeminiError(f"Gemini API 流式和非流式回應都失敗: {error_message}")
-                                    
-                            except Exception as fallback_error:
-                                raise GeminiError(f"Gemini API 降級處理失敗: {fallback_error}")
-                    
-                    elif "RESOURCE_PROJECT_INVALID" in error_message:
-                        raise GeminiError(f"Gemini API 項目設定錯誤: {error_message}")
-                    elif "PERMISSION_DENIED" in error_message:
-                        raise GeminiError(f"Gemini API 權限錯誤: {error_message}")
-                    elif "QUOTA_EXCEEDED" in error_message:
-                        raise GeminiError(f"Gemini API 配額超限: {error_message}")
-                    else:
-                        if accumulated_text:
-                            yield accumulated_text
-                            return
+                                    if fallback_response and fallback_response.text:
+                                        yield fallback_response.text
+                                        return
+                                    else:
+                                        raise GeminiError(f"Gemini API 流式和非流式回應都失敗: {error_message}")
+                                        
+                                except Exception as fallback_error:
+                                    raise GeminiError(f"Gemini API 降級處理失敗: {fallback_error}")
+                        
+                        elif "RESOURCE_PROJECT_INVALID" in error_message:
+                            raise GeminiError(f"Gemini API 項目設定錯誤: {error_message}")
+                        elif "PERMISSION_DENIED" in error_message:
+                            raise GeminiError(f"Gemini API 權限錯誤: {error_message}")
+                        elif "QUOTA_EXCEEDED" in error_message:
+                            raise GeminiError(f"Gemini API 配額超限: {error_message}")
                         else:
-                            raise GeminiError(f"Gemini API 錯誤: {error_message}")
-                
-                if not accumulated_text:
-                    raise GeminiError("Gemini API 沒有生成任何回應內容")
+                            if accumulated_text:
+                                yield accumulated_text
+                                return
+                            else:
+                                raise GeminiError(f"Gemini API 錯誤: {error_message}")
                     
-            except Exception as e:
-                if isinstance(e, GeminiError):
-                    raise
-                raise GeminiError(f"Gemini API 生成過程錯誤: {str(e)}")
-
-        return None, async_generator()
-        
+                    if not accumulated_text:
+                        raise GeminiError("Gemini API 沒有生成任何回應內容")
+                        
+                except Exception as e:
+                    raise GeminiError(f"Gemini API 生成過程錯誤: {str(e)}")
+            # 返回異步生成器用於流式回應
+            return None, async_generator()
+        else:
+            # 處理結構化 JSON 回應
+            logger.info(f"收到結構化回應: {response_object.text[:500]}...")
+            # 根據官方最新 SDK，解析後的 Pydantic 物件可直接獲取
+            try:
+                # `response.candidates[0].content.parts[0].json` 會自動使用 pydantic 進行解析
+                parsed_data = response_object.parsed
+                return None, parsed_data
+            except (AttributeError, IndexError) as e:
+                raise GeminiError(f"無法從 API 回應中提取 JSON 物件: {e}\n原始回應: {response_object.text}")
     except Exception as e:
         raise GeminiError(f"Gemini API 初始化錯誤: {str(e)}")
-
+            
 async def generate_response(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None, pdf_input=None):
     """根據 Gemini API 官方最佳實踐生成回應。
     
@@ -1248,63 +1278,3 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
     except Exception as e:
         raise GeminiError(f"Gemini API 初始化錯誤: {str(e)}")
 
-
-async def generate_structured_response(
-    inst: str,
-    system_prompt: str,
-    response_schema: BaseModel,
-    dialogue_history: Optional[List[Dict[str, str]]] = None,
-    image_input: Optional[Any] = None,
-    audio_input: Optional[Any] = None,
-    video_input: Optional[Any] = None,
-    pdf_input: Optional[Any] = None
-) -> Optional[BaseModel]:
-    """
-    專門生成結構化回應 (JSON) 的函式。
-
-    Args:
-        inst (str): 使用者輸入。
-        system_prompt (str): 系統指令。
-        response_schema (BaseModel): 用於定義輸出結構的 Pydantic 模型。
-        dialogue_history (Optional[List[Dict[str, str]]], optional): 對話歷史. Defaults to None.
-        image_input (Optional[Any], optional): 圖片輸入. Defaults to None.
-        audio_input (Optional[Any], optional): 音訊輸入. Defaults to None.
-        video_input (Optional[Any], optional): 影片輸入. Defaults to None.
-        pdf_input (Optional[Any], optional): PDF 輸入. Defaults to None.
-
-    Returns:
-        Optional[BaseModel]: 解析後的 Pydantic 物件，如果失敗則返回 None。
-    """
-    try:
-        contents = await _build_conversation_contents(
-            inst, dialogue_history, image_input, audio_input, video_input, pdf_input
-        )
-
-        config = GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=response_schema,
-            temperature=1.0,
-            top_p=0.95,
-            top_k=64,
-            max_output_tokens=8192,
-        )
-
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=model_id,
-            contents=contents,
-            generation_config=config,
-            system_instruction=system_prompt,
-            tools=[google_search_tool]
-        )
-
-        if hasattr(response, 'parsed') and response.parsed:
-            return response.parsed
-        else:
-            logger.warning("請求結構化輸出，但未在回應中找到 .parsed 內容。")
-            logger.debug(f"原始回應文字: {response.text}")
-            return None
-
-    except Exception as e:
-        logger.error(f"生成結構化回應時發生錯誤: {e}")
-        raise GeminiError(f"生成結構化回應失敗: {str(e)}")

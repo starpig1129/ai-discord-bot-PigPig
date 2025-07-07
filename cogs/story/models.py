@@ -2,6 +2,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
+from pydantic import BaseModel, Field
+
 
 @dataclass
 class Event:
@@ -67,3 +69,38 @@ class PlayerRelationship:
     user_id: int
     description: str
     relationship_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+
+# --- Pydantic Schemas for Structured Output ---
+
+class DialogueContext(BaseModel):
+    speaker_name: str = Field(..., description="The name of the character who is speaking.")
+    motivation: str = Field(..., description="The character's goal or reason for this dialogue.")
+    emotional_state: str = Field(..., description="The character's current emotional state (e.g., angry, happy, curious).")
+
+class StateUpdate(BaseModel):
+    location: Optional[str] = Field(None, description="The new location name, if it changes.")
+    date: Optional[str] = Field(None, description="The new date, if it changes.")
+    time: Optional[str] = Field(None, description="The new time, if it changes.")
+
+class RelationshipUpdate(BaseModel):
+    character_name: str = Field(..., description="The name of the NPC whose relationship is changing.")
+    user_name: str = Field(..., description="The display name of the player involved.")
+    description: str = Field(..., description="The new, updated description of the relationship.")
+
+class GMActionPlan(BaseModel):
+    """
+    The Game Master's action plan, defining the next step in the story.
+    This structure is used for the AI's structured output.
+    """
+    action_type: str = Field(
+        ...,
+        description="The type of action to be taken. MUST be one of: 'NARRATE' or 'DIALOGUE'."
+    )
+    
+    event_title: str = Field(..., description="A short, concise title for this event, suitable for memory logs.")
+    event_summary: str = Field(..., description="A one-sentence summary of this event for long-term memory.")
+    narration_content: Optional[str] = Field(None, description="The narration text, required if action_type is NARRATE.")
+    dialogue_context: Optional[DialogueContext] = Field(None, description="Context for the Character Agent, required if action_type is DIALOGUE.")
+    state_update: Optional[StateUpdate] = Field(None, description="Include this object ONLY if the world state changes.")
+    relationships_update: Optional[List[RelationshipUpdate]] = Field(None, description="Include this array ONLY if player-NPC relationships change.")
