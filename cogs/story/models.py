@@ -53,8 +53,8 @@ class StoryInstance:
     channel_id: int
     guild_id: int
     world_name: str
-    current_date: str
-    current_time: str
+    current_date: Optional[str]
+    current_time: Optional[str]
     current_location: str
     is_active: bool = True
     active_character_ids: List[str] = field(default_factory=list)

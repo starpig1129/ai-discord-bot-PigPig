@@ -263,15 +263,15 @@ class StoryStartModal(discord.ui.Modal):
         self.logger = logging.getLogger(__name__)
 
     initial_date = discord.ui.TextInput(
-        label="初始日期",
-        placeholder="例如：晴天，2024年7月7日",
-        required=True
+        label="初始日期 (選填)",
+        placeholder="留空讓 AI 決定故事的開始日期",
+        required=False
     )
 
     initial_time = discord.ui.TextInput(
-        label="初始時間",
-        placeholder="例如：上午9:00",
-        required=True
+        label="初始時間 (選填)",
+        placeholder="留空讓 AI 決定故事的開始時間",
+        required=False
     )
 
     initial_location = discord.ui.TextInput(
@@ -319,13 +319,17 @@ class StoryStartModal(discord.ui.Modal):
             from ..ui.views import NPCSelectView
             self.logger.info(f"[DEBUG] NPCSelectView 導入成功，開始調用 create 方法...")
             
+            # Use .value or None to ensure None is passed if the field is empty
+            date_value = self.initial_date.value if self.initial_date.value else None
+            time_value = self.initial_time.value if self.initial_time.value else None
+
             view = await NPCSelectView.create(
                 story_manager=self.story_manager,
                 interaction=interaction,
                 channel_id=self.channel_id,
                 world_name=self.world_name,
-                initial_date=self.initial_date.value,
-                initial_time=self.initial_time.value,
+                initial_date=date_value,
+                initial_time=time_value,
                 initial_location=self.initial_location.value,
                 system_prompt=system_prompt_content,
             )

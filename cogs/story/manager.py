@@ -4,7 +4,6 @@ import logging
 from typing import Dict, List, Optional
 import aiohttp
 import json
-import datetime
 from pydantic import ValidationError
 
 from .database import StoryDB, CharacterDB
@@ -478,8 +477,8 @@ class StoryManager:
         world_name: str,
         character_ids: List[str],
         use_narrator: bool,
-        initial_date: str,
-        initial_time: str,
+        initial_date: Optional[str],
+        initial_time: Optional[str],
         initial_location: str
     ):
         """
