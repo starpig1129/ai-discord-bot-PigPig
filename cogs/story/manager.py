@@ -30,7 +30,7 @@ class StoryManager:
         self._initialized = False
         self.db_instances: Dict[int, StoryDB] = {}
         self.character_db = CharacterDB()
-        self.prompt_engine = StoryPromptEngine(self.system_prompt_manager)
+        self.prompt_engine = StoryPromptEngine(self.bot, self.system_prompt_manager)
         self.memory_manager: MemoryManager = self.bot.memory_manager
         self.state_manager = StoryStateManager(bot)
 
@@ -234,6 +234,7 @@ class StoryManager:
                         char_system_prompt, char_user_prompt = await self.prompt_engine.build_character_prompt(
                             character=speaking_character,
                             gm_context=gm_plan.dialogue_context,
+                            guild_id=guild_id,
                         )
                         
                         _, char_response_gen = await generate_response_with_cache(

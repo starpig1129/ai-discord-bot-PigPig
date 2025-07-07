@@ -9,14 +9,23 @@ from .models import (
     StoryInstance, StoryWorld, StoryCharacter, Location, DialogueContext
 )
 from cogs.system_prompt.manager import SystemPromptManager
+from cogs.language_manager import LanguageManager
 
 
 class StoryPromptEngine:
     """Builds high-quality prompts for the layered AI agents in the story."""
 
-    def __init__(self, system_prompt_manager: "SystemPromptManager"):
+    def __init__(self, bot: commands.Bot, system_prompt_manager: "SystemPromptManager"):
+        self.bot = bot
         self.logger = logging.getLogger(__name__)
         self.system_prompt_manager = system_prompt_manager
+        self.language_manager: Optional[LanguageManager] = self.bot.get_cog('LanguageManager')
+        self.language_map = {
+            "zh_TW": "Traditional Chinese",
+            "zh_CN": "Simplified Chinese",
+            "en_US": "English",
+            "ja_JP": "Japanese"
+        }
 
     async def build_gm_prompt(
         self,
@@ -148,7 +157,7 @@ class StoryPromptEngine:
 現在，請根據提供的上下文和玩家行動，生成你的 `GMActionPlan`。"""
 
     async def build_character_prompt(
-        self, character: StoryCharacter, gm_context: "DialogueContext"
+        self, character: StoryCharacter, gm_context: "DialogueContext", guild_id: int
     ) -> Tuple[str, str]:
         """
         Constructs the prompts for the Character Agent.
@@ -174,6 +183,13 @@ class StoryPromptEngine:
         system_prompt_parts.append(
             "**IMPORTANT: Your entire output must be ONLY the dialogue text.** Do not include your character name, quotation marks, or any other formatting or explanations."
         )
+
+        # Add language instruction
+        if self.language_manager:
+            lang_code = self.language_manager.get_server_lang(str(guild_id))
+            language_name = self.language_map.get(lang_code, "English")
+            language_instruction = f"Always answer in {language_name}."
+            system_prompt_parts.append(language_instruction)
         
         system_prompt = "\n\n".join(system_prompt_parts)
 
