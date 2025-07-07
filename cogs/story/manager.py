@@ -101,11 +101,14 @@ class StoryManager:
             current_location_obj = Location(name=instance.current_location)
             world.locations.append(current_location_obj)
 
+        # The event's timestamp should reflect the in-story time, not real-world time.
+        event_timestamp = f"{instance.current_date} {instance.current_time}"
+
         event = Event(
             title=gm_plan.event_title,
             summary=gm_plan.event_summary,
             full_content=final_content,
-            timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat()
+            timestamp=event_timestamp
         )
         current_location_obj.events.append(event)
         
