@@ -282,26 +282,43 @@ class StoryStartModal(discord.ui.Modal):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        """處理表單提交，轉到 NPC 選擇介面"""
+        """
+        立即回應互動以防止超時，並在背景準備 NPC 選擇介面。
+        """
+        # 立即回應，告訴使用者我們正在處理
+        await interaction.response.send_message("⏳ 正在準備 NPC 選擇介面，請稍候...", ephemeral=True)
+        
+        # 在背景執行耗時的操作
+        self.bot.loop.create_task(self._prepare_and_send_npc_select(interaction))
+
+    async def _prepare_and_send_npc_select(self, interaction: discord.Interaction):
+        """
+        在背景中執行耗時操作，然後發送帶有 NPC 選擇視圖的 followup 訊息。
+        """
         try:
-            self.logger.debug(f"StoryStartModal submitted for world: {self.world_name}")
-            # 使用 defer 而不是 send_message，因為我們將在 followup 中發送帶有 view 的訊息
-            await interaction.response.defer(ephemeral=True, thinking=True)
-            
+            self.logger.info(f"[DEBUG] _prepare_and_send_npc_select 開始 - world: {self.world_name}")
+            self.logger.info(f"[DEBUG] 參數 - guild_id: {self.guild_id}, channel_id: {self.channel_id}")
+            self.logger.info(f"[DEBUG] 初始狀態 - date: {self.initial_date.value}, time: {self.initial_time.value}, location: {self.initial_location.value}")
+
             # 獲取系統提示詞
+            self.logger.info(f"[DEBUG] 開始獲取系統提示詞...")
             system_prompt_manager = self.story_manager.system_prompt_manager
             system_prompt_content = ""
             if system_prompt_manager:
+                self.logger.info(f"[DEBUG] 找到 SystemPromptManager，準備獲取提示詞...")
                 prompt_data = system_prompt_manager.get_effective_prompt(
                     str(self.channel_id), str(self.guild_id)
                 )
                 system_prompt_content = prompt_data.get('prompt', '')
-                self.logger.debug(f"Retrieved system prompt for channel {self.channel_id}, length: {len(system_prompt_content)}")
+                self.logger.info(f"[DEBUG] 系統提示詞獲取成功 - length: {len(system_prompt_content)}")
             else:
-                self.logger.warning("SystemPromptManager not found via StoryManager.")
+                self.logger.warning("[DEBUG] SystemPromptManager not found via StoryManager.")
 
-            # 創建 NPC 選擇視圖
-            from ..ui.views import NPCSelectView # 延遲導入以避免循環依賴
+            # 創建 NPC 選擇視圖 (這是耗時操作)
+            self.logger.info(f"[DEBUG] 準備創建 NPCSelectView...")
+            from ..ui.views import NPCSelectView
+            self.logger.info(f"[DEBUG] NPCSelectView 導入成功，開始調用 create 方法...")
+            
             view = await NPCSelectView.create(
                 story_manager=self.story_manager,
                 interaction=interaction,
@@ -312,21 +329,26 @@ class StoryStartModal(discord.ui.Modal):
                 initial_location=self.initial_location.value,
                 system_prompt=system_prompt_content,
             )
+            self.logger.info(f"[DEBUG] NPCSelectView 創建成功")
             
-            # 發送帶有選擇視圖的臨時訊息
+            # 使用 followup.send 發送最終的介面
+            self.logger.info(f"[DEBUG] 準備發送 followup 訊息...")
             await interaction.followup.send(
                 "請選擇要一同參與故事的 NPC：",
                 view=view,
                 ephemeral=True
             )
+            self.logger.info(f"[DEBUG] followup 訊息發送成功")
 
         except Exception as e:
-            self.logger.error("準備 NPC 選擇時發生錯誤", exc_info=True)
-            if not interaction.response.is_done():
+            self.logger.error(f"[DEBUG] 準備 NPC 選擇時發生錯誤: {e}", exc_info=True)
+            try:
                 await interaction.followup.send(
                     "❌ 準備 NPC 選擇介面時發生錯誤，請稍後再試。",
                     ephemeral=True
                 )
+            except Exception as followup_error:
+                self.logger.error(f"[DEBUG] 發送錯誤訊息也失敗: {followup_error}", exc_info=True)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception):
         """處理 Modal 錯誤"""

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from enum import Enum
 
 from .models import StoryInstance, StoryWorld, StoryCharacter, Location
-from cogs.system_prompt_manager import SystemPromptManagerCog
+from cogs.system_prompt.manager import SystemPromptManager
 
 # --- Pydantic Schemas for Structured Output ---
 
@@ -46,10 +46,9 @@ class GMActionPlan(BaseModel):
 class StoryPromptEngine:
     """Builds high-quality prompts for the layered AI agents in the story."""
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, system_prompt_manager: "SystemPromptManager"):
         self.logger = logging.getLogger(__name__)
-        self.system_prompt_manager: SystemPromptManagerCog = self.bot.get_cog("SystemPromptManagerCog")
+        self.system_prompt_manager = system_prompt_manager
 
     async def build_gm_prompt(
         self,
@@ -60,7 +59,7 @@ class StoryPromptEngine:
     ) -> str:
         """Constructs the prompt for the Game Master (GM) Agent."""
         
-        base_prompt = await self.system_prompt_manager.get_effective_system_prompt(
+        base_prompt = self.system_prompt_manager.get_effective_full_prompt(
             str(instance.channel_id), str(instance.guild_id)
         )
         
@@ -108,6 +107,49 @@ class StoryPromptEngine:
             "You will not write the story directly. Instead, you will create a detailed action plan by generating a JSON object. "
             "Your output MUST be a single, valid JSON object that conforms to the requested schema."
         )
+
+        return "\n\n".join(prompt_parts)
+
+    async def build_story_start_prompt(self, instance: StoryInstance, world: StoryWorld, characters: List[StoryCharacter]) -> str:
+        """Constructs the prompt for the GM to generate the very first scene."""
+        base_prompt = self.system_prompt_manager.get_effective_full_prompt(
+            str(instance.channel_id), str(instance.guild_id)
+        )
+        if not base_prompt:
+            self.logger.warning("No base_prompt available, using fallback GM system prompt for story start")
+            base_prompt = self._get_fallback_gm_prompt()
+
+        prompt_parts = [base_prompt]
+        prompt_parts.append("## Task: Generate the Opening Scene")
+        prompt_parts.append(
+            "You are the Director (Game Master). Your task is to set the stage for a brand new story. "
+            "Describe the initial setting, introduce the characters present, and establish the initial mood. "
+            "Your output MUST be a single, valid JSON object conforming to the `GMActionPlan` schema. "
+            "For this first scene, the `action_type` should almost always be `NARRATE`."
+        )
+        prompt_parts.append("## World & Scene Context")
+        prompt_parts.append(f"### World: {world.world_name}")
+        prompt_parts.append(f"**World Background:** {world.attributes.get('background', 'Not provided.')}")
+
+        state_block = (
+            f"**Starting Location:** {instance.current_location}\n"
+            f"**Date:** {instance.current_date}\n"
+            f"**Time:** {instance.current_time}"
+        )
+        prompt_parts.append(state_block)
+
+        prompt_parts.append("### Characters to Introduce")
+        if characters:
+            char_lines = [
+                f"- **{char.name}** ({'Player' if char.is_pc else 'NPC'}): {char.description} Status: {char.status}."
+                for char in characters
+            ]
+            prompt_parts.append("\n".join(char_lines))
+        else:
+            prompt_parts.append("No specific characters are present at the start.")
+
+        prompt_parts.append("## Final Instruction")
+        prompt_parts.append("Generate the `GMActionPlan` JSON for the story's opening narration now.")
 
         return "\n\n".join(prompt_parts)
 

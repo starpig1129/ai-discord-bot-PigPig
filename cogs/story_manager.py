@@ -27,7 +27,7 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
             raise RuntimeError("SystemPromptManagerCog not found!")
         system_prompt_manager = system_prompt_manager_cog.manager
 
-        self.story_manager = StoryManager(bot, system_prompt_manager)
+        self.story_manager = StoryManager(bot, self, system_prompt_manager)
         self.ui_manager = UIManager(bot, self.story_manager, system_prompt_manager)
         self.logger.info("StoryManagerCog (UI版本) 已初始化")
 

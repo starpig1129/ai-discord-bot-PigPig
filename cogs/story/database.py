@@ -169,6 +169,29 @@ class CharacterDB:
             rows = cursor.fetchall()
             return [self._row_to_character(row) for row in rows]
 
+    def get_characters_by_ids(self, character_ids: List[str]) -> List[StoryCharacter]:
+        """
+        Retrieves multiple characters by their IDs.
+        
+        Args:
+            character_ids: List of character ID strings (UUIDs)
+            
+        Returns:
+            List of StoryCharacter objects
+        """
+        if not character_ids:
+            return []
+            
+        with self._get_connection() as db:
+            # Create placeholders for the IN clause
+            placeholders = ','.join('?' * len(character_ids))
+            cursor = db.execute(
+                f"SELECT * FROM characters WHERE character_id IN ({placeholders})",
+                character_ids,
+            )
+            rows = cursor.fetchall()
+            return [self._row_to_character(row) for row in rows]
+
     def delete_character(self, character_id: str):
         """Deletes a character by ID."""
         with self._get_connection() as db:

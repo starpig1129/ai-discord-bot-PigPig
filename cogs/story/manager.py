@@ -22,14 +22,15 @@ class StoryManager:
     and prompt engine to generate story progression based on the v5 layered AI agent architecture.
     """
 
-    def __init__(self, bot: commands.Bot, system_prompt_manager: SystemPromptManager):
+    def __init__(self, bot: commands.Bot, cog: commands.Cog, system_prompt_manager: SystemPromptManager):
         self.bot = bot
+        self.cog = cog
         self.logger = logging.getLogger(__name__)
         self.system_prompt_manager = system_prompt_manager
         self._initialized = False
         self.db_instances: Dict[int, StoryDB] = {}
         self.character_db = CharacterDB()
-        self.prompt_engine = StoryPromptEngine(bot)
+        self.prompt_engine = StoryPromptEngine(self.system_prompt_manager)
         self.memory_manager: MemoryManager = self.bot.memory_manager
         self.state_manager = StoryStateManager(bot)
 
@@ -269,3 +270,150 @@ class StoryManager:
             except Exception as e:
                 self.logger.error(f"An unexpected error occurred in V5 story generation: {e}", exc_info=True)
                 await message.reply("一陣無法預測的宇宙射線干擾了故事的進行，請稍後再試...")
+
+    async def start_story(
+        self,
+        interaction: discord.Interaction,
+        world_name: str,
+        character_ids: List[str],
+        use_narrator: bool,
+        initial_date: str,
+        initial_time: str,
+        initial_location: str
+    ):
+        """
+        Handles the logic of starting a new story, creating the instance,
+        and generating the first scene.
+        """
+        db = self._get_db(interaction.guild_id)
+        world = db.get_world(world_name)
+        if not world:
+            self.logger.error(f"FATAL: Could not find world '{world_name}' during story start.")
+            await interaction.edit_original_response(content="❌ 無法載入世界資料，故事無法開始。", embed=None, view=None)
+            return
+
+        if use_narrator:
+            # This is the standard path with a narrator
+            self.logger.info(f"Starting story '{world_name}' with narrator.")
+            story_instance = StoryInstance(
+                channel_id=interaction.channel_id,
+                guild_id=interaction.guild_id,
+                world_name=world_name,
+                current_date=initial_date,
+                current_time=initial_time,
+                current_location=initial_location,
+                active_character_ids=character_ids,
+                is_active=True
+            )
+            # Save the story instance to database
+            db.save_story_instance(story_instance)
+            await self.generate_first_scene(interaction, story_instance)
+
+        else:
+            # This is the path we need to investigate
+            self.logger.info("Entering 'use_narrator=False' logic branch.")
+            
+            self.logger.info(f"Received character_ids: {character_ids}")
+            all_selected_chars = self.character_db.get_characters_by_ids(character_ids)
+            self.logger.info(f"Fetched {len(all_selected_chars)} character objects from the database.")
+
+            if not all_selected_chars:
+                self.logger.error("Error: No character objects were fetched despite receiving IDs.")
+                await interaction.edit_original_response(content="❌ 錯誤：選擇的角色無法載入，故事無法開始。", embed=None, view=None)
+                return
+
+            director_character = all_selected_chars[0]
+            self.logger.info(f"Designated director: {director_character.name} (ID: {director_character.character_id})")
+
+            actor_characters = all_selected_chars[1:]
+            self.logger.info(f"Designated {len(actor_characters)} actors.")
+
+            self.logger.info("Preparing to create StoryInstance...")
+            story_instance = StoryInstance(
+                channel_id=interaction.channel_id,
+                guild_id=interaction.guild_id,
+                world_name=world_name,
+                current_date=initial_date,
+                current_time=initial_time,
+                current_location=initial_location,
+                active_character_ids=character_ids,
+                is_active=True
+            )
+            # Save the story instance to database
+            db.save_story_instance(story_instance)
+            self.logger.info(f"Successfully created story_instance for channel: {story_instance.channel_id}")
+
+            self.logger.info("Preparing to call self.generate_first_scene...")
+            await self.generate_first_scene(interaction, story_instance)
+            self.logger.info("Successfully completed call to generate_first_scene.")
+
+    async def generate_first_scene(self, interaction: discord.Interaction, story_instance: StoryInstance):
+        """
+        Generates the introductory scene for a new story using the v5 architecture.
+        """
+        self.logger.info(f"V5: Generating first scene for story in channel {interaction.channel_id}")
+        db = self._get_db(interaction.guild.id)
+        world = db.get_world(story_instance.world_name)
+        
+        async with interaction.channel.typing():
+            try:
+                # --- Step 1: Build the prompt for the GM to start the story ---
+                characters = self.character_db.get_characters_by_ids(story_instance.active_character_ids)
+                gm_prompt = await self.prompt_engine.build_story_start_prompt(story_instance, world, characters)
+
+                # --- Step 2: Call GM Agent for a structured plan ---
+                gm_plan = await generate_structured_response(
+                    inst=gm_prompt,
+                    system_prompt="You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.",
+                    response_schema=GMActionPlan
+                )
+
+                if not gm_plan or gm_plan.action_type != "NARRATE" or not gm_plan.narration_content:
+                    raise GeminiError("Failed to generate a valid opening narration plan.")
+
+                # --- Step 3: Update World State & Relationships (if any) ---
+                updated_instance = await self.state_manager.update_state_from_gm_plan(story_instance, gm_plan)
+                await self._update_relationships(db, updated_instance.channel_id, gm_plan.relationships_update)
+
+                # --- Step 4: Record the opening event ---
+                await self._record_event(db, world, updated_instance, gm_plan, gm_plan.narration_content)
+                
+                # Save the final state of the instance
+                db.save_story_instance(updated_instance)
+
+                # --- Step 5: Send the opening narration to the channel ---
+                await self._send_story_response(
+                    channel=interaction.channel,
+                    character=None,  # Narrator speaks first
+                    story_instance=updated_instance,
+                    content=gm_plan.narration_content,
+                )
+
+                # --- Step 6: Finalize the public "Story Started" message ---
+                embed = discord.Embed(
+                    title="🎬 故事開始！",
+                    description=f"**{world.world_name}** 的冒險篇章已在此頻道開啟！",
+                    color=discord.Color.gold()
+                )
+                world_background = world.attributes.get('background', '這個世界沒有背景描述。')
+                embed.add_field(name="🌍 世界背景", value=world_background[:800] + ("..." if len(world_background) > 800 else ""), inline=False)
+                embed.add_field(name="📅 日期", value=updated_instance.current_date, inline=True)
+                embed.add_field(name="⏰ 時間", value=updated_instance.current_time, inline=True)
+                embed.add_field(name="📍 地點", value=updated_instance.current_location, inline=False)
+                
+                characters = [self.character_db.get_character(cid) for cid in updated_instance.active_character_ids]
+                if characters:
+                    selected_npcs = [char.name for char in characters if char]
+                    embed.add_field(name="👥 參與的NPC", value=", ".join(selected_npcs) if selected_npcs else "無", inline=False)
+
+                embed.set_footer(text="💡 在此頻道輸入訊息來與故事互動")
+                
+                await interaction.edit_original_response(content=None, embed=embed, view=None)
+                self.logger.info(f"V5 story started successfully in channel {interaction.channel_id}")
+
+            except (GeminiError, json.JSONDecodeError, ValidationError) as e:
+                self.logger.error(f"Error in V5 first scene generation: {e}", exc_info=True)
+                await interaction.edit_original_response(content="❌ 故事開始了，但開場白被一陣神秘的靜電干擾了...", embed=None, view=None)
+            except Exception as e:
+                self.logger.error(f"An unexpected error occurred in V5 first scene generation: {e}", exc_info=True)
+                await interaction.edit_original_response(content="一陣無法預測的宇宙射線干擾了故事的進行，請稍後再試...", embed=None, view=None)
