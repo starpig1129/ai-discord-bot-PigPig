@@ -60,6 +60,9 @@ class StoryInstance:
     active_character_ids: List[str] = field(default_factory=list)
     current_state: Dict[str, Any] = field(default_factory=dict)
     event_log: List[str] = field(default_factory=list)
+    message_counter: int = 0
+    summaries: List[str] = field(default_factory=list)
+    outlines: List[str] = field(default_factory=list)
 
 @dataclass
 class PlayerRelationship:

@@ -200,12 +200,34 @@ class StoryManager:
         async with message.channel.typing():
             try:
                 # --- Step 1: Call GM Agent for a structured plan ---
-                gm_prompt = await self.prompt_engine.build_gm_prompt(story_instance, world, characters, message.content)
-                
+                gm_prompt = await self.prompt_engine.build_gm_prompt(
+                    instance=story_instance,
+                    world=world,
+                    characters=characters,
+                    user_input=message.content,
+                    story_outlines=story_instance.outlines
+                )
+
+                # Prepare dialogue history for the GM, treating each outline and summary as a separate piece of context
+                gm_dialogue_history = []
+                if story_instance.outlines:
+                    for outline in story_instance.outlines:
+                        gm_dialogue_history.append({
+                            "role": "user",
+                            "content": f"High-level story outline: {outline}"
+                        })
+                if story_instance.summaries:
+                    for summary in story_instance.summaries[-5:]:
+                        gm_dialogue_history.append({
+                            "role": "user",
+                            "content": f"Recent plot summary: {summary}"
+                        })
+
                 # Use the new structured response function to get the GM plan directly.
                 _, gm_plan = await generate_response_with_cache(
-                    inst=gm_prompt,
-                    system_prompt="You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.",
+                    inst=message.content,
+                    system_prompt=gm_prompt,
+                    dialogue_history=gm_dialogue_history,
                     response_schema=GMActionPlan
                 )
 
@@ -230,16 +252,44 @@ class StoryManager:
                     speaking_character = next((c for c in characters if c.name == speaker_name), None)
 
                     if speaking_character:
+                        # Fetch recent conversation history
+                        history_messages = [msg async for msg in message.channel.history(limit=20)]
+                        history_messages.reverse()  # Oldest to newest
+                        
+                        # Build the dialogue history for the character, starting with summaries
+                        dialogue_history = []
+                        if story_instance.summaries:
+                            for summary in story_instance.summaries[-5:]:
+                                dialogue_history.append({
+                                    "role": "user",
+                                    "content": f"[Contextual Summary: {summary}]"
+                                })
+
+                        # Append recent conversation messages
+                        for msg in history_messages:
+                            content = msg.content
+                            role = "user"  # Default to user
+
+                            if msg.author.id == self.bot.user.id and msg.embeds:
+                                content = msg.embeds[0].description or ""
+                                role = "assistant"
+                            elif msg.author.id != self.bot.user.id:
+                                role = "user"
+
+                            if content.strip():
+                                dialogue_history.append({"role": role, "content": content})
+
                         # Step 3B: Build separated prompts and call Character Agent
                         char_system_prompt, char_user_prompt = await self.prompt_engine.build_character_prompt(
                             character=speaking_character,
                             gm_context=gm_plan.dialogue_context,
-                            guild_id=guild_id,
+                            guild_id=guild_id
                         )
                         
                         _, char_response_gen = await generate_response_with_cache(
                             inst=char_user_prompt,
-                            system_prompt=char_system_prompt
+                            system_prompt=char_system_prompt,
+                            dialogue_history=dialogue_history
                         )
                         
                         response_content = "".join([chunk async for chunk in char_response_gen]).strip()
@@ -254,8 +304,16 @@ class StoryManager:
                 # --- Step 5: Record Event ---
                 await self._record_event(db, world, updated_instance, gm_plan, response_content)
                 
-                # Save the final state of the instance after all updates
-                db.save_story_instance(updated_instance)
+                # --- Step 5.5: Handle Summary Generation ---
+                updated_instance.message_counter += 1
+                if updated_instance.message_counter >= 20:
+                    self.logger.info(f"Message counter reached {updated_instance.message_counter}, generating summary for story {updated_instance.channel_id}")
+                    await self._generate_and_save_summary(updated_instance)
+                    # The summary function will reset the counter and save the instance
+                else:
+                    # Save the instance if no summary was generated
+                    db.save_story_instance(updated_instance)
+
 
                 # --- Step 6: Send Response to User ---
                 await self._send_story_response(
@@ -271,6 +329,126 @@ class StoryManager:
             except Exception as e:
                 self.logger.error(f"An unexpected error occurred in V5 story generation: {e}", exc_info=True)
                 await message.reply("一陣無法預測的宇宙射線干擾了故事的進行，請稍後再試...")
+
+    async def _generate_and_save_summary(self, story_instance: StoryInstance):
+        """
+        Generates a summary of the last 20-40 messages and saves it.
+        """
+        db = self._get_db(story_instance.guild_id)
+        channel = self.bot.get_channel(story_instance.channel_id)
+        if not channel:
+            self.logger.error(f"Cannot generate summary, channel {story_instance.channel_id} not found.")
+            return
+
+        self.logger.info(f"Generating summary for story in channel {channel.id}")
+        try:
+            # Fetch last 30 messages for context
+            history_messages = [msg async for msg in channel.history(limit=30)]
+            history_messages.reverse()
+
+            # Format history into the required List[Dict[str, str]] format
+            dialogue_history = []
+            for msg in history_messages:
+                content = msg.content
+                role = "user"
+                if msg.author.id == self.bot.user.id and msg.embeds:
+                    content = msg.embeds[0].description or ""
+                    role = "assistant"
+                elif msg.author.id != self.bot.user.id:
+                    role = "user"
+                
+                if content.strip():
+                    dialogue_history.append({"role": role, "content": content})
+            
+            if not dialogue_history:
+                self.logger.info("No content to summarize.")
+                story_instance.message_counter = 0
+                db.save_story_instance(story_instance)
+                return
+
+            summary_system_prompt = (
+                "You are a story summarization assistant. "
+                "Based on the provided conversation log, please provide a concise, one-paragraph summary. "
+                "Focus on key events, character actions, and significant plot developments. "
+                "The summary should capture the essence of what happened, serving as a memory for the AI. "
+                "Do not add any introductory or concluding phrases."
+            )
+            
+            summary_inst = "Please provide a concise, one-paragraph summary of the preceding conversation."
+
+            _, summary_gen = await generate_response_with_cache(
+                inst=summary_inst,
+                system_prompt=summary_system_prompt,
+                dialogue_history=dialogue_history,
+            )
+            
+            summary_text = "".join([chunk async for chunk in summary_gen]).strip()
+
+            if summary_text:
+                story_instance.summaries.append(summary_text)
+                self.logger.info(f"Generated and saved new summary for story {story_instance.channel_id}. Total summaries: {len(story_instance.summaries)}")
+                
+                # Check if it's time to generate an outline
+                if len(story_instance.summaries) > 0 and len(story_instance.summaries) % 10 == 0:
+                    self.logger.info(f"Summary count is a multiple of 10. Generating outline for story {story_instance.channel_id}.")
+                    await self._generate_and_save_outline(story_instance)
+            else:
+                self.logger.warning(f"Summary generation resulted in empty text for story {story_instance.channel_id}.")
+
+        except Exception as e:
+            self.logger.error(f"Failed to generate summary for story {story_instance.channel_id}: {e}", exc_info=True)
+        finally:
+            # Reset counter and save the instance regardless of success or failure
+            story_instance.message_counter = 0
+            db.save_story_instance(story_instance)
+
+    async def _generate_and_save_outline(self, story_instance: StoryInstance):
+        """
+        Generates a high-level outline from the last 10 summaries and saves it.
+        """
+        self.logger.info(f"Attempting to generate outline for story {story_instance.channel_id}.")
+
+        # Ensure there are enough summaries
+        if len(story_instance.summaries) < 10:
+            self.logger.warning(f"Not enough summaries to generate an outline for story {story_instance.channel_id}. Need 10, have {len(story_instance.summaries)}.")
+            return
+
+        # Get the most recent 10 summaries
+        recent_summaries = story_instance.summaries[-10:]
+        formatted_summaries = "\n".join([f"{i+1}. {s}" for i, s in enumerate(recent_summaries)])
+
+        outline_system_prompt = (
+            "You are a master storyteller and editor. "
+            "Based on the provided plot summaries, please synthesize them into a single, high-level outline paragraph. "
+            "This outline should capture the major story arc, character progressions, and key turning points. "
+            "Focus on the overarching narrative, omitting minor details. "
+            "The goal is to create a concise, big-picture view of the story so far for the Director AI. "
+            "Do not add any introductory or concluding phrases."
+        )
+        
+        outline_inst = "Based on the following 10 plot summaries, please synthesize them into a single, high-level outline paragraph."
+        
+        # Format summaries into the dialogue history structure
+        dialogue_history = [{'role': 'user', 'content': f"## Recent Plot Summaries\n{formatted_summaries}"}]
+
+        try:
+            _, outline_gen = await generate_response_with_cache(
+                inst=outline_inst,
+                system_prompt=outline_system_prompt,
+                dialogue_history=dialogue_history,
+            )
+            
+            outline_text = "".join([chunk async for chunk in outline_gen]).strip()
+
+            if outline_text:
+                story_instance.outlines.append(outline_text)
+                self.logger.info(f"Generated and saved new outline for story {story_instance.channel_id}. Total outlines: {len(story_instance.outlines)}")
+            else:
+                self.logger.warning(f"Outline generation resulted in empty text for story {story_instance.channel_id}.")
+
+        except Exception as e:
+            self.logger.error(f"Failed to generate outline for story {story_instance.channel_id}: {e}", exc_info=True)
+        # The instance will be saved in the finally block of _generate_and_save_summary
 
     async def start_story(
         self,

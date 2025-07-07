@@ -870,61 +870,34 @@ async def generate_response_with_cache(inst: str,
         # 獲取快取管理器
         cache_mgr = get_cache_manager()
         
-        # 處理多媒體檔案和建構內容
-        contents = []
-        media_files = []
+        # 統一使用輔助函數建構對話內容，確保包含歷史紀錄和所有媒體
+        contents = await _build_conversation_contents(
+            inst,
+            dialogue_history,
+            image_input,
+            audio_input,
+            video_input,
+            pdf_input
+        )
         
-        # 按優先級處理多媒體（PDF > 影片 > 音訊 > 圖片）
+        # 為了快取，我們需要知道哪些檔案被成功上傳
+        media_files = []
         if pdf_input:
             try:
-                uploaded_pdfs = await _upload_media_files(pdf_input, 'pdf')
-                media_files.extend(uploaded_pdfs)
-                contents.append(inst)
-                contents.extend(uploaded_pdfs)
-                logger.info("PDF 上傳成功，使用官方 Files API")
-            except Exception as e:
-                logger.error(f"PDF 上傳失敗，降級處理: {str(e)}")
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
-        
-        elif video_input:
+                media_files.extend(await _upload_media_files(pdf_input, 'pdf'))
+            except Exception: pass
+        if video_input:
             try:
-                uploaded_videos = await _upload_media_files(video_input, 'video')
-                media_files.extend(uploaded_videos)
-                contents.append(inst)
-                contents.extend(uploaded_videos)
-                logger.info("影片上傳成功，使用官方 Files API")
-            except Exception as e:
-                logger.error(f"影片上傳失敗，降級處理: {str(e)}")
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
-        
-        elif audio_input:
+                media_files.extend(await _upload_media_files(video_input, 'video'))
+            except Exception: pass
+        if audio_input:
             try:
-                uploaded_audios = await _upload_media_files(audio_input, 'audio')
-                media_files.extend(uploaded_audios)
-                contents.append("請分析這個音訊檔案: " + inst)
-                contents.extend(uploaded_audios)
-                logger.info("音訊上傳成功，使用官方 Files API")
-            except Exception as e:
-                logger.error(f"音訊上傳失敗，降級處理: {str(e)}")
-                contents.append(f"{inst}\n\n注意: 音訊處理發生錯誤，無法分析音訊內容")
-        
-        elif image_input:
+                media_files.extend(await _upload_media_files(audio_input, 'audio'))
+            except Exception: pass
+        if image_input:
             try:
-                uploaded_images = await _upload_media_files(image_input, 'image')
-                media_files.extend(uploaded_images)
-                contents.append(inst)
-                contents.extend(uploaded_images)
-                logger.info("圖片上傳成功，使用官方 Files API")
-            except Exception as e:
-                logger.error(f"圖片上傳失敗，降級處理: {str(e)}")
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
-        
-        # 純文字輸入
-        else:
-            if dialogue_history:
-                contents = await _build_conversation_contents(inst, dialogue_history, image_input, audio_input, video_input, pdf_input)
-            else:
-                contents.append(inst)
+                media_files.extend(await _upload_media_files(image_input, 'image'))
+            except Exception: pass
         
         generation_config_args = {}
         

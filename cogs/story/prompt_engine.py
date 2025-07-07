@@ -33,6 +33,7 @@ class StoryPromptEngine:
         world: StoryWorld,
         characters: List[StoryCharacter],
         user_input: str,
+        story_outlines: List[str],
     ) -> str:
         """Constructs the prompt for the Game Master (GM) Agent."""
         
@@ -50,6 +51,13 @@ class StoryPromptEngine:
         )
 
         prompt_parts = [base_prompt]
+
+        if story_outlines:
+            prompt_parts.append("## Story Outline So Far")
+            prompt_parts.append("This is the high-level plot outline, summarizing major arcs and events. Use this for strategic, long-term decisions.")
+            outline_text = "\n".join([f"- {outline}" for outline in story_outlines])
+            prompt_parts.append(outline_text)
+
         prompt_parts.append("## World & Scene Context")
         prompt_parts.append(f"### World: {world.world_name}")
         
@@ -157,7 +165,10 @@ class StoryPromptEngine:
 現在，請根據提供的上下文和玩家行動，生成你的 `GMActionPlan`。"""
 
     async def build_character_prompt(
-        self, character: StoryCharacter, gm_context: "DialogueContext", guild_id: int
+        self,
+        character: StoryCharacter,
+        gm_context: "DialogueContext",
+        guild_id: int,
     ) -> Tuple[str, str]:
         """
         Constructs the prompts for the Character Agent.
@@ -198,7 +209,12 @@ class StoryPromptEngine:
         user_prompt_parts.append("## Current Situation & Task")
         user_prompt_parts.append(f"Your current motivation is: **{gm_context.motivation}**")
         user_prompt_parts.append(f"Your current emotional state is: **{gm_context.emotional_state}**")
-        user_prompt_parts.append("Based on this situation, please provide your line of dialogue now.")
+
+        user_prompt_parts.append("\n## Your Task")
+        user_prompt_parts.append(
+            "The conversation history and relevant summaries are provided in the dialogue history. "
+            "Based on your identity, the current situation, and the history, please provide your line of dialogue now."
+        )
 
         user_prompt = "\n\n".join(user_prompt_parts)
 
