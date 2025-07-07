@@ -107,3 +107,13 @@ class GMActionPlan(BaseModel):
     dialogue_context: Optional[DialogueContext] = Field(None, description="Context for the Character Agent, required if action_type is DIALOGUE.")
     state_update: Optional[StateUpdate] = Field(None, description="Include this object ONLY if the world state changes.")
     relationships_update: Optional[List[RelationshipUpdate]] = Field(None, description="Include this array ONLY if player-NPC relationships change.")
+
+
+class CharacterAction(BaseModel):
+    """
+    Represents a character's action, combining dialogue, physical action, and internal thought.
+    This structure is used for the AI's structured output.
+    """
+    action: Optional[str] = Field(description="The character's action,body language or facial expressions.")
+    dialogue: str = Field(description="Words spoken by the character.")
+    thought: Optional[str] = Field(description="The inner thoughts or feelings of the character, visible to the player.")

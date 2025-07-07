@@ -189,10 +189,15 @@ class StoryPromptEngine:
 
         system_prompt_parts.append("## Core Instructions")
         system_prompt_parts.append(
-            "You are a character in a story. Please respond in the first person, embodying your character's personality and background."
+            "You are an actor playing a character in a story. You must fully embody your character's personality, background, and current state. "
+            "Your performance is guided by a Director (the GM)."
         )
         system_prompt_parts.append(
-            "**IMPORTANT: Your entire output must be ONLY the dialogue text.** Do not include your character name, quotation marks, or any other formatting or explanations."
+            "**CRUCIAL:** You MUST strictly follow the Director's instructions regarding your motivation and emotional state. This is not optional. Your performance depends on it."
+        )
+        system_prompt_parts.append(
+            "Your output **MUST** be a single, valid JSON object that conforms to the `CharacterAction` schema. "
+            "This object will contain your character's action, dialogue, and internal thought. Do not output anything other than this JSON object."
         )
 
         # Add language instruction
@@ -206,14 +211,15 @@ class StoryPromptEngine:
 
         # --- User Prompt: Dynamic, Situational Context ---
         user_prompt_parts = []
-        user_prompt_parts.append("## Current Situation & Task")
-        user_prompt_parts.append(f"Your current motivation is: **{gm_context.motivation}**")
-        user_prompt_parts.append(f"Your current emotional state is: **{gm_context.emotional_state}**")
+        user_prompt_parts.append("## Director's Guidance for This Scene")
+        user_prompt_parts.append(f"Your motivation is: **{gm_context.motivation}**")
+        user_prompt_parts.append(f"Your emotional state is: **{gm_context.emotional_state}**")
 
-        user_prompt_parts.append("\n## Your Task")
+        user_prompt_parts.append("\n## Your Task: Perform")
         user_prompt_parts.append(
-            "The conversation history and relevant summaries are provided in the dialogue history. "
-            "Based on your identity, the current situation, and the history, please provide your line of dialogue now."
+            "The conversation history is provided in the message history. "
+            "Based on your identity and the Director's guidance, generate the `CharacterAction` JSON object now. "
+            "Combine your physical action, spoken dialogue, and internal thoughts into a single, cohesive performance."
         )
 
         user_prompt = "\n\n".join(user_prompt_parts)

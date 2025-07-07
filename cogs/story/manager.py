@@ -8,7 +8,7 @@ import datetime
 from pydantic import ValidationError
 
 from .database import StoryDB, CharacterDB
-from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationship, Event, Location, GMActionPlan, RelationshipUpdate
+from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationship, Event, Location, GMActionPlan, RelationshipUpdate, CharacterAction
 from .prompt_engine import StoryPromptEngine
 from .state_manager import StoryStateManager
 from cogs.memory.memory_manager import MemoryManager
@@ -120,13 +120,26 @@ class StoryManager:
         channel: discord.TextChannel,
         character: Optional[StoryCharacter],
         story_instance: StoryInstance,
-        content: str,
+        content: str | CharacterAction,
     ):
         """
         Constructs and sends the story response as an embed, using a webhook if available.
         """
         db = self._get_db(channel.guild.id)
-        embed = discord.Embed(description=content, color=discord.Color.blurple())
+        
+        description = ""
+        if isinstance(content, CharacterAction):
+            parts = []
+            if content.action:
+                parts.append(f"*{content.action}*")
+            parts.append(content.dialogue)
+            if content.thought:
+                parts.append(f"\n💭 {content.thought}")
+            description = "\n".join(parts)
+        else:
+            description = content
+
+        embed = discord.Embed(description=description, color=discord.Color.blurple())
 
         # Add world state fields
         embed.add_field(name="📍 地點", value=story_instance.current_location or "未知", inline=True)
@@ -286,13 +299,14 @@ class StoryManager:
                             guild_id=guild_id
                         )
                         
-                        _, char_response_gen = await generate_response_with_cache(
+                        _, character_action = await generate_response_with_cache(
                             inst=char_user_prompt,
                             system_prompt=char_system_prompt,
-                            dialogue_history=dialogue_history
+                            dialogue_history=dialogue_history,
+                            response_schema=CharacterAction
                         )
                         
-                        response_content = "".join([chunk async for chunk in char_response_gen]).strip()
+                        response_content = character_action
                     else:
                         self.logger.warning(f"Character '{speaker_name}' not found for dialogue.")
                         response_content = f"({speaker_name} 想要說話，但似乎走神了...)"
@@ -302,7 +316,12 @@ class StoryManager:
                 await self._update_relationships(db, updated_instance.channel_id, gm_plan.relationships_update)
                 
                 # --- Step 5: Record Event ---
-                await self._record_event(db, world, updated_instance, gm_plan, response_content)
+                # Ensure we log the string representation for the event record.
+                if isinstance(response_content, CharacterAction):
+                    event_text = f"{response_content.action or ''} {response_content.dialogue} {response_content.thought or ''}".strip()
+                else:
+                    event_text = response_content
+                await self._record_event(db, world, updated_instance, gm_plan, event_text)
                 
                 # --- Step 5.5: Handle Summary Generation ---
                 updated_instance.message_counter += 1
