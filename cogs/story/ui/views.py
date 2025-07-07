@@ -5,7 +5,7 @@ import logging
 from typing import List, Optional, TYPE_CHECKING
 
 from ..manager import StoryManager
-from ..models import StoryInstance, StoryWorld
+from ..models import StoryInstance, StoryWorld, StoryCharacter
 from .modals import WorldCreateModal, CharacterCreateModal
 
 if TYPE_CHECKING:
@@ -63,7 +63,7 @@ class InitialStoryView(discord.ui.View):
             
             embed = discord.Embed(
                 title=f"🌍 已選擇世界：{self.selected_world}",
-                description=world.background[:500] + ("..." if len(world.background) > 500 else ""),
+                description=world.attributes.get('description', '無描述')[:500] + ("..." if len(world.attributes.get('description', '')) > 500 else ""),
                 color=discord.Color.blue()
             )
             
@@ -91,8 +91,8 @@ class InitialStoryView(discord.ui.View):
     async def create_character_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """創建角色按鈕"""
         try:
-            world_name = self.selected_world if self.selected_world else None
-            modal = CharacterCreateModal(self.story_manager, self.guild_id, world_name)
+            # 角色創建不再與特定世界綁定
+            modal = CharacterCreateModal(self.story_manager, self.guild_id)
             await interaction.response.send_modal(modal)
             
         except Exception as e:
@@ -156,6 +156,7 @@ class InitialStoryView(discord.ui.View):
             from .modals import StoryStartModal
             modal = StoryStartModal(
                 story_manager=self.story_manager,
+                bot=self.ui_manager.bot,
                 guild_id=self.guild_id,
                 channel_id=self.channel_id,
                 world_name=self.selected_world
@@ -183,7 +184,7 @@ class InitialStoryView(discord.ui.View):
                     options.append(discord.SelectOption(
                         label=world.world_name,
                         value=world.world_name,
-                        description=world.background[:100] if world.background else "無描述"
+                        description=world.attributes.get('description', '無描述')[:100]
                     ))
             else:
                 options.append(discord.SelectOption(
@@ -239,18 +240,18 @@ class ActiveStoryView(discord.ui.View):
         try:
             await interaction.response.defer(ephemeral=True)
             
-            db = self.story_manager._get_db(interaction.guild_id)
+            character_db = self.story_manager.character_db
             
-            # 尋找使用者在此世界的角色
-            user_characters = db.get_characters_by_user(
+            # 尋找使用者在此伺服器的角色
+            user_characters = character_db.get_characters_by_user(
                 interaction.user.id,
-                self.story_instance.world_name
+                interaction.guild_id
             )
             
             if not user_characters:
                 await interaction.followup.send(
-                    f"❌ 你在 **{self.story_instance.world_name}** 世界中還沒有創建任何角色。\n"
-                    f"請先使用 `/story` 創建角色。",
+                    f"❌ 你在這個伺服器中還沒有創建任何角色。\n"
+                    f"請先使用 `/story` 選單中的 '創建角色' 按鈕來創建一個。",
                     ephemeral=True
                 )
                 return
@@ -372,3 +373,213 @@ class ActiveStoryView(discord.ui.View):
             
         except Exception as e:
             self.logger.error(f"結束故事錯誤: {e}", exc_info=True)
+
+
+class NPCSelectView(discord.ui.View):
+    """
+    NPC 選擇視圖
+    
+    讓玩家在開始故事時選擇要參與的 NPC
+    """
+
+    @classmethod
+    async def create(
+        cls,
+        story_manager: StoryManager,
+        interaction: discord.Interaction,
+        channel_id: int,
+        world_name: str,
+        initial_date: str,
+        initial_time: str,
+        initial_location: str,
+        system_prompt: str,
+    ) -> "NPCSelectView":
+        """
+        非同步工廠方法，用於創建和填充 NPCSelectView。
+        """
+        logger = logging.getLogger(__name__)
+        bot = story_manager.bot
+        character_db = story_manager.character_db
+        
+        # 獲取可選擇的角色列表
+        characters = character_db.get_selectable_characters(interaction.guild_id, interaction.user.id)
+        logger.debug(f"Found {len(characters)} selectable characters for user {interaction.user.id}")
+
+        # 創建角色選項
+        options = []
+        for char in characters:
+            creator_name = "未知"
+            if char.creator_id:
+                try:
+                    creator = await bot.fetch_user(char.creator_id)
+                    creator_name = creator.display_name
+                except discord.NotFound:
+                    logger.warning(f"Could not find creator user with ID {char.creator_id}")
+            
+            description = f"創作者: {creator_name}\n{char.description or ''}"
+            options.append(discord.SelectOption(
+                label=char.name,
+                value=char.character_id,
+                description=description[:100]
+            ))
+
+        # 創建並添加預設旁白選項
+        default_narrator_option = discord.SelectOption(
+            label="預設旁白 (系統人格)",
+            value="_DEFAULT_NARRATOR_",
+            description=system_prompt[:100] if system_prompt else "使用當前頻道的系統設定",
+            default=True
+        )
+        options.insert(0, default_narrator_option)
+
+        return cls(
+            story_manager=story_manager,
+            guild_id=interaction.guild_id,
+            channel_id=channel_id,
+            world_name=world_name,
+            initial_date=initial_date,
+            initial_time=initial_time,
+            initial_location=initial_location,
+            characters=characters,
+            options=options,
+        )
+
+    def __init__(
+        self,
+        story_manager: StoryManager,
+        guild_id: int,
+        channel_id: int,
+        world_name: str,
+        initial_date: str,
+        initial_time: str,
+        initial_location: str,
+        characters: List[StoryCharacter],
+        options: List[discord.SelectOption],
+    ):
+        super().__init__(timeout=300)
+        self.story_manager = story_manager
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.world_name = world_name
+        self.initial_date = initial_date
+        self.initial_time = initial_time
+        self.initial_location = initial_location
+        self.characters = characters
+        self.logger = logging.getLogger(__name__)
+
+        # 設定 min/max values
+        min_val = 1  # 至少要選一個，預設就是旁白
+        max_val = len(options)
+
+        self.npc_select = discord.ui.Select(
+            custom_id="npc_selector:select_menu",
+            placeholder="選擇要參與故事的 NPC (可複選)...",
+            min_values=min_val,
+            max_values=max_val,
+            options=options
+        )
+        self.add_item(self.npc_select)
+
+    @discord.ui.button(label="✅ 確認開始", style=discord.ButtonStyle.success, row=1, custom_id="npc_selector:confirm_button")
+    async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """確認選擇並開始故事"""
+        try:
+            await interaction.response.defer()
+
+            # 驗證使用者是否至少選擇了一個選項
+            if not self.npc_select.values:
+                await interaction.followup.send(
+                    "請至少選擇一個 NPC 或保留預設旁白來開始故事。",
+                    ephemeral=True
+                )
+                return
+
+            # 添加偵錯日誌，記錄原始返回值
+            self.logger.debug(f"NPCSelectView submitted with values: {self.npc_select.values}")
+
+            # 修正過濾邏輯：創建一個只包含真實角色 ID 的新列表
+            real_character_ids_str = [
+                value for value in self.npc_select.values
+                if value != '_DEFAULT_NARRATOR_'
+            ]
+
+            # 新增類型轉換邏輯：將字串 ID 列表轉換為整數列表
+            character_ids = []
+            try:
+                character_ids = [int(id_str) for id_str in real_character_ids_str]
+            except ValueError:
+                self.logger.error("無法將角色 ID 從字串轉換為整數", exc_info=True)
+                await interaction.response.send_message("處理角色選擇時發生內部錯誤，請聯繫管理員。", ephemeral=True)
+                return
+
+            db = self.story_manager._get_db(self.guild_id)
+            db.initialize()
+
+            # 創建新的故事實例
+            new_instance = StoryInstance(
+                channel_id=self.channel_id,
+                guild_id=self.guild_id,
+                world_name=self.world_name,
+                current_date=self.initial_date,
+                current_time=self.initial_time,
+                current_location=self.initial_location,
+                active_character_ids=character_ids
+            )
+            
+            # 初始化預設狀態，這可能會覆蓋使用者輸入
+            new_instance = self.story_manager.state_manager.initialize_default_state(new_instance)
+            
+            # 重新應用使用者輸入的初始狀態，以防被覆蓋
+            new_instance.current_date = self.initial_date
+            new_instance.current_time = self.initial_time
+            new_instance.current_location = self.initial_location
+            
+            db.save_story_instance(new_instance)
+            self.logger.debug(f"Saved new story instance {new_instance.channel_id} to DB.")
+
+            # 載入世界資訊
+            world = db.get_world(self.world_name)
+            if not world:
+                self.logger.error(f"FATAL: Could not find world '{self.world_name}' after starting story.")
+                await interaction.edit_original_response(content="❌ 無法載入世界資料，故事無法開始。", embed=None, view=None)
+                return
+            
+            # 發送成功訊息到頻道（公開）
+            embed = discord.Embed(
+                title="🎬 故事開始！",
+                description=f"**{self.world_name}** 的冒險篇章已在此頻道開啟！",
+                color=discord.Color.gold()
+            )
+            world_background = world.attributes.get('background', '這個世界沒有背景描述。')
+            embed.add_field(
+                name="🌍 世界背景",
+                value=world_background[:800] + ("..." if len(world_background) > 800 else ""),
+                inline=False
+            )
+            embed.add_field(name="📅 日期", value=self.initial_date, inline=True)
+            embed.add_field(name="⏰ 時間", value=self.initial_time, inline=True)
+            embed.add_field(name="📍 地點", value=self.initial_location, inline=False)
+            
+            if character_ids:
+                # 確保這裡比較的是整數 ID
+                selected_npcs = [char.name for char in self.characters if char.character_id in character_ids]
+                embed.add_field(
+                    name="👥 參與的NPC",
+                    value=", ".join(selected_npcs) if selected_npcs else "無",
+                    inline=False
+                )
+
+            embed.set_footer(text="💡 在此頻道輸入訊息來與故事互動")
+            
+            # 編輯原始的臨時訊息
+            await interaction.edit_original_response(content=None, embed=embed, view=None)
+            self.logger.info(f"Story started successfully in channel {self.channel_id}")
+
+        except Exception as e:
+            self.logger.error("Error in NPCSelectView confirm_button", exc_info=True)
+            if not interaction.response.is_done():
+                await interaction.edit_original_response(
+                    content="❌ 開始故事時發生嚴重錯誤，請聯繫管理員。",
+                    embed=None,
+                    view=None
+                )

@@ -2,23 +2,43 @@ import uuid
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
+
+@dataclass
+class Event:
+    """Represents a specific event that occurred at a location."""
+    title: str
+    summary: str
+    full_content: str
+    timestamp: str
+
+
+@dataclass
+class Location:
+    """Represents a specific location within the story world."""
+    name: str
+    events: List[Event] = field(default_factory=list)
+    attributes: Dict[str, Any] = field(default_factory=dict)
+
+
 @dataclass
 class StoryWorld:
-    """Represents the lore and rules of a story world."""
+    """Represents the lore and rules of a story world, acting as a container for locations."""
     guild_id: int
     world_name: str
-    background: str
-    rules: List[str] = field(default_factory=list)
-    elements: Dict[str, Any] = field(default_factory=dict)
+    locations: List[Location] = field(default_factory=list)
+    attributes: Dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class StoryCharacter:
     """Represents a character, either player-controlled (PC) or non-player (NPC)."""
-    world_name: str
     name: str
     description: str
+    guild_id: int  # The guild this character belongs to, for data isolation
+    creator_id: int
     is_pc: bool = False
     user_id: Optional[int] = None
+    is_public: bool = True
     webhook_url: Optional[str] = None
     attributes: Dict[str, Any] = field(default_factory=dict)
     inventory: List[str] = field(default_factory=list)
@@ -35,7 +55,7 @@ class StoryInstance:
     current_time: str
     current_location: str
     is_active: bool = True
-    active_characters: List[str] = field(default_factory=list) # List of character_id
+    active_character_ids: List[str] = field(default_factory=list)
     current_state: Dict[str, Any] = field(default_factory=dict)
     event_log: List[str] = field(default_factory=list)
 

@@ -5,7 +5,6 @@ import asyncio
 from addons.settings import TOKENS
 import numpy as np
 from PIL import Image
-from moviepy.editor import VideoFileClip
 from gpt.vision_tool import image_to_base64
 import io
 import tempfile
@@ -16,6 +15,7 @@ import datetime
 import pathlib
 import httpx
 from typing import Optional, Dict, Any, List
+from pydantic import BaseModel
 
 # Initialize the Gemini model
 tokens = TOKENS()
@@ -1247,3 +1247,64 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
         return None, async_generator()
     except Exception as e:
         raise GeminiError(f"Gemini API 初始化錯誤: {str(e)}")
+
+
+async def generate_structured_response(
+    inst: str,
+    system_prompt: str,
+    response_schema: BaseModel,
+    dialogue_history: Optional[List[Dict[str, str]]] = None,
+    image_input: Optional[Any] = None,
+    audio_input: Optional[Any] = None,
+    video_input: Optional[Any] = None,
+    pdf_input: Optional[Any] = None
+) -> Optional[BaseModel]:
+    """
+    專門生成結構化回應 (JSON) 的函式。
+
+    Args:
+        inst (str): 使用者輸入。
+        system_prompt (str): 系統指令。
+        response_schema (BaseModel): 用於定義輸出結構的 Pydantic 模型。
+        dialogue_history (Optional[List[Dict[str, str]]], optional): 對話歷史. Defaults to None.
+        image_input (Optional[Any], optional): 圖片輸入. Defaults to None.
+        audio_input (Optional[Any], optional): 音訊輸入. Defaults to None.
+        video_input (Optional[Any], optional): 影片輸入. Defaults to None.
+        pdf_input (Optional[Any], optional): PDF 輸入. Defaults to None.
+
+    Returns:
+        Optional[BaseModel]: 解析後的 Pydantic 物件，如果失敗則返回 None。
+    """
+    try:
+        contents = await _build_conversation_contents(
+            inst, dialogue_history, image_input, audio_input, video_input, pdf_input
+        )
+
+        config = GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=response_schema,
+            temperature=1.0,
+            top_p=0.95,
+            top_k=64,
+            max_output_tokens=8192,
+        )
+
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=model_id,
+            contents=contents,
+            generation_config=config,
+            system_instruction=system_prompt,
+            tools=[google_search_tool]
+        )
+
+        if hasattr(response, 'parsed') and response.parsed:
+            return response.parsed
+        else:
+            logger.warning("請求結構化輸出，但未在回應中找到 .parsed 內容。")
+            logger.debug(f"原始回應文字: {response.text}")
+            return None
+
+    except Exception as e:
+        logger.error(f"生成結構化回應時發生錯誤: {e}")
+        raise GeminiError(f"生成結構化回應失敗: {str(e)}")

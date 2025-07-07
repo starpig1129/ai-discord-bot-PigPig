@@ -20,6 +20,7 @@ class UIManager:
     def __init__(self, bot: commands.Bot, story_manager: StoryManager, system_prompt_manager: SystemPromptManager):
         self.bot = bot
         self.story_manager = story_manager
+        self.character_db = story_manager.character_db
         self.system_prompt_manager = system_prompt_manager
         self.logger = logging.getLogger(__name__)
         
@@ -128,7 +129,7 @@ class UIManager:
         embed.add_field(name="📊 狀態", value=status_text, inline=True)
         
         # 顯示參與角色數量
-        char_count = len(story_instance.active_characters)
+        char_count = len(story_instance.active_character_ids)
         embed.add_field(name="👥 參與角色", value=f"{char_count} 位", inline=True)
         
         # 顯示最近事件
@@ -158,7 +159,7 @@ class UIManager:
                             options.append(discord.SelectOption(
                                 label=world.world_name,
                                 value=world.world_name,
-                                description=world.background[:100] if world.background else "無描述"
+                                description=world.attributes.get('description', '無描述')[:100]
                             ))
                     else:
                         options.append(discord.SelectOption(
@@ -213,9 +214,8 @@ class UIManager:
     async def show_character_create_modal(self, interaction: discord.Interaction, name: str = "", description: str = ""):
         """顯示角色創建 Modal，可選填預設值"""
         modal = CharacterCreateModal(
-            self.story_manager,
-            interaction.guild_id,
-            world_name=None,  # 讓 Modal 自行處理 world_name 為 None 的情況
+            story_manager=self.story_manager,
+            guild_id=interaction.guild_id,
             name=name,
             description=description
         )
