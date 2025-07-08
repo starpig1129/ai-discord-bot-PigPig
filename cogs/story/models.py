@@ -63,6 +63,7 @@ class StoryInstance:
     message_counter: int = 0
     summaries: List[str] = field(default_factory=list)
     outlines: List[str] = field(default_factory=list)
+    narration_enabled: bool = True
 
 @dataclass
 class PlayerRelationship:

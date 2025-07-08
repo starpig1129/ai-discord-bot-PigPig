@@ -1,9 +1,12 @@
 import discord
 from discord.ext import commands
 import logging
+import typing
 from typing import Optional
 
-from ..manager import StoryManager
+if typing.TYPE_CHECKING:
+    from ..manager import StoryManager
+
 from ..models import StoryWorld, StoryCharacter, StoryInstance, Location
 
 
@@ -14,10 +17,10 @@ class WorldCreateModal(discord.ui.Modal):
     提供表單介面讓使用者輸入新世界的名稱、背景和第一個地點的資訊
     """
     
-    def __init__(self, story_manager: StoryManager, guild_id: int):
+    def __init__(self, manager: "StoryManager", guild_id: int):
         super().__init__(title="🌍 創建新的故事世界")
-        self.story_manager = story_manager
-        self.story_db = story_manager._get_db(guild_id)
+        self.story_manager = manager
+        self.story_db = manager._get_db(guild_id)
         self.guild_id = guild_id
         self.logger = logging.getLogger(__name__)
 
@@ -134,10 +137,10 @@ class CharacterCreateModal(discord.ui.Modal):
     提供表單介面讓使用者創建新角色
     """
     
-    def __init__(self, story_manager: StoryManager, guild_id: int, name: str = "", description: str = ""):
+    def __init__(self, manager: "StoryManager", guild_id: int, name: str = "", description: str = ""):
         super().__init__(title="👤 創建新角色")
-        self.story_manager = story_manager
-        self.character_db = story_manager.character_db
+        self.story_manager = manager
+        self.character_db = manager.character_db
         self.guild_id = guild_id
         self.logger = logging.getLogger(__name__)
 
@@ -253,9 +256,9 @@ class StoryStartModal(discord.ui.Modal):
     收集故事開始時的初始世界狀態
     """
 
-    def __init__(self, story_manager: StoryManager, bot: commands.Bot, guild_id: int, channel_id: int, world_name: str):
+    def __init__(self, manager: "StoryManager", bot: commands.Bot, guild_id: int, channel_id: int, world_name: str):
         super().__init__(title="🎬 設定故事初始狀態")
-        self.story_manager = story_manager
+        self.story_manager = manager
         self.bot = bot
         self.guild_id = guild_id
         self.channel_id = channel_id
@@ -324,7 +327,7 @@ class StoryStartModal(discord.ui.Modal):
             time_value = self.initial_time.value if self.initial_time.value else None
 
             view = await NPCSelectView.create(
-                story_manager=self.story_manager,
+                manager=self.story_manager,
                 interaction=interaction,
                 channel_id=self.channel_id,
                 world_name=self.world_name,
@@ -359,3 +362,50 @@ class StoryStartModal(discord.ui.Modal):
         self.logger.error(f"StoryStartModal 錯誤: {error}", exc_info=True)
         if not interaction.response.is_done():
             await interaction.response.send_message("❌ 處理請求時發生錯誤", ephemeral=True)
+
+
+class InterventionModal(discord.ui.Modal):
+    """
+    A modal for users to submit an OOC intervention to the story director.
+    """
+
+    def __init__(self, manager: "StoryManager"):
+        super().__init__(title="🎬 故事干預指令")
+        self.manager = manager
+        self.logger = logging.getLogger(__name__)
+
+    intervention_text = discord.ui.TextInput(
+        label="給導演的指示",
+        placeholder="請輸入你希望故事接下來如何發展的指示...\n例如：讓天氣突然變壞，並安排一個神秘的陌生人登場。",
+        style=discord.TextStyle.paragraph,
+        max_length=1000,
+        required=True,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handles the submission of the intervention."""
+        try:
+            # Defer the response to avoid timeouts
+            await interaction.response.defer(ephemeral=True)
+
+            # Store the intervention text in the manager
+            self.manager.interventions[interaction.channel_id] = self.intervention_text.value
+
+            await interaction.followup.send(
+                "✅ 你的干預指令已成功發送給導演。它將在下一次玩家發言後生效。",
+                ephemeral=True
+            )
+            self.logger.info(f"Intervention submitted for channel {interaction.channel_id}: {self.intervention_text.value}")
+
+        except Exception as e:
+            self.logger.error(f"Error submitting intervention for channel {interaction.channel_id}: {e}", exc_info=True)
+            await interaction.followup.send(
+                "❌ 發送干預指令時發生錯誤，請稍後再試。",
+                ephemeral=True
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        """Handles errors in the modal."""
+        self.logger.error(f"InterventionModal error: {error}", exc_info=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message("❌ 處理請求時發生錯誤。", ephemeral=True)

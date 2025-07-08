@@ -250,6 +250,10 @@ class StoryDB:
                             active_character_ids TEXT,
                             current_state TEXT,
                             event_log TEXT,
+                            narration_enabled BOOLEAN NOT NULL DEFAULT 1,
+                            message_counter INTEGER NOT NULL DEFAULT 0,
+                            summaries TEXT,
+                            outlines TEXT,
                             FOREIGN KEY (world_name) REFERENCES worlds (world_name)
                         )
                     """)
@@ -263,6 +267,28 @@ class StoryDB:
                             FOREIGN KEY (story_id) REFERENCES instances (channel_id)
                         )
                     """)
+                    db.commit()
+
+                    # Migration for instances table
+                    cursor = db.execute("PRAGMA table_info(instances)")
+                    columns = [row['name'] for row in cursor.fetchall()]
+
+                    if 'narration_enabled' not in columns:
+                        self.logger.info("Migrating instances table: Adding 'narration_enabled' column.")
+                        db.execute("ALTER TABLE instances ADD COLUMN narration_enabled BOOLEAN NOT NULL DEFAULT 1;")
+
+                    if 'message_counter' not in columns:
+                        self.logger.info("Migrating instances table: Adding 'message_counter' column.")
+                        db.execute("ALTER TABLE instances ADD COLUMN message_counter INTEGER NOT NULL DEFAULT 0;")
+
+                    if 'summaries' not in columns:
+                        self.logger.info("Migrating instances table: Adding 'summaries' column.")
+                        db.execute("ALTER TABLE instances ADD COLUMN summaries TEXT;")
+
+                    if 'outlines' not in columns:
+                        self.logger.info("Migrating instances table: Adding 'outlines' column.")
+                        db.execute("ALTER TABLE instances ADD COLUMN outlines TEXT;")
+
                     db.commit()
                     self._initialized = True
                     self.logger.info(f"Database initialization complete - Guild: {self.guild_id}")
@@ -365,8 +391,8 @@ class StoryDB:
         with self._get_connection() as db:
             db.execute(
                 """
-                INSERT INTO instances (channel_id, guild_id, world_name, is_active, current_date, current_time, current_location, active_character_ids, current_state, event_log)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO instances (channel_id, guild_id, world_name, is_active, current_date, current_time, current_location, active_character_ids, current_state, event_log, narration_enabled, message_counter, summaries, outlines)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(channel_id) DO UPDATE SET
                     world_name=excluded.world_name,
                     is_active=excluded.is_active,
@@ -375,7 +401,11 @@ class StoryDB:
                     current_location=excluded.current_location,
                     active_character_ids=excluded.active_character_ids,
                     current_state=excluded.current_state,
-                    event_log=excluded.event_log
+                    event_log=excluded.event_log,
+                    narration_enabled=excluded.narration_enabled,
+                    message_counter=excluded.message_counter,
+                    summaries=excluded.summaries,
+                    outlines=excluded.outlines
                 """,
                 (
                     instance.channel_id,
@@ -388,6 +418,10 @@ class StoryDB:
                     json.dumps(instance.active_character_ids),
                     json.dumps(instance.current_state),
                     json.dumps(instance.event_log),
+                    instance.narration_enabled,
+                    instance.message_counter,
+                    json.dumps(instance.summaries),
+                    json.dumps(instance.outlines),
                 ),
             )
             db.commit()
@@ -396,7 +430,7 @@ class StoryDB:
         """Retrieves a story instance by channel ID."""
         with self._get_connection() as db:
             cursor = db.execute(
-                "SELECT channel_id, guild_id, world_name, is_active, current_date, current_time, current_location, active_character_ids, current_state, event_log FROM instances WHERE channel_id = ?",
+                "SELECT channel_id, guild_id, world_name, is_active, current_date, current_time, current_location, active_character_ids, current_state, event_log, narration_enabled, message_counter, summaries, outlines FROM instances WHERE channel_id = ?",
                 (channel_id,),
             )
             row = cursor.fetchone()
@@ -412,6 +446,10 @@ class StoryDB:
                     active_character_ids=json.loads(row['active_character_ids']),
                     current_state=json.loads(row['current_state']),
                     event_log=json.loads(row['event_log']),
+                    narration_enabled=bool(row['narration_enabled']),
+                    message_counter=row['message_counter'],
+                    summaries=json.loads(row['summaries']) if row['summaries'] else [],
+                    outlines=json.loads(row['outlines']) if row['outlines'] else []
                 )
             return None
 

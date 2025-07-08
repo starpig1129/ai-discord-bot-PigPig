@@ -4,12 +4,12 @@ from discord.ext import commands
 import logging
 from typing import List, Optional, TYPE_CHECKING
 
-from ..manager import StoryManager
 from ..models import StoryInstance, StoryWorld, StoryCharacter
 from .modals import WorldCreateModal, CharacterCreateModal
 
 if TYPE_CHECKING:
     from .ui_manager import UIManager
+    from ..manager import StoryManager
 
 
 class InitialStoryView(discord.ui.View):
@@ -23,9 +23,9 @@ class InitialStoryView(discord.ui.View):
     - 開始故事按鈕
     """
     
-    def __init__(self, story_manager: StoryManager, channel_id: int, guild_id: int, ui_manager: UIManager):
+    def __init__(self, manager: "StoryManager", channel_id: int, guild_id: int, ui_manager: "UIManager"):
         super().__init__(timeout=300)  # 5分鐘超時
-        self.story_manager = story_manager
+        self.story_manager = manager
         self.ui_manager = ui_manager
         self.channel_id = channel_id
         self.guild_id = guild_id
@@ -244,15 +244,28 @@ class ActiveStoryView(discord.ui.View):
     - 結束故事按鈕（管理員）
     """
     
-    def __init__(self, story_manager: StoryManager, story_instance: StoryInstance):
-        super().__init__(timeout=300)
-        self.story_manager = story_manager
+    def __init__(self, manager: "StoryManager", story_instance: "StoryInstance"):
+        super().__init__(timeout=None)
+        self.story_manager = manager
         self.story_instance = story_instance
         self.logger = logging.getLogger(__name__)
         
-        # 根據故事狀態設定暫停/恢復按鈕的初始狀態
+        # 根據故事狀態設定按鈕的初始狀態
         self._update_pause_button_state()
-    
+        self._update_narration_button_state()
+
+    def _update_narration_button_state(self):
+        """更新旁白切換按鈕的狀態"""
+        for item in self.children:
+            if isinstance(item, discord.ui.Button) and item.custom_id == 'toggle_narration':
+                if self.story_instance.narration_enabled:
+                    item.label = "🔇 關閉旁白"
+                    item.style = discord.ButtonStyle.danger
+                else:
+                    item.label = "🔊 開啟旁白"
+                    item.style = discord.ButtonStyle.success
+                break
+
     def _update_pause_button_state(self):
         """更新暫停/恢復按鈕的狀態"""
         for item in self.children:
@@ -371,6 +384,38 @@ class ActiveStoryView(discord.ui.View):
         except Exception as e:
             self.logger.error(f"暫停故事錯誤: {e}", exc_info=True)
     
+    @discord.ui.button(label="...", style=discord.ButtonStyle.secondary, custom_id="toggle_narration")
+    async def toggle_narration_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """切換旁白功能的按鈕"""
+        try:
+            # 獲取最新的 story_instance
+            db = self.story_manager._get_db(interaction.guild_id)
+            instance = db.get_story_instance(self.story_instance.channel_id)
+            if not instance:
+                await interaction.response.send_message("❌ 找不到故事實例。", ephemeral=True)
+                return
+
+            # 反轉旁白狀態
+            instance.narration_enabled = not instance.narration_enabled
+            self.story_instance.narration_enabled = instance.narration_enabled  # 更新視圖中的實例狀態
+            
+            # 持久化到資料庫
+            db.save_story_instance(instance)
+
+            # 更新按鈕外觀
+            self._update_narration_button_state()
+
+            # 更新訊息
+            await interaction.response.edit_message(view=self)
+            
+            # 發送確認訊息
+            status = "開啟" if instance.narration_enabled else "關閉"
+            await interaction.followup.send(f"✅ 旁白功能已**{status}**。", ephemeral=True)
+
+        except Exception as e:
+            self.logger.error(f"切換旁白錯誤: {e}", exc_info=True)
+            await interaction.followup.send("❌ 切換旁白時發生錯誤。", ephemeral=True)
+
     @discord.ui.button(label="🔚 結束故事", style=discord.ButtonStyle.danger)
     async def end_story_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """結束故事按鈕（管理員專用）"""
@@ -417,7 +462,7 @@ class NPCSelectView(discord.ui.View):
     @classmethod
     async def create(
         cls,
-        story_manager: StoryManager,
+        manager: "StoryManager",
         interaction: discord.Interaction,
         channel_id: int,
         world_name: str,
@@ -432,8 +477,8 @@ class NPCSelectView(discord.ui.View):
         logger = logging.getLogger(__name__)
         logger.info(f"[DEBUG] NPCSelectView.create 開始 - guild_id: {interaction.guild_id}, user_id: {interaction.user.id}")
         
-        bot = story_manager.bot
-        character_db = story_manager.character_db
+        bot = manager.bot
+        character_db = manager.character_db
         logger.info(f"[DEBUG] 獲取到 bot: {bot is not None}, character_db: {character_db is not None}")
         
         # 獲取可選擇的角色列表
@@ -485,7 +530,7 @@ class NPCSelectView(discord.ui.View):
 
         logger.info(f"[DEBUG] 準備創建 NPCSelectView 實例...")
         return cls(
-            story_manager=story_manager,
+            manager=manager,
             guild_id=interaction.guild_id,
             channel_id=channel_id,
             world_name=world_name,
@@ -498,7 +543,7 @@ class NPCSelectView(discord.ui.View):
 
     def __init__(
         self,
-        story_manager: StoryManager,
+        manager: "StoryManager",
         guild_id: int,
         channel_id: int,
         world_name: str,
@@ -509,7 +554,7 @@ class NPCSelectView(discord.ui.View):
         options: List[discord.SelectOption],
     ):
         super().__init__(timeout=300)
-        self.story_manager = story_manager
+        self.story_manager = manager
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.world_name = world_name

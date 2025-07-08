@@ -13,6 +13,8 @@ from .state_manager import StoryStateManager
 from cogs.memory.memory_manager import MemoryManager
 from gpt.gemini_api import generate_response_with_cache, GeminiError
 from cogs.system_prompt.manager import SystemPromptManager
+from cogs.language_manager import LanguageManager
+from .ui.modals import InterventionModal
 
 
 class StoryManager:
@@ -32,6 +34,8 @@ class StoryManager:
         self.prompt_engine = StoryPromptEngine(self.bot, self.system_prompt_manager)
         self.memory_manager: MemoryManager = self.bot.memory_manager
         self.state_manager = StoryStateManager(bot)
+        self.language_manager: LanguageManager = self.bot.get_cog("LanguageManager")
+        self.interventions: Dict[int, str] = {}
 
     def _get_db(self, guild_id: int) -> StoryDB:
         """Gets or creates a database connection for a specific guild."""
@@ -47,6 +51,28 @@ class StoryManager:
         self.character_db.initialize()
         self._initialized = True
         self.logger.info("StoryManager initialized.")
+
+    def add_intervention(self, channel_id: int, text: str):
+        """Stores an intervention for a specific channel."""
+        self.interventions[channel_id] = text
+        self.logger.info(f"Intervention added for channel {channel_id}.")
+
+    async def intervene(self, interaction: discord.Interaction):
+        """
+        Opens a modal for the user to provide an OOC intervention.
+        """
+        # Ensure the story is active in the current channel
+        db = self._get_db(interaction.guild_id)
+        story_instance = db.get_story_instance(interaction.channel_id)
+        if not story_instance or not story_instance.is_active:
+            await interaction.response.send_message(
+                "❌ 此頻道沒有正在進行的故事，無法進行干預。",
+                ephemeral=True
+            )
+            return
+            
+        modal = InterventionModal(self)
+        await interaction.response.send_modal(modal)
 
     async def _update_relationships(self, db: StoryDB, story_id: int, updates: List[RelationshipUpdate]):
         """Updates player-NPC relationships based on the GM plan."""
@@ -215,12 +241,20 @@ class StoryManager:
         async with message.channel.typing():
             try:
                 # --- Step 1: Call GM Agent for a structured plan ---
+                # Check for and retrieve any pending intervention for this channel
+                intervention_text = self.interventions.pop(channel_id, None)
+                if intervention_text:
+                    self.logger.info(f"Applying intervention for channel {channel_id}: {intervention_text}")
+
+                language = self.language_manager.get_server_lang(str(guild_id))
                 gm_prompt = await self.prompt_engine.build_gm_prompt(
                     instance=story_instance,
                     world=world,
                     characters=characters,
                     user_input=message.content,
-                    story_outlines=story_instance.outlines
+                    story_outlines=story_instance.outlines,
+                    language=language,
+                    intervention_text=intervention_text,
                 )
 
                 # Prepare dialogue history for the GM, treating each outline and summary as a separate piece of context
@@ -251,13 +285,24 @@ class StoryManager:
                     # Handle cases where the response could not be parsed or is empty
                     raise GeminiError("Failed to generate a valid GM action plan.")
 
+                # Manually enforce narration setting, as context is no longer passed to the model validator.
+                if not story_instance.narration_enabled:
+                    gm_plan.narration_content = None
+
                 response_content = ""
                 speaking_character: Optional[StoryCharacter] = None
 
                 # --- Step 3: Execute the plan (NARRATE or DIALOGUE) ---
                 if gm_plan.action_type == "NARRATE":
                     self.logger.info(f"GM Action: NARRATE. Event: {gm_plan.event_title}")
-                    response_content = gm_plan.narration_content
+                    # The model_validator now handles forcing narration_content to None.
+                    # We just need to check if there's content to respond with.
+                    if gm_plan.narration_content:
+                        response_content = gm_plan.narration_content
+                    else:
+                        self.logger.info("Narration is disabled or was not generated. Using summary as fallback content.")
+                        # We still need to log the event, so we'll use the summary
+                        response_content = f"({gm_plan.event_summary})"
                 
                 elif gm_plan.action_type == "DIALOGUE":
                     self.logger.info(f"GM Action: DIALOGUE for {gm_plan.dialogue_context.speaker_name}. Event: {gm_plan.event_title}")
@@ -503,7 +548,11 @@ class StoryManager:
                 current_time=initial_time,
                 current_location=initial_location,
                 active_character_ids=character_ids,
-                is_active=True
+                is_active=True,
+                narration_enabled=True,
+                message_counter=0,
+                summaries=[],
+                outlines=[]
             )
             # Save the story instance to database
             db.save_story_instance(story_instance)
@@ -537,7 +586,11 @@ class StoryManager:
                 current_time=initial_time,
                 current_location=initial_location,
                 active_character_ids=character_ids,
-                is_active=True
+                is_active=True,
+                narration_enabled=True,
+                message_counter=0,
+                summaries=[],
+                outlines=[]
             )
             # Save the story instance to database
             db.save_story_instance(story_instance)

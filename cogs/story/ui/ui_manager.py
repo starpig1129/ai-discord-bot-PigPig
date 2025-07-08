@@ -1,9 +1,12 @@
 import discord
 from discord.ext import commands
 import logging
+import typing
 from typing import Optional
 
-from ..manager import StoryManager
+if typing.TYPE_CHECKING:
+    from ..manager import StoryManager
+
 from .views import InitialStoryView, ActiveStoryView
 from .modals import CharacterCreateModal
 from cogs.system_prompt.manager import SystemPromptManager
@@ -17,7 +20,7 @@ class UIManager:
     採用臨時性 (ephemeral) 介面設計，降低狀態管理複雜度。
     """
     
-    def __init__(self, bot: commands.Bot, story_manager: StoryManager, system_prompt_manager: SystemPromptManager):
+    def __init__(self, bot: commands.Bot, story_manager: "StoryManager", system_prompt_manager: SystemPromptManager):
         self.bot = bot
         self.story_manager = story_manager
         self.character_db = story_manager.character_db
@@ -55,7 +58,7 @@ class UIManager:
             
             if has_active_story:
                 # 顯示正在進行故事的管理介面
-                view = ActiveStoryView(self.story_manager, story_instance)
+                view = ActiveStoryView(manager=self.story_manager, story_instance=story_instance)
                 embed = self._create_active_story_embed(story_instance)
                 await interaction.response.send_message(
                     embed=embed, 
@@ -64,7 +67,7 @@ class UIManager:
                 )
             else:
                 # 顯示故事開始前的準備介面
-                view = InitialStoryView(self.story_manager, interaction.channel_id, interaction.guild_id, self)
+                view = InitialStoryView(manager=self.story_manager, channel_id=interaction.channel_id, guild_id=interaction.guild_id, ui_manager=self)
                 
                 # 動態載入世界選單選項
                 await self._update_world_select_options(view, interaction.guild_id)
@@ -214,7 +217,7 @@ class UIManager:
     async def show_character_create_modal(self, interaction: discord.Interaction, name: str = "", description: str = ""):
         """顯示角色創建 Modal，可選填預設值"""
         modal = CharacterCreateModal(
-            story_manager=self.story_manager,
+            manager=self.story_manager,
             guild_id=interaction.guild_id,
             name=name,
             description=description

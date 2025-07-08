@@ -38,7 +38,9 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
         await self.story_manager.initialize()
         self.logger.info("StoryManagerCog has been loaded and initialized.")
 
-    @app_commands.command(name="story", description="🎭 開啟故事管理選單")
+    story = app_commands.Group(name="story", description="與故事模式相關的指令")
+
+    @story.command(name="menu", description="🎭 開啟故事管理選單")
     async def story_menu(self, interaction: discord.Interaction):
         """
         故事管理主命令
@@ -58,6 +60,35 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
                 await interaction.followup.send(error_message, ephemeral=True)
             else:
                 await interaction.response.send_message(error_message, ephemeral=True)
+
+    @story.command(name="intervene", description="🎬 對故事走向進行干預")
+    async def intervene(self, interaction: discord.Interaction):
+        """
+        Allows a user to intervene in the story with OOC instructions for the director.
+        """
+        try:
+            # Check if a story is active in this channel
+            db = self.story_manager._get_db(interaction.guild_id)
+            story_instance = db.get_story_instance(interaction.channel_id)
+
+            if not story_instance or not story_instance.is_active:
+                await interaction.response.send_message(
+                    "❌ 此頻道目前沒有正在進行的故事。無法進行干預。",
+                    ephemeral=True
+                )
+                return
+
+            # Show the intervention modal
+            from .story.ui.modals import InterventionModal
+            modal = InterventionModal(self.story_manager)
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            self.logger.error(f"Error in /story intervene command: {e}", exc_info=True)
+            await interaction.response.send_message(
+                "❌ 執行干預指令時發生錯誤。",
+                ephemeral=True
+            )
 
     @commands.Cog.listener()
     async def on_ready(self):

@@ -34,6 +34,8 @@ class StoryPromptEngine:
         characters: List[StoryCharacter],
         user_input: str,
         story_outlines: List[str],
+        language: str,
+        intervention_text: Optional[str] = None,
     ) -> str:
         """Constructs the prompt for the Game Master (GM) Agent."""
         
@@ -51,6 +53,16 @@ class StoryPromptEngine:
         )
 
         prompt_parts = [base_prompt]
+
+        # Add intervention text if it exists
+        if intervention_text:
+            prompt_parts.append("---")
+            prompt_parts.append("**[URGENT OOC INTERVENTION]**")
+            prompt_parts.append("The story master has issued a new directive that you MUST follow:")
+            prompt_parts.append(f"> {intervention_text}")
+            prompt_parts.append("You must incorporate this directive into your next plan.")
+            prompt_parts.append("---")
+
 
         if story_outlines:
             prompt_parts.append("## Story Outline So Far")
@@ -91,6 +103,18 @@ class StoryPromptEngine:
             "You are the Director (GM). Your job is to analyze the context and the player's action, then decide what happens next. "
             "You will not write the story directly. Instead, you will create a detailed action plan by generating a JSON object. "
             "Your output MUST be a single, valid JSON object that conforms to the requested schema."
+        )
+
+        # Add conditional instruction based on narration setting
+        if not instance.narration_enabled:
+            prompt_parts.append(
+                "\n**CRITICAL INSTRUCTION:** Narration is disabled. The 'narration_content' field in your JSON output MUST be null. Do not generate any descriptive text for the narrator."
+            )
+        
+        # Add language consistency instruction
+        language_name = self.language_map.get(language, "English")
+        prompt_parts.append(
+            f"\n**LANGUAGE INSTRUCTION:** All descriptive fields in the `state_update` object (`location`, `date`, `time`) MUST be in {language_name}."
         )
 
         return "\n\n".join(prompt_parts)
