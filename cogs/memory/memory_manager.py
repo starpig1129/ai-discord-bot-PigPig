@@ -1047,6 +1047,8 @@ class MemoryManager:
 
             cleanup_tasks = []
             if hasattr(self, 'vector_manager') and self.vector_manager:
+                # 優化：先將所有索引移至 CPU，再進行清理
+                cleanup_tasks.append(("批次移動索引至CPU", lambda: loop.run_in_executor(None, self.vector_manager.move_all_indices_to_cpu)))
                 cleanup_tasks.append(("向量管理器", lambda: loop.run_in_executor(None, self.vector_manager.cleanup)))
             if hasattr(self, 'search_engine') and self.search_engine:
                 cleanup_tasks.append(("搜尋引擎", lambda: loop.run_in_executor(None, self.search_engine.cleanup)))

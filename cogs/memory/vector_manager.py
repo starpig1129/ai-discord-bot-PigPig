@@ -680,8 +680,8 @@ class VectorIndex:
             "is_trained": index.is_trained if hasattr(index, 'is_trained') and index else True
         }
     
-    def save(self, file_path: Path) -> bool:
-        """儲存索引到檔案（原子性操作）
+    async def save(self, file_path: Path) -> bool:
+        """非同步儲存索引到檔案（原子性操作）
         
         Args:
             file_path: 儲存路徑
@@ -693,33 +693,24 @@ class VectorIndex:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             
             # 決定要儲存的索引
-            index_to_save = None
+            # 假設索引已經在 CPU 上
+            index_to_save = self.get_index()
             
-            # 如果有 GPU 索引，需要先複製回 CPU
             if self._gpu_index is not None:
-                try:
-                    # 將 GPU 索引複製回 CPU 進行儲存
-                    index_to_save = faiss.index_gpu_to_cpu(self._gpu_index)
-                    self.logger.debug("GPU 索引已複製到 CPU 進行儲存")
-                except Exception as e:
-                    self.logger.warning(f"GPU 索引複製失敗，使用 CPU 索引: {e}")
-                    index_to_save = self._index
-            else:
-                # 使用 CPU 索引
-                index_to_save = self._index
-            
+                self.logger.warning("儲存時發現 GPU 索引仍然存在，建議在儲存前統一轉移。")
+
             if index_to_save is None:
                 self.logger.error("沒有可用的索引進行儲存")
                 return False
             
             # 使用原子性操作儲存檔案
-            return self._atomic_save(file_path, index_to_save)
+            return await self._atomic_save(file_path, index_to_save)
             
         except Exception as e:
             self.logger.error(f"儲存索引失敗: {e}")
             return False
-    
-    def _atomic_save(self, file_path: Path, index: faiss.Index) -> bool:
+
+    async def _atomic_save(self, file_path: Path, index: faiss.Index) -> bool:
         """原子性儲存索引和映射檔案
         
         Args:
@@ -1953,12 +1944,12 @@ class VectorManager:
             self.logger.error(f"取得頻道 {channel_id} 索引統計失敗: {e}")
             return {"error": str(e)}
     
-    def save_index(self, channel_id: str) -> bool:
-        """儲存頻道索引
-        
+    async def save_index(self, channel_id: str) -> bool:
+        """非同步儲存頻道索引
+
         Args:
             channel_id: 頻道 ID
-            
+
         Returns:
             bool: 是否成功
         """
@@ -1966,27 +1957,47 @@ class VectorManager:
             with self._indices_lock:
                 if channel_id in self._indices:
                     index_file = self.storage_path / f"{channel_id}.index"
-                    return self._indices[channel_id].save(index_file)
-                return False
-                
+                    return await self._indices[channel_id].save(index_file)
+            return False
         except Exception as e:
             self.logger.error(f"儲存頻道 {channel_id} 索引失敗: {e}")
             return False
     
-    def save_all_indices(self) -> Dict[str, bool]:
-        """儲存所有頻道索引
+    async def save_all_indices(self) -> Dict[str, bool]:
+        """並行儲存所有頻道索引
         
         Returns:
             Dict[str, bool]: 各頻道儲存結果
         """
-        results = {}
+        self.logger.info(f"開始並行儲存所有 {len(self._indices)} 個索引...")
+        start_time = time.time()
+        
+        tasks = []
         with self._indices_lock:
             for channel_id in self._indices:
-                results[channel_id] = self.save_index(channel_id)
+                tasks.append(self.save_index(channel_id))
         
-        success_count = sum(results.values())
-        self.logger.info(f"索引儲存完成: {success_count}/{len(results)} 個成功")
-        return results
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        end_time = time.time()
+        
+        # 處理結果
+        final_results = {}
+        success_count = 0
+        with self._indices_lock:
+            channel_ids = list(self._indices.keys())
+            for i, result in enumerate(results):
+                channel_id = channel_ids[i]
+                if isinstance(result, Exception):
+                    self.logger.error(f"並行儲存頻道 {channel_id} 索引時發生錯誤: {result}")
+                    final_results[channel_id] = False
+                else:
+                    final_results[channel_id] = result
+                    if result:
+                        success_count += 1
+
+        self.logger.info(f"所有索引並行儲存完成，耗時: {end_time - start_time:.2f} 秒。{success_count}/{len(self._indices)} 個成功。")
+        return final_results
     
     def optimize_index(self, channel_id: str) -> bool:
         """優化頻道索引
@@ -2655,40 +2666,67 @@ class VectorManager:
                 'status': 'failed'
             }
 
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         """清理向量管理器資源和快取
         
         執行完整的清理作業，儲存所有索引並釋放記憶體資源。
         """
+        self.logger.info("開始向量管理器清理...")
+        
+        # 首先儲存所有索引
         try:
-            self.logger.info("開始向量管理器清理...")
-            
-            # 首先儲存所有索引
-            try:
-                save_results = self.save_all_indices()
-                success_count = sum(save_results.values())
-                self.logger.info(f"向量索引儲存: {success_count}/{len(save_results)} 個成功")
-            except Exception as e:
-                self.logger.error(f"儲存索引時發生錯誤: {e}")
-            
-            # 清理所有快取和 GPU 資源
-            self.clear_cache()
-            
-            # 額外的記憶體優化
-            try:
-                self.optimize_memory_usage()
-            except Exception as e:
-                self.logger.warning(f"記憶體優化失敗: {e}")
-            
-            # 清理 GPU 記憶體管理器
-            if self.gpu_memory_manager is not None:
-                try:
-                    self.gpu_memory_manager.clear_gpu_memory()
-                    self.gpu_memory_manager = None
-                except Exception as e:
-                    self.logger.warning(f"清理 GPU 記憶體管理器失敗: {e}")
-            
-            self.logger.debug("向量管理器清理完成")
-            
+            await self.save_all_indices()
         except Exception as e:
-            self.logger.error(f"向量管理器清理時發生錯誤: {e}")
+            self.logger.error(f"儲存索引時發生錯誤: {e}")
+        
+        # 清理所有快取和 GPU 資源
+        self.clear_cache()
+        
+        # 額外的記憶體優化
+        try:
+            self.optimize_memory_usage()
+        except Exception as e:
+            self.logger.warning(f"記憶體優化失敗: {e}")
+        
+        # 清理 GPU 記憶體管理器
+        if self.gpu_memory_manager is not None:
+            try:
+                self.gpu_memory_manager.clear_gpu_memory()
+                self.gpu_memory_manager = None
+            except Exception as e:
+                self.logger.warning(f"清理 GPU 記憶體管理器失敗: {e}")
+        
+        self.logger.debug("向量管理器清理完成")
+
+    def move_all_indices_to_cpu(self):
+        """將所有 GPU 索引批量移至 CPU"""
+        self.logger.info("開始將所有 GPU 索引批量移至 CPU...")
+        start_time = time.time()
+        
+        indices_to_move = []
+        with self._indices_lock:
+            for channel_id, index in self._indices.items():
+                if index._gpu_index is not None:
+                    indices_to_move.append((channel_id, index))
+
+        if not indices_to_move:
+            self.logger.info("沒有需要移動的 GPU 索引。")
+            return
+
+        for channel_id, index in indices_to_move:
+            try:
+                cpu_index = faiss.index_gpu_to_cpu(index._gpu_index)
+                index._index = cpu_index
+                index._gpu_index = None # 清除 GPU 索引參考
+                self.logger.debug(f"頻道 {channel_id} 的索引已移至 CPU。")
+            except Exception as e:
+                self.logger.error(f"將頻道 {channel_id} 的索引移至 CPU 失敗: {e}")
+        
+        # 進行一次手動的垃圾回收
+        gc.collect()
+        if TORCH_AVAILABLE and torch.cuda.is_available():
+            torch.cuda.synchronize() # 等待所有 CUDA 操作完成
+            torch.cuda.empty_cache()
+
+        end_time = time.time()
+        self.logger.info(f"所有 {len(indices_to_move)} 個 GPU 索引已移至 CPU，總耗時: {end_time - start_time:.2f} 秒")
