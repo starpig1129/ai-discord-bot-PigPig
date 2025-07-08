@@ -11,7 +11,7 @@ from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationshi
 from .prompt_engine import StoryPromptEngine
 from .state_manager import StoryStateManager
 from cogs.memory.memory_manager import MemoryManager
-from gpt.gemini_api import generate_response_with_cache, GeminiError
+from gpt.gpt_response_gen import generate_response, GeminiError
 from cogs.system_prompt.manager import SystemPromptManager
 from cogs.language_manager import LanguageManager
 from .ui.modals import InterventionModal
@@ -278,7 +278,7 @@ class StoryManager:
                         })
 
                 # Use the new structured response function to get the GM plan directly.
-                _, gm_plan = await generate_response_with_cache(
+                _, gm_plan = await generate_response(
                     inst=message.content,
                     system_prompt=gm_prompt,
                     dialogue_history=gm_dialogue_history,
@@ -365,7 +365,7 @@ class StoryManager:
                                 time=latest_time
                             )
                             
-                            _, character_action = await generate_response_with_cache(
+                            _, character_action = await generate_response(
                                 inst=char_user_prompt,
                                 system_prompt=char_system_prompt,
                                 dialogue_history=dialogue_history,
@@ -466,7 +466,7 @@ class StoryManager:
             
             summary_inst = "Please provide a concise, one-paragraph summary of the preceding conversation."
 
-            _, summary_gen = await generate_response_with_cache(
+            _, summary_gen = await generate_response(
                 inst=summary_inst,
                 system_prompt=summary_system_prompt,
                 dialogue_history=dialogue_history,
@@ -522,7 +522,7 @@ class StoryManager:
         dialogue_history = [{'role': 'user', 'content': f"## Recent Plot Summaries\n{formatted_summaries}"}]
 
         try:
-            _, outline_gen = await generate_response_with_cache(
+            _, outline_gen = await generate_response(
                 inst=outline_inst,
                 system_prompt=outline_system_prompt,
                 dialogue_history=dialogue_history,
@@ -639,7 +639,7 @@ class StoryManager:
                 gm_prompt = await self.prompt_engine.build_story_start_prompt(story_instance, world, characters)
 
                 # --- Step 2: Call GM Agent for a structured plan ---
-                _, gm_plan = await generate_response_with_cache(
+                _, gm_plan = await generate_response(
                     inst=gm_prompt,
                     system_prompt="You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.",
                     response_schema=GMActionPlan

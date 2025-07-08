@@ -32,6 +32,8 @@ from moviepy.editor import VideoFileClip
 import tempfile
 import librosa
 import soundfile as sf
+from typing import Type, Optional
+from pydantic import BaseModel
 from addons.settings import Settings, TOKENS
 from gpt.openai_api import generate_response as openai_generate, OpenAIError
 from gpt.gemini_api import generate_response as gemini_generate, GeminiError
@@ -278,15 +280,49 @@ def is_model_available(model_name):
         return model is not None and tokenizer is not None
     return False
 
-async def generate_response(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None):
+async def generate_response(
+    inst: str,
+    system_prompt: str,
+    dialogue_history: Optional[list] = None,
+    image_input: Optional[any] = None,
+    audio_input: Optional[any] = None,
+    video_input: Optional[any] = None,
+    response_schema: Optional[Type[BaseModel]] = None
+):
     last_error = None
     # 根據優先順序嘗試使用可用的模型
     for model_name in settings.model_priority:
         if is_model_available(model_name):
             try:
-                generator = MODEL_GENERATORS[model_name]
-                thread, gen = await generator(inst, system_prompt, dialogue_history, image_input, audio_input, video_input)
+                generator_func = MODEL_GENERATORS[model_name]
                 
+                # 準備參數
+                params = {
+                    "inst": inst,
+                    "system_prompt": system_prompt,
+                    "dialogue_history": dialogue_history,
+                    "image_input": image_input,
+                    "audio_input": audio_input,
+                    "video_input": video_input,
+                }
+                
+                # 只有 gemini 模型支持 response_schema
+                if model_name == "gemini" and response_schema:
+                    params["response_schema"] = response_schema
+
+                thread, result = await generator_func(**params)
+
+                # 如果提供了 response_schema，我們預期 result 是一個 Pydantic 物件，而不是生成器
+                if response_schema and model_name == "gemini":
+                    if isinstance(result, BaseModel):
+                        logging.info(f"成功使用 {model_name} 模型生成並解析了結構化回應")
+                        return thread, result
+                    else:
+                        raise ValueError(f"{model_name} 模型未能回傳預期的 Pydantic 物件")
+
+                # --- 以下是處理流式生成器的邏輯 ---
+                gen = result
+
                 # 統一處理生成器回應
                 async def unified_gen():
                     try:

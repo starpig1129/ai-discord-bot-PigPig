@@ -356,8 +356,8 @@ class InstructionParser:
                 raise ValueError("模型尚未加載，請等待模型加載完成")
 
             thread, gen = await generate_response(
-                instruction,
-                self.system_prompt,
+                inst=instruction,
+                system_prompt=self.system_prompt
             )
 
             response = ""

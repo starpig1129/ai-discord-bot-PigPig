@@ -20,7 +20,8 @@ except ImportError:
     TORCH_AVAILABLE = False
 
 # 導入所有優化模組
-from gpt.gemini_api import get_cache_manager, generate_response_with_cache
+from gpt.gemini_api import get_cache_manager
+from gpt.gpt_response_gen import generate_response
 from gpt.cache_utils import get_system_cache, get_conversation_cache, cleanup_caches
 from gpt.processing_cache import (
     get_processing_result, cache_processing_result,
@@ -186,15 +187,13 @@ class OptimizedDiscordBot:
             )
             
             api_start = time.time()
-            result, response_generator = await generate_response_with_cache(
+            result, response_generator = await generate_response(
                 inst=user_input,
                 system_prompt=enhanced_system_prompt,
                 dialogue_history=dialogue_history,
                 image_input=image_input,
                 audio_input=audio_input,
-                video_input=video_input,
-                use_cache=self.config.enable_gemini_cache,
-                cache_ttl=self.config.gemini_cache_ttl
+                video_input=video_input
             )
             
             metrics.api_call_time = time.time() - api_start

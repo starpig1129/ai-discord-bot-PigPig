@@ -787,7 +787,12 @@ async def gpt_message(
         responsesall = ""
         message_result = ""
         bot_system_prompt = get_system_prompt(str(message.guild.me.id), message)
-        thread, streamer = await generate_response(combined_prompt, bot_system_prompt, enhanced_history, image_input=image_data)
+        thread, streamer = await generate_response(
+            inst=combined_prompt,
+            system_prompt=bot_system_prompt,
+            dialogue_history=enhanced_history,
+            image_input=image_data
+        )
         buffer_size = 40  # 設置緩衝區大小
         current_message = message_to_edit
         

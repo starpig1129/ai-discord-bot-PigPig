@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 import logging
 
-from gpt.gemini_api import generate_response, GeminiError
+from gpt.gpt_response_gen import generate_response, GeminiError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -110,7 +110,11 @@ class SummarizerCog(commands.Cog):
             """
             user_instruction = "請根據我提供的對話歷史紀錄，開始進行摘要。"
             logging.info(f"正在調用語言模型生成摘要... (分析 {human_msg_count} 則人類訊息，總輸入 {current_char_count} 字元)")
-            thread, generator = await generate_response(inst=user_instruction, system_prompt=system_prompt, dialogue_history=dialogue_history)
+            thread, generator = await generate_response(
+                inst=user_instruction,
+                system_prompt=system_prompt,
+                dialogue_history=dialogue_history
+            )
             full_summary = "".join([chunk async for chunk in generator])
             if not full_summary: raise ValueError("模型沒有生成任何回應。")
             logging.info("摘要生成完畢，開始進行後處理。")

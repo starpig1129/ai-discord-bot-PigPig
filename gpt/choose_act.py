@@ -193,7 +193,12 @@ class ActionHandler:
     async def _get_action_list(self, prompt: str, history_dict: List[Dict], 
                              image_data: List) -> List[Dict]:
         try:
-            thread, gen = await generate_response(prompt, self.system_prompt, history_dict, image_data)
+            thread, gen = await generate_response(
+                inst=prompt,
+                system_prompt=self.system_prompt,
+                dialogue_history=history_dict,
+                image_input=image_data
+            )
             responses = []
             async for chunk in gen:
                 responses.append(chunk)

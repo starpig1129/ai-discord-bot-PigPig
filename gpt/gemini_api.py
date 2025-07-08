@@ -13,6 +13,8 @@ import pathlib
 import httpx
 from typing import Optional, Dict, Any, List, Type
 from pydantic import BaseModel
+import json
+import re
 
 # Initialize the Gemini model
 tokens = TOKENS()
@@ -109,6 +111,11 @@ class GeminiCacheManager:
             if display_name is None:
                 display_name = f'discord_bot_cache_{cache_key}'
             
+            # 只有在 cache_contents 不為空時才創建快取
+            if not cache_contents:
+                self.logger.warning("由於 contents 為空，跳過快取創建。")
+                return None
+
             # 使用官方文檔格式創建快取
             cache = self.client.caches.create(
                 model=model,
@@ -832,7 +839,7 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
     
     return contents
 
-async def generate_response_with_cache(inst: str,
+async def generate_response(inst: str,
                                        system_prompt: str,
                                        response_schema: Optional[Type[BaseModel]] = None,
                                        dialogue_history=None,
@@ -1059,9 +1066,7 @@ async def generate_response_with_cache(inst: str,
         else:
             # 處理結構化 JSON 回應
             logger.info(f"收到結構化回應: {response_object.text[:500]}...")
-            # 根據官方最新 SDK，解析後的 Pydantic 物件可直接獲取
             try:
-                # `response.candidates[0].content.parts[0].json` 會自動使用 pydantic 進行解析
                 parsed_data = response_object.parsed
                 return None, parsed_data
             except (AttributeError, IndexError) as e:
@@ -1069,7 +1074,7 @@ async def generate_response_with_cache(inst: str,
     except Exception as e:
         raise GeminiError(f"Gemini API 初始化錯誤: {str(e)}")
             
-async def generate_response(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None, pdf_input=None):
+async def generate_response_old(inst, system_prompt, dialogue_history=None, image_input=None, audio_input=None, video_input=None, pdf_input=None):
     """根據 Gemini API 官方最佳實踐生成回應。
     
     主要改進:
