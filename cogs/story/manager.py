@@ -169,10 +169,15 @@ class StoryManager:
 
         embed = discord.Embed(description=description, color=discord.Color.blurple())
 
-        # Add world state fields
-        embed.add_field(name="📍 地點", value=story_instance.current_location or "未知", inline=True)
-        embed.add_field(name="📅 日期", value=story_instance.current_date or "未知", inline=True)
-        embed.add_field(name="⏰ 時間", value=story_instance.current_time or "未知", inline=True)
+        if isinstance(content, CharacterAction):
+            # For character actions, set the footer with their specific time and location
+            footer_text = f"📍 {content.location}  |  📅 {content.date}  |  ⏰ {content.time}"
+            embed.set_footer(text=footer_text)
+        else:
+            # For narrations, use the general story instance state in fields
+            embed.add_field(name="📍 地點", value=story_instance.current_location or "未知", inline=True)
+            embed.add_field(name="📅 日期", value=story_instance.current_date or "未知", inline=True)
+            embed.add_field(name="⏰ 時間", value=story_instance.current_time or "未知", inline=True)
 
         # Fetch and add player relationships
         relationships = db.get_relationships_for_story(story_instance.channel_id)
@@ -310,6 +315,12 @@ class StoryManager:
                     else:
                         # --- Step 3B: Loop Through and Call Character Agents ---
                         full_event_text = []
+                        
+                        # Initialize the authoritative state from the GM's plan. This will be updated by each actor.
+                        latest_location = gm_plan.state_update.location
+                        latest_date = gm_plan.state_update.date
+                        latest_time = gm_plan.state_update.time
+
                         for dialogue_ctx in gm_plan.dialogue_context:
                             speaker_name = dialogue_ctx.speaker_name
                             speaking_character = next((c for c in characters if c.name == speaker_name), None)
@@ -344,10 +355,14 @@ class StoryManager:
                                 if content.strip():
                                     dialogue_history.append({"role": role, "content": content})
 
+                            # Pass the most up-to-date world state to the character prompt
                             char_system_prompt, char_user_prompt = await self.prompt_engine.build_character_prompt(
                                 character=speaking_character,
                                 gm_context=dialogue_ctx,
-                                guild_id=guild_id
+                                guild_id=guild_id,
+                                location=latest_location,
+                                date=latest_date,
+                                time=latest_time
                             )
                             
                             _, character_action = await generate_response_with_cache(
@@ -366,16 +381,22 @@ class StoryManager:
                                 )
                                 event_text = f"{character_action.action or ''} {character_action.dialogue} {character_action.thought or ''}".strip()
                                 full_event_text.append(f"{speaker_name}: {event_text}")
+                                
+                                # The actor's action now becomes the new authoritative state for the next actor.
+                                latest_location = character_action.location
+                                latest_date = character_action.date
+                                latest_time = character_action.time
                             else:
                                 self.logger.warning(f"Failed to generate action for character '{speaker_name}'.")
 
                         event_text_for_log = "\n".join(full_event_text) if full_event_text else f"({gm_plan.event_summary})"
 
                 # --- Step 4: Update World State & Relationships ---
-                story_instance.current_location = gm_plan.state_update.location
-                story_instance.current_date = gm_plan.state_update.date
-                story_instance.current_time = gm_plan.state_update.time
-                self.logger.info(f"State updated: Loc={story_instance.current_location}, Date={story_instance.current_date}, Time={story_instance.current_time}")
+                # Use the final state, as determined by the last actor, to update the world.
+                story_instance.current_location = latest_location
+                story_instance.current_date = latest_date
+                story_instance.current_time = latest_time
+                self.logger.info(f"State updated by actor's final action: Loc={story_instance.current_location}, Date={story_instance.current_date}, Time={story_instance.current_time}")
                 
                 await self._update_relationships(db, story_instance.channel_id, gm_plan.relationships_update)
                 

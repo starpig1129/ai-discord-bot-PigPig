@@ -124,3 +124,6 @@ class CharacterAction(BaseModel):
     action: Optional[str] = Field(default=None, description="The character's action,body language or facial expressions.")
     dialogue: str = Field(description="Words spoken by the character.")
     thought: Optional[str] = Field(default=None, description="The inner thoughts or feelings of the character, visible to the player.")
+    location: str = Field(description="The specific location where the character is performing this action.")
+    date: str = Field(description="The date when the character is performing this action.")
+    time: str = Field(description="The time when the character is performing this action.")

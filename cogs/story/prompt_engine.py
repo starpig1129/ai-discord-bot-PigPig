@@ -212,6 +212,9 @@ class StoryPromptEngine:
         character: StoryCharacter,
         gm_context: "DialogueContext",
         guild_id: int,
+        location: str,
+        date: str,
+        time: str,
     ) -> Tuple[str, str]:
         """
         Constructs the prompts for the Character Agent.
@@ -258,11 +261,20 @@ class StoryPromptEngine:
         user_prompt_parts.append(f"Your motivation is: **{gm_context.motivation}**")
         user_prompt_parts.append(f"Your emotional state is: **{gm_context.emotional_state}**")
 
+        user_prompt_parts.append("\n## Scene Context")
+        user_prompt_parts.append(f"**Location:** {location}")
+        user_prompt_parts.append(f"**Date:** {date}")
+        user_prompt_parts.append(f"**Time:** {time}")
+
         user_prompt_parts.append("\n## Your Task: Perform")
         user_prompt_parts.append(
             "The conversation history is provided in the message history. "
             "Based on your identity and the Director's guidance, generate the `CharacterAction` JSON object now. "
             "Combine your physical action, spoken dialogue, and internal thoughts into a single, cohesive performance."
+        )
+        user_prompt_parts.append(
+            "\n**CRITICAL JSON REQUIREMENT:** Your `CharacterAction` JSON output **MUST** include the `location`, `date`, and `time` fields. "
+            f"Use the exact values provided in the 'Scene Context' section above for these fields."
         )
 
         user_prompt = "\n\n".join(user_prompt_parts)
