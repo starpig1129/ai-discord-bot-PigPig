@@ -83,9 +83,9 @@ class DialogueContext(BaseModel):
     emotional_state: str = Field(..., description="The character's current emotional state (e.g., angry, happy, curious).")
 
 class StateUpdate(BaseModel):
-    location: Optional[str] = Field(None, description="The new location name, if it changes.")
-    date: Optional[str] = Field(None, description="The new date, if it changes.")
-    time: Optional[str] = Field(None, description="The new time, if it changes.")
+    location: str = Field(..., description="The new location name. This is mandatory.")
+    date: str = Field(..., description="The new date. This is mandatory.")
+    time: str = Field(..., description="The new time. This is mandatory.")
 
 class RelationshipUpdate(BaseModel):
     character_name: str = Field(..., description="The name of the NPC whose relationship is changing.")
@@ -104,10 +104,16 @@ class GMActionPlan(BaseModel):
     
     event_title: str = Field(..., description="A short, concise title for this event, suitable for memory logs.")
     event_summary: str = Field(..., description="A one-sentence summary of this event for long-term memory.")
-    narration_content: Optional[str] = Field(None, description="The narration text, required if action_type is NARRATE.")
-    dialogue_context: Optional[DialogueContext] = Field(None, description="Context for the Character Agent, required if action_type is DIALOGUE.")
-    state_update: Optional[StateUpdate] = Field(None, description="Include this object ONLY if the world state changes.")
-    relationships_update: Optional[List[RelationshipUpdate]] = Field(None, description="Include this array ONLY if player-NPC relationships change.")
+    state_update: Optional[StateUpdate] = Field(default=None, description="The complete, updated world state. This is always required.")
+    narration_content: Optional[str] = Field(default=None, description="The narration text, required if action_type is NARRATE.")
+    dialogue_context: Optional[List[DialogueContext]] = Field(
+        default=None,
+        description="A list of dialogue contexts for Character Agents, allowing multiple characters to speak. Required if action_type is DIALOGUE."
+    )
+    relationships_update: Optional[List[RelationshipUpdate]] = Field(
+        default=None,
+        description="Include this array ONLY if player-NPC relationships change."
+    )
 
 
 class CharacterAction(BaseModel):
@@ -115,6 +121,6 @@ class CharacterAction(BaseModel):
     Represents a character's action, combining dialogue, physical action, and internal thought.
     This structure is used for the AI's structured output.
     """
-    action: Optional[str] = Field(description="The character's action,body language or facial expressions.")
+    action: Optional[str] = Field(default=None, description="The character's action,body language or facial expressions.")
     dialogue: str = Field(description="Words spoken by the character.")
-    thought: Optional[str] = Field(description="The inner thoughts or feelings of the character, visible to the player.")
+    thought: Optional[str] = Field(default=None, description="The inner thoughts or feelings of the character, visible to the player.")

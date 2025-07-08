@@ -105,11 +105,30 @@ class StoryPromptEngine:
             "Your output MUST be a single, valid JSON object that conforms to the requested schema."
         )
 
-        # Add conditional instruction based on narration setting
-        if not instance.narration_enabled:
-            prompt_parts.append(
-                "\n**CRITICAL INSTRUCTION:** Narration is disabled. The 'narration_content' field in your JSON output MUST be null. Do not generate any descriptive text for the narrator."
-            )
+        prompt_parts.append(
+            "\n**CRITICAL INSTRUCTION: STATE UPDATE**\n"
+            "You MUST always provide the complete `state_update` object. The `location`, `date`, and `time` fields are mandatory in every single turn."
+        )
+
+        # Dynamically build the action_type description
+        if instance.narration_enabled:
+            action_type_desc = "The type of action. Can be 'NARRATE' for scene descriptions or 'DIALOGUE' for character speech."
+            allowed_actions = "['NARRATE', 'DIALOGUE']"
+        else:
+            action_type_desc = "The type of action. Narration is disabled, so this MUST be 'DIALOGUE'."
+            allowed_actions = "['DIALOGUE']"
+
+        prompt_parts.append(
+            f"\n**CRITICAL INSTRUCTION: ACTION TYPE**\n"
+            f"`action_type`: {action_type_desc} Your only available options are: {allowed_actions}."
+        )
+
+        prompt_parts.append(
+            "\n**CRITICAL INSTRUCTION: MULTI-CHARACTER DIALOGUE**\n"
+            "The `dialogue_context` field is now a list that can contain multiple dialogue objects. "
+            "This allows several characters to speak in sequence in response to a single player action. "
+            "Example: `\"dialogue_context\": [{\"speaker_name\": \"Alice\", ...}, {\"speaker_name\": \"Bob\", ...}]`"
+        )
         
         # Add language consistency instruction
         language_name = self.language_map.get(language, "English")

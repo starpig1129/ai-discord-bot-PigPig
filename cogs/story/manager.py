@@ -285,109 +285,112 @@ class StoryManager:
                     # Handle cases where the response could not be parsed or is empty
                     raise GeminiError("Failed to generate a valid GM action plan.")
 
-                # Manually enforce narration setting, as context is no longer passed to the model validator.
-                if not story_instance.narration_enabled:
-                    gm_plan.narration_content = None
-
-                response_content = ""
-                speaking_character: Optional[StoryCharacter] = None
-
                 # --- Step 3: Execute the plan (NARRATE or DIALOGUE) ---
+                event_text_for_log = ""
+
                 if gm_plan.action_type == "NARRATE":
                     self.logger.info(f"GM Action: NARRATE. Event: {gm_plan.event_title}")
-                    # The model_validator now handles forcing narration_content to None.
-                    # We just need to check if there's content to respond with.
                     if gm_plan.narration_content:
-                        response_content = gm_plan.narration_content
+                        await self._send_story_response(
+                            channel=message.channel,
+                            character=None,
+                            story_instance=story_instance, # Use pre-update instance for state display
+                            content=gm_plan.narration_content,
+                        )
+                        event_text_for_log = gm_plan.narration_content
                     else:
-                        self.logger.info("Narration is disabled or was not generated. Using summary as fallback content.")
-                        # We still need to log the event, so we'll use the summary
-                        response_content = f"({gm_plan.event_summary})"
+                        self.logger.info("Narration is disabled or was not generated. No message sent.")
+                        event_text_for_log = f"({gm_plan.event_summary})" # Log summary if no narration
                 
                 elif gm_plan.action_type == "DIALOGUE":
-                    self.logger.info(f"GM Action: DIALOGUE for {gm_plan.dialogue_context.speaker_name}. Event: {gm_plan.event_title}")
-                    
-                    # --- Step 3B: Call Character Agent ---
-                    speaker_name = gm_plan.dialogue_context.speaker_name
-                    speaking_character = next((c for c in characters if c.name == speaker_name), None)
-
-                    if speaking_character:
-                        # Fetch recent conversation history
-                        history_messages = [msg async for msg in message.channel.history(limit=20)]
-                        history_messages.reverse()  # Oldest to newest
-                        
-                        # Build the dialogue history for the character, starting with summaries
-                        dialogue_history = []
-                        if story_instance.summaries:
-                            for summary in story_instance.summaries[-5:]:
-                                dialogue_history.append({
-                                    "role": "user",
-                                    "content": f"[Contextual Summary: {summary}]"
-                                })
-
-                        # Append recent conversation messages
-                        for msg in history_messages:
-                            content = msg.content
-                            role = "user"  # Default to user
-
-                            if msg.author.id == self.bot.user.id and msg.embeds:
-                                content = msg.embeds[0].description or ""
-                                role = "assistant"
-                            elif msg.author.id != self.bot.user.id:
-                                role = "user"
-
-                            if content.strip():
-                                dialogue_history.append({"role": role, "content": content})
-
-                        # Step 3B: Build separated prompts and call Character Agent
-                        char_system_prompt, char_user_prompt = await self.prompt_engine.build_character_prompt(
-                            character=speaking_character,
-                            gm_context=gm_plan.dialogue_context,
-                            guild_id=guild_id
-                        )
-                        
-                        _, character_action = await generate_response_with_cache(
-                            inst=char_user_prompt,
-                            system_prompt=char_system_prompt,
-                            dialogue_history=dialogue_history,
-                            response_schema=CharacterAction
-                        )
-                        
-                        response_content = character_action
+                    self.logger.info(f"GM Action: DIALOGUE. Event: {gm_plan.event_title}")
+                    if not gm_plan.dialogue_context:
+                        self.logger.warning("Dialogue action chosen, but no dialogue_context was provided.")
+                        event_text_for_log = f"({gm_plan.event_summary})" # Fallback
                     else:
-                        self.logger.warning(f"Character '{speaker_name}' not found for dialogue.")
-                        response_content = f"({speaker_name} 想要說話，但似乎走神了...)"
+                        # --- Step 3B: Loop Through and Call Character Agents ---
+                        full_event_text = []
+                        for dialogue_ctx in gm_plan.dialogue_context:
+                            speaker_name = dialogue_ctx.speaker_name
+                            speaking_character = next((c for c in characters if c.name == speaker_name), None)
+
+                            if not speaking_character:
+                                self.logger.warning(f"Character '{speaker_name}' not found for dialogue.")
+                                await self._send_story_response(
+                                    channel=message.channel,
+                                    character=None,
+                                    story_instance=story_instance,
+                                    content=f"({speaker_name} 想要說話，但似乎走神了...)"
+                                )
+                                continue
+
+                            # Fetch recent conversation history
+                            history_messages = [msg async for msg in message.channel.history(limit=20)]
+                            history_messages.reverse()
+                            
+                            dialogue_history = []
+                            if story_instance.summaries:
+                                for summary in story_instance.summaries[-5:]:
+                                    dialogue_history.append({"role": "user", "content": f"[Contextual Summary: {summary}]"})
+
+                            for msg in history_messages:
+                                content = msg.content
+                                role = "user"
+                                if msg.author.id == self.bot.user.id and msg.embeds:
+                                    content = msg.embeds[0].description or ""
+                                    role = "assistant"
+                                elif msg.author.id != self.bot.user.id:
+                                    role = "user"
+                                if content.strip():
+                                    dialogue_history.append({"role": role, "content": content})
+
+                            char_system_prompt, char_user_prompt = await self.prompt_engine.build_character_prompt(
+                                character=speaking_character,
+                                gm_context=dialogue_ctx,
+                                guild_id=guild_id
+                            )
+                            
+                            _, character_action = await generate_response_with_cache(
+                                inst=char_user_prompt,
+                                system_prompt=char_system_prompt,
+                                dialogue_history=dialogue_history,
+                                response_schema=CharacterAction
+                            )
+                            
+                            if character_action:
+                                await self._send_story_response(
+                                    channel=message.channel,
+                                    character=speaking_character,
+                                    story_instance=story_instance,
+                                    content=character_action,
+                                )
+                                event_text = f"{character_action.action or ''} {character_action.dialogue} {character_action.thought or ''}".strip()
+                                full_event_text.append(f"{speaker_name}: {event_text}")
+                            else:
+                                self.logger.warning(f"Failed to generate action for character '{speaker_name}'.")
+
+                        event_text_for_log = "\n".join(full_event_text) if full_event_text else f"({gm_plan.event_summary})"
 
                 # --- Step 4: Update World State & Relationships ---
-                updated_instance = await self.state_manager.update_state_from_gm_plan(story_instance, gm_plan)
-                await self._update_relationships(db, updated_instance.channel_id, gm_plan.relationships_update)
+                story_instance.current_location = gm_plan.state_update.location
+                story_instance.current_date = gm_plan.state_update.date
+                story_instance.current_time = gm_plan.state_update.time
+                self.logger.info(f"State updated: Loc={story_instance.current_location}, Date={story_instance.current_date}, Time={story_instance.current_time}")
+                
+                await self._update_relationships(db, story_instance.channel_id, gm_plan.relationships_update)
+                
+                updated_instance = story_instance
                 
                 # --- Step 5: Record Event ---
-                # Ensure we log the string representation for the event record.
-                if isinstance(response_content, CharacterAction):
-                    event_text = f"{response_content.action or ''} {response_content.dialogue} {response_content.thought or ''}".strip()
-                else:
-                    event_text = response_content
-                await self._record_event(db, world, updated_instance, gm_plan, event_text)
+                await self._record_event(db, world, updated_instance, gm_plan, event_text_for_log)
                 
                 # --- Step 5.5: Handle Summary Generation ---
                 updated_instance.message_counter += 1
                 if updated_instance.message_counter >= 20:
                     self.logger.info(f"Message counter reached {updated_instance.message_counter}, generating summary for story {updated_instance.channel_id}")
                     await self._generate_and_save_summary(updated_instance)
-                    # The summary function will reset the counter and save the instance
                 else:
-                    # Save the instance if no summary was generated
                     db.save_story_instance(updated_instance)
-
-
-                # --- Step 6: Send Response to User ---
-                await self._send_story_response(
-                    channel=message.channel,
-                    character=speaking_character,
-                    story_instance=updated_instance,
-                    content=response_content,
-                )
 
             except (GeminiError, json.JSONDecodeError, ValidationError) as e:
                 self.logger.error(f"Error in V5 story generation pipeline: {e}", exc_info=True)
