@@ -138,7 +138,7 @@ class CacheHelper:
             if not cache_mgr:
                 return 0
                 
-            return cache_mgr.cleanup_expired_caches()
+            return cache_mgr.force_cleanup_all_caches()
             
         except Exception as e:
             logger.error(f"清理快取失敗: {str(e)}")

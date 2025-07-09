@@ -54,78 +54,33 @@ class GeminiCacheManager:
         self.max_cache_count = max_cache_count
         self.cache_access_times: Dict[str, float] = {}  # 快取存取時間記錄
         self.cleanup_threshold = max(int(max_cache_count * 0.8), 1)  # 80% 時開始清理
-        
-    def _generate_cache_key(self, system_instruction: str, contents_hash: str = "") -> str:
-        """生成快取鍵值
-        
-        Args:
-            system_instruction: 系統指令
-            contents_hash: 內容哈希值
-            
-        Returns:
-            str: 快取鍵值
+
+    def create_and_register_cache(self,
+                                  cache_key: str,
+                                  model: str,
+                                  system_instruction: str,
+                                  contents: List[Any],
+                                  ttl: str,
+                                  display_name: str) -> Optional[Any]:
         """
-        hash_input = f"{system_instruction}_{contents_hash}"
-        return hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:16]
-    
-    def create_cache(self,
-                    model: str,
-                    system_instruction: str,
-                    contents: List[Any] = None,
-                    ttl: str = "3600s",
-                    display_name: str = None) -> Optional[Any]:
-        """創建顯式快取
-        
-        Args:
-            model: 模型名稱（必須使用明確版本，如 'models/gemini-2.0-flash-001'）
-            system_instruction: 系統指令
-            contents: 要快取的內容列表（可包含上傳的檔案）
-            ttl: 存留時間（如 "300s", "1h"）
-            display_name: 顯示名稱
-            
-        Returns:
-            快取物件或 None（如果創建失敗）
+        # <<< 新增：一個更明確的函數，用於創建遠端快取並在本地註冊。
         """
         try:
-            # 檢查快取大小限制，必要時清理
             if len(self.active_caches) >= self.cleanup_threshold:
                 self._cleanup_least_used_caches()
-            
-            # 生成快取鍵值
-            contents_hash = str(hash(str(contents))) if contents else ""
-            cache_key = self._generate_cache_key(system_instruction, contents_hash)
-            
-            # 檢查是否已存在有效快取
-            existing_cache = self.get_cache_by_key(cache_key)
-            if existing_cache:
-                self.logger.info(f"使用現有快取: {cache_key}")
-                # 更新存取時間
-                self.cache_access_times[cache_key] = time.time()
-                return existing_cache
-            
-            # 準備快取內容
-            cache_contents = contents if contents else []
-            
-            if display_name is None:
-                display_name = f'discord_bot_cache_{cache_key}'
-            
-            # 只有在 cache_contents 不為空時才創建快取
-            if not cache_contents:
-                self.logger.warning("由於 contents 為空，跳過快取創建。")
-                return None
 
-            # 使用官方文檔格式創建快取
+            self.logger.info(f"本地快取未命中。正在創建新的遠端快取: '{display_name}'...")
+            config = types.CreateCachedContentConfig(
+                system_instruction=system_instruction,
+                contents=contents,
+                ttl=ttl,
+                display_name=display_name
+            )
             cache = self.client.caches.create(
                 model=model,
-                config=types.CreateCachedContentConfig(
-                    display_name=display_name,
-                    system_instruction=system_instruction,
-                    contents=cache_contents,
-                    ttl=ttl,
-                )
+                config=config
             )
             
-            # 儲存快取資訊
             self.active_caches[cache_key] = cache
             self.cache_metadata[cache_key] = {
                 'cache_name': cache.name,
@@ -137,236 +92,59 @@ class GeminiCacheManager:
             }
             self.cache_access_times[cache_key] = time.time()
             
-            self.logger.info(f"成功創建新快取: {cache_key} (TTL: {ttl}), 當前快取數量: {len(self.active_caches)}")
+            self.logger.info(f"成功創建新快取: {cache.name} (本地key: {cache_key})")
             return cache
             
         except Exception as e:
             self.logger.error(f"創建快取失敗: {str(e)}")
             return None
-    
+
     def get_cache_by_key(self, cache_key: str) -> Optional[Any]:
-        """根據鍵值獲取快取
-        
-        Args:
-            cache_key: 快取鍵值
-            
-        Returns:
-            快取物件或 None
-        """
+        """根據（由內容生成的）唯一鍵值獲取快取"""
         if cache_key in self.active_caches:
             try:
                 cache = self.active_caches[cache_key]
-                # 嘗試獲取快取元數據以驗證是否仍然有效
-                cache_info = self.client.caches.get(name=cache.name)
-                # 更新存取時間
+                # 驗證遠端快取是否仍然存在
+                self.client.caches.get(name=cache.name)
+                self.logger.info(f"本地快取命中: {cache_key} -> {cache.name}")
                 self.cache_access_times[cache_key] = time.time()
                 return cache
             except Exception as e:
-                # 快取可能已過期或無效，清理本地記錄
-                self.logger.warning(f"快取 {cache_key} 已無效: {str(e)}")
+                self.logger.warning(f"遠端快取 {cache.name} 已失效，從本地清理: {str(e)}")
                 self._cleanup_cache_record(cache_key)
-                
         return None
-    
-    def find_cache_by_system_instruction(self, system_instruction: str) -> Optional[Any]:
-        """根據系統指令尋找現有快取
-        
-        Args:
-            system_instruction: 系統指令
-            
-        Returns:
-            快取物件或 None
-        """
-        for cache_key, metadata in self.cache_metadata.items():
-            if metadata.get('system_instruction') == system_instruction:
-                return self.get_cache_by_key(cache_key)
-        return None
-    
-    def generate_with_cache(self,
-                           model: str,
-                           contents: Any,
-                           config: types.GenerateContentConfig) -> Any:
-        """使用快取生成內容
-        
-        Args:
-            model: 模型名稱
-            contents: 用戶輸入內容
-            config: 生成配置（包含快取名稱等）
-            
-        Returns:
-            生成的回應流
-        """
-        try:
-            
-            return self.client.models.generate_content(
-                model=model,
-                contents=contents,
-                config=config
-            )
-            
-        except Exception as e:
-            self.logger.error(f"使用快取生成內容失敗: {str(e)}")
-            raise GeminiError(f"快取生成失敗: {str(e)}")
-    
-    def generate_stream_with_cache(self,
-                                  model: str,
-                                  contents: Any,
-                                  config: types.GenerateContentConfig) -> Any:
-        """使用快取生成流式內容
-        
-        Args:
-            model: 模型名稱
-            contents: 用戶輸入內容
-            config: 生成配置（包含快取名稱等）
-            
-        Returns:
-            生成的回應流
-        """
-        try:
 
-            return self.client.models.generate_content_stream(
-                model=model,
-                contents=contents,
-                config=config
-            )
-            
-        except Exception as e:
-            self.logger.error(f"使用快取生成流式內容失敗: {str(e)}")
-            raise GeminiError(f"快取流式生成失敗: {str(e)}")
-    
-    def update_cache_ttl(self, cache_key: str, ttl: str = None, expire_time: datetime.datetime = None) -> bool:
-        """更新快取的TTL或到期時間
-        
-        Args:
-            cache_key: 快取鍵值
-            ttl: 新的TTL值（如 "300s"）
-            expire_time: 明確的到期時間（timezone-aware datetime）
-            
-        Returns:
-            bool: 更新是否成功
-        """
-        try:
-            if cache_key not in self.active_caches:
-                return False
-                
-            cache = self.active_caches[cache_key]
-            
-            # 準備更新配置
-            update_config_kwargs = {}
-            if ttl:
-                update_config_kwargs['ttl'] = ttl
-            elif expire_time:
-                update_config_kwargs['expire_time'] = expire_time
-            else:
-                return False
-            
-            update_config = types.UpdateCachedContentConfig(**update_config_kwargs)
-            
-            self.client.caches.update(
-                name=cache.name,
-                config=update_config
-            )
-            
-            # 更新本地元數據
-            if ttl:
-                self.cache_metadata[cache_key]['ttl'] = ttl
-            
-            self.logger.info(f"成功更新快取: {cache_key}")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"更新快取失敗: {str(e)}")
-            return False
-    
+    def _cleanup_cache_record(self, cache_key: str):
+        """清理本地快取記錄"""
+        if cache_key in self.active_caches: del self.active_caches[cache_key]
+        if cache_key in self.cache_metadata: del self.cache_metadata[cache_key]
+        if cache_key in self.cache_access_times: del self.cache_access_times[cache_key]
+
     def delete_cache(self, cache_key: str) -> bool:
-        """刪除快取
+        """根據本地 key 刪除遠端快取並清理本地記錄
         
         Args:
-            cache_key: 快取鍵值
+            cache_key (str): 要刪除的快取的本地鍵
             
         Returns:
-            bool: 刪除是否成功
-        """
-        try:
-            if cache_key in self.active_caches:
-                cache = self.active_caches[cache_key]
-                self.client.caches.delete(cache.name)
-                
-                # 清理本地記錄
-                self._cleanup_cache_record(cache_key)
-                
-                self.logger.info(f"成功刪除快取: {cache_key}")
-                return True
-                
-        except Exception as e:
-            self.logger.error(f"刪除快取失敗: {str(e)}")
-            
-        return False
-    
-    def list_all_caches(self) -> List[Any]:
-        """列出所有快取
-        
-        Returns:
-            List[Any]: 快取列表
-        """
-        try:
-            return list(self.client.caches.list())
-        except Exception as e:
-            self.logger.error(f"列出快取失敗: {str(e)}")
-            return []
-    
-    def cleanup_expired_caches(self) -> int:
-        """清理所有本地記錄中已無效的快取
-        
-        Returns:
-            int: 清理的快取數量
-        """
-        cleaned_count = 0
-        keys_to_clean = []
-        
-        for cache_key in list(self.active_caches.keys()):
-            try:
-                cache = self.active_caches[cache_key]
-                # 嘗試獲取快取資訊以驗證是否仍然有效
-                self.client.caches.get(name=cache.name)
-            except:
-                # 快取已無效
-                keys_to_clean.append(cache_key)
-        
-        for cache_key in keys_to_clean:
-            self._cleanup_cache_record(cache_key)
-            cleaned_count += 1
-        
-        if cleaned_count > 0:
-            self.logger.info(f"清理了 {cleaned_count} 個無效快取記錄")
-            
-        return cleaned_count
-    
-    def get_cache_stats(self) -> Dict[str, Any]:
-        """獲取快取統計資訊
-        
-        Returns:
-            dict: 快取統計資訊
-        """
-        return {
-            'local_cache_count': len(self.active_caches),
-            'cache_keys': list(self.active_caches.keys()),
-            'cache_metadata': self.cache_metadata
-        }
-    
-    def _cleanup_cache_record(self, cache_key: str) -> None:
-        """清理本地快取記錄
-        
-        Args:
-            cache_key: 快取鍵值
+            bool: 如果成功啟動刪除過程則返回 True
         """
         if cache_key in self.active_caches:
-            del self.active_caches[cache_key]
-        if cache_key in self.cache_metadata:
-            del self.cache_metadata[cache_key]
-        if cache_key in self.cache_access_times:
-            del self.cache_access_times[cache_key]
-    
+            cache = self.active_caches[cache_key]
+            try:
+                self.logger.info(f"正在刪除遠端快取: {cache.name} (本地 key: {cache_key})")
+                self.client.caches.delete(name=cache.name)
+                self.logger.info(f"成功刪除遠端快取: {cache.name}")
+            except Exception as e:
+                # 如果遠端快取已不存在（例如，已過期或手動刪除），也視為成功
+                self.logger.warning(f"刪除遠端快取 {cache.name} 時發生錯誤（可能已不存在）: {str(e)}")
+            finally:
+                # 無論遠端刪除是否成功，都清理本地記錄
+                self._cleanup_cache_record(cache_key)
+            return True
+        self.logger.debug(f"嘗試刪除一個不存在的本地快取 key: {cache_key}")
+        return False
+        
     def _cleanup_least_used_caches(self) -> int:
         """清理最少使用的快取
         
@@ -438,12 +216,8 @@ class GeminiCacheManager:
             'usage_ratio': len(self.active_caches) / self.max_cache_count if self.max_cache_count > 0 else 0,
             'needs_cleanup': len(self.active_caches) >= self.cleanup_threshold
         }
-
-# 初始化全域快取管理器
 cache_manager: Optional[GeminiCacheManager] = None
-
 def initialize_cache_manager(max_cache_count: int = 50):
-    """初始化全域快取管理器"""
     global cache_manager
     if cache_manager is None:
         cache_manager = GeminiCacheManager(client, max_cache_count)
@@ -451,10 +225,8 @@ def initialize_cache_manager(max_cache_count: int = 50):
     return cache_manager
 
 def get_cache_manager() -> Optional[GeminiCacheManager]:
-    """獲取快取管理器實例"""
     global cache_manager
-    if cache_manager is None:
-        cache_manager = initialize_cache_manager()
+    if cache_manager is None: cache_manager = initialize_cache_manager()
     return cache_manager
 
 def _download_and_process_pdf(pdf_url_or_path: str) -> pathlib.Path:
@@ -837,138 +609,190 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
     
     return contents
 
-async def generate_response(inst: str,
-                                       system_prompt: str,
-                                       response_schema: Optional[Type[BaseModel]] = None,
-                                       dialogue_history=None,
-                                       image_input=None,
-                                       audio_input=None,
-                                       video_input=None,
-                                       pdf_input=None,
-                                       use_cache=True,
-                                       cache_ttl="3600s"):
-    """帶快取功能的 Gemini API 回應生成器
-    
-    主要功能:
-    1. 智慧快取系統指令和常用上下文
-    2. 自動降級到傳統模式
-    3. 支援多媒體輸入
-    4. 流式回應處理
-    
+async def _create_context_hash(
+    system_prompt: str,
+    inst: str,
+    image_input: Optional[Any] = None,
+    audio_input: Optional[Any] = None,
+    video_input: Optional[Any] = None,
+    pdf_input: Optional[Any] = None
+) -> str:
+    """為給定的上下文生成一個穩定的、基於內容的哈希值，用於快取。
+
     Args:
-        inst: 用戶輸入訊息
-        system_prompt: 系統提示詞
-        dialogue_history: 多輪對話歷史列表
-        image_input: 圖片輸入
-        audio_input: 音頻輸入
-        video_input: 視頻輸入
-        pdf_input: PDF 檔案輸入（URL 或本地路徑）
-        use_cache: 是否使用快取（預設啟用）
-        cache_ttl: 快取存留時間（預設1小時）
-        response_schema: 用於結構化輸出的 Pydantic 模型。如果提供，將返回 JSON 物件。
+        system_prompt (str): 系統提示。
+        inst (str): 使用者目前的指令。
+        image_input: 圖片輸入。
+        audio_input: 音訊輸入。
+        video_input: 影片輸入。
+        pdf_input: PDF 輸入。
+
     Returns:
-        tuple: 返回值的格式會根據 response_schema 是否提供而變化
-            - 若 response_schema is None: (None, async_generator) 用於流式文字回應
-            - 若 response_schema is not None: (None, parsed_pydantic_object) 包含已解析的 Pydantic 物件
+        str: 生成的 SHA256 哈希值。
     """
-    try:
-        # 獲取快取管理器
-        cache_mgr = get_cache_manager()
+    hasher = hashlib.sha256()
+
+    # 1. 哈希文字輸入
+    hasher.update(system_prompt.encode('utf-8'))
+    hasher.update(inst.encode('utf-8'))
+
+    # 2. 定義一個內部函數來處理不同媒體類型的內容哈希
+    def hash_media_content(media_input, media_type):
+        if not media_input:
+            return
+
+        # 確保輸入是列表以便統一處理
+        inputs = media_input if isinstance(media_input, list) else [media_input]
         
-        # 統一使用輔助函數建構對話內容，確保包含歷史紀錄和所有媒體
-        contents = await _build_conversation_contents(
-            inst,
-            dialogue_history,
-            image_input,
-            audio_input,
-            video_input,
-            pdf_input
+        for item in inputs:
+            content = b''
+            try:
+                if media_type == 'pdf':
+                    # 對 PDF，下載並讀取其內容
+                    pdf_path = _download_and_process_pdf(item)
+                    content = pdf_path.read_bytes()
+                    # 如果是臨時檔案，使用後清理
+                    if str(pdf_path).startswith(tempfile.gettempdir()):
+                        import os
+                        os.unlink(pdf_path)
+                elif media_type == 'image':
+                    # 對 PIL 圖片，轉換為 bytes
+                    import io
+                    from PIL import Image
+                    if isinstance(item, Image.Image):
+                        buf = io.BytesIO()
+                        item.save(buf, format='PNG') # 使用無損格式以保證哈希穩定
+                        content = buf.getvalue()
+                elif media_type in ['audio', 'video']:
+                    # 對音訊/影片，處理 bytes、路徑或類檔案物件
+                    if isinstance(item, bytes):
+                        content = item
+                    elif isinstance(item, str) and pathlib.Path(item).exists():
+                        content = pathlib.Path(item).read_bytes()
+                    elif hasattr(item, 'read'):
+                        content = item.read()
+                        if hasattr(item, 'seek'): # 重置指標
+                            item.seek(0)
+
+                if content:
+                    hasher.update(content)
+            except Exception as e:
+                logger.warning(f"無法為 {media_type} 輸入生成哈希值，可能導致快取不準確: {e}")
+
+    # 順序執行哈希操作以保證 hasher 的狀態一致性
+    await asyncio.to_thread(hash_media_content, image_input, 'image')
+    await asyncio.to_thread(hash_media_content, audio_input, 'audio')
+    await asyncio.to_thread(hash_media_content, video_input, 'video')
+    await asyncio.to_thread(hash_media_content, pdf_input, 'pdf')
+
+    return hasher.hexdigest()
+
+async def generate_response(inst: str,
+                            system_prompt: str,
+                            response_schema: Optional[Type[BaseModel]] = None,
+                            dialogue_history=None,
+                            image_input=None,
+                            audio_input=None,
+                            video_input=None,
+                            pdf_input=None,
+                            use_cache=True,
+                            cache_ttl="3600s"):
+    """
+    帶有通用快取功能的 Gemini API 回應生成器。
+    此函數現在會為所有輸入類型的組合嘗試使用快取。
+    """
+    cache_mgr = get_cache_manager()
+    cache_key = None
+    
+    # 步驟 1: 如果啟用快取，為當前請求生成唯一的內容哈希
+    if use_cache and cache_mgr:
+        cache_key = await _create_context_hash(
+            system_prompt=system_prompt,
+            inst=inst,
+            image_input=image_input,
+            audio_input=audio_input,
+            video_input=video_input,
+            pdf_input=pdf_input
         )
+        # 嘗試獲取快取
+        cache = cache_mgr.get_cache_by_key(cache_key)
         
-        # 為了快取，我們需要知道哪些檔案被成功上傳
-        media_files = []
-        if pdf_input:
+        # <<< 步驟 3: 如果快取未命中，則動態創建它
+        if cache is None:
             try:
-                media_files.extend(await _upload_media_files(pdf_input, 'pdf'))
-            except Exception: pass
-        if video_input:
-            try:
-                media_files.extend(await _upload_media_files(video_input, 'video'))
-            except Exception: pass
-        if audio_input:
-            try:
-                media_files.extend(await _upload_media_files(audio_input, 'audio'))
-            except Exception: pass
-        if image_input:
-            try:
-                media_files.extend(await _upload_media_files(image_input, 'image'))
-            except Exception: pass
-        
+                # 3a. 準備要快取的靜態內容（上傳檔案）
+                logger.info(f"快取未命中 ({cache_key})。準備上傳靜態上下文檔案...")
+                contents = await _build_conversation_contents(
+                    inst=inst,
+                    dialogue_history=dialogue_history,
+                    image_input=image_input,
+                    audio_input=audio_input,
+                    video_input=video_input, 
+                    pdf_input=pdf_input    
+                )
+                # 3b. 呼叫管理器來創建並註冊這個新的快取
+                cache = cache_mgr.create_and_register_cache(
+                    cache_key=cache_key,
+                    model=model_id,
+                    system_instruction=system_prompt,
+                    contents=contents,
+                    ttl=cache_ttl,
+                    display_name=f"Cache for {cache_key[:16]}"
+                )
+            except Exception as e:
+                logger.error(f"在動態創建快取時發生錯誤，將降級為非快取模式: {e}")
+                cache = None # 確保出錯時 cache 為 None
+
+    # <<< 步驟 4: 根據是否有可用的快取，準備 API 請求
+    try:
         generation_config_args = {}
-        
+        is_streaming = not bool(response_schema)
+
         if response_schema:
-            is_streaming = False
-            # 根據官方最新用法，啟用 JSON 模式
             generation_config_args["response_mime_type"] = "application/json"
             generation_config_args["response_schema"] = response_schema
-            logger.info(f"啟用結構化輸出 (JSON mode)，Schema: {response_schema.__name__}")
         else:
-            is_streaming = True
-            # 保持原有的流式文字輸出設定
             generation_config_args["tools"] = [google_search_tool]
             generation_config_args["response_modalities"] = ["TEXT"]
+        if use_cache and cache:
+            # --- 快取模式 ---
+            logger.info(f"使用快取模式，快取名稱: {cache.name}")
             
-        # 嘗試使用快取
-        cache = None
-        if use_cache and cache_mgr:
-            try:
-                # 檢查是否有現有快取
-                cache = cache_mgr.find_cache_by_system_instruction(system_prompt)
-                
-                # 如果沒有現有快取，創建新的
-                if cache is None:
-                    # 對於系統指令快取，我們只快取系統指令本身
-                    cache_contents = media_files if media_files else []
-                    cache = cache_mgr.create_cache(
-                        model=model_id,
-                        system_instruction=system_prompt,
-                        contents=cache_contents,
-                        ttl=cache_ttl,
-                        display_name=f'discord_bot_system_{int(time.time())}'
-                    )
-                
-                if cache:
-                    config=types.GenerateContentConfig(
-                                cached_content=cache.name, 
-                                **generation_config_args
-                            )
-                    if response_schema:
-                        # 如果有結構化輸出，使用快取生成結構化回應
-                        logger.info("使用快取模式生成結構化回應")
-                        response_object = cache_mgr.generate_with_cache(
-                            model=model_id,
-                            contents=contents,
-                            config=config
-                        )
-                    else:
-                        logger.info("使用快取模式生成回應")
-                        # 使用快取生成流式回應
-                        response_object = cache_mgr.generate_stream_with_cache(
-                            model=model_id,
-                            contents=contents,
-                            config=config
-                        )
-                else:
-                    logger.warning("快取創建失敗，使用傳統模式")
-                    use_cache = False
-                    
-            except Exception as cache_error:
-                logger.warning(f"快取操作失敗，降級到傳統模式: {str(cache_error)}")
-                use_cache = False
-        
-        # 如果沒有使用快取，則使用傳統模式
-        if not use_cache or cache is None:
-            logger.info("使用傳統模式生成回應")
+            # 4a. 構建「動態」對話內容 (只有當前問題、歷史和臨時媒體)
+            contents = await _build_conversation_contents(
+                inst=inst,
+                dialogue_history=dialogue_history,
+                image_input=None,
+                audio_input=None,
+                video_input=None, 
+                pdf_input=None    
+            )
+            config = types.GenerateContentConfig(cached_content=cache.name, **generation_config_args)
+
+            if response_schema:
+                # 如果有結構化輸出，使用快取生成結構化回應
+                logger.info("使用快取模式生成結構化回應")
+                response_object = client.models.generate_content(
+                    model=model_id,
+                    contents=contents,
+                    config=config
+                )
+            else:
+                logger.info("使用快取模式生成回應")
+                # 使用快取生成流式回應
+                response_object = client.models.generate_content_stream(
+                    model=model_id,
+                    contents=contents,
+                    config=config
+                )
+        else:
+            # --- 傳統（非快取）模式 ---
+            logger.info("使用傳統（非快取）模式生成回應")
+            
+            # 4c. 構建包含所有內容的完整請求
+            contents = await _build_conversation_contents(
+                inst, dialogue_history, image_input, audio_input, video_input, pdf_input
+            )
             config = GenerateContentConfig(system_instruction=system_prompt, **generation_config_args)
             if is_streaming:
                 response_object = client.models.generate_content_stream(
@@ -1012,12 +836,15 @@ async def generate_response(inst: str,
                                 # 降級到非流式調用
                                 try:
                                     if cache and use_cache:
-                                        fallback_response = cache_mgr.generate_with_cache(
-                                            model='models/gemini-2.0-flash',
-                                            cache=cache,
+                                        fallback_config = types.GenerateContentConfig(
+                                            cached_content=cache.name,
+                                            tools=[google_search_tool]
+                                        )
+                                        # 使用快取中繼資料中儲存的模型，確保一致性
+                                        fallback_response = client.models.generate_content(
+                                            model=cache.model,
                                             contents=contents,
-                                            tools=[google_search_tool],
-                                            response_modalities=["TEXT"]
+                                            config=fallback_config
                                         )
                                     else:
                                         fallback_config = GenerateContentConfig(
