@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 try:
     client = genai.Client(api_key=tokens.gemini_api_key)
-    model_id = "gemini-2.0-flash"
+    model_id = "gemini-2.5-flash"
     
     google_search_tool = Tool(
         google_search = GoogleSearch()
