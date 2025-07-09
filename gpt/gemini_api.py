@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 try:
     client = genai.Client(api_key=tokens.gemini_api_key)
-    model_id = "gemini-2.0-flash"
+    model_id = "gemini-2.5-flash"
     
     google_search_tool = Tool(
         google_search = GoogleSearch()
@@ -61,7 +61,8 @@ class GeminiCacheManager:
                                   system_instruction: str,
                                   contents: List[Any],
                                   ttl: str,
-                                  display_name: str) -> Optional[Any]:
+                                  display_name: str,
+                                  tools: List[Tool]) -> Optional[Any]:
         """
         # <<< 新增：一個更明確的函數，用於創建遠端快取並在本地註冊。
         """
@@ -74,7 +75,8 @@ class GeminiCacheManager:
                 system_instruction=system_instruction,
                 contents=contents,
                 ttl=ttl,
-                display_name=display_name
+                display_name=display_name,
+                tools=tools
             )
             cache = self.client.caches.create(
                 model=model,
@@ -611,7 +613,6 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
 
 async def _create_context_hash(
     system_prompt: str,
-    inst: str,
     image_input: Optional[Any] = None,
     audio_input: Optional[Any] = None,
     video_input: Optional[Any] = None,
@@ -621,7 +622,6 @@ async def _create_context_hash(
 
     Args:
         system_prompt (str): 系統提示。
-        inst (str): 使用者目前的指令。
         image_input: 圖片輸入。
         audio_input: 音訊輸入。
         video_input: 影片輸入。
@@ -634,7 +634,6 @@ async def _create_context_hash(
 
     # 1. 哈希文字輸入
     hasher.update(system_prompt.encode('utf-8'))
-    hasher.update(inst.encode('utf-8'))
 
     # 2. 定義一個內部函數來處理不同媒體類型的內容哈希
     def hash_media_content(media_input, media_type):
@@ -703,12 +702,19 @@ async def generate_response(inst: str,
     """
     cache_mgr = get_cache_manager()
     cache_key = None
-    
+    generation_config_args = {}
+    is_streaming = not bool(response_schema)
+
+    if response_schema:
+        generation_config_args["response_mime_type"] = "application/json"
+        generation_config_args["response_schema"] = response_schema
+    else:
+        generation_config_args["response_modalities"] = ["TEXT"]
+        tool_list = [google_search_tool]
     # 步驟 1: 如果啟用快取，為當前請求生成唯一的內容哈希
     if use_cache and cache_mgr:
         cache_key = await _create_context_hash(
             system_prompt=system_prompt,
-            inst=inst,
             image_input=image_input,
             audio_input=audio_input,
             video_input=video_input,
@@ -737,7 +743,8 @@ async def generate_response(inst: str,
                     system_instruction=system_prompt,
                     contents=contents,
                     ttl=cache_ttl,
-                    display_name=f"Cache for {cache_key[:16]}"
+                    display_name=f"Cache for {cache_key[:16]}",
+                    tools=tool_list
                 )
             except Exception as e:
                 logger.error(f"在動態創建快取時發生錯誤，將降級為非快取模式: {e}")
@@ -745,15 +752,6 @@ async def generate_response(inst: str,
 
     # <<< 步驟 4: 根據是否有可用的快取，準備 API 請求
     try:
-        generation_config_args = {}
-        is_streaming = not bool(response_schema)
-
-        if response_schema:
-            generation_config_args["response_mime_type"] = "application/json"
-            generation_config_args["response_schema"] = response_schema
-        else:
-            generation_config_args["tools"] = [google_search_tool]
-            generation_config_args["response_modalities"] = ["TEXT"]
         if use_cache and cache:
             # --- 快取模式 ---
             logger.info(f"使用快取模式，快取名稱: {cache.name}")
@@ -786,6 +784,7 @@ async def generate_response(inst: str,
                     config=config
                 )
         else:
+            generation_config_args["tools"] = tool_list
             # --- 傳統（非快取）模式 ---
             logger.info("使用傳統（非快取）模式生成回應")
             
