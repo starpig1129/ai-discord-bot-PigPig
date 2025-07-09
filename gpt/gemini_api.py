@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 try:
     client = genai.Client(api_key=tokens.gemini_api_key)
-    model_id = "gemini-2.5-flash"
+    model_id = "gemini-2.0-flash"
     
     google_search_tool = Tool(
         google_search = GoogleSearch()
@@ -540,8 +540,8 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
         try:
             # 使用統一的多媒體處理函數
             uploaded_pdfs = await _upload_media_files(pdf_input, 'pdf')
-            for uploaded_pdf in uploaded_pdfs:
-                current_parts.append(uploaded_pdf)
+            for f in uploaded_pdfs:
+                current_parts.append({'file_data': {'file_uri': f.uri, 'mime_type': f.mime_type}})
             logger.info("PDF 檔案已添加到對話內容中")
         except Exception as e:
             logger.error(f"PDF 處理失敗，使用降級方案: {str(e)}")
@@ -553,8 +553,8 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
         try:
             # 使用統一的多媒體處理函數
             uploaded_videos = await _upload_media_files(video_input, 'video')
-            for uploaded_video in uploaded_videos:
-                current_parts.append(uploaded_video)
+            for f in uploaded_videos:
+                current_parts.append({'file_data': {'file_uri': f.uri, 'mime_type': f.mime_type}})
             logger.info("影片已添加到對話內容中")
         except Exception as e:
             logger.error(f"影片處理失敗，使用降級方案: {str(e)}")
@@ -566,8 +566,8 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
         try:
             # 使用統一的多媒體處理函數
             uploaded_audios = await _upload_media_files(audio_input, 'audio')
-            for uploaded_audio in uploaded_audios:
-                current_parts.append(uploaded_audio)
+            for f in uploaded_audios:
+                current_parts.append({'file_data': {'file_uri': f.uri, 'mime_type': f.mime_type}})
             logger.info("音訊已添加到對話內容中")
         except Exception as e:
             logger.error(f"音訊處理失敗: {str(e)}")
@@ -578,8 +578,8 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
         try:
             # 使用統一的多媒體處理函數
             uploaded_images = await _upload_media_files(image_input, 'image')
-            for uploaded_image in uploaded_images:
-                current_parts.append(uploaded_image)
+            for f in uploaded_images:
+                current_parts.append({'file_data': {'file_uri': f.uri, 'mime_type': f.mime_type}})
             logger.info("圖片已添加到對話內容中")
         except Exception as e:
             logger.error(f"圖片處理失敗，使用降級方案: {str(e)}")
@@ -751,60 +751,50 @@ async def generate_response(inst: str,
                 cache = None # 確保出錯時 cache 為 None
 
     # <<< 步驟 4: 根據是否有可用的快取，準備 API 請求
-    try:
-        if use_cache and cache:
+    response_object = None
+    if use_cache and cache:
+        try:
             # --- 快取模式 ---
-            logger.info(f"使用快取模式，快取名稱: {cache.name}")
+            logger.info(f"正在嘗試使用快取模式，快取名稱: {cache.name}")
             
-            # 4a. 構建「動態」對話內容 (只有當前問題、歷史和臨時媒體)
+            # 4a. 構建「動態」對話內容
             contents = await _build_conversation_contents(
                 inst=inst,
                 dialogue_history=dialogue_history,
-                image_input=None,
-                audio_input=None,
-                video_input=None, 
-                pdf_input=None    
+                image_input=None, audio_input=None, video_input=None, pdf_input=None
             )
             config = types.GenerateContentConfig(cached_content=cache.name, **generation_config_args)
 
             if response_schema:
-                # 如果有結構化輸出，使用快取生成結構化回應
                 logger.info("使用快取模式生成結構化回應")
-                response_object = client.models.generate_content(
-                    model=model_id,
-                    contents=contents,
-                    config=config
-                )
+                response_object = client.models.generate_content(model=model_id, contents=contents, config=config)
             else:
-                logger.info("使用快取模式生成回應")
-                # 使用快取生成流式回應
-                response_object = client.models.generate_content_stream(
-                    model=model_id,
-                    contents=contents,
-                    config=config
-                )
+                logger.info("使用快取模式生成流式回應")
+                response_object = client.models.generate_content_stream(model=model_id, contents=contents, config=config)
+        
+        except Exception as e:
+            logger.warning(f"快取模式生成失敗，將自動降級為非快取模式。錯誤: {e}")
+            # 清理 response_object，確保進入非快取模式
+            response_object = None
+
+    # 如果未使用快取或快取模式失敗，則進入非快取模式
+    if response_object is None:
+        generation_config_args["tools"] = tool_list
+        # --- 傳統（非快取）模式 ---
+        logger.info("使用傳統（非快取）模式生成回應")
+        
+        # 4c. 構建包含所有內容的完整請求
+        contents = await _build_conversation_contents(
+            inst, dialogue_history, image_input, audio_input, video_input, pdf_input
+        )
+        config = GenerateContentConfig(system_instruction=system_prompt, **generation_config_args)
+        
+        if is_streaming:
+            response_object = client.models.generate_content_stream(model=model_id, contents=contents, config=config)
         else:
-            generation_config_args["tools"] = tool_list
-            # --- 傳統（非快取）模式 ---
-            logger.info("使用傳統（非快取）模式生成回應")
-            
-            # 4c. 構建包含所有內容的完整請求
-            contents = await _build_conversation_contents(
-                inst, dialogue_history, image_input, audio_input, video_input, pdf_input
-            )
-            config = GenerateContentConfig(system_instruction=system_prompt, **generation_config_args)
-            if is_streaming:
-                response_object = client.models.generate_content_stream(
-                    model=model_id,
-                    contents=contents,
-                    config=config
-                )
-            else:
-                response_object = client.models.generate_content(
-                    model=model_id,
-                    contents=contents,
-                    config=config
-                )
+            response_object = client.models.generate_content(model=model_id, contents=contents, config=config)
+
+    try:
         if is_streaming:
             async def async_generator():
                 try:
