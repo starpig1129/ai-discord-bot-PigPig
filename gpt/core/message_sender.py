@@ -763,12 +763,12 @@ async def gpt_message(
             structured_history.append(memory_tool_result)
             logging.info(f"添加了 {len(relevant_memories)} 條結構化記憶到對話歷史")
         
-        combined_prompt = f"[user_id: {user_id}] {prompt}"
+        combined_prompt = f"[{message.author.display_name}<@{message.author.id}>]: {prompt}"
     else:
         # 使用智慧背景知識上下文的結構化格式
         context_tool_result = format_intelligent_context(intelligent_context)
         structured_history.append(context_tool_result)
-        combined_prompt = f"[user_id: {user_id}] {prompt}"
+        combined_prompt = f"[{message.author.display_name}<@{message.author.id}>]: {prompt}"
         logging.info("使用智慧背景知識系統建構的結構化上下文")
     
     # 將結構化歷史合併到 history_dict 中

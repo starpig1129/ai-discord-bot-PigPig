@@ -132,8 +132,7 @@ class ActionHandler:
         history = history[:-2]  # 移除當前訊息與第一個使用者訊息(會由其他地方加入)
         history_dict = [{
             "role": "user" if msg.author != message.guild.me else "assistant",
-            "content": msg.content,
-            "user_id": str(msg.author.id) if msg.author != message.guild.me else str(message.guild.me.id)
+            "content": f"[{msg.author.display_name}<@{msg.author.id}>]: {msg.content}"
         } for msg in history]
 
         user_id = str(message.author.id)

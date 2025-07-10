@@ -195,7 +195,8 @@ class PigPig(commands.Bot):
         guild_id = str(message.guild.id)
         
         prompt = message.content.replace(f"<@{self.user.id}>","")
-        self.dialogue_history[channel_id].append({"role": "user", "content": prompt})
+        formatted_content = f"[{message.author.display_name}<@{message.author.id}>]: {prompt}"
+        self.dialogue_history[channel_id].append({"role": "user", "content": formatted_content})
         
         channel_manager = self.get_cog('ChannelManager')
         if channel_manager:
@@ -255,7 +256,8 @@ class PigPig(commands.Bot):
         except AttributeError:  # 如果正則表達式沒有匹配到，會拋出 AttributeError
             prompt = after.content
         
-        self.dialogue_history[channel_id].append({"role": "user", "content": prompt})
+        formatted_content = f"[{after.author.display_name}<@{after.author.id}>]: {prompt}"
+        self.dialogue_history[channel_id].append({"role": "user", "content": formatted_content})
         
         # 實現生成回應的邏輯
         if self.user.id in after.raw_mentions and not after.mention_everyone:
