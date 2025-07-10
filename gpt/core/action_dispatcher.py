@@ -21,13 +21,20 @@
 import json
 import logging
 import io
+import asyncio
 import discord
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from PIL import Image
 
 from gpt.core.response_generator import generate_response
-from gpt.core.message_sender import gpt_message
+from gpt.core.message_sender import (
+    gpt_message,
+    build_intelligent_context,
+    search_relevant_memory,
+    format_intelligent_context,
+    format_memory_context_structured
+)
 from gpt.utils.media import process_attachment_data
 
 
@@ -128,12 +135,37 @@ class ActionHandler:
             "content": msg.content,
             "user_id": str(msg.author.id) if msg.author != message.guild.me else str(message.guild.me.id)
         } for msg in history]
+
+        user_id = str(message.author.id)
+        # 智慧上下文與記憶搜尋
+        intelligent_context_task = asyncio.create_task(
+            build_intelligent_context(prompt, history_dict, user_id)
+        )
+        memory_search_task = asyncio.create_task(
+            search_relevant_memory(self.bot, message.channel.id, prompt)
+        )
+
+        intelligent_context = await intelligent_context_task
+        memory_context = await memory_search_task
+
+        enhanced_history = []
+        if memory_context:
+            formatted_memory = format_memory_context_structured(memory_context)
+            if formatted_memory:
+                enhanced_history.append(formatted_memory)
+
+        if intelligent_context:
+            formatted_context = format_intelligent_context(intelligent_context)
+            if formatted_context:
+                enhanced_history.append(formatted_context)
         
-        action_list = await self._get_action_list(prompt, history_dict, 
+        final_dialogue_history = enhanced_history + history_dict
+        
+        action_list = await self._get_action_list(prompt, final_dialogue_history,
                                                image_data)
         
-        async def execute_action(message_to_edit: Any, dialogue_history: Dict, 
-                               channel_id: int, original_prompt: str, 
+        async def execute_action(message_to_edit: Any, dialogue_history: Dict,
+                                channel_id: int, original_prompt: str,
                                message: Any):
             if channel_id not in dialogue_history:
                 dialogue_history[channel_id] = []
