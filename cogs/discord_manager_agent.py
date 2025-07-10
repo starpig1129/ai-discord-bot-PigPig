@@ -10,7 +10,7 @@ import json
 import re
 import os
 
-from gpt.gpt_response_gen import generate_response, get_model_and_tokenizer
+from gpt.core.response_generator import generate_response, get_model_and_tokenizer
 
 class DiscordManagerAgent(commands.Cog):
     """Discord管理代理人系統。"""

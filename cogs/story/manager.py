@@ -11,7 +11,7 @@ from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationshi
 from .prompt_engine import StoryPromptEngine
 from .state_manager import StoryStateManager
 from cogs.memory.memory_manager import MemoryManager
-from gpt.gpt_response_gen import generate_response, GeminiError
+from gpt.core.response_generator import generate_response, GeminiError
 from cogs.system_prompt.manager import SystemPromptManager
 from cogs.language_manager import LanguageManager
 from .ui.modals import InterventionModal

@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple, Callable, Set
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 

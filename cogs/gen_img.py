@@ -33,7 +33,7 @@ import torch
 from diffusers import StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
 from typing import List, Optional, Dict
 from addons.settings import TOKENS
-from gpt.vision_tool import image_to_base64
+from gpt.utils.media import image_to_base64
 
 from typing import Optional
 from .language_manager import LanguageManager

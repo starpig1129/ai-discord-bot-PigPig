@@ -1,8 +1,6 @@
 from addons.settings import TOKENS
 from anthropic import AsyncAnthropic, HUMAN_PROMPT, AI_PROMPT
 import asyncio
-from threading import Thread
-from queue import Queue
 import numpy as np
 from PIL import Image
 import base64
@@ -11,8 +9,6 @@ import math
 import numpy as np
 from PIL import Image
 from moviepy.editor import VideoFileClip
-import tempfile
-import librosa
 from addons.settings import TOKENS
 class ClaudeError(Exception):
     pass

@@ -1,12 +1,11 @@
 import yaml
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime
 
-from gpt.prompt_loader import PromptLoader
-from gpt.prompt_cache import PromptCache
-from gpt.prompt_builder import PromptBuilder
-from gpt.file_watcher import FileWatcher
+from gpt.prompting.loader import PromptLoader
+from gpt.prompting.cache import PromptCache
+from gpt.prompting.builder import PromptBuilder
+from gpt.utils.file_watcher import FileWatcher
 
 class PromptManager:
     """YAML 基礎的系統提示管理器"""

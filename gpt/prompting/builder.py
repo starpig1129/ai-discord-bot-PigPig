@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Any, Optional
+from typing import List, Optional
 
 class PromptBuilder:
     """提示建構器"""

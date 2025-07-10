@@ -35,9 +35,9 @@ import soundfile as sf
 from typing import Type, Optional
 from pydantic import BaseModel
 from addons.settings import Settings, TOKENS
-from gpt.openai_api import generate_response as openai_generate, OpenAIError
-from gpt.gemini_api import generate_response as gemini_generate, GeminiError
-from gpt.claude_api import generate_response as claude_generate, ClaudeError
+from gpt.llms.openai import generate_response as openai_generate, OpenAIError
+from gpt.llms.gemini import generate_response as gemini_generate, GeminiError
+from gpt.llms.claude import generate_response as claude_generate, ClaudeError
 
 settings = Settings()
 tokens = TOKENS()

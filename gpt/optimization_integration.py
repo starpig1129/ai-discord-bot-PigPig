@@ -20,9 +20,8 @@ except ImportError:
     TORCH_AVAILABLE = False
 
 # 導入所有優化模組
-from gpt.gemini_api import get_cache_manager
-from gpt.gpt_response_gen import generate_response
-from gpt.cache_utils import get_system_cache, get_conversation_cache, cleanup_caches
+from gpt.core.response_generator import generate_response
+from gpt.cache_utils import  cleanup_caches
 from gpt.processing_cache import (
     get_processing_result, cache_processing_result,
     get_memory_search_result, cache_memory_search_result
@@ -37,7 +36,6 @@ from gpt.performance_monitor import (
 )
 from gpt.optimization_config_manager import (
     get_optimization_settings,
-    get_config_manager,
     OptimizationSettings
 )
 

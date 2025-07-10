@@ -1,10 +1,7 @@
 from addons.settings import TOKENS
 from openai import OpenAI
 import asyncio
-from threading import Thread
-from queue import Queue
 import tiktoken
-import math
 import numpy as np
 from PIL import Image
 from moviepy.editor import VideoFileClip
@@ -75,7 +72,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
                 # 處理多張圖片
                 content = [{"type": "text", "text": inst}]
                 for img in image_input:
-                    from gpt.vision_tool import image_to_base64
+                    from gpt.utils.media import image_to_base64
                     img_base64 = image_to_base64(img)
                     content.append({
                         "type": "image_url",
@@ -86,7 +83,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
                 messages[-1] = {'role': 'user', 'content': content}
             else:
                 # 處理單張圖片
-                from gpt.vision_tool import image_to_base64
+                from gpt.utils.media import image_to_base64
                 img_base64 = image_to_base64(image_input)
                 messages[-1] = {
                     'role': 'user',

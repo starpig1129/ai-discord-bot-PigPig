@@ -26,9 +26,9 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from PIL import Image
 
-from gpt.gpt_response_gen import generate_response
-from gpt.sendmessage import gpt_message
-from gpt.vision_tool import process_attachment_data
+from gpt.core.response_generator import generate_response
+from gpt.core.message_sender import gpt_message
+from gpt.utils.media import process_attachment_data
 
 
 class ActionHandler:

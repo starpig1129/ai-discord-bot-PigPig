@@ -7,7 +7,7 @@ Gemini API 快取工具模組
 import logging
 import hashlib
 from typing import Optional, Dict, Any, List
-from gpt.gemini_api import get_cache_manager, GeminiError
+from gpt.llms.gemini import get_cache_manager
 
 logger = logging.getLogger(__name__)
 

@@ -26,7 +26,7 @@ import json
 from discord.ext import commands
 from discord import app_commands
 import discord
-from gpt.gpt_response_gen import generate_response
+from gpt.core.response_generator import generate_response
 from addons.settings import Settings
 
 from typing import Optional, Dict, Any, List

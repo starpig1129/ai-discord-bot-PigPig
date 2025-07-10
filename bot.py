@@ -31,8 +31,8 @@ import logging
 import asyncio
 from typing import Optional
 from discord.ext import commands
-from gpt.choose_act import ActionHandler
-from gpt.gpt_response_gen import get_model_and_tokenizer
+from gpt.core.action_dispatcher import ActionHandler
+from gpt.core.response_generator import get_model_and_tokenizer
 from logs import TimedRotatingFileHandler
 from cogs.memory.memory_manager import MemoryManager
 from cogs.memory.exceptions import MemorySystemError

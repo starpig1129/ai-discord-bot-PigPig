@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 import logging
 
-from gpt.gpt_response_gen import generate_response, GeminiError
+from gpt.core.response_generator import generate_response, GeminiError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 

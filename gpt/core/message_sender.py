@@ -26,17 +26,14 @@ import opencc
 import asyncio
 import re
 import datetime
-from PIL import Image
-import requests
-from io import BytesIO
 import discord
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 
-from gpt.gpt_response_gen import generate_response, is_model_available
-from gpt.prompt_manager import get_prompt_manager
+from gpt.core.response_generator import generate_response, is_model_available
+from gpt.prompting.manager import get_prompt_manager
 from addons.settings import Settings, TOKENS
 from langchain_huggingface import HuggingFaceEmbeddings
-from cogs.memory.memory_manager import MemoryManager, SearchQuery, SearchType
+from cogs.memory.memory_manager import  SearchQuery, SearchType
 from cogs.memory.exceptions import MemorySystemError, SearchError
 
 settings = Settings()

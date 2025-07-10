@@ -174,7 +174,7 @@ class SystemPromptManager:
     def _init_prompt_manager(self) -> None:
         """初始化 YAML 提示管理器"""
         try:
-            from gpt.prompt_manager import get_prompt_manager
+            from gpt.prompting.manager import get_prompt_manager
             self._prompt_manager = get_prompt_manager()
         except Exception as e:
             self.logger.error(f"Failed to initialize PromptManager: {e}")
@@ -947,7 +947,7 @@ class SystemPromptManager:
             
             # 同步清除 sendmessage 模組的快取
             try:
-                from gpt.sendmessage import clear_system_prompt_cache
+                from gpt.core.message_sender import clear_system_prompt_cache
                 clear_system_prompt_cache(guild_id, channel_id)
                 self.logger.debug("已同步清除 sendmessage 快取")
             except ImportError:
@@ -1004,7 +1004,7 @@ class SystemPromptManager:
             self.logger.info(f"🔥 開始強制清除 sendmessage 快取 - 伺服器: {guild_id}, 頻道: {channel_id}")
             
             # 清除 sendmessage 模組快取（使用加強版清除）
-            from gpt.sendmessage import clear_system_prompt_cache, _get_prompt_manager
+            from gpt.core.message_sender import clear_system_prompt_cache, _get_prompt_manager
             
             # 使用加強版快取清除
             clear_system_prompt_cache(guild_id, channel_id)
