@@ -1,7 +1,10 @@
+import os
 import random
+import logging
+import platform
 from time import sleep
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service 
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
@@ -13,6 +16,8 @@ import re
 import concurrent.futures
 import asyncio
 
+logger = logging.getLogger(__name__)
+
 # 定義一個用於從Google地圖爬取餐廳信息的類
 class GoogleMapCrawler:
     def __init__(self):
@@ -21,20 +26,28 @@ class GoogleMapCrawler:
         chrome_options.add_argument("--headless")  # 啟用無頭模式，不顯示瀏覽器界面
         chrome_options.add_argument("--disable-gpu")  # 禁用GPU加速
         chrome_options.add_argument("--incognito")  # 啟用無痕模式
-        
-        def install_driver():
-            return ChromeDriverManager().install()
-        
-        try:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(install_driver)
-                driver_path = future.result(timeout=10)  # 10秒超時
-                s = Service(driver_path)
-        except (concurrent.futures.TimeoutError, Exception) as e:
-            print(f"ChromeDriverManager timed out or failed: {e}, falling back to local driver")
-            chrome_driver_path = './chromedriverlinux64/chromedriver'
-            s = Service(executable_path=chrome_driver_path)
+
+        driver_path = os.environ.get('CHROMEDRIVER_PATH')
+
+        if driver_path:
+            logger.info(f"Using chromedriver from environment variable: {driver_path}")
+            s = Service(executable_path=driver_path)
+        else:
+            logger.info("CHROMEDRIVER_PATH not set. Falling back to local driver.")
             
+            system = platform.system()
+            if system == "Linux":
+                chrome_driver_path = './chromedriver_linux64/chromedriver'
+            elif system == "Windows":
+                chrome_driver_path = './chromedriver_win32/chromedriver.exe'
+            elif system == "Darwin": # macOS
+                chrome_driver_path = './chromedriver_mac64/chromedriver'
+            else:
+                raise Exception(f"Unsupported operating system: {system}")
+
+            logger.info(f"Using local chromedriver for {system}: {chrome_driver_path}")
+            s = Service(executable_path=chrome_driver_path)
+
         self.webdriver = webdriver.Chrome(options=chrome_options, service=s)
     
     def search(self, keyword):
