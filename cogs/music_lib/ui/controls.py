@@ -4,6 +4,7 @@ import logging as logger
 from typing import Optional
 from .progress import ProgressDisplay
 from cogs.language_manager import LanguageManager
+from ..queue_manager import PlayMode
 
 class MusicControlView(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, player):
@@ -109,7 +110,7 @@ class MusicControlView(discord.ui.View):
                 
                 # Shuffle button
                 elif child.custom_id == "toggle_shuffle":
-                    is_shuffle = self.player.queue_manager.get_queue_state(guild_id).shuffle_enabled
+                    is_shuffle = self.player.queue_manager.is_shuffle_enabled(guild_id)
                     child.style = discord.ButtonStyle.green if is_shuffle else discord.ButtonStyle.gray
                     child.emoji = discord.PartialEmoji.from_str('🔀')
         
@@ -273,7 +274,7 @@ class MusicControlView(discord.ui.View):
             self._is_updating = False
             
         # Update queue and stop current playback
-        self.player.queue_manager.get_queue_state(self.guild.id).queue = new_queue
+        self.player.queue_manager.set_queue(self.guild.id, new_queue)
         
         # 在停止播放前先更新按鈕狀態
         await self.update_button_state()
@@ -424,7 +425,7 @@ class MusicControlView(discord.ui.View):
         current_index = mode_order.index(current_mode.value)
         next_mode = mode_order[(current_index + 1) % len(mode_order)]
         
-        self.player.queue_manager.set_play_mode(guild_id, next_mode)
+        self.player.queue_manager.set_play_mode(guild_id, PlayMode(next_mode))
         
         mode_emojis = {
             "no_loop": '➡️',
@@ -468,7 +469,7 @@ class MusicControlView(discord.ui.View):
                 item = await queue.get()
                 queue_items.append(item)
                 await temp_queue.put(item)
-            self.player.queue_manager.get_queue_state(guild_id).queue = temp_queue
+            self.player.queue_manager.set_queue(guild_id, temp_queue)
 
         if self.current_embed and self.message:
             queue_text = ""

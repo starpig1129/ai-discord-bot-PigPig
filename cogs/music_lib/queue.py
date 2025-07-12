@@ -8,16 +8,11 @@ guild_queues = {}
 guild_settings = {}
 guild_playlists = {}  # 用於追蹤播放清單的剩餘歌曲
 
-class PlayMode:
-    NO_LOOP = "no_loop"
-    LOOP_QUEUE = "loop_queue"
-    LOOP_SINGLE = "loop_single"
-
 def get_guild_settings(guild_id):
     """獲取伺服器的播放設置"""
     if guild_id not in guild_settings:
         guild_settings[guild_id] = {
-            "play_mode": PlayMode.NO_LOOP,
+            "play_mode": "no_loop",
             "shuffle": False
         }
     return guild_settings[guild_id]
@@ -39,7 +34,7 @@ def clear_guild_queue(guild_id):
     if guild_id in guild_queues:
         guild_queues[guild_id] = asyncio.Queue()
     if guild_id in guild_settings:
-        guild_settings[guild_id]["play_mode"] = PlayMode.NO_LOOP
+        guild_settings[guild_id]["play_mode"] = "no_loop"
         guild_settings[guild_id]["shuffle"] = False
     if guild_id in guild_playlists:
         guild_playlists[guild_id] = []
@@ -80,13 +75,11 @@ def toggle_shuffle(guild_id):
     settings["shuffle"] = not settings["shuffle"]
     return settings["shuffle"]
 
-def set_play_mode(guild_id, mode):
+def set_play_mode(guild_id, mode: str):
     """設置播放模式"""
-    if mode in [PlayMode.NO_LOOP, PlayMode.LOOP_QUEUE, PlayMode.LOOP_SINGLE]:
-        settings = get_guild_settings(guild_id)
-        settings["play_mode"] = mode
-        return True
-    return False
+    settings = get_guild_settings(guild_id)
+    settings["play_mode"] = mode
+    return True
 
 def get_play_mode(guild_id):
     """獲取播放模式"""
@@ -128,3 +121,7 @@ async def copy_queue(guild_id, shuffle=False):
     guild_queues[guild_id] = original_queue
     
     return queue_copy, temp_queue
+
+def set_guild_queue(guild_id, q):
+    """Sets the queue for a specific guild."""
+    guild_queues[guild_id] = q
