@@ -65,24 +65,6 @@ class InternetSearchCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    @app_commands.command(name="internet_search", description="進行網絡搜索")
-    @app_commands.choices(search_type=[
-        app_commands.Choice(name="一般搜索", value="general"),
-        app_commands.Choice(name="圖片搜索", value="image"),
-        app_commands.Choice(name="YouTube搜索", value="youtube"),
-        app_commands.Choice(name="網址內容", value="url"),
-        app_commands.Choice(name="吃什麼", value="eat")
-    ])
-    async def search_command(self, interaction: discord.Interaction, query: str, search_type: str):
-        if not self.lang_manager:
-            self.lang_manager = LanguageManager.get_instance(self.bot)
-
-        await interaction.response.defer(thinking=True)
-        guild_id = str(interaction.guild_id)
-        result = await self.internet_search(interaction, query, search_type, guild_id=guild_id)
-        if result is not None:
-            await interaction.followup.send(result)
-            
     async def internet_search(self, ctx, query: str, search_type: str, message_to_edit: discord.Message = None, guild_id: str = None):
         if message_to_edit:
             searching_message = self.lang_manager.translate(

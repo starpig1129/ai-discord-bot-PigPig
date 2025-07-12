@@ -38,7 +38,7 @@ class GeminiCacheManager:
                                   contents: List[Any],
                                   ttl: str,
                                   display_name: str,
-                                  tools: List[Tool]) -> Optional[Any]:
+                                  tools: Optional[List[Tool]] = None) -> Optional[Any]:
         """
         # <<< 新增：一個更明確的函數，用於創建遠端快取並在本地註冊。
         """

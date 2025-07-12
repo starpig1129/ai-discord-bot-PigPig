@@ -31,10 +31,11 @@ import logging
 import asyncio
 from typing import Optional
 from discord.ext import commands
-from gpt.core.action_dispatcher import ActionHandler
+from gpt.core.action_dispatcher import ActionDispatcher
 from gpt.core.response_generator import get_model_and_tokenizer
 from logs import TimedRotatingFileHandler
 from cogs.memory.memory_manager import MemoryManager
+import gpt.tools.builtin
 from cogs.memory.exceptions import MemorySystemError
 
 # 導入優化模組
@@ -60,7 +61,7 @@ class PigPig(commands.Bot):
         self.dialogue_history_file = './data/dialogue_history.json'
         self.load_dialogue_history()
         self.loggers = {}
-        self.action_handler = ActionHandler(self)
+        self.action_dispatcher = ActionDispatcher(self)
         
         # 記憶系統初始化
         self.memory_manager: Optional[MemoryManager] = None
@@ -225,7 +226,7 @@ class PigPig(commands.Bot):
 
             message_to_edit = await message.reply("思考中...")
             try:
-                execute_action = await self.action_handler.choose_act(prompt, message, message_to_edit)
+                execute_action = await self.action_dispatcher.choose_act(prompt, message, message_to_edit)
                 await execute_action(message_to_edit, self.dialogue_history, channel_id, prompt, message)
             except Exception as e:
                 print(e)
@@ -268,7 +269,7 @@ class PigPig(commands.Bot):
                         await msg.delete()  # 删除之前的回复
 
                 message_to_edit = await after.reply("思考中...")  # 创建新的回复
-                execute_action = await self.action_handler.choose_act(prompt, after, message_to_edit)
+                execute_action = await self.action_dispatcher.choose_act(prompt, after, message_to_edit)
                 await execute_action(message_to_edit, self.dialogue_history, channel_id, prompt, after)
             except Exception as e:
                 print(e)

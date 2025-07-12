@@ -40,17 +40,6 @@ class MathCalculatorCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    @app_commands.command(name="calculate", description="計算數學表達式")
-    @app_commands.describe(expression="要計算的數學表達式")
-    async def calculate_command(self, interaction: discord.Interaction, expression: str):
-        if not self.lang_manager:
-            self.lang_manager = LanguageManager.get_instance(self.bot)
-        
-        await interaction.response.defer(thinking=True)
-        guild_id = str(interaction.guild_id) if interaction.guild_id else None
-        result = await self.calculate_math(expression, guild_id=guild_id)
-        await interaction.followup.send(result)
-
     async def calculate_math(self, expression: str, message_to_edit=None, guild_id: Optional[str] = None) -> str:
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)

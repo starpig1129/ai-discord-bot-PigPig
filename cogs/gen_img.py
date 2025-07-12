@@ -80,118 +80,110 @@ class ImageGenerationCog(commands.Cog):
         if len(self.conversation_history[channel_id]) > 10:
             self.conversation_history[channel_id].pop(0)
 
-    @app_commands.command(name="generate_image", description="生成或編輯圖片")
-    @app_commands.describe(prompt="用於生成或編輯圖片的提示文字")
-    async def generate_image_command(self, interaction: discord.Interaction, prompt: str):
+    async def _generate_image_logic(
+        self,
+        prompt: str,
+        guild_id: str,
+        channel_id: int,
+        input_images: Optional[List[Image.Image]] = None,
+        channel: Optional[discord.TextChannel] = None
+    ) -> Dict:
+        """
+        核心的圖片生成邏輯。
+        
+        返回一個包含 'content' 和/或 'file' 的字典，或一個包含 'error' 的字典。
+        """
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
 
-        guild_id = str(interaction.guild_id)
-        await interaction.response.defer(thinking=True)
-        
-        try:
-            # 獲取輸入圖片（如果有的話）
-            input_images = []
-            if interaction.channel.last_message and interaction.channel.last_message.attachments:
-                for attachment in interaction.channel.last_message.attachments:
-                    if attachment.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                        async with self.session.get(attachment.url) as response:
-                            image_data = await response.read()
-                        img = Image.open(io.BytesIO(image_data))
-                        input_images.append(img)
+        input_images = input_images or []
 
+        try:
             # 獲取對話歷史
-            history = self._get_conversation_history(interaction.channel_id)
+            history = self._get_conversation_history(channel_id)
             
             # 嘗試使用 Gemini API
             try:
                 image_buffer, response_text = await self.generate_with_gemini(prompt, input_images, history)
                 
                 # 更新使用者的輸入到歷史記錄
-                self._update_conversation_history(interaction.channel_id, "user", prompt, input_images)
+                self._update_conversation_history(channel_id, "user", prompt, input_images)
                 
-                # 準備回應內容
-                content = []
-                response_text = response_text or ""  # 確保 response_text 不是 None
-                if response_text.strip():
-                    content.append(response_text)
+                response_text = response_text or ""
                 
                 if image_buffer:
-                    # 如果有圖片，添加到歷史記錄並發送
+                    image_buffer.seek(0)
                     file = discord.File(image_buffer, filename="generated_image.png")
                     success_message = self.lang_manager.translate(
-                        guild_id,
-                        "commands",
-                        "generate_image",
-                        "responses",
-                        "image_generated"
+                        guild_id, "commands", "generate_image", "responses", "image_generated"
                     )
                     self._update_conversation_history(
-                        interaction.channel_id,
-                        "assistant",
-                        response_text.strip() or success_message,
-                        [image_buffer]
+                        channel_id, "assistant", response_text.strip() or success_message, [image_buffer]
                     )
-                    await interaction.followup.send(content="\n".join(content), file=file)
-                    return
+                    return {"content": response_text, "file": file}
                 elif response_text.strip():
-                    # 如果只有文字回應
-                    self._update_conversation_history(
-                        interaction.channel_id,
-                        "assistant",
-                        response_text,
-                        None
-                    )
-                    await interaction.followup.send(content="\n".join(content))
-                    return
+                    self._update_conversation_history(channel_id, "assistant", response_text, None)
+                    return {"content": response_text}
             except Exception as e:
                 error_message = self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "generate_image",
-                    "responses",
-                    "gemini_error",
-                    error=str(e)
+                    guild_id, "commands", "generate_image", "responses", "gemini_error", error=str(e)
                 )
                 print(error_message)
-                
+
             # 如果 Gemini 失敗，嘗試使用本地模型
-            image = await self.generate_with_local_model(interaction.channel, prompt, guild_id=guild_id)
-            if image:
-                file = discord.File(image, filename="generated_image.png")
-                await interaction.followup.send(content="", file=file)
-            else:
-                error_message = self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "generate_image",
-                    "responses",
-                    "all_methods_failed"
-                )
-                await interaction.followup.send(error_message)
-                
+            if channel:
+                image_buffer = await self.generate_with_local_model(channel, prompt, guild_id=guild_id)
+                if image_buffer:
+                    image_buffer.seek(0)
+                    file = discord.File(image_buffer, filename="generated_image.png")
+                    return {"file": file}
+
+            # 如果所有方法都失敗
+            error_message = self.lang_manager.translate(
+                guild_id, "commands", "generate_image", "responses", "all_methods_failed"
+            )
+            return {"error": error_message}
+
         except Exception as e:
             error_message = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "generate_image",
-                "responses",
-                "general_error",
-                error=str(e)
+                guild_id, "commands", "generate_image", "responses", "general_error", error=str(e)
             )
-            if self.lang_manager:
-                error_msg = self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "generate_image",
-                    "errors",
-                    "generation_error",
-                    error=str(e)
-                )
-                print(error_msg)
-            else:
-                print(f"圖片生成過程出現錯誤：{str(e)}")
-            await interaction.followup.send(error_message)
+            print(f"圖片生成過程出現錯誤：{str(e)}")
+            return {"error": error_message}
+
+    @app_commands.command(name="generate_image", description="生成或編輯圖片")
+    @app_commands.describe(prompt="用於生成或編輯圖片的提示文字")
+    async def generate_image_command(self, interaction: discord.Interaction, prompt: str):
+        await interaction.response.defer(thinking=True)
+        
+        guild_id = str(interaction.guild_id)
+        channel_id = interaction.channel_id
+        
+        # 獲取輸入圖片
+        input_images = []
+        if interaction.channel.last_message and interaction.channel.last_message.attachments:
+            for attachment in interaction.channel.last_message.attachments:
+                if attachment.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    try:
+                        async with self.session.get(attachment.url) as response:
+                            image_data = await response.read()
+                        img = Image.open(io.BytesIO(image_data))
+                        input_images.append(img)
+                    except Exception as e:
+                        print(f"無法讀取附件圖片: {e}")
+
+        result = await self._generate_image_logic(
+            prompt=prompt,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            input_images=input_images,
+            channel=interaction.channel
+        )
+
+        if "error" in result:
+            await interaction.followup.send(result["error"])
+        else:
+            await interaction.followup.send(content=result.get("content"), file=result.get("file"))
 
     def _image_to_base64(self, image: Image.Image) -> str:
         """將 PIL Image 轉換為 base64 字符串"""

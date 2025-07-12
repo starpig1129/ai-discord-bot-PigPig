@@ -25,7 +25,8 @@ class ScheduleManager(commands.Cog):
         guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
         
         try:
-            await self.upload_schedule(interaction.user.id, interaction.channel_id, file)
+            yaml_data = await file.read()
+            await self._core_upload_schedule(interaction.user.id, interaction.channel_id, yaml_data)
             success_msg = self.lang_manager.translate(
                 guild_id, "commands", "upload_schedule", "responses", "success"
             ) if self.lang_manager else "行程表已成功上傳！"
@@ -36,14 +37,14 @@ class ScheduleManager(commands.Cog):
             ) if self.lang_manager else f"上傳行程表時發生錯誤：{str(e)}"
             await interaction.followup.send(error_msg)
 
-    async def upload_schedule(self, user_id: int, channel_id: int, file: discord.Attachment):
-        async with self.bot.session.get(file.url) as response:
-            yaml_data = await response.text()
+    async def _core_upload_schedule(self, user_id: int, channel_id: int, yaml_data: bytes):
         try:
             schedule = yaml.safe_load(yaml_data)
+            if not isinstance(schedule, dict):
+                raise yaml.YAMLError("YAML root must be a mapping.")
             schedule_data = {"channel_id": channel_id, "schedule": schedule}
             with open(os.path.join(self.schedule_dir, f"{user_id}.yaml"), "w", encoding='utf-8') as f:
-                yaml.dump(schedule_data, f)
+                yaml.dump(schedule_data, f, allow_unicode=True)
         except yaml.YAMLError as e:
             error_msg = self.lang_manager.translate(
                 "0", "system", "schedule", "errors", "yaml_parse_error", error=str(e)
@@ -71,7 +72,7 @@ class ScheduleManager(commands.Cog):
         
         try:
             target_user_id = target_user.id if target_user else interaction.user.id
-            result = await self.query_schedule(interaction, query_type.value, time, day.value if day else None, target_user_id)
+            result = await self._core_query_schedule(interaction, query_type.value, target_user_id, time, day.value if day else None)
             await interaction.followup.send(result)
         except Exception as e:
             error_msg = self.lang_manager.translate(
@@ -79,7 +80,7 @@ class ScheduleManager(commands.Cog):
             ) if self.lang_manager else f"查詢行程表時發生錯誤：{str(e)}"
             await interaction.followup.send(error_msg)
 
-    async def query_schedule(self, interaction_or_ctx, query_type: str, time: str = None, day: str = None, target_user_id:int = None):
+    async def _core_query_schedule(self, interaction_or_ctx, query_type: str, target_user_id:int, time: str = None, day: str = None):
         guild_id = str(interaction_or_ctx.guild_id) if hasattr(interaction_or_ctx, 'guild_id') and interaction_or_ctx.guild_id else str(interaction_or_ctx.guild.id) if hasattr(interaction_or_ctx, 'guild') else "0"
         
         try:
@@ -253,7 +254,7 @@ class ScheduleManager(commands.Cog):
         guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
         
         try:
-            await self.update_schedule(interaction.user.id, day, time, description)
+            await self._core_update_schedule(interaction.user.id, day, time, description)
             success_msg = self.lang_manager.translate(
                 guild_id, "commands", "update_schedule", "responses", "success"
             ) if self.lang_manager else "行程表已成功更新或創建！"
@@ -264,7 +265,7 @@ class ScheduleManager(commands.Cog):
             ) if self.lang_manager else f"更新或創建行程表時發生錯誤：{str(e)}"
             await interaction.followup.send(error_msg)
 
-    async def update_schedule(self, user_id: int, day: str, time: str, description: str):
+    async def _core_update_schedule(self, user_id: int, day: str, time: str, description: str):
         filepath = os.path.join(self.schedule_dir, f"{user_id}.yaml")
         if not os.path.exists(filepath):
             with open(filepath, 'w', encoding='utf-8') as f:
@@ -280,7 +281,7 @@ class ScheduleManager(commands.Cog):
 
         schedule_data["schedule"] = schedule
         with open(filepath, "w", encoding='utf-8') as f:
-            yaml.dump(schedule_data, f)
+            yaml.dump(schedule_data, f, allow_unicode=True)
 
     @app_commands.command(name="show_template", description="顯示行程表範本")
     async def show_template_command(self, interaction: discord.Interaction):

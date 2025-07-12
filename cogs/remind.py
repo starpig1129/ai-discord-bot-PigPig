@@ -38,21 +38,29 @@ class ReminderCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    async def set_reminder(self, channel, target_user, time_str: str, message: str, message_to_edit: discord.Message = None, guild_id: str = None):
+    async def _set_reminder_logic(self, channel, target_user, time_str: str, message: str, guild_id: str, interaction: Optional[discord.Interaction] = None):
+        """核心提醒邏輯，可被斜線命令和LLM工具共用"""
         try:
             if not self.lang_manager:
                 self.lang_manager = LanguageManager.get_instance(self.bot)
 
-            if message_to_edit:
-                await message_to_edit.edit(content=self.lang_manager.translate(guild_id, "commands", "remind", "responses", "received"))
+            # 如果是來自斜線命令，先發送一個 "已收到" 的臨時回覆
+            if interaction:
+                await interaction.followup.send(self.lang_manager.translate(guild_id, "commands", "remind", "responses", "received"), ephemeral=True)
 
             reminder_time = self.parse_time(time_str, guild_id)
             if reminder_time is None:
-                return self.lang_manager.translate(guild_id, "commands", "remind", "responses", "invalid_format")
+                error_msg = self.lang_manager.translate(guild_id, "commands", "remind", "responses", "invalid_format")
+                if interaction:
+                    await interaction.edit_original_response(content=error_msg)
+                return error_msg
 
             time_diff = reminder_time - datetime.now()
             if time_diff.total_seconds() <= 0:
-                return self.lang_manager.translate(guild_id, "commands", "remind", "responses", "future_time_required")
+                error_msg = self.lang_manager.translate(guild_id, "commands", "remind", "responses", "future_time_required")
+                if interaction:
+                    await interaction.edit_original_response(content=error_msg)
+                return error_msg
 
             # 準備確認消息
             confirm_message = self.lang_manager.translate(
@@ -66,34 +74,29 @@ class ReminderCog(commands.Cog):
                 message=message
             )
             
-            if message_to_edit:
-                await message_to_edit.edit(content = confirm_message)
+            if interaction:
+                await interaction.edit_original_response(content=confirm_message)
+            
+            # 建立一個背景任務來處理等待和發送
+            async def reminder_task():
+                await asyncio.sleep(time_diff.total_seconds())
+                reminder_message_content = self.lang_manager.translate(
+                    guild_id,
+                    "commands",
+                    "remind",
+                    "responses",
+                    "reminder_message",
+                    user=target_user.mention,
+                    message=message
+                )
+                await channel.send(reminder_message_content)
 
-            # 等待直到指定時間
-            await asyncio.sleep(time_diff.total_seconds())
+            asyncio.create_task(reminder_task())
             
-            # 發送實際的提醒消息
-            reminder_message = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "remind",
-                "responses",
-                "reminder_message",
-                user=target_user.mention,
-                message=message
-            )
-            await channel.send(reminder_message)
-            
-            return self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "remind",
-                "responses",
-                "reminder_sent",
-                user=target_user.mention
-            )
+            return confirm_message
+
         except Exception as e:
-            return self.lang_manager.translate(
+            error_msg = self.lang_manager.translate(
                 guild_id,
                 "commands",
                 "remind",
@@ -101,6 +104,9 @@ class ReminderCog(commands.Cog):
                 "error_setting",
                 error=str(e)
             )
+            if interaction:
+                await interaction.edit_original_response(content=error_msg)
+            return error_msg
 
     @app_commands.command(name="remind", description="設置一個提醒")
     @app_commands.describe(
@@ -109,21 +115,20 @@ class ReminderCog(commands.Cog):
         user="要提醒的用戶（可選，默認為自己）"
     )
     async def remind(self, interaction: discord.Interaction, time: str, message: str, user: discord.User = None):
-        if not self.lang_manager:
-            self.lang_manager = LanguageManager.get_instance(self.bot)
-
         await interaction.response.defer(ephemeral=True)
         
         guild_id = str(interaction.guild_id)
         target_user = user or interaction.user
-        result = await self.set_reminder(
-            interaction.channel,
-            target_user,
-            time,
-            message,
-            guild_id=guild_id
+        
+        # 呼叫核心邏輯
+        await self._set_reminder_logic(
+            channel=interaction.channel,
+            target_user=target_user,
+            time_str=time,
+            message=message,
+            guild_id=guild_id,
+            interaction=interaction
         )
-        await interaction.followup.send(result, ephemeral=True)
 
     def parse_time(self, time_str: str, guild_id: str = None) -> datetime:
         """解析時間字串，支援多語言格式"""

@@ -523,6 +523,7 @@ async def generate_response(inst: str,
     cache_key = None
     generation_config_args = {}
     is_streaming = not bool(response_schema)
+    tool_list = None
 
     if response_schema:
         generation_config_args["response_mime_type"] = "application/json"
@@ -530,6 +531,7 @@ async def generate_response(inst: str,
     else:
         generation_config_args["response_modalities"] = ["TEXT"]
         tool_list = [google_search_tool]
+            
     # 步驟 1: 如果啟用快取，為當前請求生成唯一的內容哈希
     if use_cache and cache_mgr:
         cache_key = await _create_context_hash(
@@ -555,15 +557,20 @@ async def generate_response(inst: str,
                     video_input=video_input, 
                     pdf_input=pdf_input    
                 )
+                cache_args = {
+                    "cache_key": cache_key,
+                    "model": model_id,
+                    "system_instruction": system_prompt,
+                    "contents": contents,
+                    "ttl": cache_ttl,
+                    "display_name": f"Cache for {cache_key[:16]}",
+                }
+                if response_schema is None:
+                    cache_args["tools"] = tool_list
+
                 # 3b. 呼叫管理器來創建並註冊這個新的快取
                 cache = cache_mgr.create_and_register_cache(
-                    cache_key=cache_key,
-                    model=model_id,
-                    system_instruction=system_prompt,
-                    contents=contents,
-                    ttl=cache_ttl,
-                    display_name=f"Cache for {cache_key[:16]}",
-                    tools=tool_list
+                    **cache_args
                 )
             except Exception as e:
                 logger.error(f"在動態創建快取時發生錯誤，將降級為非快取模式: {e}")
@@ -584,12 +591,17 @@ async def generate_response(inst: str,
             )
             config = types.GenerateContentConfig(cached_content=cache.name, **generation_config_args)
 
+            api_kwargs = {
+                "model": model_id,
+                "contents": contents,
+                "config": config
+            }
             if response_schema:
                 logger.info("使用快取模式生成結構化回應")
-                response_object = client.models.generate_content(model=model_id, contents=contents, config=config)
+                response_object = client.models.generate_content(**api_kwargs)
             else:
                 logger.info("使用快取模式生成流式回應")
-                response_object = client.models.generate_content_stream(model=model_id, contents=contents, config=config)
+                response_object = client.models.generate_content_stream(**api_kwargs)
         
         except Exception as e:
             logger.warning(f"快取模式生成失敗，將自動降級為非快取模式。錯誤: {e}")
@@ -598,23 +610,32 @@ async def generate_response(inst: str,
 
     # 如果未使用快取或快取模式失敗，則進入非快取模式
     if response_object is None:
-        generation_config_args["tools"] = tool_list
+        if tool_list is not None:
+            generation_config_args["tools"] = tool_list
         # --- 傳統（非快取）模式 ---
         logger.info("使用傳統（非快取）模式生成回應")
         
         # 4c. 構建包含所有內容的完整請求
         contents = await _build_conversation_contents(
-            inst, dialogue_history, image_input, audio_input, video_input, pdf_input
+            inst, 
+            dialogue_history, 
+            image_input, 
+            audio_input, 
+            video_input, 
+            pdf_input
         )
         config = GenerateContentConfig(system_instruction=system_prompt, **generation_config_args)
         
         if is_streaming:
             response_object = client.models.generate_content_stream(model=model_id, contents=contents, config=config)
         else:
+
             response_object = client.models.generate_content(model=model_id, contents=contents, config=config)
 
     try:
         if is_streaming:
+            # --- 流式回應處理 ---
+            logger.info("正在處理流式回應...")
             async def async_generator():
                 try:
                     accumulated_text = ""
@@ -646,7 +667,7 @@ async def generate_response(inst: str,
                                     if cache and use_cache:
                                         fallback_config = types.GenerateContentConfig(
                                             cached_content=cache.name,
-                                            tools=[google_search_tool]
+                                            tools=tool_list
                                         )
                                         # 使用快取中繼資料中儲存的模型，確保一致性
                                         fallback_response = client.models.generate_content(
@@ -657,7 +678,7 @@ async def generate_response(inst: str,
                                     else:
                                         fallback_config = GenerateContentConfig(
                                             system_instruction=system_prompt,
-                                            tools=[google_search_tool],
+                                            tools=tool_list,
                                             response_modalities=["TEXT"],
                                         )
                                         
@@ -693,11 +714,11 @@ async def generate_response(inst: str,
                         raise GeminiError("Gemini API 沒有生成任何回應內容")
                         
                 except Exception as e:
-                    raise GeminiError(f"Gemini API 生成過程錯誤: {str(e)}")
-            # 返回異步生成器用於流式回應
+                    logger.error(f"在流式生成過程中發生錯誤: {e}")
+                    raise GeminiError(f"流式生成失敗: {e}") from e
             return None, async_generator()
         else:
-            # 處理結構化 JSON 回應
+            # --- 結構化回應處理 ---
             logger.info(f"收到結構化回應: {response_object.text[:500]}...")
             try:
                 parsed_data = response_object.parsed
@@ -705,4 +726,5 @@ async def generate_response(inst: str,
             except (AttributeError, IndexError) as e:
                 raise GeminiError(f"無法從 API 回應中提取 JSON 物件: {e}\n原始回應: {response_object.text}")
     except Exception as e:
-        raise GeminiError(f"Gemini API 初始化錯誤: {str(e)}")
+        logger.error(f"處理 Gemini 回應時發生未知錯誤: {e}")
+        raise GeminiError(f"處理 Gemini 回應失敗: {e}") from e

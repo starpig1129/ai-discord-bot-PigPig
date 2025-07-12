@@ -307,8 +307,9 @@ async def generate_response(
                 }
                 
                 # 只有 gemini 模型支持 response_schema
-                if model_name == "gemini" and response_schema:
-                    params["response_schema"] = response_schema
+                if model_name == "gemini":
+                    if response_schema:
+                        params["response_schema"] = response_schema
 
                 thread, result = await generator_func(**params)
 

@@ -25,7 +25,6 @@ import asyncio
 import discord
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from PIL import Image
 
 from gpt.core.response_generator import generate_response
 from gpt.core.message_sender import (
@@ -35,24 +34,17 @@ from gpt.core.message_sender import (
     format_intelligent_context,
     format_memory_context_structured
 )
+from gpt.tools.registry import tool_registry
+from gpt.tools.tool_context import ToolExecutionContext
 from gpt.utils.media import process_attachment_data
 
 
-class ActionHandler:
+class ActionDispatcher:
     """Handles Discord bot actions and tool execution."""
 
     def __init__(self, bot):
         self.bot = bot
-        self.system_prompt = self._load_system_prompt()
-        self.tool_func_dict = {
-            'internet_search': self.internet_search,
-            'directly_answer': gpt_message,
-            'calculate': self.calculate_math,
-            'gen_img': self.generate_image,
-            'schedule_management': self.schedule_management,
-            'send_reminder': self.send_reminder,
-            'manage_user_data': self.manage_user_data
-        }
+        self.tool_registry = tool_registry
 
     @staticmethod
     def format_tool_result(tool_name: str, result: Any) -> Dict[str, Any]:
@@ -95,11 +87,6 @@ class ActionHandler:
                 "name": tool_name,
                 "content": f"工具執行時發生錯誤: {str(e)}"
             }
-
-    @staticmethod
-    def _load_system_prompt() -> str:
-        with open('./choseAct_system_prompt.txt', 'r') as f:
-            return f.read()
 
     async def choose_act(self, prompt: str, message: Any, 
                         message_to_edit: Any) -> Any:
@@ -164,36 +151,38 @@ class ActionHandler:
                                                image_data)
         
         async def execute_action(message_to_edit: Any, dialogue_history: Dict,
-                                channel_id: int, original_prompt: str,
-                               message: Any):
+                                 channel_id: int, original_prompt: str,
+                                 message: Any):
             if channel_id not in dialogue_history:
                 dialogue_history[channel_id] = []
-                
+
             logger = self.bot.get_logger_for_guild(message_to_edit.guild.name)
             final_results = []
-            logger.info(action_list)
-            
+            logger.info(f"Executing actions: {action_list}")
+
+            context = ToolExecutionContext(
+                bot=self.bot,
+                message=message,
+                message_to_edit=message_to_edit,
+                logger=logger
+            )
+
             for action in action_list:
-                tool_name = action["tool_name"]
-                parameters = action["parameters"]
-                
-                if tool_name in self.tool_func_dict:
-                    tool_func = self.tool_func_dict[tool_name]
-                    try:
-                        if tool_name == "directly_answer":
-                            continue
-                        elif isinstance(parameters, str):
-                            result = await tool_func(message_to_edit, message, 
-                                                   parameters)
-                        else:
-                            result = await tool_func(message_to_edit, message, 
-                                                   **parameters)
-                        if result is not None and tool_name != "directly_answer":
-                            final_results.append(result)
-                    except Exception as e:
-                        logger.info(f"Error executing {tool_name}: {str(e)}")
-                else:
-                    logger.info(f"Unknown tool: {tool_name}")
+                tool_name = action.get("tool_name")
+                parameters = action.get("parameters", {})
+
+                if not tool_name or tool_name == "directly_answer":
+                    continue
+
+                try:
+                    tool = self.tool_registry.get_tool(tool_name)
+                    result = await tool.execute(context, **parameters)
+                    if result is not None:
+                        final_results.append(result)
+                except KeyError:
+                    logger.warning(f"Unknown tool requested: {tool_name}")
+                except Exception as e:
+                    logger.error(f"Error executing tool '{tool_name}': {e}", exc_info=True)
             
             # 處理結果
             for result, action in zip(final_results, action_list):
@@ -221,12 +210,44 @@ class ActionHandler:
         
         return execute_action
 
-    async def _get_action_list(self, prompt: str, history_dict: List[Dict], 
+    async def _get_action_list(self, prompt: str, history_dict: List[Dict],
                              image_data: List) -> List[Dict]:
         try:
+            tools_string = self.tool_registry.get_tools_string_for_prompt()
+            
+            instruction_prompt = """
+### Instructions for Tool Usage
+You are a multi-functional Discord bot assistant capable of analyzing user requests, selecting the most suitable tool(s) from a predefined set, 
+and providing helpful responses. Below is a list of the available tools and how to use them effectively.
+You are an expert at choosing the correct tool for a user's request.
+You must respond in a JSON array of objects, where each object represents a tool call.
+The JSON must be an array, even if there is only one tool call.
+### Example Tool Use Syntax
+```json
+[
+    {
+        "tool_name": "tool name",
+        "parameters": {
+            "parameter_name_1": "value",
+            "parameter_name_2": "value"
+        }
+    },
+    {
+        "tool_name": "another_tool_name",
+        "parameters": {
+            "parameter_name_1": "value",
+            "parameter_name_2": "value"
+        }
+    }
+]
+```
+Based on the user's request and the available tools, select the appropriate tool(s)."""
+
+            full_system_prompt = f"{instruction_prompt}\n\n# Available Tools:\n{tools_string}"
+            
             thread, gen = await generate_response(
                 inst=prompt,
-                system_prompt=self.system_prompt,
+                system_prompt=full_system_prompt,
                 dialogue_history=history_dict,
                 image_input=image_data
             )
@@ -254,116 +275,3 @@ class ActionHandler:
     @staticmethod
     def _get_default_action_list(prompt: str) -> List[Dict]:
         return [{"tool_name": "directly_answer", "parameters": {"prompt": prompt}}]
-
-    async def internet_search(self, message_to_edit: Any, message: Any, 
-                            query: str, search_type: str) -> Optional[str]:
-        internet_search_cog = self.bot.get_cog("InternetSearchCog")
-        return (await internet_search_cog.internet_search(
-            message, query, search_type, message_to_edit) 
-            if internet_search_cog else "Search is disabled")
-
-    async def calculate_math(self, message_to_edit: Any, message: Any, 
-                           expression: str) -> Optional[str]:
-        math_cog = self.bot.get_cog("MathCalculatorCog")
-        return (await math_cog.calculate_math(expression, message_to_edit)
-                if math_cog else "Math is disabled")
-
-    async def generate_image(self, message_to_edit: Any, message: Any, 
-                           prompt: str) -> Optional[str]:
-        """Generate or edit images using Gemini API or local model."""
-        image_gen_cog = self.bot.get_cog("ImageGenerationCog")
-        if not image_gen_cog:
-            return "Image generation is disabled"
-
-        try:
-            # 獲取圖片輸入（如果有）
-            input_images = []
-            if message.attachments:
-                for attachment in message.attachments:
-                    if attachment.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                        async with image_gen_cog.session.get(attachment.url) as response:
-                            image_data = await response.read()
-                        img = Image.open(io.BytesIO(image_data))
-                        input_images.append(img)
-
-            # 獲取對話歷史
-            history = image_gen_cog._get_conversation_history(message.channel.id)
-            
-            # 嘗試使用 Gemini API
-            try:
-                image_buffer, response_text = await image_gen_cog.generate_with_gemini(prompt, input_images, history)
-                
-                # 更新對話歷史
-                image_gen_cog._update_conversation_history(message.channel.id, "user", prompt, input_images)
-                
-                content = "使用 Gemini API 的回應："
-                if response_text:
-                    content += f"\n{response_text}"
-                
-                if message_to_edit:
-                    await message_to_edit.edit(content=content)
-
-                if image_buffer:
-                    # 如果有圖片，添加到歷史記錄
-                    image_gen_cog._update_conversation_history(
-                        message.channel.id,
-                        "assistant",
-                        response_text if response_text else "已生成圖片",
-                        [image_buffer]
-                    )
-                    return image_buffer
-                elif response_text:
-                    return response_text
-
-            except Exception as e:
-                print(f"Gemini API 錯誤：{str(e)}")
-                
-            # 如果 Gemini 失敗，嘗試使用本地模型
-            if message_to_edit:
-                await message_to_edit.edit(content="切換到本地模型...")
-            
-            image = await image_gen_cog.generate_with_local_model(message.channel, prompt)
-            if image:
-                return image
-                
-            return "所有圖片生成方式都失敗了，請稍後再試。"
-            
-        except Exception as e:
-            print(f"圖片生成過程出現錯誤：{str(e)}")
-            return "生成圖片時發生錯誤。"
-
-    async def schedule_management(self, message_to_edit: Any, message: Any, 
-                                action: str = "query", query_type: str = "next",
-                                time: Optional[str] = None, 
-                                date: Optional[str] = None,
-                                description: Optional[str] = None
-                                ) -> Optional[str]:
-        schedule_cog = self.bot.get_cog("ScheduleManager")
-        if not schedule_cog:
-            return "Schedule is disabled"
-            
-        if action == "query":
-            return await schedule_cog.query_schedule(
-                message.author.id, query_type, time)
-        elif action == "create":
-            return await schedule_cog.create_schedule(message.author.id)
-        elif action == "update":
-            return await schedule_cog.update_schedule(
-                message.author.id, date, time, description)
-        return "Invalid schedule operation"
-
-    async def send_reminder(self, message_to_edit: Any, message: Any,
-                          time_str: str, reminder_message: str) -> Optional[str]:
-        reminder_cog = self.bot.get_cog("ReminderCog")
-        return (await reminder_cog.set_reminder(
-            message.channel, message.author, time_str, reminder_message,
-            message_to_edit) if reminder_cog else "Reminder is disabled")
-
-    async def manage_user_data(self, message_to_edit: Any, message: Any,
-                             user_id: Optional[int] = None, 
-                             user_data: Optional[Dict] = None,
-                             action: str = "read") -> Optional[str]:
-        user_data_cog = self.bot.get_cog("UserDataCog")
-        return (await user_data_cog.manage_user_data_message(
-            message, user_id, user_data, action, message_to_edit)
-            if user_data_cog else "User data management is disabled")

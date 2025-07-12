@@ -29,7 +29,8 @@ import discord
 from gpt.core.response_generator import generate_response
 from addons.settings import Settings
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
+from gpt.tools.tool_context import ToolExecutionContext
 from .language_manager import LanguageManager
 
 # 備用翻譯字典
@@ -79,6 +80,19 @@ class UserDataCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
+    def _get_guild_id_from_context(self, context: Union[discord.Interaction, discord.Message, ToolExecutionContext, None]) -> Optional[str]:
+        """從各種上下文中提取 guild_id"""
+        if isinstance(context, ToolExecutionContext):
+            if context.interaction:
+                return str(context.interaction.guild_id)
+            if context.message and context.message.guild:
+                return str(context.message.guild.id)
+        elif isinstance(context, discord.Interaction):
+            return str(context.guild_id)
+        elif isinstance(context, discord.Message) and context.guild:
+            return str(context.guild.id)
+        return None
+
     @property
     def user_manager(self):
         """取得 SQLite 使用者管理器"""
@@ -102,236 +116,160 @@ class UserDataCog(commands.Cog):
         guild_id = str(interaction.guild_id)
         
         result = await self.manage_user_data(
-            interaction, user or interaction.user, user_data, action, guild_id=guild_id
+            interaction, user or interaction.user, user_data, action
         )
         
         await interaction.followup.send(result)
 
-    async def manage_user_data(self, interaction, user: discord.User, 
-                              user_data: str = None, action: str = 'read', 
-                              message_to_edit: discord.Message = None, 
-                              guild_id: str = None):
-        """管理使用者資料（使用 SQLite）"""
-        # 確保 LanguageManager 已初始化
+    async def _read_user_data(self, user_id: str, context: Any) -> str:
+        """核心邏輯：讀取使用者資料"""
+        guild_id = self._get_guild_id_from_context(context)
+        try:
+            user_info = await self.user_manager.get_user_info(user_id)
+            if user_info and user_info.user_data:
+                return self._translate(
+                    guild_id,
+                    "commands", "userdata", "responses", "data_found",
+                    fallback_key="data_found",
+                    user_id=user_id,
+                    data=user_info.user_data
+                )
+            else:
+                return self._translate(
+                    guild_id,
+                    "commands", "userdata", "responses", "data_not_found",
+                    fallback_key="data_not_found",
+                    user_id=user_id
+                )
+        except Exception as e:
+            return self._translate(
+                guild_id,
+                "system", "userdata", "errors", "database_error",
+                fallback_key="database_error",
+                error=str(e)
+            )
+
+    async def _save_user_data(self, user_id: str, display_name: str, user_data: str, context: Any) -> str:
+        """核心邏輯：儲存使用者資料（包含 AI 合併）"""
+        guild_id = self._get_guild_id_from_context(context)
+        try:
+            user_info = await self.user_manager.get_user_info(user_id)
+            
+            if user_info and user_info.user_data:
+                # 使用 AI 智慧合併新舊資料
+                existing_data = user_info.user_data
+                system_prompt = '''You are a professional user data management assistant.
+                                 Intelligently merge existing user data with new data to return complete and accurate user information.
+                                 Maintain data integrity and consistency while avoiding duplicate information.
+                                 Always respond in Traditional Chinese.'''
+                
+                try:
+                    dialogue_history = [
+                        {"role": "function", "name": "existing_user_data", "content": json.dumps({"existing_data": existing_data}, ensure_ascii=False, indent=2)},
+                        {"role": "function", "name": "new_user_data", "content": json.dumps({"new_data": user_data}, ensure_ascii=False, indent=2)}
+                    ]
+                    
+                    _, streamer = await generate_response(
+                        inst="Based on the provided existing user data and new data, intelligently merge them and return complete user information.",
+                        system_prompt=system_prompt,
+                        dialogue_history=dialogue_history
+                    )
+                    
+                    response_chunks = [chunk async for chunk in streamer]
+                    new_data = ''.join(response_chunks).replace("<|eot_id|>", "").strip()
+                    
+                except Exception as e:
+                    return self._translate(
+                        guild_id,
+                        "system", "userdata", "errors", "ai_processing_failed",
+                        fallback_key="ai_processing_failed",
+                        error=str(e)
+                    )
+                
+                # 更新使用者資料
+                success = await self.user_manager.update_user_data(user_id, new_data, display_name)
+                if success:
+                    return self._translate(
+                        guild_id,
+                        "commands", "userdata", "responses", "data_updated",
+                        fallback_key="data_updated",
+                        user_id=user_id,
+                        data=new_data
+                    )
+                else:
+                    return self._translate(
+                        guild_id,
+                        "system", "userdata", "errors", "update_failed",
+                        fallback_key="update_failed",
+                        error="資料庫更新失敗"
+                    )
+            else:
+                # 建立新使用者資料
+                success = await self.user_manager.update_user_data(user_id, user_data, display_name)
+                if success:
+                    return self._translate(
+                        guild_id,
+                        "commands", "userdata", "responses", "data_created",
+                        fallback_key="data_created",
+                        user_id=user_id,
+                        data=user_data
+                    )
+                else:
+                    return self._translate(
+                        guild_id,
+                        "system", "userdata", "errors", "update_failed",
+                        fallback_key="update_failed",
+                        error="資料庫建立失敗"
+                    )
+                    
+        except Exception as e:
+            return self._translate(
+                guild_id,
+                "system", "userdata", "errors", "update_failed",
+                fallback_key="update_failed",
+                error=str(e)
+            )
+
+    async def manage_user_data(self, context: Any, user: discord.User,
+                               user_data: str = None, action: str = 'read',
+                               message_to_edit: discord.Message = None):
+        """管理使用者資料（使用 SQLite） - 分派器"""
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
         
-        # 檢查 SQLite 使用者管理器是否可用
+        guild_id = self._get_guild_id_from_context(context)
+        
         if not self.user_manager:
-            return self._translate(
-                guild_id,
-                "system",
-                "userdata",
-                "errors",
-                "sqlite_not_available",
-                fallback_key="sqlite_not_available"
-            )
+            return self._translate(guild_id, "system", "userdata", "errors", "sqlite_not_available", fallback_key="sqlite_not_available")
         
         user_id = str(user.id)
+        
         if message_to_edit:
-            searching_message = self._translate(
-                guild_id,
-                "commands",
-                "userdata",
-                "responses",
-                "searching",
-                fallback_key="searching"
-            )
-            await message_to_edit.edit(content=searching_message)
+            if action == 'read':
+                message_key = "searching"
+            elif action == 'save':
+                message_key = "updating"
+            else:
+                message_key = "processing" # Generic fallback
+            
+            status_message = self._translate(guild_id, "commands", "userdata", "responses", message_key, fallback_key=message_key)
+            await message_to_edit.edit(content=status_message)
 
         if action == 'read':
-            try:
-                user_info = await self.user_manager.get_user_info(user_id)
-                if user_info and user_info.user_data:
-                    return self._translate(
-                        guild_id,
-                        "commands",
-                        "userdata",
-                        "responses",
-                        "data_found",
-                        fallback_key="data_found",
-                        user_id=user_id,
-                        data=user_info.user_data
-                    )
-                else:
-                    return self._translate(
-                        guild_id,
-                        "commands",
-                        "userdata",
-                        "responses",
-                        "data_not_found",
-                        fallback_key="data_not_found",
-                        user_id=user_id
-                    )
-            except Exception as e:
-                return self._translate(
-                    guild_id,
-                    "system",
-                    "userdata",
-                    "errors",
-                    "database_error",
-                    fallback_key="database_error",
-                    error=str(e)
-                )
-
+            return await self._read_user_data(user_id, context)
+        
         elif action == 'save':
-            try:
-                if message_to_edit:
-                    updating_message = self._translate(
-                        guild_id,
-                        "commands",
-                        "userdata",
-                        "responses",
-                        "updating",
-                        fallback_key="updating"
-                    )
-                    await message_to_edit.edit(content=updating_message)
-                
-                # 取得現有資料
-                user_info = await self.user_manager.get_user_info(user_id)
-                
-                if user_info and user_info.user_data:
-                    # 使用 AI 智慧合併新舊資料（已升級至 Google Gemini API 官方標準）
-                    existing_data = user_info.user_data
-                    system_prompt = '''You are a professional user data management assistant.
-                                    Intelligently merge existing user data with new data to return complete and accurate user information.
-                                    Maintain data integrity and consistency while avoiding duplicate information.
-                                    Always respond in Traditional Chinese.'''
-                    
-                    try:
-                        # === Google Gemini API 官方格式標準升級 ===
-                        # 建構符合官方 role + parts 格式的結構化對話歷史
-                        # 使用 function 角色格式化現有資料（符合新的工具調用標準）
-                        dialogue_history = [
-                            {
-                                "role": "function",
-                                "name": "existing_user_data",
-                                "content": json.dumps({
-                                    "existing_data": existing_data,
-                                    "data_type": "user_profile",
-                                    "last_updated": "previous_session"
-                                }, ensure_ascii=False, indent=2)
-                            },
-                            {
-                                "role": "function",
-                                "name": "new_user_data",
-                                "content": json.dumps({
-                                    "new_data": user_data,
-                                    "data_type": "user_profile_update",
-                                    "action": "merge_and_update"
-                                }, ensure_ascii=False, indent=2)
-                            }
-                        ]
-                        
-                        # 使用官方標準格式調用 generate_response
-                        # 符合新的智慧上下文建構和工具調用標準
-                        thread, streamer = await generate_response(
-                            inst="Based on the provided existing user data and new data, intelligently merge them and return complete user information.",
-                            system_prompt=system_prompt,
-                            dialogue_history=dialogue_history
-                        )
-                        
-                        # 使用 async for 收集串流回應（符合新的非同步處理標準）
-                        response_chunks = []
-                        async for chunk in streamer:
-                            response_chunks.append(chunk)
-                        
-                        # 清理回應內容並移除特殊標記
-                        new_data = ''.join(response_chunks).replace("<|eot_id|>", "").strip()
-                        
-                        # 等待執行緒完成（向後相容性處理）
-                        if thread:
-                            thread.join()
-                    except Exception as e:
-                        return self._translate(
-                            guild_id,
-                            "system",
-                            "userdata",
-                            "errors",
-                            "ai_processing_failed",
-                            fallback_key="ai_processing_failed",
-                            error=str(e)
-                        )
-                    
-                    # 更新使用者資料
-                    success = await self.user_manager.update_user_data(
-                        user_id, new_data, user.display_name
-                    )
-                    
-                    if success:
-                        return self._translate(
-                            guild_id,
-                            "commands",
-                            "userdata",
-                            "responses",
-                            "data_updated",
-                            fallback_key="data_updated",
-                            user_id=user_id,
-                            data=new_data
-                        )
-                    else:
-                        return self._translate(
-                            guild_id,
-                            "system",
-                            "userdata",
-                            "errors",
-                            "update_failed",
-                            fallback_key="update_failed",
-                            error="資料庫更新失敗"
-                        )
-                else:
-                    # 建立新使用者資料
-                    success = await self.user_manager.update_user_data(
-                        user_id, user_data, user.display_name
-                    )
-                    
-                    if success:
-                        return self._translate(
-                            guild_id,
-                            "commands",
-                            "userdata",
-                            "responses",
-                            "data_created",
-                            fallback_key="data_created",
-                            user_id=user_id,
-                            data=user_data
-                        )
-                    else:
-                        return self._translate(
-                            guild_id,
-                            "system",
-                            "userdata",
-                            "errors",
-                            "update_failed",
-                            fallback_key="update_failed",
-                            error="資料庫建立失敗"
-                        )
-                        
-            except Exception as e:
-                return self._translate(
-                    guild_id,
-                    "system",
-                    "userdata",
-                    "errors",
-                    "update_failed",
-                    fallback_key="update_failed",
-                    error=str(e)
-                )
+            if user_data is None:
+                 return self._translate(guild_id, "commands", "userdata", "errors", "no_data_provided", fallback_key="no_data_provided")
+            return await self._save_user_data(user_id, user.display_name, user_data, context)
     
         else:
-            return self._translate(
-                guild_id,
-                "commands",
-                "userdata",
-                "responses",
-                "invalid_action",
-                fallback_key="invalid_action"
-            )
+            return self._translate(guild_id, "commands", "userdata", "responses", "invalid_action", fallback_key="invalid_action")
 
-    async def manage_user_data_message(self, message, user_id=None, user_data=None, 
+    async def manage_user_data_message(self, message, user_id=None, user_data=None,
                                      action='read', message_to_edit: discord.Message = None):
         """從訊息管理使用者資料"""
-        guild_id = str(message.guild.id) if message.guild else None
+        guild_id = self._get_guild_id_from_context(message)
         
         try:
             if user_id == "<@user_id>" or user_id is None:
@@ -353,7 +291,7 @@ class UserDataCog(commands.Cog):
                 )
             
             result = await self.manage_user_data(
-                message, user, user_data, action, message_to_edit, guild_id=guild_id
+                message, user, user_data, action, message_to_edit
             )
             return result
             
