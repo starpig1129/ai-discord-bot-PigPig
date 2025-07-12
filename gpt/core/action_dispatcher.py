@@ -150,12 +150,8 @@ class ActionDispatcher:
         action_list = await self._get_action_list(prompt, final_dialogue_history,
                                                image_data)
         
-        async def execute_action(message_to_edit: Any, dialogue_history: Dict,
-                                 channel_id: int, original_prompt: str,
+        async def execute_action(message_to_edit: Any, original_prompt: str,
                                  message: Any):
-            if channel_id not in dialogue_history:
-                dialogue_history[channel_id] = []
-
             logger = self.bot.get_logger_for_guild(message_to_edit.guild.name)
             final_results = []
             logger.info(f"Executing actions: {action_list}")
@@ -205,7 +201,6 @@ class ActionDispatcher:
             
             # 生成 GPT 回應
             gptresponses = await gpt_message(message_to_edit, message, original_prompt, history_dict, image_data)
-            dialogue_history[channel_id].append({"role": "assistant", "content": gptresponses})
             logger.info(f'PigPig:{gptresponses}')
         
         return execute_action

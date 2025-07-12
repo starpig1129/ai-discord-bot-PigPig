@@ -58,8 +58,6 @@ def setup_logger(server_name):
 class PigPig(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.dialogue_history_file = './data/dialogue_history.json'
-        self.load_dialogue_history()
         self.loggers = {}
         self.action_dispatcher = ActionDispatcher(self)
         
@@ -86,19 +84,6 @@ class PigPig(commands.Bot):
         if guild_name not in self.loggers:
             self.loggers[guild_name] = setup_logger(guild_name)
 
-    def load_dialogue_history(self):
-        """從檔案中讀取對話歷史"""
-        try:
-            with open(self.dialogue_history_file, 'r', encoding='utf-8') as file:
-                self.dialogue_history = json.load(file)
-        except FileNotFoundError:
-            self.dialogue_history = {}
-
-    def save_dialogue_history(self):
-        """將對話歷史保存到檔案中"""
-        with open(self.dialogue_history_file, 'w', encoding='utf-8') as file:
-            json.dump(self.dialogue_history, file, ensure_ascii=False, indent=4)
-    
     async def initialize_memory_system(self):
         """初始化記憶系統"""
         try:
@@ -114,7 +99,7 @@ class PigPig(commands.Bot):
             if self.memory_enabled:
                 print("記憶系統初始化成功")
             else:
-                print("記憶系統初始化失敗，將使用傳統對話歷史")
+                print("記憶系統初始化失敗")
                 
         except Exception as e:
             print(f"記憶系統初始化失敗: {e}")
@@ -189,15 +174,9 @@ class PigPig(commands.Bot):
         
         await self.process_commands(message)
         
-        channel_id = str(message.channel.id)
-        if channel_id not in self.dialogue_history:
-            self.dialogue_history[channel_id] = []
-
         guild_id = str(message.guild.id)
         
         prompt = message.content.replace(f"<@{self.user.id}>","")
-        formatted_content = f"[{message.author.display_name}<@{message.author.id}>]: {prompt}"
-        self.dialogue_history[channel_id].append({"role": "user", "content": formatted_content})
         
         channel_manager = self.get_cog('ChannelManager')
         if channel_manager:
@@ -227,10 +206,9 @@ class PigPig(commands.Bot):
             message_to_edit = await message.reply("思考中...")
             try:
                 execute_action = await self.action_dispatcher.choose_act(prompt, message, message_to_edit)
-                await execute_action(message_to_edit, self.dialogue_history, channel_id, prompt, message)
+                await execute_action(message_to_edit, prompt, message)
             except Exception as e:
                 print(e)
-        self.save_dialogue_history()
     
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
         if before.author.bot or not before.guild:
@@ -240,10 +218,10 @@ class PigPig(commands.Bot):
         logger.info(
             f"訊息修改: 原訊息({before.content}) 新訊息({after.content}) 頻道:{before.channel.name}, 作者:{before.author}"
         )
-        channel_id = str(after.channel.id)
-        if channel_id not in self.dialogue_history:
-            self.dialogue_history[channel_id] = []
         
+        # 更新記憶系統中的訊息
+        await self.store_message_to_memory(after)
+
         guild_id = str(after.guild.id)
         channel_manager = self.get_cog('ChannelManager')
         if channel_manager:
@@ -257,9 +235,6 @@ class PigPig(commands.Bot):
         except AttributeError:  # 如果正則表達式沒有匹配到，會拋出 AttributeError
             prompt = after.content
         
-        formatted_content = f"[{after.author.display_name}<@{after.author.id}>]: {prompt}"
-        self.dialogue_history[channel_id].append({"role": "user", "content": formatted_content})
-        
         # 實現生成回應的邏輯
         if self.user.id in after.raw_mentions and not after.mention_everyone:
             try:
@@ -270,10 +245,9 @@ class PigPig(commands.Bot):
 
                 message_to_edit = await after.reply("思考中...")  # 创建新的回复
                 execute_action = await self.action_dispatcher.choose_act(prompt, after, message_to_edit)
-                await execute_action(message_to_edit, self.dialogue_history, channel_id, prompt, after)
+                await execute_action(message_to_edit, prompt, after)
             except Exception as e:
                 print(e)
-        self.save_dialogue_history()
         
     async def setup_hook(self) -> None:
         # Loading all the module in `cogs` folder
