@@ -529,9 +529,7 @@ class YTMusic(commands.Cog):
 
     def _get_guild_folder(self, guild_id: int) -> tuple:
         """Get guild queue and folder"""
-        queue = self.queue_manager.get_queue(guild_id)
-        folder = f"{self.settings.music_temp_base}/{guild_id}"
-        return queue, folder
+        return self.queue_manager.get_guild_queue_and_folder(guild_id)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
