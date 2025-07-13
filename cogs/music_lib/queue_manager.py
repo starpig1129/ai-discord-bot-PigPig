@@ -127,6 +127,18 @@ class QueueManager:
         
         return queue_copy, temp_queue
 
+    def get_queue_snapshot(self, guild_id: int) -> List[Dict[str, Any]]:
+        """獲取當前播放隊列的快照"""
+        queue = self.guild_queues.get(guild_id)
+        if not queue or queue.empty():
+            return []
+        return list(queue._queue).copy()
+
+    def clear_queue(self, guild_id: int):
+        """清空指定伺服器的播放隊列"""
+        if guild_id in self.guild_queues:
+            self.guild_queues[guild_id] = asyncio.Queue()
+
     def set_queue(self, guild_id: int, q: asyncio.Queue):
         """為特定 guild 設置佇列"""
         self.guild_queues[guild_id] = q

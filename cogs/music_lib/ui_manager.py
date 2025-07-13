@@ -8,7 +8,7 @@ from cogs.language_manager import LanguageManager
 
 class UIManager:
     def __init__(self, bot=None):
-        self._current_view = None
+        self.views: Dict[int, MusicControlView] = {}
         self.bot = bot
         self.lang_manager: Optional[LanguageManager] = None
         
@@ -46,86 +46,76 @@ class UIManager:
         except (KeyError, ValueError):
             return text
         
+    def get_current_view(self, guild_id: int) -> Optional[MusicControlView]:
+        return self.views.get(guild_id)
+
     async def update_player_ui(self, interaction: discord.Interaction, item: Dict[str, Any],
-                             current_message: Optional[discord.Message], youtube_manager, player=None) -> discord.Message:
+                             current_message: Optional[discord.Message], youtube_manager, music_cog) -> discord.Message:
         """Update or create the music player UI"""
         try:
-            guild_id = str(interaction.guild.id) if interaction.guild else None
-            embed = self._create_player_embed(item, youtube_manager, guild_id)
-            view = MusicControlView(interaction, player)  # Pass the player instance
+            guild_id = interaction.guild.id
+            guild_id_str = str(guild_id)
+            embed = self._create_player_embed(item, youtube_manager, guild_id_str)
+
+            callbacks = {
+                "previous_callback": music_cog.handle_previous,
+                "toggle_playback_callback": music_cog.handle_toggle_playback,
+                "skip_callback": music_cog.handle_skip,
+                "stop_callback": music_cog.handle_stop,
+                "toggle_mode_callback": music_cog.handle_toggle_mode,
+                "toggle_shuffle_callback": music_cog.handle_toggle_shuffle,
+                "show_queue_callback": music_cog.handle_show_queue,
+                "get_queue_manager": music_cog.get_queue_manager,
+                "get_state_manager": music_cog.get_state_manager,
+                "get_voice_client": lambda: music_cog.get_voice_client(guild_id),
+                "get_lang_manager": music_cog.get_lang_manager,
+            }
+
+            view = MusicControlView(interaction, **callbacks)
+            self.views[guild_id] = view
+
+            state = music_cog.state_manager.get_state(guild_id)
             
-            # Get player state to track messages
-            state = player.state_manager.get_state(interaction.guild.id)
-            
-            # Clean up all old UI messages first
             for old_message in state.ui_messages:
                 try:
                     await old_message.delete()
                 except:
-                    pass  # Ignore cleanup failures
+                    pass
             state.ui_messages.clear()
             
-            # First try to use the existing message if available
+            message = None
             if current_message:
                 try:
                     await current_message.edit(embed=embed, view=view)
                     message = current_message
-                    # Add current message to tracking if successful
-                    state.ui_messages.append(message)
                 except (discord.errors.HTTPException, discord.errors.NotFound, discord.errors.Forbidden):
-                    current_message = None  # Mark as unavailable for retry
-            
-            # If no current message or edit failed, try to send a new message
-            if not current_message:
-                
-                # Try multiple methods to send the message
-                message = None
-                errors = []
-                
-                # Method 1: Try interaction followup
-                if not message:
-                    try:
-                        message = await interaction.followup.send(embed=embed, view=view)
-                    except Exception as e:
-                        errors.append(f"Followup failed: {str(e)}")
-                
-                # Method 2: Try interaction channel
-                if not message and interaction.channel:
-                    try:
+                    pass
+
+            if not message:
+                try:
+                    message = await interaction.followup.send(embed=embed, view=view)
+                except Exception:
+                    if interaction.channel:
                         message = await interaction.channel.send(embed=embed, view=view)
-                    except Exception as e:
-                        errors.append(f"Channel send failed: {str(e)}")
-                
-                # If all methods failed, log errors and raise the last exception
-                if not message:
-                    error_msg = "All UI update methods failed:\n" + "\n".join(errors)
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg)
-                
-                # Add new message to tracking list
-                state.ui_messages.append(message)
             
-            # Setup view properties
+            if not message:
+                raise RuntimeError("Failed to send or edit the player message.")
+
+            state.ui_messages.append(message)
+            
             view.message = message
             view.current_embed = embed
-            view.current_position = 0
             
-            # Update button states now that message is set
             await view.update_button_state()
             
-            # Handle update task
-            if self._current_view and self._current_view.update_task:
-                await self._cancel_update_task()
-            
-            self._current_view = view
-            view.update_task = asyncio.create_task(view.update_progress(item['duration']))
+            view.start_progress_updater(item['duration'])
             
             return message
             
         except Exception as e:
             logger.error(f"更新播放器UI失敗: {e}")
             raise
-            
+
     def _create_player_embed(self, item: Dict[str, Any], youtube_manager, guild_id: str = None) -> discord.Embed:
         """Create the player embed with song information"""
         # 使用翻譯系統獲取文字
@@ -183,10 +173,8 @@ class UIManager:
         return embed
         
             
-    async def _cancel_update_task(self):
-        """Cancel the current update task"""
-        self._current_view.update_task.cancel()
-        try:
-            await asyncio.wait_for(self._current_view.update_task, timeout=0.1)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
-            pass
+    async def cleanup_view(self, guild_id: int):
+        """Clean up the view for a specific guild."""
+        if guild_id in self.views:
+            view = self.views.pop(guild_id)
+            view.stop_progress_updater()

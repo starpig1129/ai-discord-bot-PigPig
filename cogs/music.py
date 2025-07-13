@@ -331,7 +331,7 @@ class YTMusic(commands.Cog):
                 state.current_song,
                 state.current_message,
                 self.youtube,
-                self
+                music_cog=self
             )
             self.state_manager.update_state(interaction.guild.id, current_message=message)
             
@@ -394,7 +394,7 @@ class YTMusic(commands.Cog):
             song,
             self.state_manager.get_state(interaction.guild.id).current_message,
             self.youtube,
-            self
+            music_cog=self
         )
         self.state_manager.update_state(interaction.guild.id, current_message=message)
         
@@ -531,30 +531,168 @@ class YTMusic(commands.Cog):
         """Get guild queue and folder"""
         return self.queue_manager.get_guild_queue_and_folder(guild_id)
 
+    # --- Callback Getters ---
+    def get_queue_manager(self) -> QueueManager:
+        return self.queue_manager
+
+    def get_state_manager(self) -> StateManager:
+        return self.state_manager
+
+    def get_voice_client(self, guild_id: int) -> Optional[discord.VoiceClient]:
+        guild = self.bot.get_guild(guild_id)
+        return guild.voice_client if guild else None
+
+    def get_lang_manager(self) -> Optional[LanguageManager]:
+        return self.lang_manager
+
+    # --- Callback Handlers ---
+    async def handle_previous(self, interaction: discord.Interaction):
+        voice_client = self.get_voice_client(interaction.guild.id)
+        if not voice_client:
+            await interaction.response.send_message(self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "no_music"), ephemeral=True)
+            return
+
+        if voice_client.is_playing() or voice_client.is_paused():
+            voice_client.stop()
+            view = self.ui_manager.get_current_view(interaction.guild.id)
+            if view:
+                await view.update_embed(
+                    interaction,
+                    self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "previous", user=interaction.user.name)
+                )
+
+    async def handle_toggle_playback(self, interaction: discord.Interaction):
+        voice_client = self.get_voice_client(interaction.guild.id)
+        view = self.ui_manager.get_current_view(interaction.guild.id)
+        if not voice_client or not view:
+            return
+
+        if voice_client.is_playing():
+            voice_client.pause()
+            view.stop_progress_updater()
+            await view.update_embed(interaction, self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "paused", user=interaction.user.name))
+        elif voice_client.is_paused():
+            voice_client.resume()
+            state = self.state_manager.get_state(interaction.guild.id)
+            if state.current_song:
+                view.start_progress_updater(state.current_song["duration"])
+            await view.update_embed(interaction, self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "resumed", user=interaction.user.name))
+        
+        await view.update_button_state()
+
+    async def handle_skip(self, interaction: discord.Interaction):
+        voice_client = self.get_voice_client(interaction.guild.id)
+        if not voice_client:
+            await interaction.response.send_message(self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "no_music"), ephemeral=True)
+            return
+        
+        view = self.ui_manager.get_current_view(interaction.guild.id)
+        if view:
+            view.stop_progress_updater()
+
+        voice_client.stop()
+        
+        if view:
+            await view.update_embed(interaction, self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "skipped", user=interaction.user.name))
+            await view.update_button_state()
+
+    async def handle_stop(self, interaction: discord.Interaction):
+        voice_client = self.get_voice_client(interaction.guild.id)
+        if not voice_client:
+            return
+
+        view = self.ui_manager.get_current_view(interaction.guild.id)
+        if view:
+            await view.update_embed(interaction, self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "stopped", user=interaction.user.name), discord.Color.red())
+
+        self.queue_manager.clear_queue(interaction.guild.id)
+        if voice_client.is_connected():
+            voice_client.stop()
+            await voice_client.disconnect()
+
+    async def handle_toggle_mode(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
+        current_mode = self.queue_manager.get_play_mode(guild_id)
+        
+        mode_order = ["no_loop", "loop_queue", "loop_single"]
+        current_index = mode_order.index(current_mode.value)
+        next_mode_str = mode_order[(current_index + 1) % len(mode_order)]
+        
+        self.queue_manager.set_play_mode(guild_id, PlayMode(next_mode_str))
+        
+        mode_name = self.lang_manager.translate(str(guild_id), "commands", "mode", "choices", next_mode_str)
+        
+        view = self.ui_manager.get_current_view(guild_id)
+        if view:
+            await view.update_button_state()
+            await view.update_embed(interaction, self.lang_manager.translate(str(guild_id), "system", "music", "controls", "mode_changed", user=interaction.user.name, mode=mode_name))
+
+    async def handle_toggle_shuffle(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
+        is_shuffle = self.queue_manager.toggle_shuffle(guild_id)
+        status_key = "enabled" if is_shuffle else "disabled"
+        status = self.lang_manager.translate(str(guild_id), "commands", "shuffle", "responses", status_key)
+        
+        view = self.ui_manager.get_current_view(guild_id)
+        if view:
+            await view.update_button_state()
+            await view.update_embed(interaction, self.lang_manager.translate(str(guild_id), "system", "music", "controls", "shuffle_toggled", user=interaction.user.name, status=status))
+
+    async def handle_show_queue(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
+        view = self.ui_manager.get_current_view(guild_id)
+        if not view or not view.current_embed:
+            await interaction.response.send_message(self.lang_manager.translate(str(guild_id), "system", "music", "controls", "update_failed"), ephemeral=True)
+            return
+
+        queue_text = await self.get_queue_text(guild_id)
+        view.current_embed.set_field_at(4, name=self.lang_manager.translate(str(guild_id), "system", "music", "player", "queue"), value=queue_text, inline=False)
+        await view.update_embed(interaction, view.current_embed.title, view.current_embed.color)
+
+    async def get_queue_text(self, guild_id: int) -> str:
+        """Generates the text for the queue display."""
+        guild_id_str = str(guild_id)
+        queue = self.queue_manager.get_queue(guild_id)
+        state = self.state_manager.get_state(guild_id)
+        
+        queue_items = self.queue_manager.get_queue_snapshot(guild_id)
+        
+        text = ""
+        if state.current_song:
+            minutes, seconds = divmod(float(state.current_song["duration"]), 60)
+            prefix = self.lang_manager.translate(guild_id_str, "system", "music", "controls", "now_playing_prefix")
+            text += f"{prefix} {state.current_song['title']} | {int(minutes):02d}:{int(seconds):02d}\n\n"
+        
+        if queue_items:
+            label = self.lang_manager.translate(guild_id_str, "system", "music", "controls", "queue_songs")
+            text += f"{label}\n"
+            for i, item in enumerate(queue_items, 1):
+                minutes, seconds = divmod(float(item["duration"]), 60)
+                text += f"{i}. {item['title']} | {int(minutes):02d}:{int(seconds):02d}\n"
+        
+        return text if text else self.lang_manager.translate(guild_id_str, "system", "music", "player", "queue_empty")
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         """Handle bot leaving voice channel"""
-        if member.bot and before.channel is not None and after.channel is None:
+        if member.id == self.bot.user.id and before.channel is not None and after.channel is None:
             guild_id = member.guild.id
             _, folder = self._get_guild_folder(guild_id)
             
-            # Get state before cleanup
-            state = self.state_manager.get_state(guild_id)
+            await self.ui_manager.cleanup_view(guild_id)
             
-            # Clean up UI messages
+            state = self.state_manager.get_state(guild_id)
             for message in state.ui_messages:
                 try:
                     await message.delete()
                 except:
-                    pass  # Ignore cleanup failures
+                    pass
             
-            # Cleanup other resources
             await self.audio_manager.cleanup_guild_files(guild_id, folder)
             self.queue_manager.clear_guild_data(guild_id)
             self.state_manager.clear_state(guild_id)
             
-            if logger.getLogger().isEnabledFor(logger.INFO):
-                logger.info(f"[音樂] 伺服器 ID： {member.guild.name}, 離開語音頻道")
+            logger.info(f"[音樂] 伺服器 ID： {member.guild.name}, 離開語音頻道並清理資源")
 
 async def setup(bot):
     """Initialize the music cog"""
