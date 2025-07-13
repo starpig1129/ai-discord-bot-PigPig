@@ -417,8 +417,17 @@ class YTMusic(commands.Cog):
         channel = interaction.channel
         
         try:
-            # Clean up file if not in single loop mode
-            if self.queue_manager.get_play_mode(guild_id) != PlayMode.LOOP_SINGLE:
+            state = self.state_manager.get_state(guild_id)
+            current_song = state.current_song
+            play_mode = self.queue_manager.get_play_mode(guild_id)
+    
+            # 如果是清單循環模式，將剛播放完的歌曲（包含檔案路徑）重新加入佇列
+            if play_mode == PlayMode.LOOP_QUEUE and current_song:
+                await self.queue_manager.add_to_queue(guild_id, current_song)
+                logger.info(f"[音樂] 在清單循環模式下，將 '{current_song['title']}' 重新加入佇列。")
+    
+            # 只有在非循環模式下才刪除檔案
+            if play_mode not in [PlayMode.LOOP_SINGLE, PlayMode.LOOP_QUEUE]:
                 await self.audio_manager.delete_file(guild_id, file_path)
             
             # Add more songs from playlist if needed
