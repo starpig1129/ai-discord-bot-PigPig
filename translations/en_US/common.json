@@ -191,9 +191,9 @@
         },
         "play": {
             "name": "play",
-            "description": "Play a video (URL or keywords)",
+            "description": "Play a video (URL or keywords) or refresh the UI",
             "options": {
-                "query": "Video URL or search keywords"
+                "query": "Video URL, search keywords, or leave blank to refresh UI"
             },
             "errors": {
                 "no_voice_channel": "Please join a voice channel first!",
@@ -205,14 +205,16 @@
                 "playback_error": "Error during playback",
                 "attempting_next": "Attempting to play the next song...",
                 "playback_failed_title": "Playback failed",
-                "playback_failed_desc": "Please use /play to try again."
+                "playback_failed_desc": "Please use /play to try again.",
+                "nothing_playing": "Nothing is currently playing."
             },
             "responses": {
                 "playlist_added": "Added {count} songs to the queue (Total: {total})",
                 "song_added": "Added to queue: {title}",
                 "select_song": "Please select a song to play:",
                 "search_results_title": "YouTube Search Results",
-                "queue_finished": "Playlist finished!"
+                "queue_finished": "Playlist finished!",
+                "refreshed_ui": "Refreshed the player interface."
             }
         },
         "set_channel_mode": {

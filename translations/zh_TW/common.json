@@ -191,9 +191,9 @@
         },
         "play": {
             "name": "play",
-            "description": "播放影片(網址或關鍵字)",
+            "description": "播放影片(網址或關鍵字) 或 刷新UI",
             "options": {
-                "query": "影片網址或搜尋關鍵字"
+                "query": "影片網址、搜尋關鍵字或留空以刷新UI"
             },
             "errors": {
                 "no_voice_channel": "請先加入語音頻道！",
@@ -205,14 +205,17 @@
                 "playback_error": "播放音樂時出錯",
                 "attempting_next": "正在嘗試播放下一首歌曲...",
                 "playback_failed_title": "播放失敗",
-                "playback_failed_desc": "請使用 /play 重新播放"
+                "playback_failed_desc": "請使用 /play 重新播放",
+                "nothing_playing": "目前沒有播放任何歌曲。"
             },
             "responses": {
                 "playlist_added": "已添加 {count} 首歌曲到播放清單 (共 {total} 首)",
                 "song_added": "已添加到播放清單：{title}",
                 "select_song": "請選擇要播放的歌曲：",
                 "search_results_title": "YouTube搜尋結果",
-                "queue_finished": "播放清單已播放完畢！"
+                "queue_finished": "播放清單已播放完畢！",
+                "refreshed_ui": "已刷新播放介面。",
+                "recovering_state": "偵測到播放狀態異常，正在嘗試恢復..."
             }
         },
         "set_channel_mode": {

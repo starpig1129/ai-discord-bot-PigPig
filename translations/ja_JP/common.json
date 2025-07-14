@@ -191,9 +191,9 @@
         },
         "play": {
             "name": "play",
-            "description": "動画を再生（URLまたはキーワード）",
+            "description": "動画を再生（URLまたはキーワード）またはUIを更新",
             "options": {
-                "query": "動画URLまたは検索キーワード"
+                "query": "動画URL、検索キーワード、またはUIを更新するには空のままにします"
             },
             "errors": {
                 "no_voice_channel": "まずボイスチャンネルに参加してください！",
@@ -205,14 +205,16 @@
                 "playback_error": "再生中にエラーが発生しました",
                 "attempting_next": "次の曲を再生しようとしています...",
                 "playback_failed_title": "再生に失敗しました",
-                "playback_failed_desc": "/play を使用して再試行してください。"
+                "playback_failed_desc": "/play を使用して再試行してください。",
+                "nothing_playing": "現在再生中の曲はありません。"
             },
             "responses": {
                 "playlist_added": "キューに{count}曲を追加しました（合計：{total}曲）",
                 "song_added": "キューに追加しました：{title}",
                 "select_song": "再生する曲を選択してください：",
                 "search_results_title": "YouTube検索結果",
-                "queue_finished": "プレイリストの再生が完了しました！"
+                "queue_finished": "プレイリストの再生が完了しました！",
+                "refreshed_ui": "プレーヤーインターフェースを更新しました。"
             }
         },
         "set_channel_mode": {

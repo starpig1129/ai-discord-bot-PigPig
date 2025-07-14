@@ -31,6 +31,8 @@ import logging
 import asyncio
 from typing import Optional
 from discord.ext import commands
+from cogs.music_lib.state_manager import StateManager
+from cogs.music_lib.ui_manager import UIManager
 from gpt.core.action_dispatcher import ActionDispatcher
 from gpt.core.response_generator import get_model_and_tokenizer
 from logs import TimedRotatingFileHandler
@@ -64,6 +66,10 @@ class PigPig(commands.Bot):
         # 記憶系統初始化
         self.memory_manager: Optional[MemoryManager] = None
         self.memory_enabled = False
+        
+        # 音樂系統管理器
+        self.state_manager = StateManager()
+        self.ui_manager = UIManager(self)
         
         # 優化系統初始化
         self.optimization_enabled = False

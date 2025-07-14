@@ -8,6 +8,7 @@ from ..queue_manager import PlayMode
 
 class MusicControlView(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, *,
+                 song_info: dict,  # Add song_info
                  previous_callback, toggle_playback_callback, skip_callback, stop_callback,
                  toggle_mode_callback, toggle_shuffle_callback, show_queue_callback,
                  get_queue_manager, get_state_manager, get_voice_client, get_lang_manager):
@@ -15,6 +16,7 @@ class MusicControlView(discord.ui.View):
         self.guild = interaction.guild
         self.message = None
         self.current_embed = None
+        self.song_info = song_info  # Store song_info
         self.lang_manager: Optional[LanguageManager] = None
         self._is_updating = False
         self.update_task = None

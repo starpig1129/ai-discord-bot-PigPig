@@ -71,7 +71,12 @@ class UIManager:
                 "get_lang_manager": music_cog.get_lang_manager,
             }
 
-            view = MusicControlView(interaction, **callbacks)
+            # 在創建新 View 之前，先停止舊 View 的背景任務
+            if guild_id in self.views:
+                old_view = self.views[guild_id]
+                old_view.stop_progress_updater()
+
+            view = MusicControlView(interaction, song_info=item, **callbacks)
             self.views[guild_id] = view
 
             state = music_cog.state_manager.get_state(guild_id)
