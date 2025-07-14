@@ -75,7 +75,7 @@ class SongSelectMenu(discord.ui.Select):
     def __init__(self, results, view):
         self.view_parent = view  # 儲存父 view 以存取翻譯方法
         options = []
-        for i, result in enumerate(results[:5], 1):  # Limit to 5 choices
+        for i, result in enumerate(results, 1):
             # Format duration from seconds to MM:SS
             duration_secs = result.get('duration', 0)
             minutes, seconds = divmod(duration_secs, 60)
