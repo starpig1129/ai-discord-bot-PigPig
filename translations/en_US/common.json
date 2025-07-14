@@ -730,7 +730,8 @@
                 "progress": "🎵 Progress",
                 "queue": "📜 Queue",
                 "queue_empty": "Queue is empty",
-                "added_by": "Added by {user}"
+                "added_by": "Added by {user}",
+                "live": "Live"
             },
             "controls": {
                 "no_music": "❌ No music is currently playing!",

@@ -142,6 +142,10 @@ class MusicControlView(discord.ui.View):
                 logger.error(f"Failed to update button state: {e}")
 
     def start_progress_updater(self, duration: int):
+        # 如果是直播，則不啟動進度更新器
+        if self.song_info.get('is_live', False):
+            return
+            
         if self.update_task:
             self.update_task.cancel()
         self.current_position = 0
@@ -154,6 +158,10 @@ class MusicControlView(discord.ui.View):
             self._is_updating = False
 
     async def update_progress(self, duration):
+        # 如果是直播，則不更新進度
+        if self.song_info.get('is_live', False):
+            return
+
         try:
             if self._is_updating:
                 return

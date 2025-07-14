@@ -199,7 +199,8 @@ class YouTubeManager:
                         "views": entry.get('view_count', 0),
                         "requester": interaction.user,
                         "user_avatar": interaction.user.avatar.url,
-                        "file_path": None  # 尚未下載
+                        "file_path": None,  # 尚未下載
+                        "is_live": entry.get('is_live', False) # 檢查是否為直播
                     }
                     for entry in info_dict['entries'][1:]
                 ]
@@ -245,8 +246,11 @@ class YouTubeManager:
             
             info_dict = await extract_info()
 
-            # 檢查影片時長是否超過限制
-            if info_dict.get('duration', 0) > self.time_limit:
+            # 檢查是否為直播
+            is_live = info_dict.get('is_live', False)
+
+            # 如果不是直播，才檢查影片時長
+            if not is_live and info_dict.get('duration', 0) > self.time_limit:
                 logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
                 return None, "影片時長過長！超過 30 分鐘"
 
@@ -254,13 +258,15 @@ class YouTubeManager:
             video_info = {
                 "file_path": None,  # 尚未下載
                 "title": info_dict.get('title', '未知標題'),
-                "url": url,
+                "url": info_dict.get('webpage_url', url),
+                "stream_url": info_dict.get('url') if is_live else None,
                 "duration": info_dict.get('duration', 0),
                 "video_id": info_dict.get('id', '未知ID'),
                 "author": info_dict.get('uploader', '未知上傳者'),
                 "views": info_dict.get('view_count', 0),
                 "requester": interaction.user,
-                "user_avatar": interaction.user.avatar.url
+                "user_avatar": interaction.user.avatar.url,
+                "is_live": is_live
             }
 
             return video_info, None
@@ -339,7 +345,28 @@ class YouTubeManager:
             
             info_dict = await extract_info()
 
-            # 檢查影片時長是否超過限制
+            # 檢查是否為直播
+            is_live = info_dict.get('is_live', False)
+
+            # 如果是直播，直接回傳資訊，不進行下載
+            if is_live:
+                logger.info(f"[音樂] 偵測到直播影片 (伺服器 ID: {interaction.guild.id}): {url}")
+                video_info = {
+                    "file_path": None,  # 直播沒有本地檔案路徑
+                    "title": info_dict.get('title', '未知標題'),
+                    "url": info_dict.get('webpage_url', url),
+                    "stream_url": info_dict.get('url'), # 直播流 URL
+                    "duration": 0,  # 直播沒有固定時長
+                    "video_id": info_dict.get('id', '未知ID'),
+                    "author": info_dict.get('uploader', '未知上傳者'),
+                    "views": info_dict.get('view_count', 0),
+                    "requester": interaction.user,
+                    "user_avatar": interaction.user.avatar.url,
+                    "is_live": True
+                }
+                return video_info, None
+
+            # 如果不是直播，才檢查影片時長
             if info_dict.get('duration', 0) > self.time_limit:
                 logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
                 return None, "影片時長過長！超過 30 分鐘"
@@ -391,13 +418,15 @@ class YouTubeManager:
                     video_info = {
                         "file_path": file_path,
                         "title": info_dict.get('title', '未知標題'),
-                        "url": url,
+                        "url": info_dict.get('webpage_url', url),
+                        "stream_url": None, # 非直播
                         "duration": info_dict.get('duration', 0),
                         "video_id": info_dict.get('id', '未知ID'),
                         "author": info_dict.get('uploader', '未知上傳者'),
                         "views": info_dict.get('view_count', 0),
                         "requester": interaction.user,
-                        "user_avatar": interaction.user.avatar.url
+                        "user_avatar": interaction.user.avatar.url,
+                        "is_live": False
                     }
 
                     return video_info, None

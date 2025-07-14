@@ -316,8 +316,8 @@ class YTMusic(commands.Cog):
             if voice_client.is_playing():
                 voice_client.stop()
             
-            file_path = state.current_song["file_path"]
-            audio_source = self.audio_manager.create_audio_source(file_path)
+            song = state.current_song
+            audio_source = self.audio_manager.create_audio_source(song)
             
             message = await self.ui_manager.update_player_ui(
                 interaction, 
@@ -336,7 +336,7 @@ class YTMusic(commands.Cog):
                 loop = self.bot.loop
                 if loop and loop.is_running():
                     # Schedule the coroutine on the bot's event loop
-                    loop.create_task(self._handle_after_play(interaction, file_path))
+                    loop.create_task(self._handle_after_play(interaction, song))
                 
             voice_client.play(audio_source, after=after_callback)
         except Exception as e:
@@ -354,16 +354,19 @@ class YTMusic(commands.Cog):
             # Get and download next song
             next_song = await self.queue_manager.get_next_item(guild_id)
             if next_song:
-                _, folder = self._get_guild_folder(guild_id)
-                if not next_song.get('file_path'):
+                # 如果不是直播且沒有檔案路徑，則下載
+                if not next_song.get('is_live') and not next_song.get('file_path'):
+                    _, folder = self._get_guild_folder(guild_id)
                     downloaded_info, error = await self.youtube.download_audio(
-                        next_song['url'], 
-                        folder, 
+                        next_song['url'],
+                        folder,
                         interaction
                     )
                     if error:
+                        logger.error(f"下載失敗: {next_song['title']}")
                         return None
-                    next_song['file_path'] = downloaded_info['file_path']
+                    # 使用下載後的完整資訊更新歌曲字典
+                    next_song.update(downloaded_info)
             return next_song
         return None
 
@@ -381,7 +384,7 @@ class YTMusic(commands.Cog):
         if voice_client.is_playing():
             voice_client.stop()
             
-        audio_source = self.audio_manager.create_audio_source(song['file_path'])
+        audio_source = self.audio_manager.create_audio_source(song)
         message = await self.ui_manager.update_player_ui(
             interaction,
             song,
@@ -399,11 +402,11 @@ class YTMusic(commands.Cog):
             loop = self.bot.loop
             if loop and loop.is_running():
                 # Schedule the coroutine on the bot's event loop
-                loop.create_task(self._handle_after_play(interaction, song['file_path']))
+                loop.create_task(self._handle_after_play(interaction, song))
             
         voice_client.play(audio_source, after=after_callback)
 
-    async def _handle_after_play(self, interaction: discord.Interaction, file_path: str):
+    async def _handle_after_play(self, interaction: discord.Interaction, song: dict):
         """Handle cleanup after song finishes playing"""
         guild_id = interaction.guild.id
         guild_id_str = str(guild_id)
@@ -419,9 +422,11 @@ class YTMusic(commands.Cog):
                 await self.queue_manager.add_to_queue(guild_id, current_song)
                 logger.info(f"[音樂] 在清單循環模式下，將 '{current_song['title']}' 重新加入佇列。")
     
-            # 只有在非循環模式下才刪除檔案
-            if play_mode not in [PlayMode.LOOP_SINGLE, PlayMode.LOOP_QUEUE]:
-                await self.audio_manager.delete_file(guild_id, file_path)
+            # 只有在非循環且非直播的模式下才刪除檔案
+            if play_mode not in [PlayMode.LOOP_SINGLE, PlayMode.LOOP_QUEUE] and not song.get('is_live'):
+                file_path = song.get('file_path')
+                if file_path:
+                    await self.audio_manager.delete_file(guild_id, file_path)
             
             # Add more songs from playlist if needed
             queue = self.queue_manager.get_queue(guild_id)

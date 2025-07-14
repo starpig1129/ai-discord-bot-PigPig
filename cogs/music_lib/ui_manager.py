@@ -104,7 +104,9 @@ class UIManager:
             
             await view.update_button_state()
             
-            view.start_progress_updater(item['duration'])
+            # 只有在非直播時才啟動進度條
+            if not item.get('is_live', False):
+                view.start_progress_updater(item['duration'])
             
             return message
             
@@ -141,11 +143,17 @@ class UIManager:
             color=discord.Color.blue()
         )
         
-        # Add duration field
-        minutes, seconds = divmod(item['duration'], 60)
+        is_live = item.get('is_live', False)
+
         embed.add_field(name=uploader_text, value=item['author'], inline=True)
-        embed.add_field(name=duration_text, value=f"{int(minutes):02d}:{int(seconds):02d}", inline=True)
-        
+
+        if is_live:
+            live_text = self._translate_music(guild_id, "player", "live")
+            embed.add_field(name=duration_text, value=f"**{live_text}** 🔴", inline=True)
+        else:
+            minutes, seconds = divmod(item['duration'], 60)
+            embed.add_field(name=duration_text, value=f"{int(minutes):02d}:{int(seconds):02d}", inline=True)
+
         # Add views field
         try:
             views = int(float(item.get('views', 0)))
@@ -154,9 +162,11 @@ class UIManager:
             views_str = "N/A"
         embed.add_field(name=views_text, value=views_str, inline=True)
         
-        # Add progress bar
-        progress_bar = ProgressDisplay.create_progress_bar(0, item['duration'])
-        embed.add_field(name=progress_text, value=progress_bar, inline=False)
+        # Add progress bar only if not live
+        if not is_live:
+            progress_bar = ProgressDisplay.create_progress_bar(0, item['duration'])
+            embed.add_field(name=progress_text, value=progress_bar, inline=False)
+        
         embed.add_field(name=queue_text, value=queue_empty_text, inline=False)
         
         # Add thumbnail
