@@ -102,18 +102,16 @@ class YTMusic(commands.Cog):
                      return
             title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "no_voice_channel")
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-            message = await interaction.response.send_message(embed=embed)
-            state = self.state_manager.get_state(interaction.guild.id)
-            state.ui_messages.append(message)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         # 如果有提供查詢，將音樂加入播放清單
         if query:
             logger.info(f"[音樂] 伺服器 ID： {interaction.guild.name}, 使用者名稱： {interaction.user.name}, 使用者輸入： {query}")
-            await interaction.response.defer()
             
             # 檢查是否為URL
             if "youtube.com" in query or "youtu.be" in query:
+                await interaction.response.defer(ephemeral=True)
                 # 檢查是否為播放清單
                 if "list" in query:
                     await self._handle_playlist(interaction, query)
@@ -139,10 +137,7 @@ class YTMusic(commands.Cog):
         if error:
             title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "playlist_download_failed", error=error)
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-            message = await interaction.followup.send(embed=embed)
-            # Track error message
-            state = self.state_manager.get_state(guild_id)
-            state.ui_messages.append(message)
+            await interaction.followup.send(embed=embed, ephemeral=True)
             return
             
         # Add initial songs to queue
@@ -166,10 +161,7 @@ class YTMusic(commands.Cog):
             description=description,
             color=discord.Color.blue()
         )
-        message = await interaction.followup.send(embed=embed)
-        # Track playlist message
-        state = self.state_manager.get_state(guild_id)
-        state.ui_messages.append(message)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     async def _handle_single_video(self, interaction: discord.Interaction, url: str) -> bool:
         """Handle single video URL"""
@@ -186,8 +178,7 @@ class YTMusic(commands.Cog):
                 description=desc,
                 color=discord.Color.red()
             )
-            message = await interaction.followup.send(embed=embed)
-            state.ui_messages.append(message)
+            await interaction.followup.send(embed=embed, ephemeral=True)
             return False
             
         _, folder = self._get_guild_folder(guild_id)
@@ -201,28 +192,24 @@ class YTMusic(commands.Cog):
         if error:
             title = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "video_info_failed", error=error)
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-            message = await interaction.followup.send(embed=embed)
-            state.ui_messages.append(message)
+            await interaction.followup.send(embed=embed, ephemeral=True)
             return False
             
         await self.queue_manager.add_to_queue(guild_id, video_info)
         title = self.lang_manager.translate(guild_id_str, "commands", "play", "responses", "song_added", title=video_info['title'])
         embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
-        message = await interaction.followup.send(embed=embed)
-        state.ui_messages.append(message)
+        await interaction.followup.send(embed=embed, ephemeral=True)
         return True
 
     async def _handle_search(self, interaction: discord.Interaction, query: str):
         """Handle search query"""
+        await interaction.response.defer(ephemeral=True, thinking=True)
         results = await self.youtube.search_videos(query)
         guild_id = str(interaction.guild.id)
         if not results:
             title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "no_results")
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-            message = await interaction.followup.send(embed=embed)
-            # Track error message
-            state = self.state_manager.get_state(guild_id)
-            state.ui_messages.append(message)
+            await interaction.followup.send(embed=embed, ephemeral=True)
             return
         
         # Format durations properly
@@ -243,21 +230,7 @@ class YTMusic(commands.Cog):
             color=discord.Color.blue()
         )
         
-        # Get state for message tracking
-        state = self.state_manager.get_state(interaction.guild.id)
-        
-        try:
-            message = await interaction.followup.send(embed=embed, view=view)
-        except discord.errors.HTTPException as e:
-            if e.code == 50027:  # Invalid Webhook Token
-                message = await interaction.channel.send(embed=embed, view=view)
-            else:
-                logger.error(f"Failed to send search results: {e}")
-                raise
-        
-        # Track search results message
-        if message:
-            state.ui_messages.append(message)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     async def play_next(self, interaction: discord.Interaction, force_new: bool = False):
         """Play the next song in queue"""
@@ -606,18 +579,43 @@ class YTMusic(commands.Cog):
             await view.update_button_state()
 
     async def handle_stop(self, interaction: discord.Interaction):
-        voice_client = self.get_voice_client(interaction.guild.id)
+        guild_id = interaction.guild.id
+        voice_client = self.get_voice_client(guild_id)
+        state = self.state_manager.get_state(guild_id)
+
         if not voice_client:
+            await interaction.response.send_message(self.lang_manager.translate(str(guild_id), "system", "music", "controls", "no_music"), ephemeral=True)
             return
 
-        view = self.ui_manager.get_current_view(interaction.guild.id)
-        if view:
-            await view.update_embed(interaction, self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "stopped", user=interaction.user.name), discord.Color.red())
-
-        self.queue_manager.clear_queue(interaction.guild.id)
-        if voice_client.is_connected():
+        # Stop playback and disconnect
+        if voice_client.is_playing() or voice_client.is_paused():
             voice_client.stop()
+        if voice_client.is_connected():
             await voice_client.disconnect()
+
+        # Clean up all UI messages
+        for message in state.ui_messages:
+            try:
+                await message.delete()
+            except (discord.errors.NotFound, discord.errors.Forbidden):
+                pass
+        
+        # Clean up the view
+        await self.ui_manager.cleanup_view(guild_id)
+
+        # Clear queue and state
+        self.queue_manager.clear_queue(guild_id)
+        self.state_manager.clear_state(guild_id)
+        
+        # Send a final confirmation message
+        stopped_text = self.lang_manager.translate(str(guild_id), "system", "music", "controls", "stopped", user=interaction.user.name)
+        embed = discord.Embed(title=f"{stopped_text}", color=discord.Color.red())
+        
+        # Check if the interaction is already responded to
+        if not interaction.response.is_done():
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
     async def handle_toggle_mode(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id

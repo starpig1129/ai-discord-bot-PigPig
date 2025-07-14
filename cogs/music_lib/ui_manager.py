@@ -76,31 +76,22 @@ class UIManager:
 
             state = music_cog.state_manager.get_state(guild_id)
             
+            # Clean up all previous UI messages
             for old_message in state.ui_messages:
                 try:
                     await old_message.delete()
-                except:
+                except (discord.errors.NotFound, discord.errors.Forbidden):
                     pass
             state.ui_messages.clear()
-            
-            message = None
-            if current_message:
-                try:
-                    await current_message.edit(embed=embed, view=view)
-                    message = current_message
-                except (discord.errors.HTTPException, discord.errors.NotFound, discord.errors.Forbidden):
-                    pass
 
-            if not message:
-                try:
-                    message = await interaction.followup.send(embed=embed, view=view)
-                except Exception:
-                    if interaction.channel:
-                        message = await interaction.channel.send(embed=embed, view=view)
+            # Always send a new message to ensure it's at the bottom
+            message = await interaction.channel.send(embed=embed, view=view)
             
             if not message:
-                raise RuntimeError("Failed to send or edit the player message.")
+                raise RuntimeError("Failed to send the new player message.")
 
+            # Track the new player message
+            state.current_message = message
             state.ui_messages.append(message)
             
             view.message = message

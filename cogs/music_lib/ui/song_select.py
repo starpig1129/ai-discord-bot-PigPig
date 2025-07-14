@@ -125,17 +125,17 @@ class SongSelectMenu(discord.ui.Select):
                 raise ValueError("View not found")
                 
             # Acknowledge the interaction first
-            await interaction.response.defer(ephemeral=False)
+            await interaction.response.defer()
             
-            # Disable the select menu
+            # Disable the select menu and update the original message
             self.disabled = True
-            try:
-                if hasattr(interaction, 'message'):
-                    await interaction.message.edit(view=view)
-            except Exception as e:
-                logger.error(f"Failed to update view: {e}")
-                # Continue anyway since this is not critical
-            
+            processing_embed = discord.Embed(
+                title=self.view_parent._translate_music("select", "processing"),
+                description=self.view_parent._translate_music("select", "processing_desc"),
+                color=discord.Color.blue()
+            )
+            await view.original_interaction.edit_original_response(embed=processing_embed, view=None)
+
             # Add song to queue
             guild_id = interaction.guild.id
             queue = view.player.queue_manager.get_queue(guild_id)
@@ -146,51 +146,34 @@ class SongSelectMenu(discord.ui.Select):
                     description=self.view_parent._translate_music("select", "wait_message"),
                     color=discord.Color.red()
                 )
-                await interaction.followup.send(embed=embed)
+                await view.original_interaction.edit_original_response(embed=embed, view=None)
                 return
-                
-            # Send processing message
-            processing_embed = discord.Embed(
-                title=self.view_parent._translate_music("select", "processing"),
-                description=self.view_parent._translate_music("select", "processing_desc"),
-                color=discord.Color.blue()
-            )
-            await interaction.followup.send(embed=processing_embed)
                 
             _, folder = view.player._get_guild_folder(guild_id)
             should_download = queue.qsize() == 0
             
             if should_download:
                 video_info, error = await view.player.youtube.download_audio(
-                    selected_song['url'], 
-                    folder, 
+                    selected_song['url'],
+                    folder,
                     interaction
                 )
             else:
                 video_info, error = await view.player.youtube.get_video_info_without_download(
-                    selected_song['url'], 
+                    selected_song['url'],
                     interaction
                 )
                 
             if error:
                 embed = discord.Embed(title=f"❌ | {error}", color=discord.Color.red())
-                await interaction.followup.send(embed=embed)
+                await view.original_interaction.edit_original_response(embed=embed, view=None)
                 return
                 
             await view.player.queue_manager.add_to_queue(guild_id, video_info)
-            try:
-                success_message = self.view_parent._translate_music("select", "added", title=video_info['title'])
-                embed = discord.Embed(title=success_message, color=discord.Color.blue())
-                await interaction.followup.send(embed=embed)
-            except discord.errors.HTTPException as e:
-                if e.code == 50027:  # Invalid Webhook Token
-                    try:
-                        # Try to send directly to channel
-                        await interaction.channel.send(embed=embed)
-                    except Exception as inner_e:
-                        logger.error(f"Failed to send queue addition message: {inner_e}")
-                else:
-                    raise
+            
+            success_message = self.view_parent._translate_music("select", "added", title=video_info['title'])
+            embed = discord.Embed(title=success_message, color=discord.Color.blue())
+            await view.original_interaction.edit_original_response(embed=embed, view=None)
             
             # Start playing if not already playing
             voice_client = interaction.guild.voice_client
