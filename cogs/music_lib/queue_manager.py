@@ -154,17 +154,9 @@ class QueueManager:
     async def add_to_queue(self, guild_id: int, item: Dict[str, Any], force: bool = False):
         """
         將項目添加到佇列，並根據添加者（使用者或自動播放）應用不同的邏輯。
-
-        - 使用者新增：插入到自動播放歌曲之前，並移除超出總長度限制的自動播放歌曲。
-        - 自動播放新增：添加到佇列末尾。
         """
         q = self.get_queue(guild_id)
         queue_list = list(q._queue)
-
-        # 檢查佇列是否已滿
-        if len(queue_list) >= self.MAX_QUEUE_SIZE:
-            logger.warning(f"佇列已滿 (guild_id: {guild_id})，無法新增歌曲。")
-            return
 
         # 除非強制，否則檢查歌曲是否已存在於佇列中
         if not force:
@@ -177,6 +169,20 @@ class QueueManager:
 
         if added_by_user:
             # 使用者新增歌曲
+            if len(queue_list) >= self.MAX_QUEUE_SIZE:
+                # 佇列已滿，嘗試從末尾移除一首自動播放的歌曲
+                autoplay_song_removed = False
+                for i in range(len(queue_list) - 1, -1, -1):
+                    if queue_list[i].get('added_by') == self.bot.user.id:
+                        del queue_list[i]
+                        autoplay_song_removed = True
+                        break
+                
+                if not autoplay_song_removed:
+                    logger.warning(f"佇列已滿，且沒有自動播放歌曲可移除 (guild_id: {guild_id})。")
+                    return
+
+            # 找到第一首自動播放歌曲的索引
             insert_index = -1
             for i, song in enumerate(queue_list):
                 if song.get('added_by') == self.bot.user.id:
@@ -184,22 +190,16 @@ class QueueManager:
                     break
             
             if insert_index != -1:
+                # 將歌曲插入到第一首自動播放歌曲之前
                 queue_list.insert(insert_index, item)
             else:
+                # 如果沒有自動播放歌曲，則添加到末尾
                 queue_list.append(item)
-
-            # 移除超出總長度限制的自動播放歌曲
-            while len(queue_list) > self.MAX_QUEUE_SIZE:
-                for i in range(len(queue_list) - 1, -1, -1):
-                    if queue_list[i].get('added_by') == self.bot.user.id:
-                        del queue_list[i]
-                        break
-                else:
-                    # 如果沒有自動播放歌曲可移除，則無法新增
-                    logger.warning(f"佇列已滿，且沒有自動播放歌曲可移除 (guild_id: {guild_id})。")
-                    return
         else:
             # 自動播放新增歌曲
+            if len(queue_list) >= self.MAX_QUEUE_SIZE:
+                logger.warning(f"佇列已滿 (guild_id: {guild_id})，自動播放無法新增歌曲。")
+                return
             queue_list.append(item)
 
         # 重建佇列
@@ -208,22 +208,38 @@ class QueueManager:
             await new_queue.put(song)
         self.guild_queues[guild_id] = new_queue
 
-    async def add_to_front_of_queue(self, guild_id: int, item: Dict[str, Any]):
-        """將項目添加到佇列的前面"""
+    async def add_to_front_of_queue(self, guild_id: int, item: Dict[str, Any]) -> bool:
+        """將項目添加到佇列的前面，並處理佇列溢出。成功返回 True，失敗返回 False。"""
         q = self.get_queue(guild_id)
         queue_list = list(q._queue)
 
-        # 檢查歌曲是否已存在於佇列中
         video_id = item.get('video_id')
         if any(song.get('video_id') == video_id for song in queue_list):
             logger.info(f"歌曲 '{item.get('title')}' 已存在於佇列中，跳過新增。")
-            return
+            return True
 
+        if len(queue_list) >= self.MAX_QUEUE_SIZE:
+            # 佇列已滿，嘗試從末尾移除一首自動播放的歌曲
+            autoplay_song_removed = False
+            for i in range(len(queue_list) - 1, -1, -1):
+                if queue_list[i].get('added_by') == self.bot.user.id:
+                    del queue_list[i]
+                    autoplay_song_removed = True
+                    break
+            
+            if not autoplay_song_removed:
+                logger.warning(f"佇列已滿，且沒有自動播放歌曲可移除 (guild_id: {guild_id})。")
+                return False
+
+        # 將歌曲新增到佇列前面
+        queue_list.insert(0, item)
+
+        # 重建佇列
         new_queue = asyncio.Queue()
-        await new_queue.put(item)
         for song in queue_list:
             await new_queue.put(song)
         self.guild_queues[guild_id] = new_queue
+        return True
 
     async def get_next_item(self, guild_id: int) -> Optional[Dict[str, Any]]:
         """從佇列中獲取下一個項目"""

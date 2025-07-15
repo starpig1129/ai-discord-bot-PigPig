@@ -190,19 +190,7 @@ class YTMusic(commands.Cog):
         guild_id = interaction.guild.id
         guild_id_str = str(guild_id)
         queue = self.queue_manager.get_queue(guild_id)
-        state = self.state_manager.get_state(guild_id)
         
-        if queue.qsize() >= 5:
-            title = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "queue_full_title")
-            desc = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "queue_full_desc")
-            embed = discord.Embed(
-                title=f"❌ | {title}",
-                description=desc,
-                color=discord.Color.red()
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return False
-            
         _, folder = self._get_guild_folder(guild_id)
         should_download = queue.qsize() == 0
         
@@ -218,11 +206,25 @@ class YTMusic(commands.Cog):
             return False
             
         video_info['added_by'] = interaction.user.id
-        await self.queue_manager.add_to_front_of_queue(guild_id, video_info)
-        title = self.lang_manager.translate(guild_id_str, "commands", "play", "responses", "song_added", title=video_info['title'])
-        embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        return True
+        
+        # 將歌曲加入佇列並檢查結果
+        success = await self.queue_manager.add_to_front_of_queue(guild_id, video_info)
+        
+        if success:
+            title = self.lang_manager.translate(guild_id_str, "commands", "play", "responses", "song_added", title=video_info['title'])
+            embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return True
+        else:
+            title = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "queue_full_title")
+            desc = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "queue_full_desc")
+            embed = discord.Embed(
+                title=f"❌ | {title}",
+                description=desc,
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return False
 
     async def _handle_search(self, interaction: discord.Interaction, query: str):
         """Handle search query"""
