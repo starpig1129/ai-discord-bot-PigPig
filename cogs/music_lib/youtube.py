@@ -3,6 +3,7 @@ import logging as logger
 import subprocess
 import asyncio
 import yt_dlp
+import discord
 from youtube_search import YoutubeSearch
 from addons.settings import Settings
 
@@ -456,3 +457,65 @@ class YouTubeManager:
     def get_thumbnail_url(self, video_id):
         """取得影片縮圖 URL"""
         return f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+
+    async def get_related_videos(self, video_id: str, title: str, interaction: discord.Interaction, count: int = 5):
+        """
+        Get a list of related videos, first via yt-dlp, then falling back to title search.
+        """
+        related_videos = []
+        
+        # --- Method 1: Try to get related videos using yt-dlp ---
+        logger.info(f"正在為 video_id: {video_id} 尋找相關影片 (方法: yt-dlp)...")
+        try:
+            ydl_opts = {'format': 'bestaudio/best', 'quiet': True, 'no_warnings': True, 'extract_flat': True}
+            url = f"https://www.youtube.com/watch?v={video_id}"
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+                if 'entries' in info and info['entries']:
+                    for entry in info['entries']:
+                        if len(related_videos) >= count: break
+                        if not entry.get('is_live') and entry.get('ie_key') == 'Youtube' and entry.get('id') != video_id:
+                            related_videos.append({
+                                "file_path": None, "title": entry.get('title', '未知標題'),
+                                "url": f"https://www.youtube.com/watch?v={entry.get('id')}",
+                                "stream_url": None, "duration": entry.get('duration', 0),
+                                "video_id": entry.get('id', '未知ID'), "author": entry.get('uploader', '未知上傳者'),
+                                "views": entry.get('view_count', 0), "requester": interaction.user,
+                                "user_avatar": interaction.user.avatar.url, "is_live": False
+                            })
+            if related_videos:
+                logger.info(f"yt-dlp 找到 {len(related_videos)} 個相關影片。")
+                return related_videos, None
+            logger.warning(f"yt-dlp 未能為 video_id: {video_id} 找到有效的相關影片。")
+        except Exception as e:
+            logger.error(f"使用 yt-dlp 獲取相關影片時出錯: {e}。正在嘗試使用標題搜尋...")
+
+        # --- Method 2: Fallback to searching by title ---
+        logger.info(f"正在為 video_id: {video_id} (標題: {title}) 尋找相關影片 (方法: 標題搜尋)...")
+        try:
+            results = await self.search_videos(title, max_results=count + 1)
+            if not results:
+                logger.warning(f"標題搜尋 '{title}' 未找到任何結果。")
+                return [], "找不到相關影片"
+
+            for video in results:
+                if len(related_videos) >= count: break
+                if video.get('video_id') != video_id:
+                    related_videos.append({
+                        "file_path": None, "title": video.get('title', '未知標題'),
+                        "url": video.get('url'), "stream_url": None,
+                        "duration": video.get('duration', 0), "video_id": video.get('video_id', '未知ID'),
+                        "author": video.get('author', '未知上傳者'), "views": video.get('views', 0),
+                        "requester": interaction.user, "user_avatar": interaction.user.avatar.url,
+                        "is_live": False
+                    })
+            
+            if related_videos:
+                logger.info(f"標題搜尋找到 {len(related_videos)} 個相關影片。")
+                return related_videos, None
+            
+            logger.warning(f"標題搜尋 '{title}' 只找到原始影片，沒有其他相關影片。")
+            return [], "找不到不同的相關影片"
+        except Exception as e:
+            logger.error(f"使用標題搜尋獲取相關影片時出錯: {e}")
+            return [], "獲取相關影片時出錯"

@@ -148,6 +148,15 @@ class QueueManager:
         q = self.get_queue(guild_id)
         await q.put(item)
 
+    async def add_to_front_of_queue(self, guild_id: int, item: Dict[str, Any]):
+        """將項目添加到佇列的前面"""
+        q = self.get_queue(guild_id)
+        new_queue = asyncio.Queue()
+        await new_queue.put(item)
+        while not q.empty():
+            await new_queue.put(await q.get())
+        self.guild_queues[guild_id] = new_queue
+
     async def get_next_item(self, guild_id: int) -> Optional[Dict[str, Any]]:
         """從佇列中獲取下一個項目"""
         q = self.get_queue(guild_id)

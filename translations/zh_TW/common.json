@@ -758,6 +758,12 @@
                 "processing_desc": "正在處理您的選擇，請稍候...",
                 "added": "✅ | 已添加到播放清單： {title}",
                 "error": "❌ | 選擇歌曲時發生錯誤"
+            },
+            "autoplay": {
+                "enabled": "開啟",
+                "disabled": "關閉",
+                "toggled": "自動播放已{status}",
+                "playing": "自動播放：已將 {song_title} 加入佇列"
             }
         }
     }

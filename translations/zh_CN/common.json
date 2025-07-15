@@ -770,6 +770,12 @@
                 "processing_desc": "正在处理您的选择，请稍候...",
                 "added": "✅ | 已添加到播放列表： {title}",
                 "error": "❌ | 选择歌曲时发生错误"
+            },
+            "autoplay": {
+                "enabled": "开启",
+                "disabled": "关闭",
+                "toggled": "自动播放已{status}",
+                "playing": "自动播放：已将 {song_title} 加入队列"
             }
         }
     }

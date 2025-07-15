@@ -8,10 +8,10 @@ from ..queue_manager import PlayMode
 
 class MusicControlView(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, *,
-                 song_info: dict,  # Add song_info
-                 previous_callback, toggle_playback_callback, skip_callback, stop_callback,
-                 toggle_mode_callback, toggle_shuffle_callback, show_queue_callback,
-                 get_queue_manager, get_state_manager, get_voice_client, get_lang_manager):
+                song_info: dict,  # Add song_info
+                previous_callback, toggle_playback_callback, skip_callback, stop_callback,
+                toggle_mode_callback, toggle_shuffle_callback, show_queue_callback, toggle_autoplay_callback,
+                get_queue_manager, get_state_manager, get_voice_client, get_lang_manager):
         super().__init__(timeout=None)
         self.guild = interaction.guild
         self.message = None
@@ -30,6 +30,7 @@ class MusicControlView(discord.ui.View):
         self.toggle_mode_callback = toggle_mode_callback
         self.toggle_shuffle_callback = toggle_shuffle_callback
         self.show_queue_callback = show_queue_callback
+        self.toggle_autoplay_callback = toggle_autoplay_callback
 
         # State/Manager Getters
         self.get_queue_manager = get_queue_manager
@@ -133,6 +134,13 @@ class MusicControlView(discord.ui.View):
                     is_shuffle = queue_manager.is_shuffle_enabled(guild_id)
                     child.style = discord.ButtonStyle.green if is_shuffle else discord.ButtonStyle.gray
                     child.emoji = discord.PartialEmoji.from_str('🔀')
+
+                # Autoplay button
+                elif child.custom_id == "toggle_autoplay":
+                    state = self.get_state_manager().get_state(guild_id)
+                    is_autoplay = state.autoplay
+                    child.style = discord.ButtonStyle.green if is_autoplay else discord.ButtonStyle.gray
+                    child.emoji = discord.PartialEmoji.from_str('🎶')
 
         # Only update message if requested and message exists
         if update_message and self.message:
@@ -317,3 +325,8 @@ class MusicControlView(discord.ui.View):
         await self.show_queue_callback(interaction)
         if not interaction.response.is_done():
             await interaction.response.defer()
+
+    @discord.ui.button(emoji='🎶', style=discord.ButtonStyle.gray, custom_id="toggle_autoplay")
+    async def toggle_autoplay(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """切換自動播放"""
+        await self.toggle_autoplay_callback(interaction)

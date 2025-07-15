@@ -215,7 +215,7 @@ class YTMusic(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return False
             
-        await self.queue_manager.add_to_queue(guild_id, video_info)
+        await self.queue_manager.add_to_front_of_queue(guild_id, video_info)
         title = self.lang_manager.translate(guild_id_str, "commands", "play", "responses", "song_added", title=video_info['title'])
         embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -328,47 +328,58 @@ class YTMusic(commands.Cog):
             )
             self.state_manager.update_state(interaction.guild.id, current_message=message)
             
-            def after_callback(error):
-                if error:
-                    logger.error(f"[音樂] 播放時發生錯誤: {error}")
-                
-                # Get the event loop from the bot
-                loop = self.bot.loop
-                if loop and loop.is_running():
-                    # Schedule the coroutine on the bot's event loop
-                    loop.create_task(self._handle_after_play(interaction, song))
-                
-            voice_client.play(audio_source, after=after_callback)
+            voice_client.play(audio_source)
+            # For single loop, the loop is handled by play_next, not the player loop
+            if not song.get('is_live') and self.queue_manager.get_play_mode(interaction.guild.id) != PlayMode.LOOP_SINGLE:
+                self.bot.loop.create_task(self._player_loop(interaction, song))
         except Exception as e:
             logger.error(f"[音樂] 單曲循環播放時出錯： {e}")
             await self.play_next(interaction, force_new=True)
 
     async def _get_next_song(self, interaction: discord.Interaction, guild_id: int, force_new: bool):
-        """Get the next song to play"""
-        if force_new or self.queue_manager.get_play_mode(guild_id) != PlayMode.LOOP_SINGLE:
-            # Handle queue loop
-            if self.queue_manager.get_queue(guild_id).empty():
-                if self.queue_manager.get_play_mode(guild_id) == PlayMode.LOOP_QUEUE:
-                    await self._refill_queue(guild_id)
-                    
-            # Get and download next song
+        """Get the next song to play, handling autoplay and ensuring download."""
+        guild_id_str = str(guild_id)
+        state = self.state_manager.get_state(guild_id)
+
+        # --- Autoplay Logic: Fill queue if empty ---
+        if state.autoplay and self.queue_manager.is_queue_empty(guild_id):
+            logger.info(f"[音樂] Autoplay 已啟用且佇列為空，正在填充推薦歌曲。")
+            song_to_recommend_from = state.current_song or state.last_played_song
+            if song_to_recommend_from:
+                video_id = song_to_recommend_from.get("video_id")
+                title = song_to_recommend_from.get("title")
+                if video_id and title:
+                    related_videos, error = await self.youtube.get_related_videos(video_id, title, interaction)
+                    if related_videos:
+                        logger.info(f"成功獲取 {len(related_videos)} 首推薦影片，正在加入佇列。")
+                        for video in related_videos:
+                            await self.queue_manager.add_to_queue(guild_id, video)
+                    else:
+                        logger.warning(f"無法獲取推薦影片: {error}")
+
+        # --- Queue Logic: Get next song ---
+        next_song = await self.queue_manager.get_next_item(guild_id)
+
+        # --- Loop Logic ---
+        if not next_song and self.queue_manager.get_play_mode(guild_id) == PlayMode.LOOP_QUEUE:
+            await self._refill_queue(guild_id)
             next_song = await self.queue_manager.get_next_item(guild_id)
-            if next_song:
-                # 如果不是直播且沒有檔案路徑，則下載
-                if not next_song.get('is_live') and not next_song.get('file_path'):
-                    _, folder = self._get_guild_folder(guild_id)
-                    downloaded_info, error = await self.youtube.download_audio(
-                        next_song['url'],
-                        folder,
-                        interaction
-                    )
-                    if error:
-                        logger.error(f"下載失敗: {next_song['title']}")
-                        return None
-                    # 使用下載後的完整資訊更新歌曲字典
-                    next_song.update(downloaded_info)
-            return next_song
-        return None
+
+        if not next_song:
+            return None
+
+        # --- Download Logic: Ensure song is downloaded before playing ---
+        if not next_song.get('is_live') and not next_song.get('file_path'):
+            logger.info(f"歌曲 '{next_song['title']}' 未下載，開始下載...")
+            _, folder = self._get_guild_folder(guild_id)
+            downloaded_info, error = await self.youtube.download_audio(next_song['url'], folder, interaction)
+            if error:
+                logger.error(f"下載失敗: {next_song['title']} - {error}")
+                # Skip to the next song if download fails
+                return await self._get_next_song(interaction, guild_id, force_new)
+            next_song.update(downloaded_info)
+
+        return next_song
 
     async def _refill_queue(self, guild_id: int):
         """Refill the queue with songs"""
@@ -392,19 +403,11 @@ class YTMusic(commands.Cog):
             self.youtube,
             music_cog=self
         )
-        self.state_manager.update_state(interaction.guild.id, current_message=message)
+        self.state_manager.update_state(interaction.guild.id, current_message=message, current_song=song, last_played_song=song)
         
-        def after_callback(error):
-            if error:
-                logger.error(f"[音樂] 播放時發生錯誤: {error}")
-            
-            # Get the event loop from the bot
-            loop = self.bot.loop
-            if loop and loop.is_running():
-                # Schedule the coroutine on the bot's event loop
-                loop.create_task(self._handle_after_play(interaction, song))
-            
-        voice_client.play(audio_source, after=after_callback)
+        voice_client.play(audio_source)
+        if not song.get('is_live'):
+            self.bot.loop.create_task(self._player_loop(interaction, song))
 
     async def _handle_after_play(self, interaction: discord.Interaction, song: dict):
         """Handle cleanup after song finishes playing"""
@@ -441,51 +444,7 @@ class YTMusic(commands.Cog):
             
             # Create a new interaction-like object for UI updates
             if channel:
-                class DummyInteraction:
-                    def __init__(self, channel, guild, original_interaction):
-                        self.channel = channel
-                        self.guild = guild
-                        # Add response attribute
-                        class DummyResponse:
-                            def __init__(self):
-                                self.is_done = lambda: True
-                            async def send_message(self, *args, **kwargs):
-                                return await channel.send(*args, **kwargs)
-                        
-                        self.response = DummyResponse()
-                        # Create a complete user copy with all required attributes
-                        class DummyUser:
-                            def __init__(self, original_user):
-                                self.name = original_user.name
-                                self.display_name = original_user.display_name
-                                self.id = original_user.id
-                                self.mention = original_user.mention
-                                self.display_avatar = original_user.display_avatar
-                                self.avatar = type('Avatar', (), {'url': original_user.display_avatar.url})()
-                            
-                            def __getattr__(self, name):
-                                # Forward any other attribute access to the original user
-                                return getattr(original_interaction.user, name)
-                                
-                        self.user = DummyUser(original_interaction.user)
-                        # Create a followup object with proper send method
-                        class DummyFollowup:
-                            def __init__(self, channel):
-                                self._channel = channel
-                            
-                            async def send(self, *args, **kwargs):
-                                try:
-                                    return await self._channel.send(*args, **kwargs)
-                                except Exception as e:
-                                    logger.error(f"[音樂] 發送訊息失敗： {str(e)}")
-                                    raise
-                                    
-                        self.followup = DummyFollowup(channel)
-                        # Copy additional required attributes
-                        self.application_id = original_interaction.application_id
-                        self.id = original_interaction.id
-                        
-                new_interaction = DummyInteraction(channel, interaction.guild, interaction)
+                new_interaction = await self._create_dummy_interaction(channel, interaction.guild, interaction)
                 
                 # Play next song with new interaction object
                 try:
@@ -532,7 +491,7 @@ class YTMusic(commands.Cog):
                                 logger.error(f"[音樂] 發送錯誤訊息失敗： {str(final_error)}")
             
         except Exception as e:
-            logger.error(f"[音樂] 處理播放完成時出錯： {str(e)}")
+            logger.error(f"[音樂] 處理播放完成時出錯： {e}")
 
     def _get_guild_folder(self, guild_id: int) -> tuple:
         """Get guild queue and folder"""
@@ -630,7 +589,7 @@ class YTMusic(commands.Cog):
 
         # Clear queue and state
         self.queue_manager.clear_queue(guild_id)
-        self.state_manager.clear_state(guild_id)
+        self.state_manager.update_state(guild_id, current_song=None, last_played_song=None, current_message=None, current_view=None, ui_messages=[])
         
         # Send a final confirmation message
         stopped_text = self.lang_manager.translate(str(guild_id), "system", "music", "controls", "stopped", user=interaction.user.name)
@@ -681,17 +640,46 @@ class YTMusic(commands.Cog):
         view.current_embed.set_field_at(4, name=self.lang_manager.translate(str(guild_id), "system", "music", "player", "queue"), value=queue_text, inline=False)
         await view.update_embed(interaction, view.current_embed.title, view.current_embed.color)
 
+    async def handle_toggle_autoplay(self, interaction: discord.Interaction):
+        """切換自動播放模式"""
+        guild_id = interaction.guild.id
+        state = self.state_manager.get_state(guild_id)
+        state.autoplay = not state.autoplay
+        self.state_manager.update_state(guild_id, autoplay=state.autoplay)
+        logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, Autoplay 狀態切換為: {state.autoplay}")
+
+        view = self.ui_manager.get_current_view(guild_id)
+        if view:
+            await view.update_button_state()
+
+        status_key = "enabled" if state.autoplay else "disabled"
+        status_str = self.lang_manager.translate(str(guild_id), "system", "music", "autoplay", status_key)
+        
+        title = self.lang_manager.translate(str(guild_id), "system", "music", "autoplay", "toggled", status=status_str)
+        
+        await interaction.response.send_message(f"✅ | {title}", ephemeral=True, delete_after=5)
+
+        # If autoplay is enabled, check if the upcoming queue is empty to fill it
+        if state.autoplay and len(self.queue_manager.get_queue_snapshot(interaction.guild.id)) == 0:
+            logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, Autoplay 已啟用且待播清單為空，立即觸發推薦填充。")
+            self.bot.loop.create_task(self._fill_autoplay_queue(interaction))
+
+        # If autoplay is enabled and nothing is playing, start it
+        voice_client = interaction.guild.voice_client
+        if state.autoplay and not (voice_client and voice_client.is_playing()):
+            logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 觸發閒置時的 Autoplay。")
+            self.bot.loop.create_task(self.play_next(interaction))
+
     async def get_queue_text(self, guild_id: int) -> str:
         """Generates the text for the queue display."""
         guild_id_str = str(guild_id)
-        queue = self.queue_manager.get_queue(guild_id)
         state = self.state_manager.get_state(guild_id)
         
         queue_items = self.queue_manager.get_queue_snapshot(guild_id)
         
         text = ""
         if state.current_song:
-            minutes, seconds = divmod(float(state.current_song["duration"]), 60)
+            minutes, seconds = divmod(float(state.current_song.get("duration", 0)), 60)
             prefix = self.lang_manager.translate(guild_id_str, "system", "music", "controls", "now_playing_prefix")
             text += f"{prefix} {state.current_song['title']} | {int(minutes):02d}:{int(seconds):02d}\n\n"
         
@@ -699,10 +687,38 @@ class YTMusic(commands.Cog):
             label = self.lang_manager.translate(guild_id_str, "system", "music", "controls", "queue_songs")
             text += f"{label}\n"
             for i, item in enumerate(queue_items, 1):
-                minutes, seconds = divmod(float(item["duration"]), 60)
+                duration = item.get("duration", 0)
+                minutes, seconds = divmod(float(duration), 60)
                 text += f"{i}. {item['title']} | {int(minutes):02d}:{int(seconds):02d}\n"
         
-        return text if text else self.lang_manager.translate(guild_id_str, "system", "music", "player", "queue_empty")
+        return text if text.strip() else self.lang_manager.translate(guild_id_str, "system", "music", "player", "queue_empty")
+
+    async def _fill_autoplay_queue(self, interaction: discord.Interaction):
+        """Fills the queue with recommended songs when autoplay is on."""
+        guild_id = interaction.guild.id
+        state = self.state_manager.get_state(guild_id)
+        
+        song_to_recommend_from = state.current_song or state.last_played_song
+        if song_to_recommend_from:
+            video_id = song_to_recommend_from.get("video_id")
+            title = song_to_recommend_from.get("title")
+            if video_id and title:
+                related_videos, error = await self.youtube.get_related_videos(video_id, title, interaction)
+                if related_videos:
+                    logger.info(f"成功獲取 {len(related_videos)} 首推薦影片，正在加入佇列。")
+                    for video in related_videos:
+                        await self.queue_manager.add_to_queue(guild_id, video)
+                    
+                    # Notify user that songs have been added
+                    channel = interaction.channel
+                    if channel:
+                        embed = discord.Embed(
+                            title=f"🎶 | 已自動為您加入 {len(related_videos)} 首推薦歌曲",
+                            color=discord.Color.blue()
+                        )
+                        await channel.send(embed=embed, delete_after=15)
+                else:
+                    logger.warning(f"無法獲取推薦影片: {error}")
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -725,6 +741,80 @@ class YTMusic(commands.Cog):
             self.state_manager.clear_state(guild_id)
             
             logger.info(f"[音樂] 伺服器 ID： {member.guild.name}, 離開語音頻道並清理資源")
+
+    async def _create_dummy_interaction(self, channel, guild, original_interaction):
+        """Creates a dummy interaction object for internal use."""
+        
+        class DummyUser:
+            def __init__(self, original_user):
+                self.name = original_user.name
+                self.display_name = original_user.display_name
+                self.id = original_user.id
+                self.mention = original_user.mention
+                self.display_avatar = original_user.display_avatar
+                self.avatar = type('Avatar', (), {'url': original_user.display_avatar.url})()
+            def __getattr__(self, name):
+                return getattr(original_interaction.user, name)
+
+        class DummyInteraction:
+            def __init__(self, channel, guild, user):
+                self.channel = channel
+                self.guild = guild
+                self.user = user
+                self.application_id = original_interaction.application_id
+                self.id = original_interaction.id
+                
+                class DummyResponse:
+                    def __init__(self):
+                        self.is_done = lambda: True
+                    async def send_message(self, *args, **kwargs):
+                        return await channel.send(*args, **kwargs)
+                self.response = DummyResponse()
+
+                class DummyFollowup:
+                    def __init__(self, channel):
+                        self._channel = channel
+                    async def send(self, *args, **kwargs):
+                        return await channel.send(*args, **kwargs)
+                self.followup = DummyFollowup(channel)
+
+        return DummyInteraction(channel, guild, DummyUser(original_interaction.user))
+
+
+    async def _player_loop(self, interaction: discord.Interaction, song: dict):
+        """Monitors the player and handles song completion."""
+        guild_id = interaction.guild.id
+        logger.info(f"[{guild_id}] Player loop started for '{song['title']}'.")
+        
+        await asyncio.sleep(2) # Wait for playback to start
+        
+        while True:
+            voice_client = self.get_voice_client(guild_id)
+            if not voice_client or not voice_client.is_connected():
+                logger.warning(f"[{guild_id}] Player loop exiting: voice client disconnected.")
+                return
+
+            if voice_client.is_paused():
+                await asyncio.sleep(1)
+                continue
+
+            if not voice_client.is_playing():
+                logger.info(f"[{guild_id}] Player loop detected song has finished.")
+                break
+            
+            await asyncio.sleep(1)
+        
+        state = self.state_manager.get_state(guild_id)
+        # Ensure we are still on the same song before triggering after_play
+        if state.current_song and state.current_song['video_id'] == song['video_id']:
+            logger.info(f"[{guild_id}] 歌曲 '{song['title']}' 播放完畢，觸發 _handle_after_play。")
+            # Use a new interaction object to avoid issues with expired interactions
+            channel = interaction.channel
+            if channel:
+                new_interaction = await self._create_dummy_interaction(channel, interaction.guild, interaction)
+                await self._handle_after_play(new_interaction, song)
+        else:
+            logger.info(f"[{guild_id}] Player loop for '{song['title']}' exiting without action. (Song might have been skipped).")
 
 async def setup(bot):
     """Initialize the music cog"""

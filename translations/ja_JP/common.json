@@ -770,6 +770,12 @@
                 "processing_desc": "選択を処理しています。しばらくお待ちください...",
                 "added": "✅ | 再生リストに追加されました: {title}",
                 "error": "❌ | 楽曲選択中にエラーが発生しました"
+            },
+            "autoplay": {
+                "enabled": "有効",
+                "disabled": "無効",
+                "toggled": "自動再生を{status}にしました",
+                "playing": "自動再生：{song_title} をキューに追加しました"
             }
         }
     }

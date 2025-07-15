@@ -757,6 +757,12 @@
                 "processing_desc": "Processing your selection, please wait...",
                 "added": "✅ | Added to queue: {title}",
                 "error": "❌ | Error occurred while selecting song"
+            },
+            "autoplay": {
+                "enabled": "enabled",
+                "disabled": "disabled",
+                "toggled": "Autoplay {status}",
+                "playing": "Autoplay: Added {song_title} to the queue"
             }
         }
     }

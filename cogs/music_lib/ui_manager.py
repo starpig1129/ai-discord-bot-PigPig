@@ -65,6 +65,7 @@ class UIManager:
                 "toggle_mode_callback": music_cog.handle_toggle_mode,
                 "toggle_shuffle_callback": music_cog.handle_toggle_shuffle,
                 "show_queue_callback": music_cog.handle_show_queue,
+                "toggle_autoplay_callback": music_cog.handle_toggle_autoplay,
                 "get_queue_manager": music_cog.get_queue_manager,
                 "get_state_manager": music_cog.get_state_manager,
                 "get_voice_client": lambda: music_cog.get_voice_client(guild_id),
