@@ -522,8 +522,9 @@ class YTMusic(commands.Cog):
 
         video_id = song_to_recommend_from.get("video_id")
         title = song_to_recommend_from.get("title")
-        if not video_id or not title:
-            logger.warning(f"無法觸發自動播放，因為缺少 video_id 或 title。")
+        author = song_to_recommend_from.get("author")
+        if not video_id or not title or not author:
+            logger.warning(f"無法觸發自動播放，因為缺少 video_id、title 或 author。")
             return
 
         # 建立一個包含當前歌曲和佇列中所有歌曲ID的集合，以供排除
@@ -532,7 +533,7 @@ class YTMusic(commands.Cog):
             exclude_ids.add(state.current_song.get('video_id'))
 
         related_videos, error = await self.youtube.get_related_videos(
-            video_id, title, interaction, limit=needed, exclude_ids=exclude_ids
+            video_id, title, author, interaction, limit=needed, exclude_ids=exclude_ids
         )
         if error:
             logger.warning(f"無法獲取推薦影片: {error}")
@@ -761,13 +762,16 @@ class YTMusic(commands.Cog):
         if song_to_recommend_from:
             video_id = song_to_recommend_from.get("video_id")
             title = song_to_recommend_from.get("title")
-            if video_id and title:
-                related_videos, error = await self.youtube.get_related_videos(video_id, title, interaction)
+            author = song_to_recommend_from.get("author")
+            if video_id and title and author:
+                related_videos, error = await self.youtube.get_related_videos(
+                    video_id, title, author, interaction, limit=5, exclude_ids=set()
+                )
                 if related_videos:
                     logger.info(f"成功獲取 {len(related_videos)} 首推薦影片，正在加入佇列。")
                     for video in related_videos:
                         await self.queue_manager.add_to_queue(guild_id, video)
-                    
+
                     # Notify user that songs have been added
                     channel = interaction.channel
                     if channel:

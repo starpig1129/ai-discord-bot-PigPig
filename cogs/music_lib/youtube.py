@@ -4,6 +4,8 @@ import subprocess
 import asyncio
 import yt_dlp
 import discord
+import random
+import re
 from youtube_search import YoutubeSearch
 from addons.settings import Settings
 
@@ -476,75 +478,127 @@ class YouTubeManager:
         """取得影片縮圖 URL"""
         return f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
 
-    async def get_related_videos(self, video_id: str, title: str, interaction: discord.Interaction, limit: int = 5, exclude_ids: set = None):
+    async def get_related_videos(self, video_id: str, title: str, author: str, interaction: discord.Interaction, limit: int = 5, exclude_ids: set = None):
         """
-        Get a list of related videos, filtering out any IDs in the exclude_ids set.
+        使用多層次策略獲取相關影片列表，並過濾掉 exclude_ids 中的影片。
+
+        策略:
+        1. 基於藝人/頻道搜尋。
+        2. 基於淨化後的標題搜尋。
+        3. 使用 yt-dlp 的 'up next' 列表作為備用。
         """
         if exclude_ids is None:
             exclude_ids = set()
-
-        related_videos = []
         
-        # --- Method 1: Try to get related videos using yt-dlp ---
-        logger.info(f"正在為 video_id: {video_id} 尋找相關影片 (方法: yt-dlp)...")
-        try:
-            ydl_opts = {'format': 'bestaudio/best', 'quiet': True, 'no_warnings': True, 'extract_flat': True}
-            
-            # 檢查並加入 cookies
-            cookies_path = self.settings.youtube_cookies_path
-            if os.path.exists(cookies_path):
-                logger.info(f"使用 Cookies 檔案: {cookies_path}")
-                ydl_opts['cookiefile'] = cookies_path
-            url = f"https://www.youtube.com/watch?v={video_id}"
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=False)
-                if 'entries' in info and info['entries']:
-                    for entry in info['entries']:
-                        if len(related_videos) >= limit: break
-                        entry_id = entry.get('id')
-                        if not entry.get('is_live') and entry.get('ie_key') == 'Youtube' and entry_id not in exclude_ids:
-                            related_videos.append({
-                                "file_path": None, "title": entry.get('title', '未知標題'),
-                                "url": f"https://www.youtube.com/watch?v={entry_id}",
-                                "stream_url": None, "duration": entry.get('duration', 0),
-                                "video_id": entry_id, "author": entry.get('uploader', '未知上傳者'),
-                                "views": entry.get('view_count', 0), "requester": interaction.user,
-                                "user_avatar": interaction.user.avatar.url, "is_live": False
-                            })
-            if related_videos:
-                logger.info(f"yt-dlp 找到 {len(related_videos)} 個相關影片。")
-                return related_videos, None
-            logger.warning(f"yt-dlp 未能為 video_id: {video_id} 找到有效的相關影片。")
-        except Exception as e:
-            logger.error(f"使用 yt-dlp 獲取相關影片時出錯: {e}。正在嘗試使用標題搜尋...")
+        final_results = []
+        # 確保當前影片ID也被排除
+        exclude_ids.add(video_id)
 
-        # --- Method 2: Fallback to searching by title ---
-        logger.info(f"正在為 video_id: {video_id} (標題: {title}) 尋找相關影片 (方法: 標題搜尋)...")
-        try:
-            results = await self.search_videos(title, max_results=limit + 5) # Fetch extra to allow for filtering
-            if not results:
-                logger.warning(f"標題搜尋 '{title}' 未找到任何結果。")
-                return [], "找不到相關影片"
-
+        # 輔助函式來處理和格式化搜尋結果
+        def process_search_results(results):
+            processed = []
             for video in results:
-                if len(related_videos) >= limit: break
                 video_id_res = video.get('video_id')
-                if video_id_res not in exclude_ids:
-                    related_videos.append({
-                        "file_path": None, "title": video.get('title', '未知標題'),
-                        "url": video.get('url'), "stream_url": None,
-                        "duration": video.get('duration', 0), "video_id": video_id_res,
-                        "author": video.get('author', '未知上傳者'), "views": video.get('views', 0),
-                        "requester": interaction.user, "user_avatar": interaction.user.avatar.url,
+                if video_id_res and video_id_res not in exclude_ids:
+                    processed.append({
+                        "file_path": None,
+                        "title": video.get('title', '未知標題'),
+                        "url": video.get('url'),
+                        "stream_url": None,
+                        "duration": video.get('duration', 0),
+                        "video_id": video_id_res,
+                        "author": video.get('author', '未知上傳者'),
+                        "views": video.get('views', 0),
+                        "requester": interaction.user,
+                        "user_avatar": interaction.user.avatar.url,
                         "is_live": False
                     })
+                    exclude_ids.add(video_id_res)
+            return processed
+
+        # --- 策略一: 基於藝人/頻道的搜尋 ---
+        if author and author != '未知上傳者':
+            logger.info(f"策略一: 正在為藝人 '{author}' 搜尋歌曲...")
+            try:
+                # 嘗試兩種搜尋查詢
+                queries = [f"{author} songs", author]
+                author_results = []
+                for query in queries:
+                    if len(author_results) >= limit:
+                        break
+                    results = await self.search_videos(query, max_results=limit + 10)
+                    author_results.extend(process_search_results(results))
+                
+                if author_results:
+                    # 增加隨機性
+                    num_to_add = min(limit - len(final_results), len(author_results))
+                    final_results.extend(random.sample(author_results, num_to_add))
+                    logger.info(f"策略一找到 {len(final_results)} 首歌曲。")
+
+            except Exception as e:
+                logger.error(f"策略一 (藝人搜尋) 失敗: {e}")
+
+        # --- 策略二: 基於淨化標題的搜尋 ---
+        if len(final_results) < limit:
+            logger.info("策略二: 正在使用淨化標題進行搜尋...")
+            try:
+                # 移除標題中的雜訊
+                clean_title = re.sub(r'\s*\(.*?(official|video|lyric|mv|audio|4k|hd).*?\)\s*|\[.*?\]', '', title, flags=re.IGNORECASE).strip()
+                if not clean_title or len(clean_title) < 3:
+                    clean_title = title # 如果淨化後標題太短，則使用原標題
+                
+                logger.info(f"原始標題: '{title}', 淨化後標題: '{clean_title}'")
+                
+                results = await self.search_videos(clean_title, max_results=limit + 10)
+                title_results = process_search_results(results)
+
+                if title_results:
+                    num_to_add = min(limit - len(final_results), len(title_results))
+                    if num_to_add > 0:
+                        final_results.extend(random.sample(title_results, num_to_add))
+                        logger.info(f"策略二新增了 {num_to_add} 首歌曲。")
+
+            except Exception as e:
+                logger.error(f"策略二 (標題搜尋) 失敗: {e}")
+
+        # --- 策略三: yt-dlp 'up next' (備用) ---
+        if len(final_results) < limit:
+            logger.info("策略三: 正在使用 yt-dlp 'up next' 作為備用方案...")
+            try:
+                ydl_opts = {'format': 'bestaudio/best', 'quiet': True, 'no_warnings': True, 'extract_flat': True}
+                cookies_path = self.settings.youtube_cookies_path
+                if os.path.exists(cookies_path):
+                    ydl_opts['cookiefile'] = cookies_path
+                
+                url = f"https://www.youtube.com/watch?v={video_id}"
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+                    if 'entries' in info and info['entries']:
+                        yt_dlp_results = []
+                        for entry in info['entries']:
+                            entry_id = entry.get('id')
+                            if entry_id and entry_id not in exclude_ids and not entry.get('is_live') and entry.get('ie_key') == 'Youtube':
+                                yt_dlp_results.append({
+                                    "file_path": None, "title": entry.get('title', '未知標題'),
+                                    "url": f"https://www.youtube.com/watch?v={entry_id}",
+                                    "stream_url": None, "duration": entry.get('duration', 0),
+                                    "video_id": entry_id, "author": entry.get('uploader', '未知上傳者'),
+                                    "views": entry.get('view_count', 0), "requester": interaction.user,
+                                    "user_avatar": interaction.user.avatar.url, "is_live": False
+                                })
+                                exclude_ids.add(entry_id)
+                        
+                        num_to_add = min(limit - len(final_results), len(yt_dlp_results))
+                        if num_to_add > 0:
+                            final_results.extend(random.sample(yt_dlp_results, num_to_add))
+                            logger.info(f"策略三新增了 {num_to_add} 首歌曲。")
             
-            if related_videos:
-                logger.info(f"標題搜尋找到 {len(related_videos)} 個相關影片。")
-                return related_videos, None
-            
-            logger.warning(f"標題搜尋 '{title}' 只找到原始影片，沒有其他相關影片。")
-            return [], "找不到不同的相關影片"
-        except Exception as e:
-            logger.error(f"使用標題搜尋獲取相關影片時出錯: {e}")
-            return [], "獲取相關影片時出錯"
+            except Exception as e:
+                logger.error(f"策略三 (yt-dlp) 失敗: {e}")
+
+        if final_results:
+            logger.info(f"總共找到 {len(final_results)} 首相關歌曲。")
+            return final_results, None
+        else:
+            logger.warning(f"所有策略都未能為 video_id: {video_id} 找到任何相關歌曲。")
+            return [], "找不到相關影片"
