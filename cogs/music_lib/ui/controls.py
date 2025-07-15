@@ -296,9 +296,9 @@ class MusicControlView(discord.ui.View):
 
     @discord.ui.button(emoji='⏭️', style=discord.ButtonStyle.gray, custom_id="skip")
     async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.skip_callback(interaction)
         if not interaction.response.is_done():
             await interaction.response.defer()
+        await self.skip_callback(interaction)
 
     @discord.ui.button(emoji='⏹️', style=discord.ButtonStyle.red, custom_id="stop")
     async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):

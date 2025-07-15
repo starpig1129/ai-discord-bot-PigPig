@@ -13,6 +13,7 @@ class Settings:
         self.version: str = settings.get("version", "")
         self.mongodb_uri: str = settings.get("mongodb", "")
         self.music_temp_base: str = settings.get("music_temp_base", "./temp/music")
+        self.youtube_cookies_path: str = settings.get("youtube_cookies_path", "data/cookies.txt")
         self.model_priority: list = settings.get("model_priority", ["gemini","local", "openai", "claude"])
         
         # 自動更新配置

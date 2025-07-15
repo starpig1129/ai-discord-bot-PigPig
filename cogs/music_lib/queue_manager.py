@@ -151,7 +151,7 @@ class QueueManager:
         """為特定 guild 設置佇列"""
         self.guild_queues[guild_id] = q
 
-    async def add_to_queue(self, guild_id: int, item: Dict[str, Any], interaction: Optional[Any] = None):
+    async def add_to_queue(self, guild_id: int, item: Dict[str, Any], force: bool = False):
         """
         將項目添加到佇列，並根據添加者（使用者或自動播放）應用不同的邏輯。
 
@@ -165,6 +165,13 @@ class QueueManager:
         if len(queue_list) >= self.MAX_QUEUE_SIZE:
             logger.warning(f"佇列已滿 (guild_id: {guild_id})，無法新增歌曲。")
             return
+
+        # 除非強制，否則檢查歌曲是否已存在於佇列中
+        if not force:
+            video_id = item.get('video_id')
+            if any(song.get('video_id') == video_id for song in queue_list):
+                logger.info(f"歌曲 '{item.get('title')}' 已存在於佇列中，跳過新增。")
+                return
 
         added_by_user = 'added_by' in item and item['added_by'] != self.bot.user.id
 
@@ -204,10 +211,18 @@ class QueueManager:
     async def add_to_front_of_queue(self, guild_id: int, item: Dict[str, Any]):
         """將項目添加到佇列的前面"""
         q = self.get_queue(guild_id)
+        queue_list = list(q._queue)
+
+        # 檢查歌曲是否已存在於佇列中
+        video_id = item.get('video_id')
+        if any(song.get('video_id') == video_id for song in queue_list):
+            logger.info(f"歌曲 '{item.get('title')}' 已存在於佇列中，跳過新增。")
+            return
+
         new_queue = asyncio.Queue()
         await new_queue.put(item)
-        while not q.empty():
-            await new_queue.put(await q.get())
+        for song in queue_list:
+            await new_queue.put(song)
         self.guild_queues[guild_id] = new_queue
 
     async def get_next_item(self, guild_id: int) -> Optional[Dict[str, Any]]:

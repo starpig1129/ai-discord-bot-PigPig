@@ -1,4 +1,5 @@
 import asyncio
+import os
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -360,14 +361,20 @@ class YTMusic(commands.Cog):
 
         # --- Download Logic: Ensure song is downloaded before playing ---
         if not next_song.get('is_live') and not next_song.get('file_path'):
-            logger.info(f"歌曲 '{next_song['title']}' 未下載，開始下載...")
+            # 額外檢查檔案是否存在，以防狀態不一致
             _, folder = self._get_guild_folder(guild_id)
-            downloaded_info, error = await self.youtube.download_audio(next_song['url'], folder, interaction)
-            if error:
-                logger.error(f"下載失敗: {next_song['title']} - {error}")
-                # Skip to the next song if download fails
-                return await self._get_next_song(interaction, guild_id, force_new)
-            next_song.update(downloaded_info)
+            potential_path = os.path.join(folder, f"{next_song.get('video_id')}.mp3")
+            if not await asyncio.to_thread(os.path.exists, potential_path):
+                logger.info(f"歌曲 '{next_song['title']}' 未下載，開始下載...")
+                downloaded_info, error = await self.youtube.download_audio(next_song['url'], folder, interaction)
+                if error:
+                    logger.error(f"下載失敗: {next_song['title']} - {error}")
+                    # Skip to the next song if download fails
+                    return await self._get_next_song(interaction, guild_id, force_new)
+                next_song.update(downloaded_info)
+            else:
+                logger.info(f"歌曲 '{next_song['title']}' 已存在於本地，更新檔案路徑。")
+                next_song['file_path'] = potential_path
 
         return next_song
 
@@ -412,7 +419,7 @@ class YTMusic(commands.Cog):
     
             # 如果是清單循環模式，將剛播放完的歌曲（包含檔案路徑）重新加入佇列
             if play_mode == PlayMode.LOOP_QUEUE and current_song:
-                await self.queue_manager.add_to_queue(guild_id, current_song)
+                await self.queue_manager.add_to_queue(guild_id, current_song, force=True)
                 logger.info(f"[音樂] 在清單循環模式下，將 '{current_song['title']}' 重新加入佇列。")
     
             # 只有在非循環且非直播的模式下才刪除檔案
@@ -430,7 +437,7 @@ class YTMusic(commands.Cog):
                     count=5 - queue.qsize()
                 )
                 for song in next_songs:
-                    await self.queue_manager.add_to_queue(guild_id, song, interaction=interaction)
+                    await self.queue_manager.add_to_queue(guild_id, song)
                 
                 # Enforce autoplay limit after adding new songs
                 await self.queue_manager.enforce_autoplay_limit(guild_id)
@@ -494,9 +501,17 @@ class YTMusic(commands.Cog):
             logger.error(f"[音樂] 處理播放完成時出錯： {e}")
 
     async def _trigger_autoplay(self, interaction: discord.Interaction, guild_id: int):
-        """根據最後播放的歌曲觸發自動播放，填充推薦歌曲。"""
+        """根據最後播放的歌曲觸發自動播放，精確填充推薦歌曲至5首，並排除重複。"""
         state = self.state_manager.get_state(guild_id)
-        logger.info(f"[音樂] Autoplay 已啟用，正在檢查是否需要填充推薦歌曲。")
+        
+        queue_snapshot = self.queue_manager.get_queue_snapshot(guild_id)
+        autoplay_song_count = sum(1 for s in queue_snapshot if s.get('added_by') == self.bot.user.id)
+        
+        needed = 5 - autoplay_song_count
+        if needed <= 0:
+            return
+
+        logger.info(f"[音樂] Autoplay 已啟用，需要填充 {needed} 首推薦歌曲。")
 
         song_to_recommend_from = state.current_song or state.last_played_song
         if not song_to_recommend_from:
@@ -509,7 +524,14 @@ class YTMusic(commands.Cog):
             logger.warning(f"無法觸發自動播放，因為缺少 video_id 或 title。")
             return
 
-        related_videos, error = await self.youtube.get_related_videos(video_id, title, interaction)
+        # 建立一個包含當前歌曲和佇列中所有歌曲ID的集合，以供排除
+        exclude_ids = {s.get('video_id') for s in queue_snapshot if s.get('video_id')}
+        if state.current_song and state.current_song.get('video_id'):
+            exclude_ids.add(state.current_song.get('video_id'))
+
+        related_videos, error = await self.youtube.get_related_videos(
+            video_id, title, interaction, limit=needed, exclude_ids=exclude_ids
+        )
         if error:
             logger.warning(f"無法獲取推薦影片: {error}")
             return
@@ -518,7 +540,7 @@ class YTMusic(commands.Cog):
             logger.info(f"成功獲取 {len(related_videos)} 首推薦影片，正在加入佇列。")
             for video in related_videos:
                 video['added_by'] = self.bot.user.id
-                await self.queue_manager.add_to_queue(guild_id, video, interaction=interaction)
+                await self.queue_manager.add_to_queue(guild_id, video)
             
             await self.queue_manager.enforce_autoplay_limit(guild_id)
 
@@ -590,6 +612,12 @@ class YTMusic(commands.Cog):
         if view:
             await view.update_embed(interaction, self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "skipped", user=interaction.user.name))
             await view.update_button_state()
+
+        # Check and trigger autoplay after skipping
+        state = self.state_manager.get_state(interaction.guild.id)
+        if state.autoplay:
+            # 使用 create_task 在背景觸發自動播放，避免阻塞當前的 skip 操作
+            asyncio.create_task(self._trigger_autoplay(interaction, interaction.guild.id))
 
     async def handle_stop(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id

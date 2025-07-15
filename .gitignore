@@ -45,3 +45,5 @@ data/backups/*.db
 *REPORT*.md
 *_REPORT.md
 PHASE*_*.md
+# 忽略 cookies 檔案
+data/cookies.txt

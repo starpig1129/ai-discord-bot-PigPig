@@ -171,6 +171,12 @@ class YouTubeManager:
                 'ffmpeg_location': self.ffmpeg_config.get('location', '/usr/bin/ffmpeg')
             }
 
+            # 檢查並加入 cookies
+            cookies_path = self.settings.youtube_cookies_path
+            if os.path.exists(cookies_path):
+                logger.info(f"使用 Cookies 檔案: {cookies_path}")
+                ydl_opts['cookiefile'] = cookies_path
+
             # 使用 asyncio.to_thread 非同步執行 yt-dlp 資訊提取
             async def extract_info():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -239,6 +245,12 @@ class YouTubeManager:
                 'force_generic_extractor': False,
                 'ffmpeg_location': self.ffmpeg_config.get('location', '/usr/bin/ffmpeg')
             }
+
+            # 檢查並加入 cookies
+            cookies_path = self.settings.youtube_cookies_path
+            if os.path.exists(cookies_path):
+                logger.info(f"使用 Cookies 檔案: {cookies_path}")
+                ydl_opts['cookiefile'] = cookies_path
 
             # 使用 asyncio.to_thread 非同步執行 yt-dlp 資訊提取
             async def extract_info():
@@ -336,6 +348,12 @@ class YouTubeManager:
                     'Sec-Fetch-Mode': http_headers.get('sec_fetch_mode', 'navigate')
                 }
             }
+
+            # 檢查並加入 cookies
+            cookies_path = self.settings.youtube_cookies_path
+            if os.path.exists(cookies_path):
+                logger.info(f"使用 Cookies 檔案: {cookies_path}")
+                ydl_opts['cookiefile'] = cookies_path
 
             logger.info(f"[音樂] 開始下載 (伺服器 ID: {interaction.guild.id}): {url} 到 {folder}")
 
@@ -458,28 +476,38 @@ class YouTubeManager:
         """取得影片縮圖 URL"""
         return f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
 
-    async def get_related_videos(self, video_id: str, title: str, interaction: discord.Interaction, count: int = 5):
+    async def get_related_videos(self, video_id: str, title: str, interaction: discord.Interaction, limit: int = 5, exclude_ids: set = None):
         """
-        Get a list of related videos, first via yt-dlp, then falling back to title search.
+        Get a list of related videos, filtering out any IDs in the exclude_ids set.
         """
+        if exclude_ids is None:
+            exclude_ids = set()
+
         related_videos = []
         
         # --- Method 1: Try to get related videos using yt-dlp ---
         logger.info(f"正在為 video_id: {video_id} 尋找相關影片 (方法: yt-dlp)...")
         try:
             ydl_opts = {'format': 'bestaudio/best', 'quiet': True, 'no_warnings': True, 'extract_flat': True}
+            
+            # 檢查並加入 cookies
+            cookies_path = self.settings.youtube_cookies_path
+            if os.path.exists(cookies_path):
+                logger.info(f"使用 Cookies 檔案: {cookies_path}")
+                ydl_opts['cookiefile'] = cookies_path
             url = f"https://www.youtube.com/watch?v={video_id}"
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = await asyncio.to_thread(ydl.extract_info, url, download=False)
                 if 'entries' in info and info['entries']:
                     for entry in info['entries']:
-                        if len(related_videos) >= count: break
-                        if not entry.get('is_live') and entry.get('ie_key') == 'Youtube' and entry.get('id') != video_id:
+                        if len(related_videos) >= limit: break
+                        entry_id = entry.get('id')
+                        if not entry.get('is_live') and entry.get('ie_key') == 'Youtube' and entry_id not in exclude_ids:
                             related_videos.append({
                                 "file_path": None, "title": entry.get('title', '未知標題'),
-                                "url": f"https://www.youtube.com/watch?v={entry.get('id')}",
+                                "url": f"https://www.youtube.com/watch?v={entry_id}",
                                 "stream_url": None, "duration": entry.get('duration', 0),
-                                "video_id": entry.get('id', '未知ID'), "author": entry.get('uploader', '未知上傳者'),
+                                "video_id": entry_id, "author": entry.get('uploader', '未知上傳者'),
                                 "views": entry.get('view_count', 0), "requester": interaction.user,
                                 "user_avatar": interaction.user.avatar.url, "is_live": False
                             })
@@ -493,18 +521,19 @@ class YouTubeManager:
         # --- Method 2: Fallback to searching by title ---
         logger.info(f"正在為 video_id: {video_id} (標題: {title}) 尋找相關影片 (方法: 標題搜尋)...")
         try:
-            results = await self.search_videos(title, max_results=count + 1)
+            results = await self.search_videos(title, max_results=limit + 5) # Fetch extra to allow for filtering
             if not results:
                 logger.warning(f"標題搜尋 '{title}' 未找到任何結果。")
                 return [], "找不到相關影片"
 
             for video in results:
-                if len(related_videos) >= count: break
-                if video.get('video_id') != video_id:
+                if len(related_videos) >= limit: break
+                video_id_res = video.get('video_id')
+                if video_id_res not in exclude_ids:
                     related_videos.append({
                         "file_path": None, "title": video.get('title', '未知標題'),
                         "url": video.get('url'), "stream_url": None,
-                        "duration": video.get('duration', 0), "video_id": video.get('video_id', '未知ID'),
+                        "duration": video.get('duration', 0), "video_id": video_id_res,
                         "author": video.get('author', '未知上傳者'), "views": video.get('views', 0),
                         "requester": interaction.user, "user_avatar": interaction.user.avatar.url,
                         "is_live": False
