@@ -169,6 +169,7 @@ class SongSelectMenu(discord.ui.Select):
                 await view.original_interaction.edit_original_response(embed=embed, view=None)
                 return
                 
+            video_info['added_by'] = interaction.user.id
             await view.player.queue_manager.add_to_front_of_queue(guild_id, video_info)
             
             success_message = self.view_parent._translate_music("select", "added", title=video_info['title'])

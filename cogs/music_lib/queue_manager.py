@@ -11,7 +11,10 @@ class PlayMode(Enum):
     LOOP_SINGLE = "loop_single"
 
 class QueueManager:
-    def __init__(self):
+    MAX_QUEUE_SIZE = 50
+    
+    def __init__(self, bot=None):
+        self.bot = bot
         self.guild_queues: Dict[int, asyncio.Queue] = {}
         self.guild_settings: Dict[int, Dict[str, Any]] = {}
         self.guild_playlists: Dict[int, List[Dict[str, Any]]] = {}
@@ -134,6 +137,11 @@ class QueueManager:
             return []
         return list(queue._queue).copy()
 
+    def is_queue_empty(self, guild_id: int) -> bool:
+        """檢查佇列是否為空"""
+        q = self.guild_queues.get(guild_id)
+        return not q or q.empty()
+
     def clear_queue(self, guild_id: int):
         """清空指定伺服器的播放隊列"""
         if guild_id in self.guild_queues:
@@ -143,10 +151,55 @@ class QueueManager:
         """為特定 guild 設置佇列"""
         self.guild_queues[guild_id] = q
 
-    async def add_to_queue(self, guild_id: int, item: Dict[str, Any]):
-        """將項目添加到佇列"""
+    async def add_to_queue(self, guild_id: int, item: Dict[str, Any], interaction: Optional[Any] = None):
+        """
+        將項目添加到佇列，並根據添加者（使用者或自動播放）應用不同的邏輯。
+
+        - 使用者新增：插入到自動播放歌曲之前，並移除超出總長度限制的自動播放歌曲。
+        - 自動播放新增：添加到佇列末尾。
+        """
         q = self.get_queue(guild_id)
-        await q.put(item)
+        queue_list = list(q._queue)
+
+        # 檢查佇列是否已滿
+        if len(queue_list) >= self.MAX_QUEUE_SIZE:
+            logger.warning(f"佇列已滿 (guild_id: {guild_id})，無法新增歌曲。")
+            return
+
+        added_by_user = 'added_by' in item and item['added_by'] != self.bot.user.id
+
+        if added_by_user:
+            # 使用者新增歌曲
+            insert_index = -1
+            for i, song in enumerate(queue_list):
+                if song.get('added_by') == self.bot.user.id:
+                    insert_index = i
+                    break
+            
+            if insert_index != -1:
+                queue_list.insert(insert_index, item)
+            else:
+                queue_list.append(item)
+
+            # 移除超出總長度限制的自動播放歌曲
+            while len(queue_list) > self.MAX_QUEUE_SIZE:
+                for i in range(len(queue_list) - 1, -1, -1):
+                    if queue_list[i].get('added_by') == self.bot.user.id:
+                        del queue_list[i]
+                        break
+                else:
+                    # 如果沒有自動播放歌曲可移除，則無法新增
+                    logger.warning(f"佇列已滿，且沒有自動播放歌曲可移除 (guild_id: {guild_id})。")
+                    return
+        else:
+            # 自動播放新增歌曲
+            queue_list.append(item)
+
+        # 重建佇列
+        new_queue = asyncio.Queue()
+        for song in queue_list:
+            await new_queue.put(song)
+        self.guild_queues[guild_id] = new_queue
 
     async def add_to_front_of_queue(self, guild_id: int, item: Dict[str, Any]):
         """將項目添加到佇列的前面"""
@@ -163,3 +216,27 @@ class QueueManager:
         if q.empty():
             return None
         return await q.get()
+
+    async def enforce_autoplay_limit(self, guild_id: int, limit: int = 5):
+        """確保佇列中由自動播放新增的歌曲不超過指定數量"""
+        q = self.get_queue(guild_id)
+        queue_list = list(q._queue)
+        
+        autoplay_songs_indices = [i for i, song in enumerate(queue_list) if song.get('added_by') == self.bot.user.id]
+        
+        if len(autoplay_songs_indices) > limit:
+            # 計算需要移除的歌曲數量
+            to_remove_count = len(autoplay_songs_indices) - limit
+            
+            # 獲取需要移除的歌曲的索引（從頭開始）
+            indices_to_remove = set(autoplay_songs_indices[:to_remove_count])
+            
+            # 過濾掉需要移除的歌曲
+            new_queue_list = [song for i, song in enumerate(queue_list) if i not in indices_to_remove]
+
+            # 重建佇列
+            new_queue = asyncio.Queue()
+            for song in new_queue_list:
+                await new_queue.put(song)
+            self.guild_queues[guild_id] = new_queue
+            logger.info(f"已從佇列 (guild_id: {guild_id}) 移除 {to_remove_count} 首多餘的自動播放歌曲。")

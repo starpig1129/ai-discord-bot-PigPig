@@ -25,7 +25,7 @@ class YTMusic(commands.Cog):
         # Initialize managers
         self.audio_manager = AudioManager()
         self.state_manager = bot.state_manager
-        self.queue_manager = QueueManager()
+        self.queue_manager = QueueManager(bot=bot)
         self.ui_manager = bot.ui_manager
         self.lang_manager: Optional[LanguageManager] = None # Initialize lang_manager
 
@@ -166,6 +166,7 @@ class YTMusic(commands.Cog):
         added_songs = video_infos[:songs_to_add]
         
         for video_info in added_songs:
+            video_info['added_by'] = interaction.user.id
             await self.queue_manager.add_to_queue(interaction.guild.id, video_info)
             
         # Save remaining songs to playlist
@@ -215,6 +216,7 @@ class YTMusic(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return False
             
+        video_info['added_by'] = interaction.user.id
         await self.queue_manager.add_to_front_of_queue(guild_id, video_info)
         title = self.lang_manager.translate(guild_id_str, "commands", "play", "responses", "song_added", title=video_info['title'])
         embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
@@ -343,19 +345,7 @@ class YTMusic(commands.Cog):
 
         # --- Autoplay Logic: Fill queue if empty ---
         if state.autoplay and self.queue_manager.is_queue_empty(guild_id):
-            logger.info(f"[音樂] Autoplay 已啟用且佇列為空，正在填充推薦歌曲。")
-            song_to_recommend_from = state.current_song or state.last_played_song
-            if song_to_recommend_from:
-                video_id = song_to_recommend_from.get("video_id")
-                title = song_to_recommend_from.get("title")
-                if video_id and title:
-                    related_videos, error = await self.youtube.get_related_videos(video_id, title, interaction)
-                    if related_videos:
-                        logger.info(f"成功獲取 {len(related_videos)} 首推薦影片，正在加入佇列。")
-                        for video in related_videos:
-                            await self.queue_manager.add_to_queue(guild_id, video)
-                    else:
-                        logger.warning(f"無法獲取推薦影片: {error}")
+            await self._trigger_autoplay(interaction, guild_id)
 
         # --- Queue Logic: Get next song ---
         next_song = await self.queue_manager.get_next_item(guild_id)
@@ -440,8 +430,18 @@ class YTMusic(commands.Cog):
                     count=5 - queue.qsize()
                 )
                 for song in next_songs:
-                    await self.queue_manager.add_to_queue(guild_id, song)
-            
+                    await self.queue_manager.add_to_queue(guild_id, song, interaction=interaction)
+                
+                # Enforce autoplay limit after adding new songs
+                await self.queue_manager.enforce_autoplay_limit(guild_id)
+
+            # Trigger autoplay if enabled and not enough songs in queue
+            if state.autoplay:
+                queue_snapshot = self.queue_manager.get_queue_snapshot(guild_id)
+                autoplay_song_count = sum(1 for s in queue_snapshot if s.get('added_by') == self.bot.user.id)
+                if autoplay_song_count < 5:
+                    await self._trigger_autoplay(interaction, guild_id)
+
             # Create a new interaction-like object for UI updates
             if channel:
                 new_interaction = await self._create_dummy_interaction(channel, interaction.guild, interaction)
@@ -492,6 +492,35 @@ class YTMusic(commands.Cog):
             
         except Exception as e:
             logger.error(f"[音樂] 處理播放完成時出錯： {e}")
+
+    async def _trigger_autoplay(self, interaction: discord.Interaction, guild_id: int):
+        """根據最後播放的歌曲觸發自動播放，填充推薦歌曲。"""
+        state = self.state_manager.get_state(guild_id)
+        logger.info(f"[音樂] Autoplay 已啟用，正在檢查是否需要填充推薦歌曲。")
+
+        song_to_recommend_from = state.current_song or state.last_played_song
+        if not song_to_recommend_from:
+            logger.info("[音樂] 沒有可供推薦的歌曲。")
+            return
+
+        video_id = song_to_recommend_from.get("video_id")
+        title = song_to_recommend_from.get("title")
+        if not video_id or not title:
+            logger.warning(f"無法觸發自動播放，因為缺少 video_id 或 title。")
+            return
+
+        related_videos, error = await self.youtube.get_related_videos(video_id, title, interaction)
+        if error:
+            logger.warning(f"無法獲取推薦影片: {error}")
+            return
+
+        if related_videos:
+            logger.info(f"成功獲取 {len(related_videos)} 首推薦影片，正在加入佇列。")
+            for video in related_videos:
+                video['added_by'] = self.bot.user.id
+                await self.queue_manager.add_to_queue(guild_id, video, interaction=interaction)
+            
+            await self.queue_manager.enforce_autoplay_limit(guild_id)
 
     def _get_guild_folder(self, guild_id: int) -> tuple:
         """Get guild queue and folder"""
