@@ -151,94 +151,95 @@ class QueueManager:
         """為特定 guild 設置佇列"""
         self.guild_queues[guild_id] = q
 
-    async def add_to_queue(self, guild_id: int, item: Dict[str, Any], force: bool = False):
+    async def add_to_queue(self, guild_id: int, item: Dict[str, Any], force: bool = False) -> bool:
         """
-        將項目添加到佇列，並根據添加者（使用者或自動播放）應用不同的邏輯。
+        將項目添加到佇列，並根據添加者（使用者或機器人）應用不同的優先級邏輯。
+        成功返回 True，失敗返回 False。
         """
         q = self.get_queue(guild_id)
-        queue_list = list(q._queue)
+        # 直接操作 q._queue (deque) 以確保原子性
 
-        # 除非強制，否則檢查歌曲是否已存在於佇列中
+        # 1. 檢查歌曲是否已存在，如果存在且非強制新增，則直接返回 True
         if not force:
             video_id = item.get('video_id')
-            if any(song.get('video_id') == video_id for song in queue_list):
-                logger.info(f"歌曲 '{item.get('title')}' 已存在於佇列中，跳過新增。")
-                return
+            if any(song.get('video_id') == video_id for song in q._queue):
+                logger.info(f"歌曲 '{item.get('title')}' 已在佇列中，視為成功。")
+                return True
 
+        # 2. 判斷新增者是使用者還是機器人
         added_by_user = 'added_by' in item and item['added_by'] != self.bot.user.id
 
-        if added_by_user:
-            # 使用者新增歌曲
-            if len(queue_list) >= self.MAX_QUEUE_SIZE:
-                # 佇列已滿，嘗試從末尾移除一首自動播放的歌曲
-                autoplay_song_removed = False
-                for i in range(len(queue_list) - 1, -1, -1):
-                    if queue_list[i].get('added_by') == self.bot.user.id:
-                        del queue_list[i]
-                        autoplay_song_removed = True
+        # 3. 處理佇列已滿的情況
+        if q.qsize() >= self.MAX_QUEUE_SIZE:
+            if added_by_user:
+                # 使用者新增：從末尾反向尋找並刪除第一首機器人歌曲
+                bot_song_removed = False
+                for i in range(len(q._queue) - 1, -1, -1):
+                    if q._queue[i].get('added_by') == self.bot.user.id:
+                        del q._queue[i]
+                        bot_song_removed = True
+                        logger.info("佇列已滿，已為使用者移除一首機器人歌曲。")
                         break
                 
-                if not autoplay_song_removed:
-                    logger.warning(f"佇列已滿，且沒有自動播放歌曲可移除 (guild_id: {guild_id})。")
-                    return
+                if not bot_song_removed:
+                    logger.warning(f"佇列已滿，且沒有機器人歌曲可移除 (guild_id: {guild_id})。無法新增歌曲。")
+                    return False
+            else:
+                # 機器人新增：佇列已滿，直接失敗
+                logger.warning(f"佇列已滿 (guild_id: {guild_id})，機器人無法新增歌曲。")
+                return False
 
-            # 找到第一首自動播放歌曲的索引
+        # 4. 決定插入點
+        if added_by_user:
+            # 使用者新增：尋找第一首機器人歌曲的索引，並插入在其前面
             insert_index = -1
-            for i, song in enumerate(queue_list):
+            for i, song in enumerate(q._queue):
                 if song.get('added_by') == self.bot.user.id:
                     insert_index = i
                     break
             
             if insert_index != -1:
-                # 將歌曲插入到第一首自動播放歌曲之前
-                queue_list.insert(insert_index, item)
+                q._queue.insert(insert_index, item)
             else:
-                # 如果沒有自動播放歌曲，則添加到末尾
-                queue_list.append(item)
+                # 如果沒有機器人歌曲，則添加到末尾
+                q._queue.append(item)
         else:
-            # 自動播放新增歌曲
-            if len(queue_list) >= self.MAX_QUEUE_SIZE:
-                logger.warning(f"佇列已滿 (guild_id: {guild_id})，自動播放無法新增歌曲。")
-                return
-            queue_list.append(item)
+            # 機器人新增：直接添加到末尾
+            q._queue.append(item)
 
-        # 重建佇列
-        new_queue = asyncio.Queue()
-        for song in queue_list:
-            await new_queue.put(song)
-        self.guild_queues[guild_id] = new_queue
+        # 5. 不再需要重建佇列
+        return True
 
     async def add_to_front_of_queue(self, guild_id: int, item: Dict[str, Any]) -> bool:
         """將項目添加到佇列的前面，並處理佇列溢出。成功返回 True，失敗返回 False。"""
         q = self.get_queue(guild_id)
-        queue_list = list(q._queue)
+        # 直接操作 q._queue (deque) 以確保原子性
 
+        # 1. 檢查歌曲是否已存在
         video_id = item.get('video_id')
-        if any(song.get('video_id') == video_id for song in queue_list):
+        if any(song.get('video_id') == video_id for song in q._queue):
             logger.info(f"歌曲 '{item.get('title')}' 已存在於佇列中，跳過新增。")
             return True
 
-        if len(queue_list) >= self.MAX_QUEUE_SIZE:
-            # 佇列已滿，嘗試從末尾移除一首自動播放的歌曲
-            autoplay_song_removed = False
-            for i in range(len(queue_list) - 1, -1, -1):
-                if queue_list[i].get('added_by') == self.bot.user.id:
-                    del queue_list[i]
-                    autoplay_song_removed = True
+        # 2. 處理佇列已滿的情況
+        if q.qsize() >= self.MAX_QUEUE_SIZE:
+            # 從末尾反向尋找並刪除第一首機器人歌曲
+            bot_song_removed = False
+            for i in range(len(q._queue) - 1, -1, -1):
+                if q._queue[i].get('added_by') == self.bot.user.id:
+                    del q._queue[i]
+                    bot_song_removed = True
+                    logger.info("佇列已滿，已為優先歌曲移除一首機器人歌曲。")
                     break
             
-            if not autoplay_song_removed:
-                logger.warning(f"佇列已滿，且沒有自動播放歌曲可移除 (guild_id: {guild_id})。")
+            if not bot_song_removed:
+                logger.warning(f"佇列已滿，且沒有機器人歌曲可移除 (guild_id: {guild_id})。無法新增歌曲。")
                 return False
 
-        # 將歌曲新增到佇列前面
-        queue_list.insert(0, item)
+        # 3. 將歌曲新增到佇列前面 (使用 appendleft 以提高效率)
+        q._queue.appendleft(item)
 
-        # 重建佇列
-        new_queue = asyncio.Queue()
-        for song in queue_list:
-            await new_queue.put(song)
-        self.guild_queues[guild_id] = new_queue
+        # 4. 不再需要重建佇列
         return True
 
     async def get_next_item(self, guild_id: int) -> Optional[Dict[str, Any]]:

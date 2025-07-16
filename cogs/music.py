@@ -541,8 +541,12 @@ class YTMusic(commands.Cog):
 
         if related_videos:
             logger.info(f"成功獲取 {len(related_videos)} 首推薦影片，正在加入佇列。")
+            # --- 新增的修復程式碼 ---
             for video in related_videos:
                 video['added_by'] = self.bot.user.id
+            # --- 修復結束 ---
+            
+            for video in related_videos:
                 await self.queue_manager.add_to_queue(guild_id, video)
             
             await self.queue_manager.enforce_autoplay_limit(guild_id)
@@ -769,6 +773,11 @@ class YTMusic(commands.Cog):
                 )
                 if related_videos:
                     logger.info(f"成功獲取 {len(related_videos)} 首推薦影片，正在加入佇列。")
+                    # --- 新增的修復程式碼 ---
+                    for video in related_videos:
+                        video['added_by'] = self.bot.user.id
+                    # --- 修復結束 ---
+
                     for video in related_videos:
                         await self.queue_manager.add_to_queue(guild_id, video)
 
