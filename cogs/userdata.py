@@ -83,13 +83,16 @@ class UserDataCog(commands.Cog):
     def _get_guild_id_from_context(self, context: Union[discord.Interaction, discord.Message, ToolExecutionContext, None]) -> Optional[str]:
         """從各種上下文中提取 guild_id"""
         if isinstance(context, ToolExecutionContext):
-            if context.interaction:
-                return str(context.interaction.guild_id)
+            # ToolExecutionContext 沒有 interaction 屬性，
+            # 但它有 message 屬性，可以從中獲取 guild 資訊。
             if context.message and context.message.guild:
                 return str(context.message.guild.id)
         elif isinstance(context, discord.Interaction):
-            return str(context.guild_id)
+            # 處理來自斜線指令的互動
+            if context.guild_id:
+                return str(context.guild_id)
         elif isinstance(context, discord.Message) and context.guild:
+            # 處理一般的訊息物件
             return str(context.guild.id)
         return None
 
