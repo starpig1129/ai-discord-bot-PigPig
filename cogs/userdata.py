@@ -115,14 +115,14 @@ class UserDataCog(commands.Cog):
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
 
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer(thinking=True, ephemeral=True)
         guild_id = str(interaction.guild_id)
         
         result = await self.manage_user_data(
             interaction, user or interaction.user, user_data, action
         )
         
-        await interaction.followup.send(result)
+        await interaction.followup.send(result, ephemeral=True)
 
     async def _read_user_data(self, user_id: str, context: Any) -> str:
         """核心邏輯：讀取使用者資料"""
