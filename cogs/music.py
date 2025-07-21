@@ -29,6 +29,7 @@ class YTMusic(commands.Cog):
         self.queue_manager = QueueManager(bot=bot)
         self.ui_manager = bot.ui_manager
         self.lang_manager: Optional[LanguageManager] = None # Initialize lang_manager
+        self.disconnect_timers = {}
 
     async def setup_hook(self):
         """Initialize async components and LanguageManager"""
@@ -391,6 +392,7 @@ class YTMusic(commands.Cog):
 
     async def _play_song(self, interaction: discord.Interaction, song: dict, voice_client):
         """Play a song and update UI"""
+        await self._cancel_disconnect_timer(interaction.guild.id)
         if voice_client.is_playing():
             voice_client.stop()
             
@@ -586,21 +588,24 @@ class YTMusic(commands.Cog):
                 )
 
     async def handle_toggle_playback(self, interaction: discord.Interaction):
-        voice_client = self.get_voice_client(interaction.guild.id)
-        view = self.ui_manager.get_current_view(interaction.guild.id)
+        guild_id = interaction.guild.id
+        voice_client = self.get_voice_client(guild_id)
+        view = self.ui_manager.get_current_view(guild_id)
         if not voice_client or not view:
             return
 
         if voice_client.is_playing():
             voice_client.pause()
             view.stop_progress_updater()
-            await view.update_embed(interaction, self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "paused", user=interaction.user.name))
+            await self._start_disconnect_timer(guild_id)
+            await view.update_embed(interaction, self.lang_manager.translate(str(guild_id), "system", "music", "controls", "paused", user=interaction.user.name))
         elif voice_client.is_paused():
             voice_client.resume()
-            state = self.state_manager.get_state(interaction.guild.id)
+            await self._cancel_disconnect_timer(guild_id)
+            state = self.state_manager.get_state(guild_id)
             if state.current_song:
                 view.start_progress_updater(state.current_song["duration"])
-            await view.update_embed(interaction, self.lang_manager.translate(str(interaction.guild.id), "system", "music", "controls", "resumed", user=interaction.user.name))
+            await view.update_embed(interaction, self.lang_manager.translate(str(guild_id), "system", "music", "controls", "resumed", user=interaction.user.name))
         
         await view.update_button_state()
 
@@ -629,31 +634,13 @@ class YTMusic(commands.Cog):
     async def handle_stop(self, interaction: discord.Interaction):
         guild_id = interaction.guild.id
         voice_client = self.get_voice_client(guild_id)
-        state = self.state_manager.get_state(guild_id)
 
         if not voice_client:
             await interaction.response.send_message(self.lang_manager.translate(str(guild_id), "system", "music", "controls", "no_music"), ephemeral=True)
             return
 
-        # Stop playback and disconnect
-        if voice_client.is_playing() or voice_client.is_paused():
-            voice_client.stop()
-        if voice_client.is_connected():
-            await voice_client.disconnect()
-
-        # Clean up all UI messages
-        for message in state.ui_messages:
-            try:
-                await message.delete()
-            except (discord.errors.NotFound, discord.errors.Forbidden):
-                pass
-        
-        # Clean up the view
-        await self.ui_manager.cleanup_view(guild_id)
-
-        # Clear queue and state
-        self.queue_manager.clear_queue(guild_id)
-        self.state_manager.update_state(guild_id, current_song=None, last_played_song=None, current_message=None, current_view=None, ui_messages=[])
+        await self._cancel_disconnect_timer(guild_id)
+        await self._cleanup_voice_session(guild_id)
         
         # Send a final confirmation message
         stopped_text = self.lang_manager.translate(str(guild_id), "system", "music", "controls", "stopped", user=interaction.user.name)
@@ -792,27 +779,132 @@ class YTMusic(commands.Cog):
                 else:
                     logger.warning(f"無法獲取推薦影片: {error}")
 
+    async def _cleanup_voice_session(self, guild_id: int):
+        """Cleans up the voice session for a guild."""
+        voice_client = self.get_voice_client(guild_id)
+        state = self.state_manager.get_state(guild_id)
+
+        # Stop playback and disconnect
+        if voice_client:
+            if voice_client.is_playing() or voice_client.is_paused():
+                voice_client.stop()
+            if voice_client.is_connected():
+                await voice_client.disconnect()
+
+        # Clean up all UI messages
+        for message in state.ui_messages:
+            try:
+                await message.delete()
+            except (discord.errors.NotFound, discord.errors.Forbidden):
+                pass
+        
+        # Clean up the view
+        await self.ui_manager.cleanup_view(guild_id)
+
+        # Clear queue and state
+        self.queue_manager.clear_queue(guild_id)
+        self.state_manager.update_state(guild_id, current_song=None, last_played_song=None, current_message=None, current_view=None, ui_messages=[])
+        logger.info(f"[音樂] 伺服器 ID: {guild_id}, 已清理語音會話。")
+
+    async def _cancel_disconnect_timer(self, guild_id: int):
+        """Cancels the disconnect timer for a guild."""
+        if guild_id in self.disconnect_timers:
+            self.disconnect_timers[guild_id].cancel()
+            del self.disconnect_timers[guild_id]
+            logger.info(f"[音樂] 伺服器 ID: {guild_id}, 已取消閒置斷線計時器。")
+
+    async def _start_disconnect_timer(self, guild_id: int):
+        """Starts the disconnect timer for a guild."""
+        await self._cancel_disconnect_timer(guild_id) # Cancel any existing timer
+        
+        logger.info(f"[音樂] 伺服器 ID: {guild_id}, 播放器已暫停，啟動 5 分鐘閒置斷線計時器。")
+        self.disconnect_timers[guild_id] = self.bot.loop.create_task(
+            self._disconnect_after_delay(guild_id)
+        )
+
+    async def _disconnect_after_delay(self, guild_id: int):
+        """Disconnects the bot after a 5-minute delay if it's still paused."""
+        await asyncio.sleep(300) # 5 minutes
+        
+        voice_client = self.get_voice_client(guild_id)
+        if voice_client and voice_client.is_connected() and voice_client.is_paused():
+            logger.info(f"[音樂] 伺服器 ID: {guild_id}, 閒置超過 5 分鐘，自動斷線。")
+            
+            # Find a channel to send the message
+            state = self.state_manager.get_state(guild_id)
+            channel = None
+            if state.current_message:
+                channel = state.current_message.channel
+            
+            await self._cleanup_voice_session(guild_id)
+            
+            if channel:
+                idle_disconnect_msg = self.lang_manager.translate(str(guild_id), "system", "music", "status", "idle_disconnect")
+                embed = discord.Embed(title=f"😴 | {idle_disconnect_msg}", color=discord.Color.orange())
+                try:
+                    await channel.send(embed=embed, delete_after=60)
+                except discord.errors.Forbidden:
+                    logger.warning(f"[音樂] 伺服器 ID: {guild_id}, 無法發送閒置斷線訊息（權限不足）。")
+        else:
+            logger.info(f"[音樂] 伺服器 ID: {guild_id}, 閒置斷線計時器觸發，但機器人已非暫停狀態，取消操作。")
+
+        # Clean up the timer task from the dictionary
+        if guild_id in self.disconnect_timers:
+            del self.disconnect_timers[guild_id]
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        """Handle bot leaving voice channel"""
-        if member.id == self.bot.user.id and before.channel is not None and after.channel is None:
-            guild_id = member.guild.id
-            _, folder = self._get_guild_folder(guild_id)
+        """Handle voice state changes, including auto-pause and auto-disconnect."""
+        # Ignore bot's own state changes unless it's a disconnect
+        if member.id == self.bot.user.id:
+            if before.channel is not None and after.channel is None:
+                # Bot was disconnected
+                guild_id = member.guild.id
+                logger.info(f"[音樂] 偵測到機器人被動斷線於伺服器 {member.guild.name}。")
+                await self._cancel_disconnect_timer(guild_id)
+                await self._cleanup_voice_session(guild_id)
+            return
+
+        # Check the voice channel the bot is in
+        voice_client = member.guild.voice_client
+        if not voice_client or not voice_client.channel:
+            return
+
+        # Check if the state change happened in the bot's channel
+        if before.channel == voice_client.channel or after.channel == voice_client.channel:
+            # Get the number of human members in the channel
+            human_members = [m for m in voice_client.channel.members if not m.bot]
             
-            await self.ui_manager.cleanup_view(guild_id)
-            
-            state = self.state_manager.get_state(guild_id)
-            for message in state.ui_messages:
-                try:
-                    await message.delete()
-                except:
-                    pass
-            
-            await self.audio_manager.cleanup_guild_files(guild_id, folder)
-            self.queue_manager.clear_guild_data(guild_id)
-            self.state_manager.clear_state(guild_id)
-            
-            logger.info(f"[音樂] 伺服器 ID： {member.guild.name}, 離開語音頻道並清理資源")
+            if not human_members:
+                # No one left, pause the player and start disconnect timer
+                if voice_client.is_playing():
+                    logger.info(f"[音樂] 伺服器 ID: {member.guild.id}, 頻道內無人，自動暫停播放。")
+                    voice_client.pause()
+                    await self._start_disconnect_timer(member.guild.id)
+                    
+                    # Update UI if possible
+                    view = self.ui_manager.get_current_view(member.guild.id)
+                    if view:
+                        view.stop_progress_updater()
+                        # We can't send an interaction here, but we can update the buttons
+                        await view.update_button_state()
+
+            else:
+                # Someone is in the channel, resume if paused
+                if voice_client.is_paused():
+                    # Check if the pause was due to inactivity (i.e., a timer is running)
+                    if member.guild.id in self.disconnect_timers:
+                        logger.info(f"[音樂] 伺服器 ID: {member.guild.id}, 有使用者加入，自動恢復播放。")
+                        voice_client.resume()
+                        await self._cancel_disconnect_timer(member.guild.id)
+                        
+                        # Update UI
+                        view = self.ui_manager.get_current_view(member.guild.id)
+                        if view:
+                            state = self.state_manager.get_state(member.guild.id)
+                            if state.current_song:
+                                view.start_progress_updater(state.current_song["duration"])
+                            await view.update_button_state()
 
     async def _create_dummy_interaction(self, channel, guild, original_interaction):
         """Creates a dummy interaction object for internal use."""
