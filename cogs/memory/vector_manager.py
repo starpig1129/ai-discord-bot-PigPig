@@ -112,7 +112,7 @@ class GPUMemoryManager:
             self.logger.error(f"檢查 GPU 記憶體失敗: {e}")
             return False
     
-    def get_gpu_resource(self) -> Optional[faiss.StandardGpuResources]:
+    def get_gpu_resource(self) -> 'Optional[faiss.StandardGpuResources]':
         """取得 GPU 資源實例（單例模式）
         
         Returns:
@@ -120,6 +120,11 @@ class GPUMemoryManager:
         """
         with self._memory_lock:
             if self._gpu_resource is None:
+                # 檢查 'faiss-gpu' 是否安裝
+                if not hasattr(faiss, 'StandardGpuResources'):
+                    self.logger.info("未偵測到 faiss-gpu，將停用 GPU 功能。")
+                    return None
+                
                 try:
                     # 檢查記憶體是否可用
                     if not self.is_memory_available(self.max_memory_mb):

@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import logging
+from typing import Optional
 
 from .story.manager import StoryManager
 from .story.ui import UIManager
@@ -21,20 +22,24 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
-        
-        system_prompt_manager_cog = bot.get_cog("SystemPromptManagerCog")
-        if not system_prompt_manager_cog:
-            raise RuntimeError("SystemPromptManagerCog not found!")
-        system_prompt_manager = system_prompt_manager_cog.manager
-
-        self.story_manager = StoryManager(bot, self, system_prompt_manager)
-        self.ui_manager = UIManager(bot, self.story_manager, system_prompt_manager)
+        self.story_manager: Optional[StoryManager] = None
+        self.ui_manager: Optional[UIManager] = None
         self.logger.info("StoryManagerCog (UI版本) 已初始化")
 
     async def cog_load(self):
         """
         非同步初始化 Cog 及其管理器。
         """
+        system_prompt_manager_cog = self.bot.get_cog("SystemPromptManagerCog")
+        if not system_prompt_manager_cog:
+            self.logger.error("無法找到 SystemPromptManagerCog，StoryManagerCog 將無法正常運作。")
+            return
+        
+        system_prompt_manager = system_prompt_manager_cog.manager
+        
+        self.story_manager = StoryManager(self.bot, self, system_prompt_manager)
+        self.ui_manager = UIManager(self.bot, self.story_manager, system_prompt_manager)
+        
         await self.story_manager.initialize()
         self.logger.info("StoryManagerCog has been loaded and initialized.")
 

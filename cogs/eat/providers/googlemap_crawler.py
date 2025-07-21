@@ -27,28 +27,7 @@ class GoogleMapCrawler:
         chrome_options.add_argument("--disable-gpu")  # 禁用GPU加速
         chrome_options.add_argument("--incognito")  # 啟用無痕模式
 
-        driver_path = os.environ.get('CHROMEDRIVER_PATH')
-
-        if driver_path:
-            logger.info(f"Using chromedriver from environment variable: {driver_path}")
-            s = Service(executable_path=driver_path)
-        else:
-            logger.info("CHROMEDRIVER_PATH not set. Falling back to local driver.")
-            
-            system = platform.system()
-            if system == "Linux":
-                chrome_driver_path = './chromedriver_linux64/chromedriver'
-            elif system == "Windows":
-                chrome_driver_path = './chromedriver_win32/chromedriver.exe'
-            elif system == "Darwin": # macOS
-                chrome_driver_path = './chromedriver_mac64/chromedriver'
-            else:
-                raise Exception(f"Unsupported operating system: {system}")
-
-            logger.info(f"Using local chromedriver for {system}: {chrome_driver_path}")
-            s = Service(executable_path=chrome_driver_path)
-
-        self.webdriver = webdriver.Chrome(options=chrome_options, service=s)
+        self.webdriver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     
     def search(self, keyword):
         # 使用webdriver打開特定的Google地圖搜索URL
