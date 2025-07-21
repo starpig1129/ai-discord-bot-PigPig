@@ -27,6 +27,7 @@ import asyncio
 import re
 import datetime
 import discord
+import torch
 from typing import Optional, List, Dict, Any
 
 from gpt.core.response_generator import generate_response, is_model_available
@@ -341,10 +342,6 @@ def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
 
     # 如果無法獲取語言設定，使用預設值
     return fallback_prompt.format(bot_id=bot_id, bot_owner_id=bot_owner_id)
-
-# 初始化 Hugging Face 嵌入模型（保留供未來使用）
-hf_embeddings_model = "sentence-transformers/all-MiniLM-L6-v2"
-embeddings = HuggingFaceEmbeddings(model_name=hf_embeddings_model)
 
 # 創建繁簡轉換器字典
 converters = {
