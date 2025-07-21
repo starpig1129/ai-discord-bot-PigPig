@@ -337,7 +337,7 @@ class YouTubeManager:
                 'socket_timeout': ytdlp_config.get('socket_timeout', 300),
                 'retries': ytdlp_config.get('retries', 10),
                 'verbose': False,
-                'progress_hooks': [lambda d: logger.info(f"下載進度: {d.get('status', 'unknown')} - {d.get('_percent_str', '0%')}")],
+                'progress_hooks': [lambda d: logger.debug(f"下載進度: {d.get('status', 'unknown')} - {d.get('_percent_str', '0%')}")],
                 'merge_output_format': self.ffmpeg_config.get('audio_codec', 'mp3'),
                 'concurrent_fragment_downloads': ytdlp_config.get('concurrent_fragment_downloads', 1),
                 'file_access_retries': ytdlp_config.get('file_access_retries', 5),
