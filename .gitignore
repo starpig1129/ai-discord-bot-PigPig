@@ -1,6 +1,7 @@
 # 忽略環境設定檔與編譯後的 Python 檔案
 .env
 *.pyc
+.roomodes
 __pycache__/
 
 # 忽略應用程式的設定檔案
