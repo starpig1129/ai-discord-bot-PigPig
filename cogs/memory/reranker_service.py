@@ -38,6 +38,13 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch.nn.functional as F
 
+try:
+    from torch.distributed import device_mesh, distribute_tensor
+    from torch.distributed.tensor.parallel import Replicate
+except ImportError:
+    device_mesh, distribute_tensor, Replicate = None, None, None
+
+
 # 修復 transformers 庫的 NoneType 錯誤
 try:
     import transformers.modeling_utils
@@ -156,12 +163,11 @@ class RerankerService:
         """
         if not self.profile.vector_enabled or not self.reranker_model:
             raise VectorOperationError("向量功能未啟用或模型名稱為空")
-        
+
         try:
             self.logger.info(f"正在載入重排序模型: {self.reranker_model}")
             start_time = time.time()
             
-            # 安全檢查模型名稱
             model_name = str(self.reranker_model) if self.reranker_model is not None else "Qwen/Qwen3-Reranker-0.6B"
             
             # 載入分詞器
@@ -169,44 +175,22 @@ class RerankerService:
                 model_name,
                 cache_dir=str(self._cache_dir),
                 trust_remote_code=True,
-                padding_side='left'  # 官方範例設定
+                padding_side='left'
             )
             
-            # 載入模型
-            model_kwargs = {
-                "cache_dir": str(self._cache_dir),
-                "trust_remote_code": True
-            }
+            # 判斷模型載入的 dtype
+            model_dtype = torch.float16 if self._device == "cuda" else torch.float32
 
-            use_device_map_auto = False
-            if self._device == "cuda":
-                torch_version = torch.__version__
-                major, minor = map(int, torch_version.split('.')[:2])
-                
-                if major > 2 or (major == 2 and minor >= 5):
-                    use_device_map_auto = True # 標記將使用 device_map
-                    model_kwargs.update({
-                        "torch_dtype": torch.float16,
-                        "device_map": "auto"
-                    })
-                else:
-                    # PyTorch < 2.5，將先載入到 CPU，然後手動移至 CUDA
-                    model_kwargs.update({
-                        "torch_dtype": torch.float16
-                    })
-            else: # "mps" 或 "cpu"
-                model_kwargs.update({
-                    "torch_dtype": torch.float32 #  或者為 MPS 選擇合適的 dtype
-                })
-            
+            # 載入模型，不使用 device_map="auto"
             model = AutoModelForCausalLM.from_pretrained(
-                model_name, **model_kwargs
+                model_name,
+                cache_dir=str(self._cache_dir),
+                trust_remote_code=True,
+                torch_dtype=model_dtype
             )
             
-            # 移動到指定設備
-            if not use_device_map_auto:
-                model = model.to(self._device)
-            
+            # 手動將模型移動到指定設備
+            model = model.to(self._device)
             model.eval()
             
             # 初始化 token IDs
@@ -214,10 +198,8 @@ class RerankerService:
                 self._token_false_id = tokenizer.convert_tokens_to_ids("no")
                 self._token_true_id = tokenizer.convert_tokens_to_ids("yes")
                 
-                # 安全檢查 unk_token_id
                 unk_token_id = getattr(tokenizer, 'unk_token_id', None)
                 
-                # 檢查 token IDs 是否有效
                 if (self._token_false_id is None or self._token_true_id is None or
                     (unk_token_id is not None and
                      (self._token_false_id == unk_token_id or self._token_true_id == unk_token_id))):
@@ -226,7 +208,7 @@ class RerankerService:
             except Exception as e:
                 raise VectorOperationError(f"初始化 token IDs 失敗: {e}")
             
-            # 預處理 prefix 和 suffix tokens（官方範例方式）
+            # 預處理 prefix 和 suffix tokens
             try:
                 prefix_text = self.prompt_prefix if self.prompt_prefix is not None else ""
                 suffix_text = self.prompt_suffix if self.prompt_suffix is not None else ""
@@ -238,14 +220,10 @@ class RerankerService:
                 self._suffix_tokens = []
             
             load_time = time.time() - start_time
-            # 確保 load_time 是數值類型
-            if isinstance(load_time, (int, float)):
-                load_time_str = f"{load_time:.2f}"
-            else:
-                load_time_str = str(load_time)
+            load_time_str = f"{load_time:.2f}" if isinstance(load_time, (int, float)) else str(load_time)
             
             self.logger.info(
-                f"重排序模型載入完成，耗時: {load_time_str}秒, "
+                f"重排序模型載入完成（已禁用 device_map='auto'），耗時: {load_time_str}秒, "
                 f"設備: {next(model.parameters()).device}, "
                 f"Token IDs - yes: {self._token_true_id}, no: {self._token_false_id}"
             )
@@ -325,22 +303,19 @@ class RerankerService:
         
         # 統一 padding 和轉換為張量
         inputs = tokenizer.pad(
-            inputs, 
-            padding=True, 
-            return_tensors="pt", 
+            inputs,
+            padding='max_length',  # 修正：使用 'max_length' 以避免警告
+            return_tensors="pt",
             max_length=self.max_length
         )
-        
-        # 移動到模型設備
-        for key in inputs:
-            inputs[key] = inputs[key].to(model.device)
-        
+
+        # 注意：不再手動移動到設備，這將由 compute_logits 處理
         return inputs
     
     @torch.no_grad()
     def compute_logits(self, inputs: Dict[str, torch.Tensor]) -> List[float]:
         """計算 logits 分數（根據官方範例的 compute_logits 函數）
-        
+    
         Args:
             inputs: 處理後的輸入張量
             
@@ -348,9 +323,17 @@ class RerankerService:
             List[float]: 分數列表
         """
         model, _ = self.get_model()
-        
+
+        # 直接將所有輸入張量移動到目標設備
+        # device_map="auto" 會自動處理後續的設備分配
+        processed_inputs = {
+            key: tensor.to(self._device)
+            for key, tensor in inputs.items()
+            if isinstance(tensor, torch.Tensor)
+        }
+
         # 前向傳播
-        batch_scores = model(**inputs).logits[:, -1, :]
+        batch_scores = model(**processed_inputs).logits[:, -1, :]
         
         # 提取 yes/no token 的 logits
         true_vector = batch_scores[:, self._token_true_id]
@@ -577,14 +560,19 @@ class RerankerService:
             self.logger.info("正在預熱重排序模型...")
             start_time = time.time()
             
-            # 測試重排序
-            test_query = "測試查詢"
-            test_candidates = [
-                {"content": "相關測試內容"},
-                {"content": "不相關測試內容"}
-            ]
+            # 獲取模型，但不觸發完整的 rerank 流程
+            model, _ = self.get_model()
             
-            self.rerank_results(test_query, test_candidates)
+            # 建立一個簡單的 dummy input 來預熱模型
+            dummy_query = "預熱查詢"
+            dummy_doc = "這是一份用於預熱的樣本文檔。"
+            
+            # 使用與實際 rerank 相同的邏輯
+            formatted_input = self.format_instruction(None, dummy_query, dummy_doc)
+            dummy_input = self.process_inputs([formatted_input])
+
+            # 執行一次推理
+            _ = self.compute_logits(dummy_input)
             
             warmup_time = time.time() - start_time
             # 確保 warmup_time 是數值類型
@@ -596,70 +584,18 @@ class RerankerService:
             self.logger.info(f"重排序模型預熱完成，耗時: {warmup_time_str}秒")
             
         except Exception as e:
-            self.logger.warning(f"重排序模型預熱失敗: {e}")
+            self.logger.error(f"預熱重排序模型失敗: {e}")
+            # 即使預熱失敗，也應繼續運行
+            pass
     
     def __del__(self):
         """析構函數，清理資源"""
-        try:
-            self.clear_cache()
-        except Exception:
-            pass
+        import sys
+        # 僅在直譯器未處於關閉狀態時才嘗試清理，以避免不可預測的錯誤
+        if sys and sys.meta_path is not None:
+            try:
+                self.clear_cache()
+            except Exception:
+                # 在 __del__ 中，即使是日誌記錄也可能不安全，因此靜默處理異常
+                pass
 
-
-class RerankerServiceManager:
-    """重排序服務管理器
-    
-    管理重排序服務實例，提供服務池和資源管理。
-    """
-    
-    def __init__(self):
-        """初始化服務管理器"""
-        self.logger = logging.getLogger(__name__)
-        self._services: Dict[str, RerankerService] = {}
-        self._lock = threading.RLock()
-    
-    def get_service(
-        self, 
-        profile: MemoryProfile, 
-        reranker_model: str = "Qwen/Qwen3-Reranker-0.6B"
-    ) -> RerankerService:
-        """取得重排序服務實例
-        
-        Args:
-            profile: 記憶系統配置檔案
-            reranker_model: 重排序模型名稱
-            
-        Returns:
-            RerankerService: 重排序服務實例
-        """
-        service_key = f"{profile.name}_{reranker_model}"
-        
-        if service_key not in self._services:
-            with self._lock:
-                if service_key not in self._services:
-                    self._services[service_key] = RerankerService(profile, reranker_model)
-        
-        return self._services[service_key]
-    
-    def clear_all_caches(self) -> None:
-        """清除所有服務的快取"""
-        with self._lock:
-            for service in self._services.values():
-                service.clear_cache()
-            self._services.clear()
-            self.logger.info("所有重排序服務快取已清除")
-    
-    def get_all_statistics(self) -> Dict[str, Dict[str, Union[int, float, str]]]:
-        """取得所有服務的統計資訊
-        
-        Returns:
-            Dict[str, Dict[str, Union[int, float, str]]]: 服務統計資訊
-        """
-        return {
-            service_key: service.get_statistics()
-            for service_key, service in self._services.items()
-        }
-
-
-# 全域重排序服務管理器實例
-reranker_service_manager = RerankerServiceManager()

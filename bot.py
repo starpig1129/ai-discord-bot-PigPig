@@ -35,6 +35,8 @@ from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
 from gpt.core.action_dispatcher import ActionDispatcher
 from gpt.core.response_generator import get_model_and_tokenizer
+from gpt.core.message_handler import MessageHandler
+from gpt.performance_monitor import PerformanceMonitor
 from logs import TimedRotatingFileHandler
 from cogs.memory.memory_manager import MemoryManager
 import gpt.tools.builtin
@@ -45,7 +47,6 @@ from gpt.optimization_integration import (
     initialize_optimization_from_file,
     get_optimized_bot,
     process_optimized_request,
-    get_optimization_status
 )
 from gpt.optimization_config_manager import is_optimization_enabled
 # 配置 logging
@@ -61,7 +62,8 @@ class PigPig(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.loggers = {}
-        self.action_dispatcher = ActionDispatcher(self)
+        # ActionDispatcher 將在 setup_hook 中被創建和注入
+        self.message_handler: Optional[MessageHandler] = None
         
         # 記憶系統初始化
         self.memory_manager: Optional[MemoryManager] = None
@@ -74,6 +76,7 @@ class PigPig(commands.Bot):
         # 優化系統初始化
         self.optimization_enabled = False
         self.optimized_bot = None
+        self.performance_monitor = PerformanceMonitor()
 
     def setup_logger_for_guild(self, guild_name):
         if guild_name not in self.loggers:
@@ -112,31 +115,29 @@ class PigPig(commands.Bot):
             self.memory_enabled = False
     
     async def initialize_optimization_system(self):
-        """初始化優化系統"""
+        """根據配置文件初始化各個優化模組。"""
         try:
-            # 檢查優化功能是否啟用
             if not is_optimization_enabled():
-                print("優化系統已在配置中停用")
+                print("優化系統已在配置中停用。")
+                self.optimization_enabled = False
                 return
+
+            print("正在初始化優化系統...")
+            # 這裡不再初始化一個完整的 Bot，而是根據需要初始化各個模組
+            # 例如，未來可以這樣做：
+            # config = get_optimization_config()
+            # if config.get('gemini_cache'):
+            #     self.gemini_cache = GeminiCache()
+            # if config.get('parallel_tools'):
+            #     self.tool_executor = ParallelToolExecutor()
             
-            # 初始化優化系統
-            self.optimized_bot = initialize_optimization_from_file()
+            # 目前，我們只設置一個標誌
             self.optimization_enabled = True
-            
-            print("優化系統初始化成功")
-            
-            # 顯示優化狀態
-            status = get_optimization_status()
-            config = status.get('config', {})
-            print(f"  - Gemini 快取: {'✓' if config.get('gemini_cache') else '✗'}")
-            print(f"  - 處理快取: {'✓' if config.get('processing_cache') else '✗'}")
-            print(f"  - 記憶快取: {'✓' if config.get('memory_cache') else '✗'}")
-            print(f"  - 並行工具: {'✓' if config.get('parallel_tools') else '✗'}")
-            print(f"  - 性能監控: {'✓' if config.get('performance_monitoring') else '✗'}")
-            
+            print("優化系統初始化完成。")
+
         except Exception as e:
             print(f"優化系統初始化失敗: {e}")
-            print("將使用傳統處理方式")
+            print("將使用傳統處理方式。")
             self.optimization_enabled = False
     
     async def store_message_to_memory(self, message: discord.Message):
@@ -180,41 +181,16 @@ class PigPig(commands.Bot):
         
         await self.process_commands(message)
         
-        guild_id = str(message.guild.id)
-        
-        prompt = message.content.replace(f"<@{self.user.id}>","")
-        
+        # 將訊息處理委派給 MessageHandler
+        # 檢查訊息是否需要由機器人處理 (例如 @mention 或在特定頻道)
         channel_manager = self.get_cog('ChannelManager')
         if channel_manager:
-            is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(message.channel, guild_id)
-            if not is_allowed:
-                return
-
-            # 如果是故事模式，將訊息交給 StoryManagerCog 處理
-            if channel_mode == 'story':
-                story_cog = self.get_cog('StoryManagerCog')
-                if story_cog:
-                    # 使用 asyncio.create_task 在背景處理，避免阻塞 on_message
-                    asyncio.create_task(story_cog.handle_story_message(message))
-                return # 中斷後續的標準對話流程
-
-        # 實現生成回應的邏輯
-        if (self.user.id in message.raw_mentions and not message.mention_everyone) or auto_response_enabled:
-            # 發送初始訊息
-            global global_model, global_tokenizer
-
-            model, tokenizer = get_model_and_tokenizer()
-            # if model is None or tokenizer is None:
-            #     await message.reply("豬腦休息中")
-            #     self.save_dialogue_history()
-            #     return
-
-            message_to_edit = await message.reply("思考中...")
-            try:
-                execute_action = await self.action_dispatcher.choose_act(prompt, message, message_to_edit)
-                await execute_action(message_to_edit, prompt, message)
-            except Exception as e:
-                print(e)
+            guild_id = str(message.guild.id)
+            is_allowed, auto_response_enabled, _ = channel_manager.is_allowed_channel(message.channel, guild_id)
+            
+            # 只有在允許的頻道且被提及或啟用自動回應時，才觸發 handle_message
+            if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
+                await self.message_handler.handle_message(message)
     
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
         if before.author.bot or not before.guild:
@@ -263,6 +239,10 @@ class PigPig(commands.Bot):
             # 2. 排除 __init__.py（包初始化文件）
             # 3. 排除以 _ 開頭的文件（私有模組）
             # 4. 排除以 . 開頭的文件（隱藏文件）
+            if module == 'gen_img.py':
+                # 由於 triton 套件安裝問題，暫時禁用 gen_img
+                print(f"Skipping cog: {module[:-3]}")
+                continue
             if (module.endswith('.py') and
                 module != '__init__.py' and
                 not module.startswith('_') and
@@ -273,6 +253,10 @@ class PigPig(commands.Bot):
                 except Exception as e:
                     print(f"Failed to load {module[:-3]}: {e}")
                     print(traceback.format_exc())
+
+        # 初始化核心服務
+        action_dispatcher = ActionDispatcher(self)
+        self.message_handler = MessageHandler(self, action_dispatcher, self.performance_monitor)
 
         # 初始化記憶系統
         await self.initialize_memory_system()

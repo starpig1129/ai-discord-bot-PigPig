@@ -14,11 +14,11 @@ langchain==0.2.5
 langchain-community==0.2.5
 langchain-core==0.2.9
 bitsandbytes==0.43.1
-diffusers==0.29.1
+diffusers==0.34.0
+triton
 huggingface-hub==0.30.0
 transformers>=4.52.0
 safetensors==0.4.3
-triton
 scikit-image==0.24.0
 scipy==1.13.1
 tqdm==4.66.2
@@ -46,6 +46,7 @@ pytz
 yt_dlp
 youtube_search
 PyNaCl
+humanize
 # ============================================================================
 # Memory System Dependencies (智能頻道記憶系統)
 # ============================================================================
@@ -60,4 +61,3 @@ scikit-learn>=1.0.0           # 機器學習工具（相似度計算）
 # Note: 記憶系統已整合至主要依賴項目
 # GPU 用戶可選擇安裝: pip install faiss-gpu
 # Apple Silicon 用戶建議: pip install torch torchvision torchaudio
-triton

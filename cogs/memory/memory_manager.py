@@ -9,6 +9,7 @@ import json
 import logging
 import time
 import uuid
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -23,7 +24,7 @@ from .database import DatabaseManager
 from .config import MemoryConfig, MemoryProfile
 from .embedding_service import EmbeddingService, embedding_service_manager
 from .vector_manager import VectorManager
-from .search_engine import SearchEngine, SearchQuery, SearchResult, SearchType, TimeRange
+from .search_engine import SearchEngine, SearchQuery, SearchResult, SearchType, TimeRange, SearchCache
 from .segmentation_service import (
     TextSegmentationService,
     SegmentationConfig,
@@ -37,6 +38,7 @@ from .exceptions import (
     SearchError,
     VectorOperationError
 )
+from .reranker_service import RerankerService
 from .startup_logger import get_startup_logger, StartupLoggerManager
 
 
@@ -59,6 +61,7 @@ class MemoryManager:
     """
     
     INDEX_LOAD_CONCURRENCY_THRESHOLD = 10  # 載入索引時，觸發並行處理的檔案數量閾值
+    MAX_LOADED_INDICES = 50  # LRU 快取中最大載入索引數量
     
     def __init__(self, config_path: Optional[str] = None):
         """初始化記憶管理器
@@ -79,6 +82,7 @@ class MemoryManager:
         
         # 向量搜尋組件
         self.embedding_service: Optional[EmbeddingService] = None
+        self.reranker_service: Optional[RerankerService] = None
         self.vector_manager: Optional[VectorManager] = None
         self.search_engine: Optional[SearchEngine] = None
         
@@ -86,10 +90,15 @@ class MemoryManager:
         self.segmentation_service: Optional[TextSegmentationService] = None
         self.segmentation_config: Optional[SegmentationConfig] = None
         
-        # 性能統計
+        # 性能統計與快取
         self._query_times: List[float] = []
         self._cache_hits = 0
         self._cache_misses = 0
+        self.search_cache: Optional[SearchCache] = None
+        
+        # 索引管理 (延遲載入與 LRU)
+        self.indices_status: Dict[str, str] = {}  # "on_disk" or "loaded"
+        self.loaded_indices: OrderedDict[str, Any] = OrderedDict()
         
         # 執行緒安全鎖
         self._lock = asyncio.Lock()
@@ -212,6 +221,35 @@ class MemoryManager:
                 indices_path
             )
             
+            # 初始化搜尋快取
+            if memory_config.get("cache", {}).get("enabled", True):
+                cache_config = memory_config.get("cache", {})
+                self.search_cache = SearchCache(
+                    max_size=cache_config.get("max_size", 1000),
+                    ttl_seconds=cache_config.get("ttl_seconds", 3600)
+                )
+                self.logger.info("搜尋快取已啟用")
+            else:
+                self.search_cache = None
+                self.logger.info("搜尋快取已停用")
+
+            # 初始化重排序服務
+            self.reranker_service = None
+            if memory_config.get("reranker", {}).get("enabled", True):
+                try:
+                    # 直接實例化 RerankerService
+                    self.reranker_service = await loop.run_in_executor(
+                        None,
+                        RerankerService,
+                        self.current_profile
+                    )
+                    if self.reranker_service:
+                        self.logger.info("重排序服務初始化成功")
+                except Exception as e:
+                    self.logger.warning(f"重排序服務初始化失敗: {e}")
+                    get_startup_logger().log_warning(f"重排序服務初始化失敗: {e}")
+                    self.reranker_service = None # 確保失敗時為 None
+
             # 初始化搜尋引擎
             self.search_engine = await loop.run_in_executor(
                 None,
@@ -220,8 +258,9 @@ class MemoryManager:
                 self.embedding_service,
                 self.vector_manager,
                 self.db_manager,
-                memory_config.get("cache", {}).get("enabled", True),
-                memory_config.get("reranker", {}).get("enabled", True)  # 預設啟用重排序
+                self.reranker_service,
+                self.search_cache,
+                memory_config.get("reranker", {}).get("enabled", True)
             )
             
             # 預熱嵌入模型
@@ -231,7 +270,7 @@ class MemoryManager:
             if hasattr(self.search_engine, 'warmup_reranker'):
                 await loop.run_in_executor(None, self.search_engine.warmup_reranker)
             
-            # 載入現有的索引檔案
+            # 掃描現有的索引檔案
             await self._load_existing_indices()
             
             self.logger.info("向量搜尋組件初始化完成")
@@ -242,14 +281,14 @@ class MemoryManager:
             self.current_profile.vector_enabled = False
     
     async def _load_existing_indices(self) -> None:
-        """以非阻塞方式逐一載入所有現有的索引檔案到記憶體中。"""
+        """掃描現有的索引檔案並記錄其狀態，但不立即載入。"""
         try:
             if not self.vector_manager or not self.current_profile.vector_enabled:
                 return
 
             indices_path = self.vector_manager.storage_path
             if not indices_path.exists():
-                self.logger.info("索引目錄不存在，跳過載入現有索引")
+                self.logger.info("索引目錄不存在，跳過掃描現有索引")
                 return
 
             index_files = list(indices_path.glob("*.index"))
@@ -259,55 +298,69 @@ class MemoryManager:
                 self.logger.info("沒有找到現有的索引檔案")
                 return
 
-            self.logger.info(f"找到 {total_files} 個現有索引檔案，開始非阻塞載入...")
+            self.logger.info(f"找到 {total_files} 個現有索引檔案，將其標記為 'on_disk'")
 
-            loaded_count = 0
-            failed_count = 0
+            for index_file in index_files:
+                channel_id = index_file.stem
+                self.indices_status[channel_id] = "on_disk"
 
-            # 根據檔案大小排序，優先載入較小的索引
-            index_files_sorted = sorted(
-                index_files,
-                key=lambda f: f.stat().st_size if f.exists() else 0
-            )
+            self.logger.info(f"索引狀態初始化完成，共 {len(self.indices_status)} 個索引待命。")
 
-            loop = asyncio.get_event_loop()
-            with tqdm.tqdm(total=total_files, desc="載入記憶體索引", unit="file") as pbar:
-                for index_file in index_files_sorted:
-                    try:
-                        channel_id = index_file.stem
-                        
-                        # 在獨立的執行緒中執行阻塞的檔案 I/O 和反序列化操作
-                        success = await loop.run_in_executor(
-                            None,
-                            self.vector_manager.create_channel_index,
-                            channel_id
-                        )
-                        
-                        if success:
-                            self.logger.debug(f"成功載入頻道 {channel_id} 的索引")
-                            loaded_count += 1
-                        else:
-                            self.logger.warning(f"載入頻道 {channel_id} 的索引失敗")
-                            failed_count += 1
-                            
-                    except Exception as e:
-                        self.logger.error(f"處理索引檔案 {index_file.name} 時發生嚴重錯誤: {e}")
-                        failed_count += 1
-                    finally:
-                        # 確保無論成功或失敗，進度條都會更新
-                        pbar.update(1)
-
-            self.logger.info(
-                f"索引載入完成: {loaded_count} 個成功，{failed_count} 個失敗，"
-                f"總共 {total_files} 個索引檔案"
-            )
-
-            if self.vector_manager.gpu_memory_manager:
-                self.vector_manager.gpu_memory_manager.log_memory_stats(force_log=True)
-            
         except Exception as e:
-            self.logger.error(f"載入現有索引時發生未預期的錯誤: {e}")
+            self.logger.error(f"掃描現有索引時發生未預期的錯誤: {e}")
     
+    async def _ensure_index_loaded(self, channel_id: str) -> None:
+        """確保指定頻道的索引已載入記憶體，並管理 LRU 快取。"""
+        if not self.vector_manager or not self.current_profile.vector_enabled:
+            return
+
+        async with self._lock:
+            status = self.indices_status.get(channel_id)
+
+            if status == "loaded":
+                if channel_id in self.loaded_indices:
+                    self.loaded_indices.move_to_end(channel_id)
+                    self.logger.debug(f"索引 {channel_id} 已載入，更新其為最近使用。")
+                return
+
+            if status == "on_disk":
+                self.logger.info(f"索引 {channel_id} 狀態為 'on_disk'，開始載入...")
+
+                # LRU 快取管理：檢查是否達到上限
+                if len(self.loaded_indices) >= self.MAX_LOADED_INDICES:
+                    lru_channel_id, _ = self.loaded_indices.popitem(last=False)
+                    self.indices_status[lru_channel_id] = "on_disk"
+                    # 使用新加入的 unload_channel_index 方法
+                    if not self.vector_manager.unload_channel_index(lru_channel_id):
+                        self.logger.error(f"卸載索引 {lru_channel_id} 失敗")
+                    else:
+                        self.logger.info(f"LRU 快取已滿，卸載最久未使用的索引: {lru_channel_id}")
+
+                # 載入新索引
+                loop = asyncio.get_event_loop()
+                try:
+                    success = await loop.run_in_executor(
+                        None,
+                        self.vector_manager.create_channel_index,
+                        channel_id
+                    )
+                    if success:
+                        self.indices_status[channel_id] = "loaded"
+                        index_instance = self.vector_manager.get_channel_index(channel_id)
+                        if index_instance:
+                            self.loaded_indices[channel_id] = index_instance
+                            self.logger.info(f"成功載入索引: {channel_id}")
+                        else:
+                             self.logger.error(f"載入索引 {channel_id} 後無法獲取實例")
+                             self.indices_status[channel_id] = "on_disk"
+                    else:
+                        self.logger.error(f"載入索引 {channel_id} 失敗")
+                        self.indices_status.pop(channel_id, None)
+                except Exception as e:
+                    self.logger.error(f"載入索引 {channel_id} 時發生嚴重錯誤: {e}")
+                    self.indices_status.pop(channel_id, None)
+                    raise MemorySystemError(f"無法載入頻道 {channel_id} 的索引: {e}")
+
     async def _initialize_segmentation_service(self) -> None:
         """初始化文本分割服務"""
         try:
@@ -598,259 +651,205 @@ class MemoryManager:
     
     async def _store_message_vector(self, message_data: Dict[str, Any]) -> None:
         """儲存訊息的向量嵌入
-        
+
         Args:
             message_data: 訊息資料
         """
+        if not self.embedding_service or not self.vector_manager:
+            return
+
         try:
-            # 檢查是否有有效的內容
-            content = message_data.get("content_processed", "") or message_data.get("content", "")
-            if not content.strip():
+            content_to_embed = message_data.get("content_processed")
+            if not content_to_embed or not content_to_embed.strip():
+                self.logger.debug(f"訊息 {message_data['message_id']} 內容為空，跳過向量化")
                 return
-            
-            channel_id = message_data["channel_id"]
-            message_id = message_data["message_id"]
-            
-            # 確保頻道索引存在
+
+            # 確保索引已載入
+            channel_id = message_data['channel_id']
+            await self._ensure_index_loaded(channel_id)
+
+            # 在執行緒池中執行嵌入和新增向量操作
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                self.vector_manager.create_channel_index,
-                channel_id
-            )
             
-            # 生成嵌入向量
-            embedding = await loop.run_in_executor(
-                None,
-                self.embedding_service.encode_text,
-                content
-            )
-            
-            # 儲存向量到 FAISS 索引
-            faiss_success = await loop.run_in_executor(
-                None,
-                self.vector_manager.add_vectors,
-                channel_id,
-                embedding.reshape(1, -1),  # 轉換為批次格式
-                [message_id]
-            )
-            
-            # 儲存嵌入到資料庫
-            db_success = await loop.run_in_executor(
-                None,
-                self._store_embedding_to_database,
-                message_id,
-                channel_id,
-                embedding,
-                self.current_profile.embedding_model,
-                len(embedding)
-            )
-            
-            # 定期儲存索引檔案（每 50 個向量儲存一次）
-            if faiss_success:
+            def embed_and_add_sync():
                 try:
-                    # 確保索引目錄存在
-                    await self._ensure_indices_directory()
+                    # 產生嵌入向量
+                    embedding = self.embedding_service.encode_text(content_to_embed)
                     
-                    # 取得頻道的向量統計
-                    stats = self.vector_manager.get_index_stats(channel_id)
-                    total_vectors = stats.get("total_vectors", 0)
+                    # 新增向量到索引
+                    self.vector_manager.add_vectors(
+                        channel_id=channel_id,
+                        vectors=np.array([embedding]),
+                        ids=[message_data["message_id"]]
+                    )
                     
-                    # 每 50 個向量或第一個向量時儲存索引
-                    if total_vectors == 1 or total_vectors % 50 == 0:
-                        save_success = await loop.run_in_executor(
-                            None,
-                            self.vector_manager.save_index,
-                            channel_id
-                        )
-                        if save_success:
-                            self.logger.debug(f"頻道 {channel_id} 索引檔案已儲存（向量數: {total_vectors}）")
-                        else:
-                            self.logger.warning(f"頻道 {channel_id} 索引檔案儲存失敗")
-                            # 檢查具體的儲存問題
-                            await self._diagnose_index_storage_issue(channel_id)
+                    # 將嵌入向量儲存到資料庫
+                    self._store_embedding_to_database(
+                        message_id=message_data["message_id"],
+                        channel_id=channel_id,
+                        embedding=embedding
+                    )
                 except Exception as e:
-                    self.logger.warning(f"定期儲存索引檔案失敗: {e}")
-                    # 記錄詳細的錯誤資訊
-                    await self._diagnose_index_storage_issue(channel_id, str(e))
-            
-            if faiss_success and db_success:
-                self.logger.debug(f"向量嵌入已儲存到索引和資料庫: {message_id}")
-            elif faiss_success:
-                self.logger.warning(f"向量嵌入儲存到索引成功，但資料庫儲存失敗: {message_id}")
-            elif db_success:
-                self.logger.warning(f"向量嵌入儲存到資料庫成功，但索引儲存失敗: {message_id}")
-            else:
-                self.logger.warning(f"向量嵌入儲存完全失敗: {message_id}")
-                
+                    self.logger.error(f"處理訊息向量時發生錯誤: {e}")
+                    raise
+
+            await loop.run_in_executor(None, embed_and_add_sync)
+
         except Exception as e:
             self.logger.error(f"儲存訊息向量失敗: {e}")
-            # 不拋出例外，避免影響主要的訊息儲存流程
+            raise VectorOperationError(f"儲存訊息向量失敗: {e}")
     
     async def _process_message_segmentation(self, message_data: Dict[str, Any]) -> None:
         """處理訊息的文本分割
-        
+
         Args:
             message_data: 訊息資料
         """
+        if not self.segmentation_service:
+            return
+
         try:
-            # 檢查是否有有效的內容
-            content = message_data.get("content_processed", "") or message_data.get("content", "")
-            if not content.strip():
-                return
+            channel_id = message_data['channel_id']
             
-            # 準備分割處理參數
-            message_id = message_data["message_id"]
-            channel_id = message_data["channel_id"]
-            user_id = message_data["user_id"]
-            timestamp = message_data["timestamp"]
-            
-            # 在背景執行分割處理
-            if self.segmentation_config.background_segmentation:
-                # 非同步處理，不等待結果
-                asyncio.create_task(
-                    self._process_segmentation_async(
-                        message_id, channel_id, content, timestamp, user_id
-                    )
-                )
+            if self.segmentation_config.async_processing:
+                # 非同步處理
+                asyncio.create_task(self._process_segmentation_async(channel_id))
             else:
                 # 同步處理
-                await self._process_segmentation_async(
-                    message_id, channel_id, content, timestamp, user_id
-                )
-                
+                completed_segment = self.segmentation_service.process_message(message_data)
+                if completed_segment:
+                    await self._post_process_completed_segment(completed_segment)
+                    
         except Exception as e:
             self.logger.error(f"處理訊息分割失敗: {e}")
-            # 不拋出例外，避免影響主要的訊息儲存流程
     
     async def _process_segmentation_async(
-        self,
-        message_id: str,
-        channel_id: str,
-        content: str,
-        timestamp: datetime,
-        user_id: str
+        self, 
+        channel_id: str, 
+        force_segment: bool = False, 
+        force_all: bool = False
     ) -> None:
         """非同步處理分割邏輯
-        
+
         Args:
-            message_id: 訊息 ID
             channel_id: 頻道 ID
-            content: 訊息內容
-            timestamp: 時間戳記
-            user_id: 使用者 ID
+            force_segment: 是否強制分割
+            force_all: 是否處理所有待處理訊息
         """
+        if not self.segmentation_service:
+            return
+
         try:
-            # 呼叫分割服務處理新訊息
-            completed_segment = await self.segmentation_service.process_new_message(
-                message_id=message_id,
-                channel_id=channel_id,
-                content=content,
-                timestamp=timestamp,
-                user_id=user_id
-            )
+            self.logger.info(f"開始對頻道 {channel_id} 進行批次文本分割...")
             
-            if completed_segment:
-                # 記錄完成的片段
-                self.logger.debug(
-                    f"完成對話片段: {completed_segment.segment_id}，"
-                    f"訊息數: {completed_segment.message_count}，"
-                    f"持續時間: {completed_segment.duration_minutes:.1f}分鐘"
-                )
-                
-                # 可以在這裡添加額外的後處理邏輯
-                await self._post_process_completed_segment(completed_segment)
-                
+            # 1. 從資料庫獲取所有訊息
+            messages = self.db_manager.get_messages(channel_id=channel_id, limit=None)
+            
+            if not messages:
+                self.logger.info(f"頻道 {channel_id} 中沒有需要處理的訊息。")
+                return
+            
+            # 2. 按時間戳排序
+            messages.sort(key=lambda m: datetime.fromisoformat(m['timestamp']))
+            
+            self.logger.info(f"找到 {len(messages)} 條訊息，開始處理...")
+            
+            processed_count = 0
+            # 3. 遍歷並處理每條訊息
+            for message_data in messages:
+                try:
+                    # 4. 呼叫單一訊息處理方法
+                    completed_segment = await self.segmentation_service.process_new_message(
+                        message_id=message_data['message_id'],
+                        channel_id=message_data['channel_id'],
+                        content=message_data['content'],
+                        timestamp=datetime.fromisoformat(message_data['timestamp']),
+                        user_id=message_data['user_id']
+                    )
+                    
+                    # 5. 後處理已完成的片段
+                    if completed_segment:
+                        await self._post_process_completed_segment(completed_segment)
+                    
+                    processed_count += 1
+                except Exception as inner_e:
+                    self.logger.error(f"處理訊息 {message_data['message_id']} 分割時出錯: {inner_e}")
+
+            self.logger.info(f"頻道 {channel_id} 的批次分割完成，共處理 {processed_count} 條訊息。")
+
         except Exception as e:
-            self.logger.error(f"非同步分割處理失敗: {e}")
+            self.logger.error(f"非同步處理頻道 {channel_id} 分割失敗: {e}")
     
     async def _post_process_completed_segment(self, segment) -> None:
         """後處理已完成的片段
-        
+
         Args:
-            segment: 完成的對話片段
+            segment: 已完成的片段物件
         """
         try:
-            # 這裡可以添加額外的處理邏輯，例如：
-            # 1. 更新向量索引
-            # 2. 生成片段摘要
-            # 3. 發送通知
-            # 4. 更新統計資料
-            
-            # 更新片段的向量表示到向量索引（如果需要）
-            if (segment.vector_representation is not None and 
-                self.vector_manager and 
-                self.current_profile.vector_enabled):
-                
-                # 將片段向量添加到特殊的片段索引中
+            if self.current_profile.vector_enabled:
                 await self._add_segment_to_vector_index(segment)
-            
         except Exception as e:
-            self.logger.warning(f"後處理片段失敗: {e}")
+            self.logger.error(f"後處理片段 {segment.id} 失敗: {e}")
     
     async def _add_segment_to_vector_index(self, segment) -> None:
         """將片段添加到向量索引
-        
+
         Args:
-            segment: 對話片段
+            segment: 片段物件
         """
+        if not self.embedding_service or not self.vector_manager:
+            return
+
         try:
-            if not segment.vector_representation.any():
-                return
-            
-            # 使用特殊的索引鍵來標識片段向量
-            segment_index_key = f"segments_{segment.channel_id}"
-            
-            # 在執行緒池中執行向量操作
+            # 確保索引已載入
+            await self._ensure_index_loaded(segment.channel_id)
+
+            # 在執行緒池中執行
             loop = asyncio.get_event_loop()
             
-            # 確保片段索引存在
-            await loop.run_in_executor(
-                None,
-                self.vector_manager.create_channel_index,
-                segment_index_key
-            )
-            
-            # 添加片段向量
-            await loop.run_in_executor(
-                None,
-                self.vector_manager.add_vectors,
-                segment_index_key,
-                segment.vector_representation.reshape(1, -1),
-                [segment.segment_id]
-            )
-            
-            self.logger.debug(f"片段向量已添加到索引: {segment.segment_id}")
+            def embed_and_add_sync():
+                try:
+                    embedding = self.embedding_service.encode_text(segment.summary)
+                    self.vector_manager.add_vectors(
+                        channel_id=segment.channel_id,
+                        vectors=np.array([embedding]),
+                        ids=[f"seg_{segment.id}"]
+                    )
+                except Exception as e:
+                    self.logger.error(f"處理片段向量時發生錯誤: {e}")
+                    raise
+
+            await loop.run_in_executor(None, embed_and_add_sync)
             
         except Exception as e:
-            self.logger.warning(f"添加片段到向量索引失敗: {e}")
+            self.logger.error(f"新增片段到向量索引失敗: {e}")
     
     def _store_embedding_to_database(
-        self,
-        message_id: str,
-        channel_id: str,
-        embedding: np.ndarray,
-        model_version: str,
-        dimension: int
+        self, 
+        message_id: str, 
+        channel_id: str, 
+        embedding: np.ndarray
     ) -> bool:
         """將嵌入向量儲存到資料庫
-        
+
         Args:
             message_id: 訊息 ID
             channel_id: 頻道 ID
             embedding: 嵌入向量
-            model_version: 模型版本
-            dimension: 向量維度
-            
+
         Returns:
             bool: 是否成功儲存
         """
+        if not self.db_manager or not self.embedding_service:
+            return False
+
         try:
-            # 序列化向量資料
             vector_data = embedding.tobytes()
-            
+            model_version = self.embedding_service.get_model_version()
+            dimension = embedding.shape[0]
+
             with self.db_manager.get_connection() as conn:
-                # 適應現有資料庫結構：使用 id 作為主鍵（自動遞增）
                 # 添加 user_id 欄位以符合現有結構
                 conn.execute("""
                     INSERT INTO embeddings
@@ -970,139 +969,126 @@ class MemoryManager:
                 free_mb = free // (1024 * 1024)
                 if free_mb < 100:  # 少於 100MB
                     self.logger.error(f"磁盤空間不足: 剩餘 {free_mb}MB")
-                else:
-                    self.logger.debug(f"磁盤空間足夠: 剩餘 {free_mb}MB")
             except Exception as disk_e:
-                self.logger.warning(f"無法檢查磁盤空間: {disk_e}")
+                self.logger.error(f"檢查磁盤空間失敗: {disk_e}")
             
-            # 記錄詳細錯誤
-            if error_msg:
-                self.logger.error(f"索引儲存失敗的具體錯誤: {error_msg}")
-            else:
-                self.logger.warning(f"頻道 {channel_id} 索引儲存失敗，但未提供具體錯誤訊息")
-                
+            self.logger.info(f"頻道 {channel_id} 索引儲存診斷完成")
+            
         except Exception as e:
             self.logger.error(f"診斷索引儲存問題時發生錯誤: {e}")
-
-    async def search_memory(self, search_query) -> 'SearchResult':
+    
+    async def search_memory(self, search_query: SearchQuery) -> 'SearchResult':
         """搜尋相關記憶（包裝器方法）
-        
+
         Args:
             search_query: 搜尋查詢物件
-            
+
         Returns:
             SearchResult: 搜尋結果
-            
-        Raises:
-            MemorySystemError: 當搜尋系統未初始化或搜尋失敗時
         """
-        if not self._check_initialized():
-            raise MemorySystemError("記憶系統未初始化或已停用")
-        
-        if not self.search_engine:
-            raise MemorySystemError("搜尋引擎未初始化")
-        
+        if not self._check_initialized() or not self.search_engine:
+            raise MemorySystemError("記憶系統未初始化或搜尋引擎不可用")
+
         try:
             start_time = time.time()
+
+            # 步驟 1: 檢查快取
+            cache_key = None
+            if self.search_cache:
+                cache_key = search_query.get_cache_key()
+                cached_result = self.search_cache.get(cache_key)
+                if cached_result:
+                    self._cache_hits += 1
+                    total_time_ms = (time.time() - start_time) * 1000
+                    cached_result.search_time_ms = total_time_ms
+                    cached_result.cache_hit = True
+                    self.logger.info(
+                        f"記憶搜尋完成 (快取命中) - "
+                        f"頻道: {search_query.channel_id}, "
+                        f"耗時: {total_time_ms:.2f}ms"
+                    )
+                    # 即使快取命中，也要更新 LRU 順序
+                    if search_query.search_type in [SearchType.SEMANTIC, SearchType.HYBRID]:
+                        await self._ensure_index_loaded(search_query.channel_id)
+                    return cached_result
             
-            # 在執行緒池中執行搜尋
-            loop = asyncio.get_event_loop()
-            search_result = await loop.run_in_executor(
-                None,
-                self.search_engine.search,
-                search_query
+            self._cache_misses += 1
+
+            # 步驟 2: 延遲載入索引 (如果需要)
+            if search_query.search_type in [SearchType.SEMANTIC, SearchType.HYBRID]:
+                await self._ensure_index_loaded(search_query.channel_id)
+
+            # 步驟 3: 執行搜尋 (在執行緒中運行以避免阻塞事件循環)
+            result = await asyncio.to_thread(self.search_engine.search, search_query)
+            
+            # 步驟 4: 更新統計數據
+            total_time_ms = (time.time() - start_time) * 1000
+            self._query_times.append(total_time_ms)
+            result.search_time_ms = total_time_ms
+            result.cache_hit = False
+
+            # 步驟 5: 存入快取
+            if self.search_cache and cache_key:
+                self.search_cache.put(cache_key, result)
+
+            self.logger.info(
+                f"記憶搜尋完成 - "
+                f"頻道: {search_query.channel_id}, "
+                f"類型: {result.search_method}, "
+                f"找到: {len(result.messages)}/{result.total_found}, "
+                f"耗時: {total_time_ms:.2f}ms, "
+                f"快取命中: False"
             )
             
-            # 記錄查詢時間統計
-            query_time_ms = (time.time() - start_time) * 1000
-            self._query_times.append(query_time_ms)
-            
-            # 限制統計資料大小
-            if len(self._query_times) > 1000:
-                self._query_times = self._query_times[-500:]
-            
-            # 更新快取統計
-            if search_result.cache_hit:
-                self._cache_hits += 1
-            else:
-                self._cache_misses += 1
-            
-            self.logger.debug(
-                f"搜尋完成: 查詢時間 {query_time_ms:.1f}ms, "
-                f"結果數量 {len(search_result.messages)}, "
-                f"快取命中: {search_result.cache_hit}"
-            )
-            
-            return search_result
+            return result
             
         except Exception as e:
-            self.logger.error(f"搜尋相關記憶時發生未預期錯誤: {e}")
-            raise SearchError(f"搜尋相關記憶失敗: {e}")
+            self.logger.error(f"記憶搜尋失敗: {e}")
+            raise SearchError(f"記憶搜尋失敗: {e}")
     
     async def cleanup(self) -> None:
         """清理記憶體資源和快取（使用 tqdm 進度條）"""
         try:
             self.logger.info("開始記憶體系統清理...")
-            loop = asyncio.get_event_loop()
-
+            
             cleanup_tasks = []
-            if hasattr(self, 'vector_manager') and self.vector_manager:
-                # 優化：先將所有索引移至 CPU，再進行清理
-                cleanup_tasks.append(("批次移動索引至CPU", lambda: loop.run_in_executor(None, self.vector_manager.move_all_indices_to_cpu)))
-                cleanup_tasks.append(("向量管理器", lambda: loop.run_in_executor(None, self.vector_manager.cleanup)))
-            if hasattr(self, 'search_engine') and self.search_engine:
-                cleanup_tasks.append(("搜尋引擎", lambda: loop.run_in_executor(None, self.search_engine.cleanup)))
-            if hasattr(self, 'embedding_service') and self.embedding_service:
-                cleanup_tasks.append(("嵌入服務", lambda: loop.run_in_executor(None, self.embedding_service.cleanup)))
-            if hasattr(self, 'segmentation_service') and self.segmentation_service and hasattr(self.segmentation_service, 'cleanup'):
-                cleanup_tasks.append(("分割服務", lambda: loop.run_in_executor(None, self.segmentation_service.cleanup)))
-            if hasattr(self, 'db_manager') and self.db_manager:
-                db_cleanup = getattr(self.db_manager, 'close', getattr(self.db_manager, 'cleanup', None))
-                if db_cleanup:
-                    cleanup_tasks.append(("資料庫", lambda: loop.run_in_executor(None, db_cleanup)))
-
+            
+            # 清理搜尋引擎
+            if self.search_engine:
+                cleanup_tasks.append(("搜尋引擎", self.search_engine.cleanup))
+            
+            # 清理向量管理器
+            if self.vector_manager:
+                cleanup_tasks.append(("向量管理器", self.vector_manager.cleanup))
+            
+            # 清理資料庫管理器
+            if self.db_manager:
+                cleanup_tasks.append(("資料庫管理器", self.db_manager.close_connections))
+            
+            # 使用 tqdm 顯示進度
             with tqdm.tqdm(total=len(cleanup_tasks), desc="清理記憶體資源", unit="task") as pbar:
-                for name, task in cleanup_tasks:
+                for name, cleanup_func in cleanup_tasks:
                     try:
-                        pbar.set_postfix_str(name)
-                        await task()
-                        self.logger.debug(f"{name} 已清理")
+                        if asyncio.iscoroutinefunction(cleanup_func):
+                            await cleanup_func()
+                        else:
+                            cleanup_func()
+                        self.logger.debug(f"{name} 清理完成")
                     except Exception as e:
-                        self.logger.error(f"清理 {name} 時發生錯誤: {e}")
+                        self.logger.error(f"{name} 清理失敗: {e}")
                     finally:
                         pbar.update(1)
-
-            # 清理統計資料
-            self._query_times.clear()
-            self._cache_hits = 0
-            self._cache_misses = 0
-
-            # 強制垃圾回收
-            import gc
-            gc.collect()
-
-            # 釋放 GPU 記憶體
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-                    self.logger.info("GPU 記憶體已清理")
-            except ImportError:
-                pass
-            except Exception as e:
-                self.logger.warning(f"清理 GPU 記憶體時發生錯誤: {e}")
-
+            
+            # 清理 GPU 記憶體
+            if self.vector_manager and self.vector_manager.gpu_memory_manager:
+                try:
+                    self.vector_manager.gpu_memory_manager.clear_gpu_memory()
+                    self.logger.debug("GPU 記憶體清理完成")
+                except Exception as e:
+                    self.logger.error(f"GPU 記憶體清理失敗: {e}")
+            
             self._initialized = False
             self.logger.info("記憶體系統清理完成")
             
         except Exception as e:
             self.logger.error(f"記憶體清理時發生嚴重錯誤: {e}")
-            # 即使發生錯誤也要嘗試強制清理
-            try:
-                import gc
-                gc.collect()
-                if hasattr(torch, 'cuda') and torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-            except Exception:
-                pass

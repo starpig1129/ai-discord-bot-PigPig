@@ -8,32 +8,54 @@
 import time
 import hashlib
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
+import numpy as np
 from datetime import datetime
+
+from cogs.memory.config import MemoryProfile
+from cogs.memory.embedding_service import EmbeddingServiceManager
 
 logger = logging.getLogger(__name__)
 
 class ProcessingCache:
     """處理結果快取管理器"""
     
-    def __init__(self, default_ttl: int = 300, max_cache_size: int = 1000):
+    def __init__(self, default_ttl: int = 300, max_cache_size: int = 1000, max_semantic_cache_size: int = 200, semantic_threshold: float = 0.95):
         """初始化處理快取
         
         Args:
             default_ttl: 預設TTL（秒），預設5分鐘
-            max_cache_size: 最大快取大小
+            max_cache_size: 最大精確快取大小
+            max_semantic_cache_size: 最大語意快取大小
+            semantic_threshold: 語意相似度閾值
         """
-        self.cache: Dict[str, Tuple[Any, float]] = {}
+        self.exact_cache: Dict[str, Tuple[Any, float]] = {}
+        self.semantic_cache: List[Tuple[np.ndarray, Any, float]] = []
         self.default_ttl = default_ttl
         self.max_cache_size = max_cache_size
+        self.max_semantic_cache_size = max_semantic_cache_size
+        self.semantic_threshold = semantic_threshold
         self.logger = logging.getLogger(__name__)
         self.hit_count = 0
         self.miss_count = 0
+        self.semantic_hit_count = 0
+        self._embedding_service = None
         
         # 快取存取時間追蹤（用於LRU清理）
         self.access_times: Dict[str, float] = {}
         self.cleanup_threshold = max(int(max_cache_size * 0.8), 1)  # 80% 時開始清理
         
+    def _get_embedding_service(self):
+        if self._embedding_service is None:
+            # 這是一個簡化的配置，實際應用中可能需要更複雜的配置管理
+            profile = MemoryProfile(
+                vector_enabled=True,
+                embedding_model="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                embedding_dimension=384
+            )
+            self._embedding_service = EmbeddingServiceManager().get_service(profile)
+        return self._embedding_service
+
     def _generate_cache_key(self,
                            user_input: str,
                            user_id: str,
@@ -65,12 +87,12 @@ class ProcessingCache:
         key_string = "|".join(key_components)
         return hashlib.sha256(key_string.encode('utf-8')).hexdigest()[:32]
     
-    def get_cached_result(self, 
+    def get_cached_result(self,
                          user_input: str,
                          user_id: str,
                          channel_id: str,
                          additional_context: str = "") -> Optional[Any]:
-        """獲取快取的處理結果
+        """獲取快取的處理結果，包含精確和語意快取
         
         Args:
             user_input: 用戶輸入
@@ -81,23 +103,49 @@ class ProcessingCache:
         Returns:
             快取的結果或 None
         """
+        # 1. 精確快取檢查
         cache_key = self._generate_cache_key(user_input, user_id, channel_id, additional_context)
-        
-        if cache_key in self.cache:
-            result, timestamp = self.cache[cache_key]
-            
-            # 檢查是否過期
+        if cache_key in self.exact_cache:
+            result, timestamp = self.exact_cache[cache_key]
             if time.time() - timestamp < self.default_ttl:
                 self.hit_count += 1
-                # 更新存取時間
                 self.access_times[cache_key] = time.time()
-                self.logger.debug(f"快取命中: {cache_key[:16]}...")
+                self.logger.debug(f"精確快取命中: {cache_key[:16]}...")
                 return result
             else:
-                # 清理過期快取
                 self._remove_cache_entry(cache_key)
-                self.logger.debug(f"快取過期已清理: {cache_key[:16]}...")
-        
+                self.logger.debug(f"精確快取過期已清理: {cache_key[:16]}...")
+
+        # 2. 語意快取檢查
+        if self.semantic_cache:
+            try:
+                embedding_service = self._get_embedding_service()
+                current_embedding = embedding_service.encode_text(user_input)
+                
+                best_match_result = None
+                highest_similarity = -1.0
+                
+                # 清理過期的語意快取項目
+                current_time = time.time()
+                self.semantic_cache = [
+                    item for item in self.semantic_cache
+                    if current_time - item[2] < self.default_ttl
+                ]
+
+                for cached_embedding, cached_result, timestamp in self.semantic_cache:
+                    similarity = np.dot(current_embedding, cached_embedding) / (np.linalg.norm(current_embedding) * np.linalg.norm(cached_embedding))
+                    if similarity > highest_similarity:
+                        highest_similarity = similarity
+                        best_match_result = cached_result
+
+                if highest_similarity > self.semantic_threshold:
+                    self.semantic_hit_count += 1
+                    self.logger.debug(f"語意快取命中，相似度: {highest_similarity:.4f}")
+                    return best_match_result
+
+            except Exception as e:
+                self.logger.error(f"語意快取搜尋失敗: {e}")
+
         self.miss_count += 1
         self.logger.debug(f"快取未命中: {cache_key[:16]}...")
         return None
@@ -123,7 +171,7 @@ class ProcessingCache:
             str: 快取鍵值
         """
         # 檢查快取大小限制，必要時清理
-        if len(self.cache) >= self.cleanup_threshold:
+        if len(self.exact_cache) >= self.cleanup_threshold:
             self._cleanup_least_used_cache()
         
         cache_key = self._generate_cache_key(user_input, user_id, channel_id, additional_context)
@@ -133,10 +181,10 @@ class ProcessingCache:
         
         # 儲存結果和時間戳
         current_time = time.time()
-        self.cache[cache_key] = (result, current_time)
+        self.exact_cache[cache_key] = (result, current_time)
         self.access_times[cache_key] = current_time
         
-        self.logger.debug(f"結果已快取: {cache_key[:16]}..., TTL: {actual_ttl}s, 當前快取大小: {len(self.cache)}")
+        self.logger.debug(f"結果已快取: {cache_key[:16]}..., TTL: {actual_ttl}s, 當前快取大小: {len(self.exact_cache)}")
         return cache_key
     
     def invalidate_cache(self, cache_key: str) -> bool:
@@ -148,7 +196,7 @@ class ProcessingCache:
         Returns:
             bool: 是否成功刪除
         """
-        if cache_key in self.cache:
+        if cache_key in self.exact_cache:
             self._remove_cache_entry(cache_key)
             self.logger.debug(f"手動無效化快取: {cache_key[:16]}...")
             return True
@@ -163,7 +211,7 @@ class ProcessingCache:
         current_time = time.time()
         expired_keys = []
         
-        for cache_key, (result, timestamp) in self.cache.items():
+        for cache_key, (result, timestamp) in self.exact_cache.items():
             if current_time - timestamp >= self.default_ttl:
                 expired_keys.append(cache_key)
         
@@ -185,9 +233,11 @@ class ProcessingCache:
         hit_ratio = (self.hit_count / total_requests * 100) if total_requests > 0 else 0
         
         return {
-            'cache_size': len(self.cache),
+            'cache_size': len(self.exact_cache),
+            'semantic_cache_size': len(self.semantic_cache),
             'hit_count': self.hit_count,
             'miss_count': self.miss_count,
+            'semantic_hit_count': self.semantic_hit_count,
             'hit_ratio': f"{hit_ratio:.2f}%",
             'default_ttl': self.default_ttl,
             'last_cleanup': datetime.now().isoformat()
@@ -199,11 +249,13 @@ class ProcessingCache:
         Returns:
             int: 清理的快取數量
         """
-        cache_count = len(self.cache)
-        self.cache.clear()
+        cache_count = len(self.exact_cache)
+        self.exact_cache.clear()
+        self.semantic_cache.clear()
         self.access_times.clear()
         self.hit_count = 0
         self.miss_count = 0
+        self.semantic_hit_count = 0
         
         self.logger.info(f"清空了所有快取，共 {cache_count} 個項目")
         return cache_count
@@ -214,8 +266,8 @@ class ProcessingCache:
         Args:
             cache_key: 快取鍵值
         """
-        if cache_key in self.cache:
-            del self.cache[cache_key]
+        if cache_key in self.exact_cache:
+            del self.exact_cache[cache_key]
         if cache_key in self.access_times:
             del self.access_times[cache_key]
     
@@ -229,19 +281,19 @@ class ProcessingCache:
         
         try:
             # 如果快取數量未超過限制，不執行清理
-            if len(self.cache) < self.cleanup_threshold:
+            if len(self.exact_cache) < self.cleanup_threshold:
                 return 0
             
             # 計算需要清理的數量（清理到最大限制的60%）
             target_count = max(int(self.max_cache_size * 0.6), 1)
-            cleanup_count = len(self.cache) - target_count
+            cleanup_count = len(self.exact_cache) - target_count
             
             if cleanup_count <= 0:
                 return 0
             
             # 按存取時間排序，清理最舊的快取
             cache_items = []
-            for cache_key in self.cache.keys():
+            for cache_key in self.exact_cache.keys():
                 access_time = self.access_times.get(cache_key, 0)
                 cache_items.append((access_time, cache_key))
             
@@ -254,7 +306,7 @@ class ProcessingCache:
                 self._remove_cache_entry(cache_key)
                 cleaned_count += 1
             
-            self.logger.info(f"主動清理了 {cleaned_count} 個最少使用的處理快取，當前快取數量: {len(self.cache)}")
+            self.logger.info(f"主動清理了 {cleaned_count} 個最少使用的處理快取，當前快取數量: {len(self.exact_cache)}")
             
         except Exception as e:
             self.logger.error(f"清理最少使用的處理快取失敗: {str(e)}")
@@ -268,11 +320,11 @@ class ProcessingCache:
             Dict[str, Any]: 快取大小統計
         """
         return {
-            'current_count': len(self.cache),
+            'current_count': len(self.exact_cache),
             'max_count': self.max_cache_size,
             'cleanup_threshold': self.cleanup_threshold,
-            'usage_ratio': len(self.cache) / self.max_cache_size if self.max_cache_size > 0 else 0,
-            'needs_cleanup': len(self.cache) >= self.cleanup_threshold
+            'usage_ratio': len(self.exact_cache) / self.max_cache_size if self.max_cache_size > 0 else 0,
+            'needs_cleanup': len(self.exact_cache) >= self.cleanup_threshold
         }
 
 class MemorySearchCache:
@@ -355,7 +407,7 @@ class MemorySearchCache:
         return cache_key
 
 # 全域快取實例
-processing_cache = ProcessingCache(default_ttl=300, max_cache_size=1000)
+processing_cache = ProcessingCache(default_ttl=300, max_cache_size=1000, max_semantic_cache_size=200)
 memory_search_cache = MemorySearchCache(default_ttl=1800)
 
 # 便捷函數

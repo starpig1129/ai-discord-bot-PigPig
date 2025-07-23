@@ -45,9 +45,33 @@ tokens = TOKENS()
 # 全局變量用於本地模型
 global_model = None
 global_tokenizer = None
+_model_lock = asyncio.Lock()
 
-def get_model_and_tokenizer():
+async def get_model_and_tokenizer():
+    """
+    以執行緒安全的方式獲取或初始化模型和分詞器。
+    """
     global global_model, global_tokenizer
+    if global_model is None or global_tokenizer is None:
+        async with _model_lock:
+            # 再次檢查，因為在等待鎖的時候可能已經被其他協程初始化了
+            if global_model is None or global_tokenizer is None:
+                logging.info("正在初始化本地模型...")
+                try:
+                    # 這裡的 set_model_and_tokenizer 是一個同步函數，
+                    # 需要在異步函數中以非阻塞方式運行。
+                    loop = asyncio.get_running_loop()
+                    model, tokenizer = await loop.run_in_executor(
+                        None, set_model_and_tokenizer
+                    )
+                    global_model = model
+                    global_tokenizer = tokenizer
+                    logging.info("本地模型初始化成功。")
+                except Exception as e:
+                    logging.error(f"初始化本地模型失敗: {e}")
+                    # 確保即使失敗也不會一直重試
+                    global_model, global_tokenizer = None, None
+                    raise
     return global_model, global_tokenizer
 
 def get_video_chunk_content(video_path, flatten=True):
@@ -107,14 +131,19 @@ def set_model_and_tokenizer(model=None, tokenizer=None, model_path=None):
         model_path = 'openbmb/MiniCPM-o-2_6'
         
     try:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logging.info(f"正在 {device} 上載入模型...")
+        
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         model = AutoModel.from_pretrained(
             model_path,
             trust_remote_code=True,
             attn_implementation='sdpa',
             torch_dtype=torch.bfloat16
-        ).eval().cuda()
+        ).eval().to(device)
         
+        logging.info(f"模型成功載入到 {device}")
+
         # 初始化 TTS 和其他模組
         model.init_tts()
         model.tts.float()  # 避免某些 PyTorch 版本的兼容性問題
@@ -148,9 +177,9 @@ async def local_generate(inst, system_prompt, dialogue_history=None, image_input
     global global_model, global_tokenizer
     
     try:
-        model, tokenizer = get_model_and_tokenizer()
+        model, tokenizer = await get_model_and_tokenizer()
         if model is None or tokenizer is None:
-            raise LocalModelError("本地模型未設置")
+            raise LocalModelError("本地模型未設置或初始化失敗")
 
         if video_input is not None:
             # 使用流式處理方式處理視頻
@@ -268,7 +297,7 @@ MODEL_GENERATORS = {
 }
 
 # 定義模型可用性檢查
-def is_model_available(model_name):
+async def is_model_available(model_name):
     if model_name == "openai":
         return tokens.openai_api_key is not None
     elif model_name == "gemini":
@@ -276,8 +305,12 @@ def is_model_available(model_name):
     elif model_name == "claude":
         return tokens.anthropic_api_key is not None
     elif model_name == "local":
-        model, tokenizer = get_model_and_tokenizer()
-        return model is not None and tokenizer is not None
+        # 使用異步版本的 get_model_and_tokenizer
+        try:
+            model, tokenizer = await get_model_and_tokenizer()
+            return model is not None and tokenizer is not None
+        except Exception:
+            return False
     return False
 
 async def generate_response(
@@ -289,10 +322,13 @@ async def generate_response(
     video_input: Optional[any] = None,
     response_schema: Optional[Type[BaseModel]] = None
 ):
+    logging.info("--- 開始生成回應 ---")
     last_error = None
     # 根據優先順序嘗試使用可用的模型
     for model_name in settings.model_priority:
-        if is_model_available(model_name):
+        logging.info(f"正在檢查模型: {model_name}")
+        if await is_model_available(model_name):
+            logging.info(f"模型 {model_name} 可用，正在嘗試使用...")
             try:
                 generator_func = MODEL_GENERATORS[model_name]
                 
@@ -311,7 +347,9 @@ async def generate_response(
                     if response_schema:
                         params["response_schema"] = response_schema
 
+                logging.info(f"[{model_name}] 準備呼叫模型生成函式...")
                 thread, result = await generator_func(**params)
+                logging.info(f"[{model_name}] 模型生成函式呼叫完成。")
 
                 # 如果提供了 response_schema，我們預期 result 是一個 Pydantic 物件，而不是生成器
                 if response_schema and model_name == "gemini":

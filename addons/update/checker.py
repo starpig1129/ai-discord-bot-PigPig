@@ -22,7 +22,7 @@ class VersionChecker:
         """
         self.github_api_url = github_config.get(
             "api_url", 
-            "https://api.github.com/repos/PigPig-discord-LLM-bot/releases/latest"
+            "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest"
         )
         self.current_version = self._get_current_version()
         self.logger = logging.getLogger(__name__)

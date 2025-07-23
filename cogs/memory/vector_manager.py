@@ -1,3 +1,4 @@
+import asyncio
 """向量管理模組
 
 提供 FAISS 向量索引的建立、管理和搜尋功能。
@@ -289,7 +290,8 @@ class VectorIndex:
         index_type: str = "Flat",
         metric: str = "L2",
         use_gpu: bool = False,
-        gpu_memory_manager: Optional[GPUMemoryManager] = None
+        gpu_memory_manager: Optional[GPUMemoryManager] = None,
+        hnsw_m: int = 64
     ):
         """初始化向量索引
         
@@ -299,12 +301,14 @@ class VectorIndex:
             metric: 距離度量 ("L2", "IP")
             use_gpu: 是否使用 GPU
             gpu_memory_manager: GPU 記憶體管理器
+            hnsw_m: HNSW 索引的 M 參數
         """
         self.dimension = dimension
         self.index_type = index_type
         self.metric = metric
         self.use_gpu = use_gpu
         self.gpu_memory_manager = gpu_memory_manager
+        self.hnsw_m = hnsw_m
         self._index: Optional[faiss.Index] = None
         self._gpu_index: Optional[faiss.Index] = None
         self._id_map: Dict[int, str] = {}  # FAISS ID -> 實際 ID 映射
@@ -327,7 +331,7 @@ class VectorIndex:
                 quantizer = faiss.IndexFlatL2(self.dimension)
                 index = faiss.IndexIVFFlat(quantizer, self.dimension, 100)
             elif self.index_type == "HNSW":
-                index = faiss.IndexHNSWFlat(self.dimension, 32)
+                index = faiss.IndexHNSWFlat(self.dimension, self.hnsw_m)
             else:
                 self.logger.warning(f"不支援的索引類型: {self.index_type}，使用 Flat")
                 index = faiss.IndexFlatL2(self.dimension)
@@ -1949,6 +1953,34 @@ class VectorManager:
             self.logger.error(f"取得頻道 {channel_id} 索引統計失敗: {e}")
             return {"error": str(e)}
     
+    def unload_channel_index(self, channel_id: str) -> bool:
+        """從記憶體中卸載特定頻道的索引。
+
+        Args:
+            channel_id: 要卸載索引的頻道 ID。
+
+        Returns:
+            bool: 如果成功卸載或索引本來就不存在，則返回 True。
+        """
+        try:
+            with self._indices_lock:
+                if channel_id in self._indices:
+                    # 釋放與索引相關的資源
+                    if hasattr(self._indices[channel_id], 'clear_gpu_resources'):
+                        self._indices[channel_id].clear_gpu_resources()
+                    
+                    del self._indices[channel_id]
+                    self.logger.info(f"成功從記憶體中卸載頻道 {channel_id} 的索引。")
+                    # 觸發垃圾回收以釋放記憶體
+                    gc.collect()
+                    return True
+                else:
+                    self.logger.debug(f"頻道 {channel_id} 的索引未載入，無需卸載。")
+                    return True
+        except Exception as e:
+            self.logger.error(f"卸載頻道 {channel_id} 的索引時發生錯誤: {e}")
+            return False
+
     async def save_index(self, channel_id: str) -> bool:
         """非同步儲存頻道索引
 

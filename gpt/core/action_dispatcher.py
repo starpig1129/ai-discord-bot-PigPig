@@ -20,8 +20,8 @@
 # SOFTWARE.
 import json
 import logging
-import io
 import asyncio
+import re
 import discord
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -37,58 +37,51 @@ from gpt.core.message_sender import (
 from gpt.tools.registry import tool_registry
 from gpt.tools.tool_context import ToolExecutionContext
 from gpt.utils.media import process_attachment_data
+from gpt.core.tool_executor import ToolExecutor
 
 
 class ActionDispatcher:
-    """Handles Discord bot actions and tool execution."""
+    """處理 Discord 機器人動作和工具執行。"""
 
     def __init__(self, bot):
         self.bot = bot
         self.tool_registry = tool_registry
+        self.tool_executor = ToolExecutor(bot)
+        self._tool_routing_rules = [
+            (re.compile(r"(算一下|計算|算|\+)"), [{"tool_name": "math", "parameters": {"expression": None}}]),
+            (re.compile(r"(天氣|氣溫|下雨)"), [{"tool_name": "internet_search", "parameters": {"query": None}}]),
+            (re.compile(r"(提醒我|設定提醒)"), [{"tool_name": "reminder", "parameters": {"time": None, "thing_to_remind": None}}]),
+        ]
 
-    @staticmethod
-    def format_tool_result(tool_name: str, result: Any) -> Dict[str, Any]:
-        """格式化工具結果為 Google Gemini API 官方標準格式
-        
-        根據 Google Gemini API 官方文檔，工具調用結果應使用 function 角色格式：
-        - role: "function" (官方工具角色)
-        - name: 工具名稱
-        - content: 工具回應內容
-        
-        Args:
-            tool_name: 工具名稱
-            result: 工具執行結果
-            
-        Returns:
-            Dict[str, Any]: 符合官方標準的工具結果格式
+    def _rule_based_router(self, prompt: str) -> Optional[List[Dict]]:
         """
-        try:
-            # 處理不同類型的工具結果
-            if isinstance(result, (dict, list)):
-                # 結構化資料轉為 JSON 字串
-                content = json.dumps(result, ensure_ascii=False, indent=2)
-            elif isinstance(result, io.BytesIO):
-                # 圖片生成結果
-                content = f"已生成圖片 (工具: {tool_name})"
-            elif result is None:
-                content = f"工具 {tool_name} 執行完成，無返回值"
-            else:
-                content = str(result)
-            
-            return {
-                "role": "function",  # 官方工具角色標準
-                "name": tool_name,   # 工具名稱
-                "content": content   # 工具回應內容
-            }
-        except Exception as e:
-            logging.error(f"格式化工具結果失敗 (工具: {tool_name}): {e}")
-            return {
-                "role": "function",
-                "name": tool_name,
-                "content": f"工具執行時發生錯誤: {str(e)}"
-            }
+        基於規則的輕量級工具路由。
+        如果匹配成功，返回工具列表；否則返回 None。
+        """
+        for pattern, tool_config in self._tool_routing_rules:
+            match = pattern.search(prompt)
+            if match:
+                # 簡單提取參數的邏輯，這裡可以根據需要擴展
+                action_list = []
+                for tool in tool_config:
+                    # 複製一份，避免修改原始設定
+                    action = tool.copy()
+                    action["parameters"] = action["parameters"].copy()
+                    
+                    # 嘗試填充參數，如果沒有特定邏輯，就將整個 prompt 作為主要參數
+                    if "expression" in action["parameters"]:
+                        action["parameters"]["expression"] = prompt
+                    elif "query" in action["parameters"]:
+                        action["parameters"]["query"] = prompt
+                    elif "thing_to_remind" in action["parameters"]:
+                         action["parameters"]["thing_to_remind"] = prompt
 
-    async def choose_act(self, prompt: str, message: Any, 
+                    action_list.append(action)
+                logging.info(f"規則路由匹配成功: {pattern.pattern} -> {action_list}")
+                return action_list
+        return None
+
+    async def choose_act(self, prompt: str, message: Any,
                         message_to_edit: Any) -> Any:
         prompt = f"time:[{datetime.now().isoformat(timespec='seconds')}]{prompt}"
         # 初始化變數
@@ -153,8 +146,7 @@ class ActionDispatcher:
         async def execute_action(message_to_edit: Any, original_prompt: str,
                                  message: Any):
             logger = self.bot.get_logger_for_guild(message_to_edit.guild.name)
-            final_results = []
-            logger.info(f"Executing actions: {action_list}")
+            logger.info(f"準備執行的動作: {action_list}")
 
             context = ToolExecutionContext(
                 bot=self.bot,
@@ -163,56 +155,33 @@ class ActionDispatcher:
                 logger=logger
             )
 
-            for action in action_list:
-                tool_name = action.get("tool_name")
-                parameters = action.get("parameters", {})
-
-                if not tool_name or tool_name == "directly_answer":
-                    continue
-
-                try:
-                    tool = self.tool_registry.get_tool(tool_name)
-                    result = await tool.execute(context, **parameters)
-                    if result is not None:
-                        final_results.append(result)
-                except KeyError:
-                    logger.warning(f"Unknown tool requested: {tool_name}")
-                except Exception as e:
-                    logger.error(f"Error executing tool '{tool_name}': {e}", exc_info=True)
+            # 使用 ToolExecutor 執行工具
+            tool_results = await self.tool_executor.execute_tools(action_list, context)
             
-            # 處理結果
-            for result, action in zip(final_results, action_list):
-                tool_name = action["tool_name"]
-                
-                # 處理圖片生成的結果
-                if tool_name == "gen_img" and isinstance(result, io.BytesIO):
-                    # 確保緩衝區位於開始位置
-                    result.seek(0)
-                    # 創建 Discord File 對象並傳送
-                    file = discord.File(result, filename="generated_image.png")
-                    await message.channel.send(content=f"生成的圖片：", file=file)
-                    # 使用官方標準格式化工具結果
-                    formatted_result = self.format_tool_result(tool_name, result)
-                    history_dict.append(formatted_result)
-                else:
-                    # 使用官方標準格式化所有其他工具結果
-                    formatted_result = self.format_tool_result(tool_name, result)
-                    history_dict.append(formatted_result)
+            # 將工具執行結果添加到歷史紀錄中
+            if tool_results:
+                history_dict.extend(tool_results)
             
-            # 生成 GPT 回應
-            gptresponses = await gpt_message(message_to_edit, message, original_prompt, history_dict, image_data)
-            logger.info(f'PigPig:{gptresponses}')
+            # 生成最終回應
+            gpt_response = await gpt_message(message_to_edit, message, original_prompt, history_dict, image_data)
+            logger.info(f'PigPig 回應: {gpt_response}')
         
         return execute_action
 
     async def _get_action_list(self, prompt: str, history_dict: List[Dict],
                              image_data: List) -> List[Dict]:
+        # 1. 嘗試規則路由
+        routed_action = self._rule_based_router(prompt)
+        if routed_action:
+            return routed_action
+
+        # 2. 如果規則路由未命中，則呼叫 LLM
         try:
             tools_string = self.tool_registry.get_tools_string_for_prompt()
             
             instruction_prompt = """
 ### Instructions for Tool Usage
-You are a multi-functional Discord bot assistant capable of analyzing user requests, selecting the most suitable tool(s) from a predefined set, 
+You are a multi-functional Discord bot assistant capable of analyzing user requests, selecting the most suitable tool(s) from a predefined set,
 and providing helpful responses. Below is a list of the available tools and how to use them effectively.
 You are an expert at choosing the correct tool for a user's request.
 You must respond in a JSON array of objects, where each object represents a tool call.
@@ -252,7 +221,7 @@ Based on the user's request and the available tools, select the appropriate tool
             
             full_response = ''.join(responses)
             json_string = self._extract_json_from_response(full_response)
-            return (json.loads(json_string) if json_string 
+            return (json.loads(json_string) if json_string
                    else self._get_default_action_list(prompt))
         except json.JSONDecodeError:
             return self._get_default_action_list(prompt)

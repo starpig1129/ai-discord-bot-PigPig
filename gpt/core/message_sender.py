@@ -794,7 +794,7 @@ async def gpt_message(
         bot = message.guild.me._state._get_client()
         logger = bot.get_logger_for_guild(message.guild.name)
         for model_name in settings.model_priority:
-            if is_model_available(model_name):
+            if await is_model_available(model_name):
                 logger.info(f"使用模型: {model_name}")
                 break
     

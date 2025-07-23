@@ -348,9 +348,9 @@ class UpdateManager:
             # 查找解壓後的目錄
             version_clean = version.replace('v', '')
             possible_dirs = [
-                f"PigPig-discord-LLM-bot-{version_clean}",
-                f"PigPig-discord-LLM-bot-{version}",
-                "PigPig-discord-LLM-bot-main"
+                f"ai-discord-bot-PigPig-{version_clean}",
+                f"ai-discord-bot-PigPig-{version}",
+                "ai-discord-bot-PigPig-main"
             ]
             
             source_dir = None

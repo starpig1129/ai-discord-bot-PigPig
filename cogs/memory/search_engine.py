@@ -18,7 +18,7 @@ from .config import MemoryProfile
 from .embedding_service import EmbeddingService
 from .exceptions import SearchError
 from .vector_manager import VectorManager
-from .reranker_service import RerankerService, reranker_service_manager
+from .reranker_service import RerankerService
 
 
 class SearchType(Enum):
@@ -211,7 +211,8 @@ class SearchEngine:
         embedding_service: EmbeddingService,
         vector_manager: VectorManager,
         database_manager,
-        enable_cache: bool = True,
+        reranker_service: Optional[RerankerService] = None,
+        cache: Optional[SearchCache] = None,
         enable_reranker: bool = True
     ):
         """初始化搜尋引擎
@@ -221,7 +222,8 @@ class SearchEngine:
             embedding_service: 嵌入服務
             vector_manager: 向量管理器
             database_manager: 資料庫管理器
-            enable_cache: 是否啟用快取
+            reranker_service: 重排序服務實例
+            cache: 搜尋快取實例
             enable_reranker: 是否啟用重排序
         """
         self.logger = logging.getLogger(__name__)
@@ -229,41 +231,32 @@ class SearchEngine:
         self.embedding_service = embedding_service
         self.vector_manager = vector_manager
         self.database_manager = database_manager
-        
+        self.reranker_service = reranker_service
+        self.cache = cache
+
         # 初始化重排序服務
-        self.enable_reranker = enable_reranker and profile.vector_enabled
+        self.enable_reranker = (
+            enable_reranker and
+            profile.vector_enabled and
+            self.reranker_service is not None
+        )
         if self.enable_reranker:
-            try:
-                self.reranker_service = reranker_service_manager.get_service(profile)
-                self.logger.info("重排序服務已啟用")
-            except Exception as e:
-                self.logger.warning(f"重排序服務初始化失敗，已停用: {e}")
-                self.enable_reranker = False
-                self.reranker_service = None
+            self.logger.info("重排序服務已啟用")
         else:
             self.reranker_service = None
             self.logger.info("重排序服務已停用")
         
-        # 初始化快取
-        if enable_cache:
-            cache_size = getattr(profile, 'cache_size_mb', 512) * 1000 // 10  # 估算快取項目數
-            self.cache = SearchCache(max_size=cache_size, ttl_seconds=3600)
-        else:
-            self.cache = None
-        
         # 搜尋統計
         self._search_count = 0
         self._total_search_time = 0.0
-        self._cache_hits = 0
         self._rerank_count = 0
         
         self.logger.info(
-            f"搜尋引擎初始化完成 - 快取: {enable_cache}, "
-            f"重排序: {self.enable_reranker}"
+            f"搜尋引擎初始化完成 - 重排序: {self.enable_reranker}"
         )
     
     def search(self, query: SearchQuery) -> SearchResult:
-        """執行搜尋
+        """執行搜尋的核心邏輯，不包含快取。
         
         Args:
             query: 搜尋查詢
@@ -277,14 +270,6 @@ class SearchEngine:
         start_time = time.time()
         
         try:
-            # 檢查快取
-            if self.cache:
-                cache_key = query.get_cache_key()
-                cached_result = self.cache.get(cache_key)
-                if cached_result:
-                    self._cache_hits += 1
-                    return cached_result
-            
             # 根據搜尋類型執行搜尋
             if query.search_type == SearchType.SEMANTIC:
                 result = self._semantic_search(query)
@@ -301,16 +286,12 @@ class SearchEngine:
             search_time = (time.time() - start_time) * 1000
             result.search_time_ms = search_time
             
-            # 更新統計
+            # 更新內部統計
             self._search_count += 1
             self._total_search_time += search_time
             
-            # 存入快取
-            if self.cache:
-                self.cache.put(cache_key, result)
-            
             self.logger.debug(
-                f"搜尋完成 - 類型: {query.search_type.value}, "
+                f"搜尋執行完成 - 類型: {query.search_type.value}, "
                 f"結果: {len(result.messages)}, 耗時: {search_time:.1f}ms"
             )
             
