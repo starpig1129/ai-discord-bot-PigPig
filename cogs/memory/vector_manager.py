@@ -1793,6 +1793,11 @@ class VectorManager:
             self.logger.error(f"建立頻道 {channel_id} 索引失敗: {e}")
             return False
     
+    def get_channel_index(self, channel_id: str) -> Optional['VectorIndex']:
+        """取得指定頻道的向量索引實例。"""
+        with self._indices_lock:
+            return self._indices.get(channel_id)
+
     def add_vectors(
         self,
         channel_id: str,

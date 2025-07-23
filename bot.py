@@ -51,6 +51,14 @@ from gpt.optimization_integration import (
 from gpt.optimization_config_manager import is_optimization_enabled
 # 配置 logging
 def setup_logger(server_name):
+    # 減少第三方套件的日誌等級
+    logging.getLogger("faiss").setLevel(logging.WARNING)
+    logging.getLogger("WDM").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("google_genai").setLevel(logging.WARNING)
+    logging.getLogger("discord").setLevel(logging.WARNING)
+
     logger = logging.getLogger(server_name)
     logger.setLevel(logging.INFO)
     handler = TimedRotatingFileHandler(server_name)

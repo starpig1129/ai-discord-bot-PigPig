@@ -755,7 +755,7 @@ class TextSegmentationService:
                 self.db_manager.add_message_to_segment(
                     segment_id=segment.segment_id,
                     message_id=message_id,
-                    position_in_segment=i
+                    position=i
                 )
                 
         except Exception as e:

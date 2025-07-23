@@ -743,7 +743,13 @@ class MemoryManager:
             self.logger.info(f"開始對頻道 {channel_id} 進行批次文本分割...")
             
             # 1. 從資料庫獲取所有訊息
-            messages = self.db_manager.get_messages(channel_id=channel_id, limit=None)
+            loop = asyncio.get_event_loop()
+            messages = await loop.run_in_executor(
+                None,
+                self.db_manager.get_messages,
+                str(channel_id),  # 確保 channel_id 是字串
+                None  # limit
+            )
             
             if not messages:
                 self.logger.info(f"頻道 {channel_id} 中沒有需要處理的訊息。")
@@ -810,11 +816,11 @@ class MemoryManager:
             
             def embed_and_add_sync():
                 try:
-                    embedding = self.embedding_service.encode_text(segment.summary)
+                    embedding = self.embedding_service.encode_text(segment.segment_summary)
                     self.vector_manager.add_vectors(
                         channel_id=segment.channel_id,
                         vectors=np.array([embedding]),
-                        ids=[f"seg_{segment.id}"]
+                        message_ids=[f"seg_{segment.segment_id}"]
                     )
                 except Exception as e:
                     self.logger.error(f"處理片段向量時發生錯誤: {e}")
