@@ -63,12 +63,14 @@ class MemoryManager:
     INDEX_LOAD_CONCURRENCY_THRESHOLD = 10  # 載入索引時，觸發並行處理的檔案數量閾值
     MAX_LOADED_INDICES = 50  # LRU 快取中最大載入索引數量
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, bot, config_path: Optional[str] = None):
         """初始化記憶管理器
         
         Args:
+            bot: Discord bot 實例
             config_path: 配置檔案路徑
         """
+        self.bot = bot
         self.logger = logging.getLogger(__name__)
         self._initialized = False
         self._enabled = False
@@ -258,6 +260,7 @@ class MemoryManager:
                 self.embedding_service,
                 self.vector_manager,
                 self.db_manager,
+                self.bot,
                 self.reranker_service,
                 self.search_cache,
                 memory_config.get("reranker", {}).get("enabled", True)
@@ -1024,8 +1027,8 @@ class MemoryManager:
             if search_query.search_type in [SearchType.SEMANTIC, SearchType.HYBRID]:
                 await self._ensure_index_loaded(search_query.channel_id)
 
-            # 步驟 3: 執行搜尋 (在執行緒中運行以避免阻塞事件循環)
-            result = await asyncio.to_thread(self.search_engine.search, search_query)
+            # 步驟 3: 執行搜尋
+            result = await self.search_engine.search(search_query)
             
             # 步驟 4: 更新統計數據
             total_time_ms = (time.time() - start_time) * 1000

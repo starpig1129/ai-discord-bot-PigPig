@@ -110,7 +110,7 @@ class PigPig(commands.Bot):
                 print("記憶系統已在設定中停用")
                 return
             
-            self.memory_manager = MemoryManager()
+            self.memory_manager = MemoryManager(self)
             self.memory_enabled = await self.memory_manager.initialize()
             
             if self.memory_enabled:

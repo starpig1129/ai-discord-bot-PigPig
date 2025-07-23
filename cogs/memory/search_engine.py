@@ -4,6 +4,7 @@
 支援搜尋快取、結果排序和過濾機制。
 """
 
+import asyncio
 import hashlib
 import logging
 import time
@@ -12,6 +13,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import discord
 import numpy as np
 
 from .config import MemoryProfile
@@ -211,6 +213,7 @@ class SearchEngine:
         embedding_service: EmbeddingService,
         vector_manager: VectorManager,
         database_manager,
+        bot,  # 新增 bot 實例
         reranker_service: Optional[RerankerService] = None,
         cache: Optional[SearchCache] = None,
         enable_reranker: bool = True
@@ -222,6 +225,7 @@ class SearchEngine:
             embedding_service: 嵌入服務
             vector_manager: 向量管理器
             database_manager: 資料庫管理器
+            bot: Discord bot 實例
             reranker_service: 重排序服務實例
             cache: 搜尋快取實例
             enable_reranker: 是否啟用重排序
@@ -231,6 +235,7 @@ class SearchEngine:
         self.embedding_service = embedding_service
         self.vector_manager = vector_manager
         self.database_manager = database_manager
+        self.bot = bot
         self.reranker_service = reranker_service
         self.cache = cache
 
@@ -255,7 +260,7 @@ class SearchEngine:
             f"搜尋引擎初始化完成 - 重排序: {self.enable_reranker}"
         )
     
-    def search(self, query: SearchQuery) -> SearchResult:
+    async def search(self, query: SearchQuery) -> SearchResult:
         """執行搜尋的核心邏輯，不包含快取。
         
         Args:
@@ -272,13 +277,13 @@ class SearchEngine:
         try:
             # 根據搜尋類型執行搜尋
             if query.search_type == SearchType.SEMANTIC:
-                result = self._semantic_search(query)
+                result = await self._semantic_search(query)
             elif query.search_type == SearchType.KEYWORD:
                 result = self._keyword_search(query)
             elif query.search_type == SearchType.TEMPORAL:
-                result = self._temporal_search(query)
+                result = await self._temporal_search(query)
             elif query.search_type == SearchType.HYBRID:
-                result = self._hybrid_search(query)
+                result = await self._hybrid_search(query)
             else:
                 raise SearchError(f"不支援的搜尋類型: {query.search_type}")
             
@@ -301,7 +306,7 @@ class SearchEngine:
             self.logger.error(f"搜尋失敗: {e}")
             raise SearchError(f"搜尋執行失敗: {e}")
     
-    def _semantic_search(self, query: SearchQuery) -> SearchResult:
+    async def _semantic_search(self, query: SearchQuery) -> SearchResult:
         """執行語義搜尋
         
         Args:
@@ -312,143 +317,126 @@ class SearchEngine:
         """
         if not self.profile.vector_enabled:
             return SearchResult(
-                messages=[],
-                relevance_scores=[],
-                total_found=0,
-                search_time_ms=0.0,
-                search_method="semantic_disabled"
+                messages=[], relevance_scores=[], total_found=0,
+                search_time_ms=0.0, search_method="semantic_disabled"
             )
-        
-        # 生成查詢向量
+
         query_vector = self.embedding_service.encode_text(query.text)
         
-        # 向量搜尋 - 取更多結果以補償空內容過濾
         vector_results = self.vector_manager.search_similar(
-            channel_id=query.channel_id,
-            query_vector=query_vector,
-            k=query.limit * 3,  # 增加倍數以補償空內容過濾
-            score_threshold=query.score_threshold
+            channel_id=query.channel_id, query_vector=query_vector,
+            k=query.limit * 3, score_threshold=query.score_threshold
         )
         
-        # 轉換結果格式（從資料庫取得完整訊息資料）
-        messages = []
-        scores = []
+        if not vector_results:
+            return SearchResult(
+                messages=[], relevance_scores=[], total_found=0,
+                search_time_ms=0.0, search_method="semantic_no_results",
+                query_vector=query_vector
+            )
+
+        segment_ids = [seg_id for seg_id, _ in vector_results]
+        segment_score_map = {seg_id: score for seg_id, score in vector_results}
+
+        segment_to_message_map = self.database_manager.get_segment_to_message_map(segment_ids)
         
-        if vector_results:
-            # 批次查詢訊息資料以提高效能
-            message_ids = [message_id for message_id, _ in vector_results]
-            try:
-                # 從資料庫取得完整訊息資料
-                db_messages = self.database_manager.get_messages_by_ids(message_ids)
+        all_message_ids = [
+            msg_id for seg_id in segment_ids 
+            for msg_id in segment_to_message_map.get(seg_id, [])
+        ]
+        unique_message_ids = list(dict.fromkeys(all_message_ids))
+
+        if not unique_message_ids:
+            self.logger.warning("語義搜尋找到片段，但無法對應到任何訊息。")
+            return SearchResult(
+                messages=[], relevance_scores=[], total_found=0,
+                search_time_ms=0.0, search_method="semantic_no_messages",
+                query_vector=query_vector
+            )
+
+        db_messages = self.database_manager.get_messages_by_ids(unique_message_ids)
+        message_map = {msg['message_id']: msg for msg in db_messages}
+
+        missing_ids = [msg_id for msg_id in unique_message_ids if msg_id not in message_map]
+        if missing_ids:
+            self.logger.info(f"在本地資料庫中找不到 {len(missing_ids)} 則訊息，嘗試從 Discord 回退。")
+            fetched_messages = await asyncio.gather(
+                *[self._fetch_message_from_discord(query.channel_id, msg_id) for msg_id in missing_ids]
+            )
+            for msg_data in fetched_messages:
+                if msg_data:
+                    message_map[msg_data['message_id']] = msg_data
+
+        message_to_segment_map = {
+            msg_id: seg_id 
+            for seg_id, msg_ids in segment_to_message_map.items() 
+            for msg_id in msg_ids
+        }
+
+        messages, scores = [], []
+        for message_id in unique_message_ids:
+            if message_id in message_map:
+                message_data = message_map[message_id].copy()
                 
-                # 建立 message_id 到訊息資料的映射
-                message_map = {msg['message_id']: msg for msg in db_messages}
-                
-                # 按照向量搜尋結果的順序組織資料，並過濾空內容
-                for message_id, similarity_score in vector_results:
-                    if message_id in message_map:
-                        message_data = message_map[message_id].copy()
-                        
-                        # 過濾空內容的訊息
-                        content = message_data.get('content', '')
-                        content_processed = message_data.get('content_processed', '')
-                        
-                        # 檢查是否有有效內容（不為空且不只是空白）
-                        has_valid_content = (
-                            (content and content.strip()) or
-                            (content_processed and content_processed.strip() and content_processed != 'None')
-                        )
-                        
-                        if has_valid_content:
-                            message_data['similarity_score'] = similarity_score
-                            messages.append(message_data)
-                            scores.append(similarity_score)
-                        else:
-                            self.logger.debug(f"跳過空內容訊息 ID: {message_id} (content: {repr(content)}, processed: {repr(content_processed)})")
-                    else:
-                        self.logger.warning(f"在資料庫中找不到訊息 ID: {message_id}")
-                        
-            except Exception as e:
-                self.logger.error(f"從資料庫查詢訊息失敗: {e}")
-                # 降級處理：使用簡化格式
-                for message_id, similarity_score in vector_results:
-                    message_data = {
-                        "message_id": message_id,
-                        "similarity_score": similarity_score,
-                        "content": f"[無法載入訊息內容: {e}]",
-                        "user_id": "unknown",
-                        "channel_id": query.channel_id,
-                        "timestamp": None
-                    }
+                content = message_data.get('content', '')
+                content_processed = message_data.get('content_processed', '')
+                has_valid_content = (content and content.strip()) or \
+                                    (content_processed and content_processed.strip() and content_processed != 'None')
+
+                if has_valid_content:
+                    segment_id = message_to_segment_map.get(message_id)
+                    similarity_score = segment_score_map.get(segment_id, 0.0)
+                    
+                    message_data['similarity_score'] = similarity_score
                     messages.append(message_data)
                     scores.append(similarity_score)
-        
-        # 應用時間過濾
+                else:
+                    self.logger.debug(f"跳過空內容訊息 ID: {message_id}")
+            else:
+                self.logger.warning(f"在資料庫和 Discord 中都找不到訊息 ID: {message_id}")
+
         if query.time_range:
-            filtered_messages = []
-            filtered_scores = []
-            
+            filtered_messages, filtered_scores = [], []
             for msg, score in zip(messages, scores):
-                # 從訊息資料中取得時間戳記進行過濾
                 try:
                     if 'timestamp' in msg and msg['timestamp']:
-                        # 處理時間戳記格式
-                        if isinstance(msg['timestamp'], str):
-                            from datetime import datetime
-                            timestamp = datetime.fromisoformat(msg['timestamp'].replace('Z', '+00:00'))
-                        else:
-                            timestamp = msg['timestamp']
+                        timestamp = msg['timestamp']
+                        if isinstance(timestamp, str):
+                            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                         
-                        # 檢查是否在時間範圍內
                         if query.time_range.contains(timestamp):
                             filtered_messages.append(msg)
                             filtered_scores.append(score)
                     else:
-                        # 如果沒有時間戳記，保留訊息（向後相容）
                         filtered_messages.append(msg)
                         filtered_scores.append(score)
                 except Exception as e:
                     self.logger.warning(f"處理時間過濾失敗: {e}")
-                    # 發生錯誤時保留訊息
                     filtered_messages.append(msg)
                     filtered_scores.append(score)
-            
-            messages = filtered_messages
-            scores = filtered_scores
-        
-        # 應用重排序（在限制結果數量之前）
+            messages, scores = filtered_messages, filtered_scores
+
+        search_method = "semantic"
         if self.enable_reranker and self.reranker_service and messages:
             try:
-                # 取更多結果用於重排序（最多 query.limit * 2）
                 rerank_count = min(len(messages), query.limit * 2)
                 rerank_messages = messages[:rerank_count]
                 
-                # 執行重排序
                 reranked_messages = self.reranker_service.rerank_results(
                     query=query.text,
                     candidates=rerank_messages,
-                    score_field="content_processed" if (rerank_messages and
-                                                       isinstance(rerank_messages[0], dict) and
-                                                       rerank_messages[0].get("content_processed")) else "content",
+                    score_field="content_processed" if (rerank_messages and rerank_messages[0].get("content_processed")) else "content",
                     top_k=query.limit
                 )
                 
-                # 更新消息和分數
                 messages = reranked_messages
                 scores = [msg.get("rerank_score", msg.get("similarity_score", 0.0)) for msg in messages]
-                
                 self._rerank_count += 1
                 search_method = "semantic_with_rerank"
-                
                 self.logger.debug(f"重排序完成，處理了 {rerank_count} 個候選，返回 {len(messages)} 個結果")
-                
             except Exception as e:
                 self.logger.warning(f"重排序失敗，使用原始結果: {e}")
-                search_method = "semantic"
-        else:
-            search_method = "semantic"
-        
-        # 限制結果數量（如果重排序沒有限制的話）
+
         if len(messages) > query.limit:
             messages = messages[:query.limit]
             scores = scores[:query.limit]
@@ -456,8 +444,8 @@ class SearchEngine:
         return SearchResult(
             messages=messages,
             relevance_scores=scores,
-            total_found=len(vector_results),
-            search_time_ms=0.0,  # 將在主搜尋函數中設定
+            total_found=len(unique_message_ids),
+            search_time_ms=0.0,
             search_method=search_method,
             query_vector=query_vector
         )
@@ -610,103 +598,67 @@ class SearchEngine:
             
             for word in words:
                 # 過濾條件
-                if (len(word) >= 2 and  # 至少2個字符
-                    word not in stop_words and  # 不是停用詞
-                    not word.isspace() and  # 不是空白
-                    not word.isdigit() and  # 不是純數字
-                    word.isalnum() or any('\u4e00' <= char <= '\u9fff' for char in word)):  # 包含中文或字母數字
+                if word.strip() and word not in stop_words and not word.isdigit():
                     keywords.append(word)
             
-            # 去重並保持順序
-            seen = set()
-            unique_keywords = []
-            for keyword in keywords:
-                if keyword not in seen:
-                    seen.add(keyword)
-                    unique_keywords.append(keyword)
+            # 如果沒有提取到關鍵字，使用 TF-IDF 作為備用
+            if not keywords:
+                self.logger.debug("使用 TF-IDF 提取關鍵字")
+                keywords = jieba.analyse.extract_tags(cleaned_text, topK=5)
             
-            # 如果沒有提取到關鍵字，使用原始文本
-            if not unique_keywords:
-                # 移除標點符號後作為關鍵字
-                import re
-                cleaned = re.sub(r'[^\w\s\u4e00-\u9fff]', ' ', cleaned_text)
-                if cleaned.strip():
-                    unique_keywords = [cleaned.strip()]
+            return list(set(keywords))  # 返回唯一的關鍵字
             
-            self.logger.debug(f"關鍵字提取: '{text}' -> {unique_keywords}")
-            return unique_keywords[:10]  # 限制關鍵字數量
-            
+        except ImportError:
+            self.logger.warning("jieba 模組未安裝，關鍵字搜尋功能受限。")
+            return text.split()
         except Exception as e:
-            self.logger.error(f"關鍵字提取失敗: {e}")
-            # 降級處理：直接使用原始文本
-            return [text.strip()] if text.strip() else []
-    
+            self.logger.error(f"提取關鍵字失敗: {e}")
+            return text.split()
+
     def _calculate_enhanced_keyword_score(
-        self,
-        content: str,
-        content_processed: str,
-        keywords: List[str],
-        original_query: str
+        self, content: str, content_processed: Optional[str], keywords: List[str], query: str
     ) -> float:
         """計算增強的關鍵字匹配分數
         
         Args:
-            content: 原始內容
-            content_processed: 處理後內容
+            content: 原始訊息內容
+            content_processed: 處理後的訊息內容
             keywords: 關鍵字列表
-            original_query: 原始查詢
+            query: 原始查詢字串
             
         Returns:
-            float: 匹配分數 (0.0-1.0)
+            float: 匹配分數 (0.0 - 1.0)
         """
-        if not keywords:
-            return 0.0
-        
-        # 合併內容
-        combined_content = f"{content} {content_processed}".lower()
-        original_query_lower = original_query.lower()
-        
-        if not combined_content.strip():
-            return 0.0
-        
         total_score = 0.0
         matched_keywords = 0
         
-        # 檢查完整查詢匹配（最高權重）
-        if original_query_lower in combined_content:
-            total_score += 0.5
-            self.logger.debug(f"完整查詢匹配: '{original_query}'")
+        # 優先使用處理後的內容
+        search_text = content_processed if content_processed and content_processed.strip() else content
+        search_text_lower = search_text.lower()
+        query_lower = query.lower()
         
-        # 檢查各個關鍵字
-        for keyword in keywords:
-            keyword_lower = keyword.lower()
-            keyword_score = 0.0
-            
-            if keyword_lower in combined_content:
-                matched_keywords += 1
-                
-                # 基礎匹配分數
-                keyword_score += 0.3
-                
-                # 計算出現次數加分
-                count = combined_content.count(keyword_lower)
-                keyword_score += min(count * 0.1, 0.2)
-                
-                # 位置加分
-                if combined_content.startswith(keyword_lower):
-                    keyword_score += 0.15
-                elif combined_content.find(keyword_lower) < len(combined_content) * 0.3:
-                    keyword_score += 0.1
-                
-                # 關鍵字長度加分（較長的關鍵字更重要）
-                if len(keyword) >= 3:
-                    keyword_score += 0.05
-                
-                total_score += keyword_score
-                self.logger.debug(f"關鍵字匹配: '{keyword}' -> {keyword_score:.3f}")
+        # 完整查詢匹配加分
+        if query_lower in search_text_lower:
+            total_score += 0.3
         
-        # 匹配關鍵字比例加分
+        # 關鍵字匹配
         if keywords:
+            for keyword in keywords:
+                keyword_lower = keyword.lower()
+                if keyword_lower in search_text_lower:
+                    matched_keywords += 1
+                    keyword_score = 0.1  # 基礎分
+                    
+                    # 根據關鍵字長度加權
+                    if len(keyword) >= 2:
+                        keyword_score += 0.05
+                    if len(keyword) >= 3:
+                        keyword_score += 0.05
+                    
+                    total_score += keyword_score
+                    self.logger.debug(f"關鍵字匹配: '{keyword}' -> {keyword_score:.3f}")
+            
+            # 匹配關鍵字比例加分
             match_ratio = matched_keywords / len(keywords)
             total_score += match_ratio * 0.2
         
@@ -720,7 +672,7 @@ class SearchEngine:
         
         return final_score
     
-    def _temporal_search(self, query: SearchQuery) -> SearchResult:
+    async def _temporal_search(self, query: SearchQuery) -> SearchResult:
         """執行時間搜尋
         
         Args:
@@ -734,13 +686,16 @@ class SearchEngine:
         
         if query.time_range:
             # 如果有時間範圍，執行時間篩選的語義搜尋
-            return self._semantic_search(query)
+            return await self._semantic_search(query)
         else:
             # 如果沒有時間範圍，回退到語義搜尋
             self.logger.warning("時間搜尋但沒有提供時間範圍，回退到語義搜尋")
-            return self._semantic_search(query)
-    def _hybrid_search(self, query: SearchQuery) -> SearchResult:
+            return await self._semantic_search(query)
+
+    async def _hybrid_search(self, query: SearchQuery) -> SearchResult:
         """執行混合搜尋
+        
+        結合語義搜尋和關鍵字搜尋的結果。
         
         Args:
             query: 搜尋查詢
@@ -750,294 +705,181 @@ class SearchEngine:
         """
         self.logger.debug(f"開始混合搜尋: {query.text}")
         
-        # 執行語義搜尋和關鍵字搜尋
-        semantic_result = None
-        keyword_result = None
-        
         try:
-            # 語義搜尋（如果啟用）
-            if self.profile.vector_enabled:
-                semantic_result = self._semantic_search(query)
-                self.logger.debug(f"語義搜尋結果: {len(semantic_result.messages)} 個")
+            # 1. 執行語義搜尋 (非同步)
+            semantic_task = asyncio.create_task(self._semantic_search(
+                SearchQuery(
+                    text=query.text,
+                    channel_id=query.channel_id,
+                    limit=query.limit * 2,
+                    score_threshold=query.score_threshold,
+                    time_range=query.time_range
+                )
+            ))
             
-            # 關鍵字搜尋
-            keyword_result = self._keyword_search(query)
-            self.logger.debug(f"關鍵字搜尋結果: {len(keyword_result.messages)} 個")
+            # 2. 執行關鍵字搜尋 (同步，在執行器中運行以避免阻塞)
+            loop = asyncio.get_running_loop()
+            keyword_results = await loop.run_in_executor(
+                None,  # 使用預設執行器
+                self._keyword_search,
+                SearchQuery(
+                    text=query.text,
+                    channel_id=query.channel_id,
+                    limit=query.limit * 2,
+                    score_threshold=0.1,
+                    time_range=query.time_range
+                )
+            )
+
+            semantic_results = await semantic_task
             
-            # 合併和去重結果
-            combined_messages = []
-            combined_scores = []
-            seen_message_ids = set()
+            # 3. 合併和重新排序結果
+            combined_messages = {}
             
             # 處理語義搜尋結果
-            if semantic_result and semantic_result.messages:
-                for i, msg in enumerate(semantic_result.messages):
-                    message_id = msg.get('message_id')
-                    if message_id and message_id not in seen_message_ids:
-                        seen_message_ids.add(message_id)
-                        
-                        # 計算混合分數
-                        semantic_score = semantic_result.relevance_scores[i] if i < len(semantic_result.relevance_scores) else 0.0
-                        keyword_score = 0.0  # 預設關鍵字分數
-                        
-                        # 檢查是否在關鍵字結果中
-                        if keyword_result and keyword_result.messages:
-                            for j, kw_msg in enumerate(keyword_result.messages):
-                                if kw_msg.get('message_id') == message_id:
-                                    keyword_score = keyword_result.relevance_scores[j] if j < len(keyword_result.relevance_scores) else 0.0
-                                    break
-                        
-                        # 混合分數：50% 語義 + 50% 關鍵字
-                        hybrid_score = 0.5 * semantic_score + 0.5 * keyword_score
-                        
-                        # 如果兩種搜尋都有結果，給予額外加分
-                        if semantic_score > 0 and keyword_score > 0:
-                            hybrid_score += 0.1
-                        
-                        msg['hybrid_score'] = hybrid_score
-                        msg['semantic_score'] = semantic_score
-                        msg['keyword_score'] = keyword_score
-                        
-                        combined_messages.append(msg)
-                        combined_scores.append(hybrid_score)
+            if semantic_results and semantic_results.messages:
+                for i, msg in enumerate(semantic_results.messages):
+                    msg_id = msg['message_id']
+                    combined_messages[msg_id] = {
+                        "message": msg,
+                        "semantic_score": semantic_results.relevance_scores[i],
+                        "keyword_score": 0.0
+                    }
             
-            # 處理只在關鍵字搜尋中的結果
-            if keyword_result and keyword_result.messages:
-                for i, msg in enumerate(keyword_result.messages):
-                    message_id = msg.get('message_id')
-                    if message_id and message_id not in seen_message_ids:
-                        seen_message_ids.add(message_id)
-                        
-                        keyword_score = keyword_result.relevance_scores[i] if i < len(keyword_result.relevance_scores) else 0.0
-                        semantic_score = 0.0
-                        
-                        # 混合分數：偏重關鍵字搜尋
-                        hybrid_score = 0.3 * semantic_score + 0.7 * keyword_score
-                        
-                        msg['hybrid_score'] = hybrid_score
-                        msg['semantic_score'] = semantic_score
-                        msg['keyword_score'] = keyword_score
-                        
-                        combined_messages.append(msg)
-                        combined_scores.append(hybrid_score)
+            # 處理關鍵字搜尋結果
+            if keyword_results and keyword_results.messages:
+                for i, msg in enumerate(keyword_results.messages):
+                    msg_id = msg['message_id']
+                    if msg_id in combined_messages:
+                        combined_messages[msg_id]['keyword_score'] = keyword_results.relevance_scores[i]
+                    else:
+                        combined_messages[msg_id] = {
+                            "message": msg,
+                            "semantic_score": 0.0,
+                            "keyword_score": keyword_results.relevance_scores[i]
+                        }
             
-            # 按混合分數排序
-            if combined_messages:
-                sorted_pairs = sorted(
-                    zip(combined_messages, combined_scores),
-                    key=lambda x: x[1],
-                    reverse=True
-                )
-                combined_messages, combined_scores = zip(*sorted_pairs)
-                combined_messages = list(combined_messages)
-                combined_scores = list(combined_scores)
+            # 計算混合分數並排序
+            final_results = []
+            for msg_id, data in combined_messages.items():
+                semantic_score = data['semantic_score']
+                keyword_score = data['keyword_score']
+                
+                # 混合分數權重
+                hybrid_score = (semantic_score * 0.6) + (keyword_score * 0.4)
+                if semantic_score > 0 and keyword_score > 0:
+                    hybrid_score += 0.1  # 獎勵同時匹配
+                
+                message_data = data['message']
+                message_data['hybrid_score'] = min(hybrid_score, 1.0)
+                final_results.append((message_data, hybrid_score))
             
-            # 限制結果數量
-            if len(combined_messages) > query.limit:
-                combined_messages = combined_messages[:query.limit]
-                combined_scores = combined_scores[:query.limit]
+            # 按混合分數降序排序
+            final_results.sort(key=lambda x: x[1], reverse=True)
             
-            # 應用重排序（如果啟用且有足夠結果）
-            if (self.enable_reranker and self.reranker_service and
-                combined_messages and len(combined_messages) > 1):
-                try:
-                    reranked_messages = self.reranker_service.rerank_results(
-                        query=query.text,
-                        candidates=combined_messages,
-                        score_field="content_processed" if (combined_messages and
-                                                           isinstance(combined_messages[0], dict) and
-                                                           combined_messages[0].get("content_processed")) else "content",
-                        top_k=query.limit
-                    )
-                    
-                    # 更新分數（結合重排序分數和混合分數）
-                    final_scores = []
-                    for msg in reranked_messages:
-                        rerank_score = msg.get("rerank_score", 0.0)
-                        hybrid_score = msg.get("hybrid_score", 0.0)
-                        # 70% 重排序 + 30% 混合分數
-                        final_score = 0.7 * rerank_score + 0.3 * hybrid_score
-                        final_scores.append(final_score)
-                    
-                    combined_messages = reranked_messages
-                    combined_scores = final_scores
-                    search_method = "hybrid_with_rerank"
-                    
-                    self._rerank_count += 1
-                    self.logger.debug("混合搜尋重排序完成")
-                    
-                except Exception as e:
-                    self.logger.warning(f"混合搜尋重排序失敗: {e}")
-                    search_method = "hybrid"
-            else:
-                search_method = "hybrid"
-            
-            # 計算總結果數
-            total_found = 0
-            if semantic_result:
-                total_found += semantic_result.total_found
-            if keyword_result:
-                total_found += keyword_result.total_found
-            
-            self.logger.info(
-                f"混合搜尋完成 - 語義: {len(semantic_result.messages) if semantic_result else 0}, "
-                f"關鍵字: {len(keyword_result.messages) if keyword_result else 0}, "
-                f"合併後: {len(combined_messages)}"
-            )
+            # 提取排序後的訊息和分數
+            messages = [item[0] for item in final_results[:query.limit]]
+            scores = [item[1] for item in final_results[:query.limit]]
             
             return SearchResult(
-                messages=combined_messages,
-                relevance_scores=combined_scores,
-                total_found=total_found,
-                search_time_ms=0.0,
-                search_method=search_method
+                messages=messages,
+                relevance_scores=scores,
+                total_found=len(combined_messages),
+                search_time_ms=0.0,  # 將在主函數中設定
+                search_method="hybrid"
             )
             
         except Exception as e:
-            self.logger.error(f"混合搜尋失敗: {e}")
-            
-            # 降級處理：嘗試單獨的搜尋方式
-            if semantic_result and semantic_result.messages:
-                return SearchResult(
-                    messages=semantic_result.messages,
-                    relevance_scores=semantic_result.relevance_scores,
-                    total_found=semantic_result.total_found,
-                    search_time_ms=0.0,
-                    search_method="hybrid_fallback_semantic"
-                )
-            elif keyword_result and keyword_result.messages:
-                return SearchResult(
-                    messages=keyword_result.messages,
-                    relevance_scores=keyword_result.relevance_scores,
-                    total_found=keyword_result.total_found,
-                    search_time_ms=0.0,
-                    search_method="hybrid_fallback_keyword"
-                )
-            else:
-                return SearchResult(
-                    messages=[],
-                    relevance_scores=[],
-                    total_found=0,
-                    search_time_ms=0.0,
-                    search_method="hybrid_error"
-                )
-    
+            self.logger.error(f"混合搜尋失敗: {e}", exc_info=True)
+            return SearchResult(
+                messages=[],
+                relevance_scores=[],
+                total_found=0,
+                search_time_ms=0.0,
+                search_method="hybrid_error"
+            )
+
     def calculate_similarity(
-        self, 
-        text1: str, 
-        text2: str
+        self, text1: str, text2: str, model: Optional[str] = None
     ) -> float:
         """計算兩個文本的相似度
         
         Args:
             text1: 第一個文本
             text2: 第二個文本
+            model: 使用的嵌入模型
             
         Returns:
-            float: 相似度分數 (0-1)
+            float: 相似度分數
         """
         try:
-            if not self.profile.vector_enabled:
-                return 0.0
-            
-            vectors = self.embedding_service.encode_batch([text1, text2])
-            if len(vectors) != 2:
-                return 0.0
+            vec1 = self.embedding_service.encode_text(text1, model=model)
+            vec2 = self.embedding_service.encode_text(text2, model=model)
             
             # 計算餘弦相似度
-            vec1, vec2 = vectors[0], vectors[1]
-            
-            # 正規化向量
-            norm1 = np.linalg.norm(vec1)
-            norm2 = np.linalg.norm(vec2)
-            
-            if norm1 == 0 or norm2 == 0:
-                return 0.0
-            
-            cosine_sim = np.dot(vec1, vec2) / (norm1 * norm2)
-            
-            # 確保結果在 [0, 1] 範圍內
-            return max(0.0, min(1.0, (cosine_sim + 1.0) / 2.0))
+            similarity = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+            return float(similarity)
             
         except Exception as e:
             self.logger.error(f"計算相似度失敗: {e}")
             return 0.0
-    
+
     def get_statistics(self) -> Dict[str, Union[int, float]]:
-        """取得搜尋引擎統計資訊
+        """取得搜尋引擎的統計資訊
         
         Returns:
-            Dict[str, Union[int, float]]: 統計資訊
+            Dict[str, Union[int, float]]: 統計資訊字典
         """
-        avg_search_time = (
-            self._total_search_time / self._search_count 
-            if self._search_count > 0 else 0.0
-        )
-        
-        cache_hit_rate = (
-            self._cache_hits / self._search_count 
-            if self._search_count > 0 else 0.0
-        )
+        avg_search_time = (self._total_search_time / self._search_count) if self._search_count > 0 else 0.0
         
         stats = {
             "total_searches": self._search_count,
             "total_search_time_ms": self._total_search_time,
             "average_search_time_ms": avg_search_time,
-            "cache_hits": self._cache_hits,
-            "cache_hit_rate": cache_hit_rate,
-            "rerank_enabled": self.enable_reranker,
-            "total_reranks": self._rerank_count
+            "reranked_searches": self._rerank_count,
+            "cache_stats": self.cache.get_stats() if self.cache else {}
         }
         
-        # 加入快取統計
-        if self.cache:
-            stats.update(self.cache.get_stats())
-        
-        # 加入重排序統計
-        if self.enable_reranker and self.reranker_service:
-            reranker_stats = self.reranker_service.get_statistics()
-            stats["reranker_stats"] = reranker_stats
-        
+        # 添加向量管理器統計
+        if self.vector_manager:
+            stats["vector_manager_stats"] = self.vector_manager.get_statistics()
+            
         return stats
-    
+
     def clear_cache(self) -> None:
-        """清除搜尋快取"""
+        """清除搜尋快取
+        
+        提供一個方便的方法來清除快取，而無需直接訪問快取對象。
+        """
         if self.cache:
             self.cache.clear()
-            self.logger.info("搜尋引擎快取已清除")
-        
-        # 清除重排序快取
-        if self.enable_reranker and self.reranker_service:
-            self.reranker_service.clear_cache()
-            self.logger.info("重排序服務快取已清除")
-    
+            self.logger.info("搜尋快取已成功清除")
+        else:
+            self.logger.warning("未配置搜尋快取，無法清除")
+
     def optimize_performance(self) -> Dict[str, Any]:
         """優化搜尋效能
         
+        執行諸如清理過期快取、預熱模型等操作。
+        
         Returns:
-            Dict[str, Any]: 優化結果報告
+            Dict[str, Any]: 優化操作的報告
         """
-        optimization_report = {
-            "cache_cleared": False,
-            "indices_optimized": []
-        }
+        optimization_report = {"status": "success"}
+        self.logger.info("開始搜尋引擎效能優化...")
         
         try:
-            # 清除過期快取
+            # 1. 清理過期快取
             if self.cache:
                 old_size = len(self.cache._cache)
-                # 手動清理過期項目
-                current_time = datetime.now()
                 expired_keys = [
-                    key for key, (_, timestamp) in self.cache._cache.items()
-                    if current_time - timestamp >= timedelta(seconds=self.cache.ttl_seconds)
+                    k for k, (_, ts) in self.cache._cache.items()
+                    if datetime.now() - ts > timedelta(seconds=self.cache.ttl_seconds)
                 ]
-                
                 for key in expired_keys:
                     del self.cache._cache[key]
                 
                 new_size = len(self.cache._cache)
-                optimization_report["cache_cleared"] = old_size > new_size
                 optimization_report["expired_items_removed"] = old_size - new_size
             
             self.logger.info("搜尋引擎效能優化完成")
@@ -1078,6 +920,67 @@ class SearchEngine:
                 self.reranker_service.clear_cache()
             self.logger.info("重排序服務已停用")
     
+    async def _fetch_message_from_discord(self, channel_id: str, message_id: str) -> Optional[Dict[str, Any]]:
+        """從 Discord API 獲取訊息並存入資料庫"""
+        try:
+            # 將 ID 轉換為整數
+            channel_id_int = int(channel_id)
+            message_id_int = int(message_id)
+
+            channel = self.bot.get_channel(channel_id_int)
+            if not channel:
+                self.logger.warning(f"找不到頻道: {channel_id}")
+                return None
+            
+            # 確保 channel 是可以發送訊息的文字頻道
+            if not isinstance(channel, (discord.TextChannel, discord.Thread, discord.VoiceChannel)):
+                 self.logger.warning(f"頻道 {channel_id} 不是有效的文字頻道，無法獲取訊息。")
+                 return None
+
+            message = await channel.fetch_message(message_id_int)
+            if not message:
+                return None
+
+            # 將 discord.Message 物件轉換為資料庫格式
+            message_data = {
+                'message_id': str(message.id),
+                'channel_id': str(message.channel.id),
+                'user_id': str(message.author.id),
+                'content': message.content,
+                'timestamp': message.created_at,
+                'message_type': 'user', # 預設類型
+                'content_processed': None,
+                'metadata': None
+            }
+            
+            # 異步存入資料庫
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None, self.database_manager.store_message, **message_data
+            )
+            
+            self.logger.info(f"從 Discord 回退成功並儲存訊息: {message_id}")
+            
+            # 返回從 message 物件轉換的字典，而不是 store_message 的結果
+            return {
+                'message_id': str(message.id),
+                'channel_id': str(message.channel.id),
+                'user_id': str(message.author.id),
+                'content': message.content,
+                'timestamp': message.created_at,
+                'content_processed': None,
+                'metadata': None
+            }
+
+        except (discord.NotFound, ValueError):
+            self.logger.warning(f"在 Discord 上找不到訊息 ID: {message_id} 或 ID 格式錯誤")
+        except discord.Forbidden:
+            self.logger.error(f"沒有權限獲取訊息 ID: {message_id} (頻道: {channel_id})")
+        except Exception as e:
+            self.logger.error(f"從 Discord 獲取訊息時發生未知錯誤 (訊息 ID: {message_id}): {e}", exc_info=True)
+        
+        return None
+
     def cleanup(self) -> None:
         """清理搜尋引擎資源和快取
         

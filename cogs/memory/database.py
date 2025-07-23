@@ -897,6 +897,41 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"取得片段訊息失敗: {e}")
             raise DatabaseError(f"取得片段訊息失敗: {e}", operation="get_segment_messages", table="segment_messages")
+    def get_segment_to_message_map(self, segment_ids: List[str]) -> Dict[str, List[str]]:
+        """根據片段 ID 列表，取得 segment_id 到 message_id 列表的映射
+        
+        Args:
+            segment_ids: 片段 ID 列表
+            
+        Returns:
+            Dict[str, List[str]]: segment_id 到 message_id 列表的映射
+        """
+        if not segment_ids:
+            return {}
+        
+        try:
+            with self.get_connection() as conn:
+                placeholders = ','.join('?' * len(segment_ids))
+                query = f"""
+                    SELECT segment_id, message_id
+                    FROM segment_messages
+                    WHERE segment_id IN ({placeholders})
+                    ORDER BY position_in_segment
+                """
+                cursor = conn.execute(query, segment_ids)
+                rows = cursor.fetchall()
+                
+                result_map = {seg_id: [] for seg_id in segment_ids}
+                for row in rows:
+                    result_map[row['segment_id']].append(row['message_id'])
+                
+                self.logger.debug(f"從 {len(segment_ids)} 個片段 ID 中查詢到 {len(result_map)} 個映射")
+                return result_map
+                
+        except Exception as e:
+            self.logger.error(f"查詢 segment-to-message map 失敗: {e}")
+            raise DatabaseError(f"查詢 segment-to-message map 失敗: {e}", operation="get_segment_to_message_map", table="segment_messages")
+
 
     def update_segment_coherence(self, segment_id: str, coherence_score: float) -> bool:
         """更新片段語義連貫性分數
