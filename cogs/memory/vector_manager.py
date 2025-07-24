@@ -559,6 +559,59 @@ class VectorIndex:
         except Exception as e:
             self.logger.error(f"批次新增向量失敗: {e}")
             return False
+
+    def remove_vectors(self, ids: List[str]) -> int:
+        """
+        從索引中移除向量。
+
+        Args:
+            ids: 要移除的向量的真實 ID 列表。
+
+        Returns:
+            int: 成功移除的向量數量。
+        """
+        if not ids:
+            return 0
+
+        faiss_ids_to_remove = [self._reverse_id_map[id_str] for id_str in ids if id_str in self._reverse_id_map]
+
+        if not faiss_ids_to_remove:
+            return 0
+
+        try:
+            index = self.get_index()
+            
+            # HNSW 不支援 remove_ids，需要特殊處理
+            if "HNSW" in self.index_type:
+                self.logger.warning(f"HNSW 索引不直接支援移除操作。將標記為已刪除，但空間不會立即釋放。建議定期重建索引。")
+                # 對於 HNSW，我們只能從映射中移除，讓它們無法被訪問
+                removed_count = 0
+                for id_str in ids:
+                    if id_str in self._reverse_id_map:
+                        faiss_id = self._reverse_id_map.pop(id_str)
+                        if faiss_id in self._id_map:
+                            self._id_map.pop(faiss_id)
+                        removed_count += 1
+                if removed_count > 0:
+                    self._needs_mapping_rebuild = True
+                return removed_count
+
+            # 對於支援 remove_ids 的索引
+            removed_count = index.remove_ids(faiss.IDSelectorBatch(np.array(faiss_ids_to_remove, dtype=np.int64)))
+
+            if removed_count > 0:
+                # 更新 ID 映射
+                for id_str in ids:
+                    if id_str in self._reverse_id_map:
+                        faiss_id = self._reverse_id_map.pop(id_str)
+                        self._id_map.pop(faiss_id, None)
+
+                self.logger.info(f"成功移除了 {removed_count} 個向量。")
+            
+            return removed_count
+        except Exception as e:
+            self.logger.error(f"移除向量時發生錯誤: {e}")
+            return 0
     
     def search(
         self,
@@ -688,6 +741,10 @@ class VectorIndex:
             "use_gpu": self.use_gpu,
             "is_trained": index.is_trained if hasattr(index, 'is_trained') and index else True
         }
+
+    def get_all_ids(self) -> List[str]:
+        """取得此索引中的所有真實 ID"""
+        return list(self._reverse_id_map.keys())
     
     async def save(self, file_path: Path) -> bool:
         """非同步儲存索引到檔案（原子性操作）
@@ -1843,6 +1900,35 @@ class VectorManager:
         except Exception as e:
             self.logger.error(f"新增向量到頻道 {channel_id} 失敗: {e}")
             return False
+
+    def remove_vectors(self, channel_id: str, ids: List[str]) -> int:
+        """從頻道索引中移除向量。
+
+        Args:
+            channel_id: 頻道的 ID。
+            ids: 要移除的向量的真實 ID 列表。
+
+        Returns:
+            int: 成功移除的向量數量。
+        """
+        if not ids:
+            return 0
+        
+        try:
+            with self._indices_lock:
+                index = self._indices.get(channel_id)
+                if index:
+                    self.logger.info(f"在頻道 {channel_id} 中移除 {len(ids)} 個向量。")
+                    removed_count = index.remove_vectors(ids)
+                    if removed_count > 0:
+                        self.logger.info(f"成功從頻道 {channel_id} 的索引中移除了 {removed_count} 個向量。")
+                    return removed_count
+                else:
+                    self.logger.warning(f"嘗試從未載入的索引 {channel_id} 中移除向量。")
+                    return 0
+        except Exception as e:
+            self.logger.error(f"從頻道 {channel_id} 移除向量時發生錯誤: {e}", exc_info=True)
+            raise VectorOperationError(f"從頻道 {channel_id} 移除向量失敗: {e}")
     
     def search_similar(
         self,

@@ -147,6 +147,85 @@ class MemoryManager:
         # 執行緒安全鎖 (使用自訂的 RLock 避免死鎖)
         self._lock = RLock()
     
+    async def find_and_remove_orphan_vectors(self) -> None:
+        """
+        查找並刪除孤立的向量。
+
+        此方法負責識別和清理向量資料庫中不再具有對應訊息的向量嵌入。
+        如果訊息被刪除或系統未正常關閉，就可能發生這種情況。
+        """
+        if not self.vector_manager or not self.db_manager:
+            self.logger.warning("VectorManager 或 DatabaseManager 未初始化。跳過孤兒向量清理。")
+            return
+
+        self.logger.info("開始孤兒向量清理...")
+        try:
+            # 注意：這是一個佔位符實作。
+            # 實際的邏輯需要根據您的 VectorManager 和 DatabaseManager 的 API 來實現。
+            # 例如：
+            # all_vector_ids = await asyncio.to_thread(self.vector_manager.get_all_vector_ids)
+            # all_message_ids = await asyncio.to_thread(self.db_manager.get_all_message_ids)
+            # orphan_ids = set(all_vector_ids) - set(all_message_ids)
+            # if orphan_ids:
+            #     self.logger.info(f"找到 {len(orphan_ids)} 個孤兒向量。正在刪除...")
+            #     await self.vector_manager.remove_vectors_by_ids(list(orphan_ids))
+            
+            self.logger.info("孤兒向量清理任務已觸發（目前為佔位符）。")
+            await asyncio.sleep(1) # 模擬非同步操作
+            self.logger.info("孤兒向量清理完成。")
+
+        except Exception as e:
+            self.logger.error(f"孤兒向量清理期間發生錯誤: {e}", exc_info=True)
+
+    async def find_and_remove_orphan_vectors(self) -> None:
+        """查找並刪除孤立的向量"""
+        if not self.vector_manager or not self.db_manager:
+            self.logger.warning("VectorManager 或 DatabaseManager 未初始化。跳過孤兒向量清理。")
+            return
+
+        self.logger.info("開始孤兒向量清理...")
+        try:
+            # 取得所有向量索引中的 ID
+            all_vector_ids = []
+            with self.vector_manager._indices_lock:
+                for channel_id, index in self.vector_manager._indices.items():
+                    try:
+                        all_vector_ids.extend(index.get_all_ids())
+                    except Exception as e:
+                        self.logger.error(f"從頻道 {channel_id} 獲取向量 ID 失敗: {e}")
+
+            # 取得資料庫中所有訊息的 ID
+            all_message_ids = await asyncio.to_thread(self.db_manager.get_all_message_ids)
+
+            # 找出孤兒向量
+            orphan_ids = set(all_vector_ids) - set(all_message_ids)
+
+            if orphan_ids:
+                self.logger.info(f"找到 {len(orphan_ids)} 個孤兒向量。正在刪除...")
+                
+                # 根據頻道分組孤兒 ID
+                orphans_by_channel = {}
+                with self.vector_manager._indices_lock:
+                    for channel_id, index in self.vector_manager._indices.items():
+                        channel_vector_ids = set(index.get_all_ids())
+                        channel_orphans = list(channel_vector_ids.intersection(orphan_ids))
+                        if channel_orphans:
+                            orphans_by_channel[channel_id] = channel_orphans
+
+                # 批次刪除
+                for channel_id, ids_to_remove in orphans_by_channel.items():
+                    try:
+                        removed_count = self.vector_manager.remove_vectors(channel_id, ids_to_remove)
+                        self.logger.info(f"從頻道 {channel_id} 移除了 {removed_count} 個孤兒向量。")
+                    except Exception as e:
+                        self.logger.error(f"從頻道 {channel_id} 移除孤兒向量時發生錯誤: {e}")
+
+            else:
+                self.logger.info("未找到孤兒向量。")
+
+        except Exception as e:
+            self.logger.error(f"孤兒向量清理期間發生錯誤: {e}", exc_info=True)
+
     async def initialize(self) -> bool:
         """初始化記憶系統
         
@@ -317,6 +396,9 @@ class MemoryManager:
             
             # 掃描現有的索引檔案
             await self._load_existing_indices()
+
+            # 在啟動時執行孤兒向量清理
+            asyncio.create_task(self.find_and_remove_orphan_vectors())
             
             self.logger.info("向量搜尋組件初始化完成")
             

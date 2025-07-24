@@ -805,6 +805,23 @@ class DatabaseManager:
             self.logger.error(f"取得資料庫統計資訊失敗: {e}")
             raise DatabaseError(f"取得資料庫統計資訊失敗: {e}", operation="get_stats")
 
+    def get_all_message_ids(self) -> List[str]:
+        """取得資料庫中所有訊息的 ID
+        
+        Returns:
+            List[str]: 所有訊息 ID 的列表
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("SELECT message_id FROM messages")
+                # 使用 cursor.fetchall() 取得所有結果
+                rows = cursor.fetchall()
+                # 從每行中提取第一個元素（message_id）
+                return [row[0] for row in rows]
+        except Exception as e:
+            self.logger.error(f"取得所有訊息 ID 失敗: {e}")
+            raise DatabaseError(f"取得所有訊息 ID 失敗: {e}", operation="get_all_message_ids", table="messages")
+
     def close_connections(self) -> None:
         """關閉所有資料庫連接"""
         with self._lock:
@@ -1138,3 +1155,19 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"取得重疊片段失敗: {e}")
             raise DatabaseError(f"取得重疊片段失敗: {e}", operation="get_overlapping_segments", table="conversation_segments")
+
+    def get_all_valid_segment_ids(self) -> List[str]:
+        """
+        從 conversation_segments 表中獲取所有有效的 segment_id。
+
+        Returns:
+            List[str]: 所有 segment_id 的列表。
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("SELECT segment_id FROM conversation_segments")
+                rows = cursor.fetchall()
+                return [row['segment_id'] for row in rows]
+        except Exception as e:
+            self.logger.error(f"獲取所有有效的 segment_id 失敗: {e}")
+            raise DatabaseError(f"獲取所有有效的 segment_id 失敗: {e}", operation="get_all_valid_segment_ids", table="conversation_segments")
