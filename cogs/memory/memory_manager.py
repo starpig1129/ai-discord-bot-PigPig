@@ -42,6 +42,48 @@ from .reranker_service import RerankerService
 from .startup_logger import get_startup_logger, StartupLoggerManager
 
 
+class RLock:
+    """A re-entrant lock for asyncio, compatible with older Python versions."""
+    def __init__(self):
+        self._lock = asyncio.Lock()
+        self._owner = None
+        self._count = 0
+
+    async def acquire(self):
+        try:
+            current_task = asyncio.current_task()
+        except RuntimeError:
+            current_task = None
+            
+        if self._owner is current_task:
+            self._count += 1
+            return
+        await self._lock.acquire()
+        self._owner = current_task
+        self._count = 1
+
+    async def release(self):
+        try:
+            current_task = asyncio.current_task()
+        except RuntimeError:
+            current_task = None
+
+        if self._owner is not current_task:
+            return
+
+        self._count -= 1
+        if self._count == 0:
+            self._owner = None
+            self._lock.release()
+
+    async def __aenter__(self):
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.release()
+
+
 @dataclass
 class MemoryStats:
     """記憶系統統計資料"""
@@ -102,8 +144,8 @@ class MemoryManager:
         self.indices_status: Dict[str, str] = {}  # "on_disk" or "loaded"
         self.loaded_indices: OrderedDict[str, Any] = OrderedDict()
         
-        # 執行緒安全鎖
-        self._lock = asyncio.Lock()
+        # 執行緒安全鎖 (使用自訂的 RLock 避免死鎖)
+        self._lock = RLock()
     
     async def initialize(self) -> bool:
         """初始化記憶系統
@@ -557,8 +599,8 @@ class MemoryManager:
                         await self._store_message_vector(message_data)
                     
                     # 如果啟用分割功能，處理文本分割
-                    if (self.segmentation_config and 
-                        self.segmentation_config.enabled and 
+                    if (self.segmentation_config and
+                        self.segmentation_config.enabled and
                         self.segmentation_service):
                         await self._process_message_segmentation(message_data)
                     
@@ -667,39 +709,37 @@ class MemoryManager:
                 self.logger.debug(f"訊息 {message_data['message_id']} 內容為空，跳過向量化")
                 return
 
-            # 確保索引已載入
             channel_id = message_data['channel_id']
+            message_id = message_data['message_id']
+
+            # 確保索引已載入
             await self._ensure_index_loaded(channel_id)
 
-            # 在執行緒池中執行嵌入和新增向量操作
+            # 在執行緒池中執行嵌入操作
             loop = asyncio.get_event_loop()
-            
-            def embed_and_add_sync():
-                try:
-                    # 產生嵌入向量
-                    embedding = self.embedding_service.encode_text(content_to_embed)
-                    
-                    # 新增向量到索引
-                    self.vector_manager.add_vectors(
-                        channel_id=channel_id,
-                        vectors=np.array([embedding]),
-                        ids=[message_data["message_id"]]
-                    )
-                    
-                    # 將嵌入向量儲存到資料庫
-                    self._store_embedding_to_database(
-                        message_id=message_data["message_id"],
-                        channel_id=channel_id,
-                        embedding=embedding
-                    )
-                except Exception as e:
-                    self.logger.error(f"處理訊息向量時發生錯誤: {e}")
-                    raise
+            embedding = await loop.run_in_executor(
+                None, self.embedding_service.encode_text, content_to_embed
+            )
 
-            await loop.run_in_executor(None, embed_and_add_sync)
+            # 在主事件循環中新增向量到索引
+            success = self.vector_manager.add_vectors(
+                channel_id=channel_id,
+                vectors=np.array([embedding]),
+                ids=[message_id]
+            )
+
+            if success:
+                # 將嵌入向量儲存到資料庫
+                self._store_embedding_to_database(
+                    message_id=message_id,
+                    channel_id=channel_id,
+                    embedding=embedding
+                )
+            else:
+                self.logger.error(f"無法新增向量到索引 {channel_id} for message {message_id}")
 
         except Exception as e:
-            self.logger.error(f"儲存訊息向量失敗: {e}")
+            self.logger.error(f"儲存訊息向量失敗: {e}", exc_info=True)
             raise VectorOperationError(f"儲存訊息向量失敗: {e}")
     
     async def _process_message_segmentation(self, message_data: Dict[str, Any]) -> None:
@@ -823,7 +863,7 @@ class MemoryManager:
                     self.vector_manager.add_vectors(
                         channel_id=segment.channel_id,
                         vectors=np.array([embedding]),
-                        message_ids=[f"seg_{segment.segment_id}"]
+                        ids=[f"seg_{segment.segment_id}"]
                     )
                 except Exception as e:
                     self.logger.error(f"處理片段向量時發生錯誤: {e}")

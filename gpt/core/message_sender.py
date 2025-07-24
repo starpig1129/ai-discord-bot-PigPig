@@ -709,7 +709,7 @@ async def gpt_message(
     prompt: str,
     history_dict: Dict[str, Any],
     image_data: Optional[Any] = None
-) -> Optional[str]:
+) -> str:
     """生成並發送 GPT 回應訊息。支援文字和 GIF 回應。
 
     Args:
@@ -905,4 +905,5 @@ async def gpt_message(
         logging.error(f"生成 GPT 回應時發生錯誤: {e}")
         import traceback
         logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
-        return None
+        await message_to_edit.edit(content=f"An error occurred: {e}")
+        return ""

@@ -165,6 +165,7 @@ class ActionDispatcher:
             # 生成最終回應
             gpt_response = await gpt_message(message_to_edit, message, original_prompt, history_dict, image_data)
             logger.info(f'PigPig 回應: {gpt_response}')
+            return gpt_response
         
         return execute_action
 

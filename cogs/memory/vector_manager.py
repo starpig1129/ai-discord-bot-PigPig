@@ -1802,7 +1802,7 @@ class VectorManager:
         self,
         channel_id: str,
         vectors: np.ndarray,
-        message_ids: List[str],
+        ids: List[str],
         batch_size: int = None
     ) -> bool:
         """新增向量到頻道索引
@@ -1831,11 +1831,11 @@ class VectorManager:
                 if batch_size is None:
                     batch_size = getattr(self.profile, 'batch_size', 50)
                 
-                success = index.add_vectors(vectors, message_ids, batch_size)
+                success = index.add_vectors(vectors, ids, batch_size)
                 
                 if success:
                     self.logger.debug(
-                        f"已新增 {len(message_ids)} 個向量到頻道 {channel_id}"
+                        f"已新增 {len(ids)} 個向量到頻道 {channel_id}"
                     )
                 
                 return success

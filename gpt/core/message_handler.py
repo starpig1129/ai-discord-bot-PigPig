@@ -77,11 +77,11 @@ class MessageHandler:
                     self.performance_monitor.stop_timer("tool_execution_time")
 
                     self.performance_monitor.start_timer("llm_generation_time")
-                    await execute_action(message_to_edit, prompt, message)
+                    final_result = await execute_action(message_to_edit, prompt, message)
                     self.performance_monitor.stop_timer("llm_generation_time")
                     
-                    final_result = message_to_edit.content
-                    processing_cache.cache_result(prompt, user_id, channel_id, final_result)
+                    if final_result:
+                        processing_cache.cache_result(prompt, user_id, channel_id, final_result)
                 except Exception as e:
                     self.bot.get_logger_for_guild(message.guild.name).error(f"處理訊息時發生錯誤: {e}", exc_info=True)
                     await message_to_edit.edit(content=f"糟糕，處理你的訊息時發生了錯誤：{e}")
