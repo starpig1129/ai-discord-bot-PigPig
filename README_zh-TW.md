@@ -1,8 +1,6 @@
-# PigPig：多模態大型語言模型 Discord 機器人
+# PigPig: 先進的多模態大型語言模型 Discord 機器人
 
-<p align="center">
-  <a href="README.md">English</a> | <a href="README_zh-TW.md">繁體中文</a>
-</p>
+[English](README.md) | 繁體中文
 
 <p align="center">
   <a href="https://discord.gg/BvP64mqKzR">
@@ -10,173 +8,106 @@
   </a>
 </p>
 
-PigPig 是一個基於多模態大型語言模型 (LLM) 的強大 Discord 機器人，旨在透過自然語言與使用者互動。它結合了先進的 AI 功能與實用特性，為 Discord 社群提供豐富的體驗。
+## 簡介
 
-[邀請 PigPig 到您的伺服器](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot)
+PigPig 是一款由大型語言模型 (LLM) 驅動的強大、多模態 Discord 機器人。它旨在透過自然語言與使用者互動，結合先進的 AI 功能與實用、有趣的特性，豐富任何 Discord 社群。
+
+[**邀請 PigPig 到您的伺服器！**](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot)
 
 ## 🌟 主要功能
 
-- 🧠 **AI 驅動的對話**: 使用 LLM 和 LangChain 進行自然語言理解和生成。
-- 🖼️ **多模態功能**: 視覺問答和圖片生成。
-- 🍽️ **實用功能**: 設定提醒事項、獲得推薦和執行計算。
-- 👤 **使用者資訊管理**: 建立和維護使用者個人資料。
-- 📊 **頻道資料 RAG**: 使用頻道歷史記錄來獲得具備情境感知的回應。
-- 🧠 **智能頻道記憶系統**: 永久儲存並智能檢索頻道對話歷史，提供語義搜尋和上下文增強
-- 💭 **思維鏈推理 (Chain of Thought Reasoning)**：採用思維鏈推理來提供詳細的、循序漸進的思考過程說明，增強透明度和理解力。此功能允許機器人將複雜的問題分解成較小的、易於管理的步驟，提供更全面和有見地的回應。
-- 🔄 **自動更新系統**: 自動檢查和下載 GitHub 更新，支援安全備份和回滾機制。
-
-
-## 🖥️ 系統需求
-
-### 基本依賴項目
-- [Python 3.10+](https://www.python.org/downloads/)
-- [MongoDB](https://www.mongodb.com/)（用於使用者資料和餐廳推薦功能）
-- [FFmpeg](https://ffmpeg.org/)（用於音樂播放功能）
-- [requirements 中的模組](requirements.txt)
-
-### 硬體需求
-- **GPU（可選）**：至少具有 12GB VRAM 的 NVIDIA GPU（建議用於本地模型推理）
-- **注意**：機器人優先使用 API 服務而非本地模型，因此 GPU 對大多數使用情況而言是可選的
+*   🧠 **AI 驅動的對話**：利用先進的大型語言模型進行自然語言理解與生成。
+*   🖼️ **多模態能力**：支援視覺問答 (VQA) 和 AI 圖像生成。
+*   🎵 **音樂播放**：從 YouTube 播放音樂，並提供佇列和播放清單管理。
+*   🧠 **智慧頻道記憶**：永久儲存並透過語意搜尋智慧檢索對話歷史，為回應提供增強的上下文。
+*   🔄 **自動更新系統**：自動檢查並應用 GitHub 更新，具備安全備份和還原功能。
+*   🍽️ **實用工具**：設定提醒、獲取餐廳推薦、執行計算等。
+*   💭 **思維鏈推理**：提供其思維過程的詳細、逐步解釋，以增強透明度。
 
 ## 📸 功能展示
-### Discord 機器人
 
 ![alt text](readmeimg/image-4.png)
-
 ![alt text](readmeimg/image.png)
-
 ![alt text](readmeimg/image-1.png)
-
 ![alt text](readmeimg/image-2.png)
-
 ![alt text](readmeimg/image-3.png)
 
-## 🚀 快速入門
+## 🚀 開始使用
+
+### 系統需求
+
+*   **基本依賴項目：**
+    *   [Python 3.10+](https://www.python.org/downloads/)
+    *   [MongoDB](https://www.mongodb.com/) (用於使用者資料和特定功能)
+    *   [FFmpeg](https://ffmpeg.org/) (用於音樂播放)
+    *   [`requirements.txt`](./requirements.txt) 中列出的 Python 套件
+*   **硬體需求：**
+    *   **GPU (可選)**：建議使用至少 12GB VRAM 的 NVIDIA GPU 來運行本地模型。機器人優先使用 API 服務，因此大多數功能不需要 GPU。
+
+### 安裝步驟
+
+```bash
+# 複製儲存庫
+git clone https://github.com/starpig1129/discord-LLM-bot-PigPig.git
+
+# 進入專案目錄
+cd discord-LLM-bot-PigPig
+
+# 安裝所需的 Python 套件
+pip install -r requirements.txt
 ```
-
-### FFmpeg 設定
-
-機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
-
-| 設定項目 | 描述 |
-| --- | --- |
-| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
-| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
-| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
-| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
-| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
-
-這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。sh
-git clone https://github.com/starpig1129/discord-LLM-bot-PigPig.git  #複製儲存庫
-cd discord-LLM-bot-PigPig                                        #進入目錄
-python -m pip install -r requirements.txt          #安裝所需的套件
-```
-
-### FFmpeg 設定
-
-機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
-
-| 設定項目 | 描述 |
-| --- | --- |
-| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
-| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
-| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
-| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
-| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
-
-這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。
-
-使用 `python main.py` 啟動您的機器人
 
 ## ⚙️ 設定
-1. **將 `.env Example` 重新命名為 `.env` 並填寫所有值**
+
+請按照以下步驟設定您的機器人實例。
+
+### 步驟 1：設定 `.env` 檔案
+
+將 `.env Example` 檔案重新命名為 `.env` 並填入所需的值。
+
+```env
+# .env
+
+# --- Discord 機器人憑證 ---
+TOKEN=XXXXXXXXXXXXXXXXXXXXXXXX.XXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXX
+CLIENT_ID=123456789012345678
+CLIENT_SECRET_ID=XXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXX
+SERCET_KEY=DASHBOARD_SERCET_KEY
+
+# --- 機器人設定 ---
+BOT_OWNER_ID=123456789012345678
+BUG_REPORT_CHANNEL_ID=123456789012345678
+
+# --- AI 模型設定 ---
+MODEL_NAME=openbmb/MiniCPM-o-2_6
+ANTHROPIC_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+OPENAI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+GEMINI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
-### FFmpeg 設定
+| 變數                  | 描述                                                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `TOKEN`               | **(必要)** 您在 [Discord 開發者入口網站](https://discord.com/developers/applications) 取得的 Discord 機器人權杖。 |
+| `CLIENT_ID`           | **(必要)** 您機器人的用戶端 ID，來自開發者入口網站。                                                         |
+| `CLIENT_SECRET_ID`    | *(可選)* 您機器人的用戶端密鑰，用於特定的 API 互動。                                                         |
+| `SERCET_KEY`          | *(可選)* 用於儀表板驗證的密鑰。                                                                            |
+| `BOT_OWNER_ID`        | **(必要)** 您的 Discord 使用者 ID。授予擁有者等級的權限，並且是自動更新系統所必需的。                         |
+| `BUG_REPORT_CHANNEL_ID` | *(可選)* 用於發送錯誤訊息和錯誤報告的 Discord 頻道 ID。                                                    |
+| `MODEL_NAME`          | 預設使用的本地多模態模型。                                                                                 |
+| `ANTHROPIC_API_KEY`   | *(可選)* 您用於 Anthropic 的 Claude 模型的 API 金鑰。                                                      |
+| `OPENAI_API_KEY`      | *(可選)* 您用於 OpenAI 的 GPT 模型的 API 金鑰。                                                            |
+| `GEMINI_API_KEY`      | *(可選)* 您用於 Google 的 Gemini 模型的 API 金鑰。                                                         |
 
-機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
+### 步驟 2：設定 `settings.json` 檔案
 
-| 設定項目 | 描述 |
-| --- | --- |
-| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
-| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
-| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
-| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
-| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
+如果存在 `settingsExample.json` 檔案，請將其重新命名為 `settings.json`。否則，請建立它。此檔案控制機器人的行為、功能和其他操作參數。請勿更改鍵名。
 
-這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。sh
-TOKEN = XXXXXXXXXXXXXXXXXXXXXXXX.XXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXX
-CLIENT_ID = 123456789012345678
-CLIENT_SECRET_ID = XXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXX
-SERCET_KEY = DASHBOARD_SERCET_KEY
-
-BUG_REPORT_CHANNEL_ID = 123456789012345678
-
-LLM_MODEL_NAME = shenzhi-wang/Llama3-8B-Chinese-Chat
-VQA_MODEL_NAME = openbmb/MiniCPM-Llama3-V-2_5-int4
-ANTHROPIC_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
-# 機器人擁有者 ID（自動更新系統和管理員操作必需）
-BOT_OWNER_ID = 123456789012345678
-
-# MongoDB 配置（使用者資料和餐廳功能必需）
-MONGODB_URI = mongodb://localhost:27017/pigpig
-```
-
-### FFmpeg 設定
-
-機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
-
-| 設定項目 | 描述 |
-| --- | --- |
-| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
-| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
-| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
-| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
-| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
-
-這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。
-| 值 | 描述 |
-|---|---|
-| TOKEN | 您的 Discord 機器人權杖 [(Discord 入口網站)](https://discord.com/developers/applications) |
-| CLIENT_ID | 您的 Discord 機器人客戶端 ID [(Discord 入口網站)](https://discord.com/developers/applications) |
-| CLIENT_SECRET_ID | 您的 Discord 機器人客戶端秘密 ID [(Discord 入口網站)](https://discord.com/developers/applications) ***(選填)*** |
-| SERCET_KEY | 儀表板的秘密金鑰 ***(選填)*** |
-| BUG_REPORT_CHANNEL_ID | 所有錯誤訊息將會傳送到此文字頻道 ***(選填)*** |
-| ANTHROPIC_API_KEY | 您的 Anthropic API 金鑰 [(Anthropic API)](https://www.anthropic.com/api) ***(選填)*** |
-| OPENAI_API_KEY | 您的 OpenAI API 金鑰 [(OpenAI API)](https://openai.com/api/) ***(選填)*** |
-| GEMINI_API_KEY | 您的 GEMINI API 金鑰 [(GEMINI API)](https://aistudio.google.com/app/apikey/) ***(選填)*** |
-| BOT_OWNER_ID | 您的 Discord 使用者 ID，用於機器人擁有者權限和自動更新系統 ***(自動更新功能必需)*** |
-| MONGODB_URI | MongoDB 連線字串，用於使用者資料儲存 ***(使用者資料和餐廳功能必需)*** |
-2. **將 `settingsExample.json` 重新命名為 `settings.json` 並自訂您的設定**
-***(注意：請勿更改 `settings.json` 中的任何金鑰)***
-```
-
-### FFmpeg 設定
-
-機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
-
-| 設定項目 | 描述 |
-| --- | --- |
-| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
-| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
-| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
-| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
-| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
-
-這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。json
+```json
 {
     "prefix": "/",
     "activity": [
         {
-            "paly": "\u5b78\u7fd2\u8aaa\u8a71"
+            "paly": "學習說話"
         }
     ],
     "ipc_server": {
@@ -207,7 +138,7 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
     },
     "restart": {
         "graceful_shutdown_timeout": 30,
-        "restart_command": "python main.py",
+        "restart_command": "python bot.py",
         "pre_restart_delay": 5
     },
     "github": {
@@ -217,109 +148,53 @@ MONGODB_URI = mongodb://localhost:27017/pigpig
     },
     "ffmpeg": {
         "location": "/usr/bin/ffmpeg",
-        "audio_quality": "192",
-        "audio_codec": "mp3",
-        "postprocessor_args": {
-            "threads": 2,
-            "loglevel": "warning",
-            "overwrite_output": true,
-            "max_muxing_queue_size": 2048,
-            "analyzeduration": "20M",
-            "probesize": "20M",
-            "reconnect": true,
-            "reconnect_streamed": true,
-            "reconnect_delay_max": 30,
-            "timeout": 30000000,
-            "rw_timeout": 30000000
-        },
-        "ytdlp_options": {
-            "socket_timeout": 300,
-            "retries": 10,
-            "concurrent_fragment_downloads": 1,
-            "file_access_retries": 5,
-            "fragment_retries": 10,
-            "retry_sleep_http": 5
-        },
-        "http_headers": {
-            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "accept_language": "en-us,en;q=0.5",
-            "sec_fetch_mode": "navigate"
-        }
+        "audio_quality": "192"
     }
 }
 ```
 
-### FFmpeg 設定
+### 步驟 3：啟動機器人
 
-機器人現在支援透過 `settings.json` 檔案來配置 FFmpeg 設定。主要配置選項包括：
+設定完成後，您可以使用以下指令啟動機器人：
 
-| 設定項目 | 描述 |
-| --- | --- |
-| `ffmpeg.location` | FFmpeg 執行檔路徑 (預設: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | 音樂下載的音訊品質 (預設: `192` kbps) |
-| `ffmpeg.audio_codec` | 轉換用的音訊編解碼器 (預設: `mp3`) |
-| `ffmpeg.postprocessor_args` | 用於最佳化的 FFmpeg 後處理器參數 |
-| `ffmpeg.ytdlp_options` | yt-dlp 特定的下載行為選項 |
-| `ffmpeg.http_headers` | 下載請求的 HTTP 標頭 |
+```bash
+python main.py
+```
 
-這些設定讓您可以根據系統需求和偏好來自訂音樂下載和處理行為。
+## 📦 功能 / Cogs 總覽
 
-## 🧠 記憶系統配置
+機器人採用模組化的 "Cogs" 設計，其中每個檔案代表一組不同的功能。
 
-機器人包含智能頻道記憶系統，提供永久對話儲存和語義搜尋功能。主要特性包括：
+*   **Channel Manager**：管理特定頻道的設定和權限。
+*   **Image Generation**：使用 AI 從文字提示生成圖像。
+*   **Internet Search**：執行網路搜尋以獲取最新資訊。
+*   **Language Manager**：處理多語言支援和翻譯。
+*   **Math**：執行數學計算。
+*   **Memory System**：管理長期對話記憶，實現語意搜尋和上下文檢索。
+*   **Model Management**：處理本地 AI 模型的載入和卸載以管理資源。
+*   **Music**：提供完整的音樂播放功能。
+*   **Reminder**：允許使用者設定和管理提醒。
+*   **Story Manager**：促進互動式、由 AI 驅動的故事生成。
+*   **System Prompt Manager**：管理不同頻道或伺服器的系統提示。
+*   **Update Manager**：管理自動更新過程。
+*   **User Data**：管理使用者特定的資料和設定檔。
+*   **Eat**：提供智慧餐廳和美食推薦。
 
-### 記憶系統功能
-- **永久儲存**: 所有頻道對話自動儲存至本地 SQLite 資料庫
-- **語義搜尋**: 使用句子轉換器進行進階向量搜尋，實現有意義的上下文檢索
-- **多語言支援**: 支援包括英文、中文、日文等多種語言
-- **混合搜尋**: 結合關鍵字和語義搜尋以獲得最佳結果
-- **上下文增強**: 自動提供相關對話歷史以改善 AI 回應
+## 📚 開發者：技術文件
 
-### 記憶系統指令
-- `/memory_search <查詢>`: 使用語義搜尋查找對話歷史
-- `/memory_stats`: 檢視記憶系統統計資訊和儲存狀態
-- `/memory_config`: 管理記憶系統配置設定
+程式碼庫有廣泛的文件紀錄。以下是為開發者提供的主要文件部分的連結：
 
-### 記憶系統硬體需求
-- **CPU**: 標準 CPU 足以應付基本操作
-- **記憶體**: 建議最少 4GB 以支援向量運算
-- **儲存空間**: 本地儲存空間用於 SQLite 資料庫和向量索引
-- **可選 GPU**: NVIDIA GPU 可加速向量計算（安裝 `faiss-gpu` 取代 `faiss-cpu`）
+| 模組類別 | 描述 | 文件連結 |
+|---|---|---|
+| **核心 GPT 引擎** | 處理 LLM 整合、回應生成和工具。 | [`gpt/`](./docs/gpt/core/index.md) |
+| **附加元件** | 管理系統級功能，如自動更新。 | [`addons/`](./docs/addons/update/index.md) |
+| **Cogs (功能)** | 核心機器人功能和指令。 | [`cogs/`](./docs/cogs/) |
+| ↳ Eat 系統 | 智慧美食推薦模組。 | [`cogs/eat/`](./docs/cogs/eat/index.md) |
+| ↳ 記憶系統 | 管理長期對話記憶。 | [`cogs/memory/`](./docs/cogs/memory/index.md) |
+| ↳ 音樂系統 | 處理音樂播放和佇列。 | [`cogs/music_lib/`](./docs/cogs/music_lib/index.md) |
+| ↳ 故事系統 | 互動式故事生成模組。 | [`cogs/story/`](./docs/cogs/story/index.md) |
+| ↳ 系統提示 | 管理伺服器和頻道的系統提示。 | [`cogs/system_prompt/`](./docs/cogs/system_prompt/index.md) |
 
-### 記憶系統依賴項目
-記憶系統使用以下核心依賴項目（透過 requirements.txt 自動安裝）：
-- `faiss-cpu>=1.7.4`: 向量相似度搜尋引擎
-- `sentence-transformers>=2.2.2`: 多語言句子嵌入
-- `scikit-learn>=1.0.0`: 機器學習工具用於相似度計算
-- `psutil>=5.9.8`: 系統監控以優化效能
-詳細的設定和使用說明，請參閱 [記憶系統快速使用指南](docs/memory_system_quick_start_guide.md)。
+## 授權
 
-## Cogs 概述
-
-此機器人採用模組化設計，包含數個 Cogs (模組) 來處理不同的功能。以下是簡要概述：
-
-- **CoT_AI:** 實現思維鏈推理，提供詳細的、循序漸進的回應。
-- **頻道管理器 (Channel Manager):** 管理特定頻道的設定和權限。
-- **Discord 管理代理 (Discord Manager Agent):** 處理 Discord 特定的管理操作和自動化功能。
-- **圖片生成 (Image Generation):** 基於文字提示生成圖片。
-- **GIF 工具 (GIF Tools):** 提供 GIF 創建和操作功能。
-- **說明 (Help):** 提供可用指令的列表和協助。
-- **網路搜尋 (Internet Search):** 執行各種網路搜尋 (一般、圖片、YouTube、網址內容)。
-- **語言管理器 (Language Manager):** 管理多語言支援和翻譯功能。
-- **數學 (Math):** 執行數學計算和問題解決。
-- **記憶系統 (Memory System):** 智能頻道記憶系統，提供永久對話儲存、語義搜尋、智能上下文增強，支援多語言向量搜尋和混合搜尋策略。
-- **記憶指令 (Memory Commands):** 記憶系統管理指令，包括記憶搜尋、統計資訊、配置管理等功能。
-- **模型管理 (Model Management):** 載入和卸載語言模型以實現最佳效能。
-- **音樂 (Music):** 使用自建 YouTube 整合系統 (yt_dlp + PyNaCl) 提供音樂播放，支援播放清單、佇列和各種播放模式。
-- **提醒 (Reminder):** 為使用者設定和管理提醒事項。
-- **行程表 (Schedule):** 管理使用者行程表和日曆功能。
-- **系統提示管理器 (System Prompt Manager):** 管理頻道和伺服器專用的系統提示，具備權限驗證、快取機制和模組化提示系統整合功能。
-- **更新管理器 (Update Manager):** 管理自動更新系統，提供版本檢查、安全下載和系統重啟功能。
-- **使用者資料 (User Data):** 管理使用者特定資料和個人資料。
-- **美食推薦 (Eat):** 透過 MongoDB 整合提供智慧美食推薦。
-
-
-## 授權條款
-
-此專案採用 MIT 授權條款授權 - 詳細資訊請參閱 [LICENSE](LICENSE) 檔案。
+本專案採用 MIT 授權。詳情請參閱 `LICENSE` 檔案。
