@@ -163,22 +163,105 @@ python main.py
 
 ## 📦 功能 / Cogs 總覽
 
-機器人採用模組化的 "Cogs" 設計，其中每個檔案代表一組不同的功能。
+機器人的功能被劃分為稱為 "Cogs" 的模組。以下是可用的主要功能：
 
-*   **Channel Manager**：管理特定頻道的設定和權限。
-*   **Image Generation**：使用 AI 從文字提示生成圖像。
-*   **Internet Search**：執行網路搜尋以獲取最新資訊。
-*   **Language Manager**：處理多語言支援和翻譯。
-*   **Math**：執行數學計算。
-*   **Memory System**：管理長期對話記憶，實現語意搜尋和上下文檢索。
-*   **Model Management**：處理本地 AI 模型的載入和卸載以管理資源。
-*   **Music**：提供完整的音樂播放功能。
-*   **Reminder**：允許使用者設定和管理提醒。
-*   **Story Manager**：促進互動式、由 AI 驅動的故事生成。
-*   **System Prompt Manager**：管理不同頻道或伺服器的系統提示。
-*   **Update Manager**：管理自動更新過程。
-*   **User Data**：管理使用者特定的資料和設定檔。
-*   **Eat**：提供智慧餐廳和美食推薦。
+---
+
+### 🧠 記憶系統 (Memory System)
+*   **描述：** 管理長期對話記憶，使機器人能夠回憶過去的互動。它使用語意搜尋來尋找最相關的上下文。
+*   **主要指令：** `/memory_search`, `/memory_stats`, `/memory_config`
+*   **[完整文件](./docs/cogs/memory/index.md)**
+
+---
+
+### 🎵 音樂 (Music)
+*   **描述：** 提供完整的 YouTube 音樂播放功能，支援歌曲點播、佇列管理、播放清單和多種播放模式。
+*   **主要指令：** `/play`, `/mode`, `/shuffle`
+*   **[完整文件](./docs/cogs/music_lib/index.md)**
+
+---
+
+### 📖 故事管理員 (Story Manager)
+*   **描述：** 利用多代理 (multi-agent) AI 架構，促進互動式、協作性的故事創作，根據使用者的行動創造動態的敘事。
+*   **主要指令：** `/story`
+*   **[完整文件](./docs/cogs/story/index.md)**
+
+---
+
+### 🍽️ 吃什麼 (Eat - 餐廳推薦)
+*   **描述：** 一個智慧引擎，透過學習伺服器使用者的評分和回饋，來推薦餐廳，從而了解伺服器的美食偏好。
+*   **主要指令：** `/internet_search search_type: eat`
+*   **[完整文件](./docs/cogs/eat/index.md)**
+
+---
+
+### 🖼️ 圖像生成 (Image Generation)
+*   **描述：** 使用先進的 AI 模型，根據文字提示生成和編輯圖像，支援從頭創作和基於指令的修改。
+*   **主要指令：** `/generate_image`
+*   **[完整文件](./docs/cogs/gen_img.md)**
+
+---
+
+### 🌐 網路搜尋 (Internet Search)
+*   **描述：** 一個多功能工具，可用於搜尋網頁、尋找圖片、查詢 YouTube 影片或從 URL 獲取內容。
+*   **主要指令：** `/internet_search`
+*   **[完整文件](./docs/cogs/internet_search.md)**
+
+---
+
+### ⚙️ 系統提示管理員 (System Prompt Manager)
+*   **描述：** 允許透過三層繼承模型，對每個伺服器或每個頻道的機器人個性和行為進行深度客製化。
+*   **主要指令：** `/system_prompt`
+*   **[完整文件](./docs/cogs/system_prompt/index.md)**
+
+---
+
+### ⏰ 提醒 (Reminder)
+*   **描述：** 允許使用者為自己或他人設定提醒，可使用自然語言來指定時間（例如「10 分鐘後」或特定日期）。
+*   **主要指令：** `/remind`
+*   **[完整文件](./docs/cogs/remind.md)**
+
+---
+
+### 🔄 更新管理員 (Update Manager)
+*   **描述：** 提供一個指令介面，用於檢查、啟動和監控機器人從 GitHub 進行的自動更新過程。
+*   **主要指令：** `/update_check`, `/update_now`
+*   **[完整文件](./docs/cogs/update_manager.md)**
+
+---
+
+### 🛂 頻道管理員 (Channel Manager)
+*   **描述：** 為管理員提供工具，透過伺服器範圍的政策和個別頻道的覆寫，來控制機器人可以互動的範圍。
+*   **主要指令：** `/set_server_mode`, `/set_channel_mode`, `/auto_response`
+*   **[完整文件](./docs/cogs/channel_manager.md)**
+
+---
+
+### 👤 使用者資料 (User Data)
+*   **描述：** 一個用於儲存和管理使用者特定資料的系統，可以手動更新或由 AI 智慧合併。
+*   **主要指令：** `/userdata`
+*   **[完整文件](./docs/cogs/userdata.md)**
+
+---
+
+### 🌍 語言管理員 (Language Manager)
+*   **描述：** 管理多語言支援，允許伺服器設定機器人回應和指令的首選語言。
+*   **主要指令：** `/set_language`, `/current_language`
+*   **[完整文件](./docs/cogs/language_manager.md)**
+
+---
+
+### 🧠 模型管理 (Model Management)
+*   **描述：** 一個為機器人擁有者設計的開發者工具，用於動態載入和卸載本地 AI 模型，以管理 GPU 資源。
+*   **主要指令：** `/model_management`
+*   **[完整文件](./docs/cogs/model_management.md)**
+
+---
+
+### 🧮 數學計算機 (Math Calculator)
+*   **描述：** 一個使用 `sympy` 函式庫來安全評估各種數學表達式的工具。
+*   **主要指令：** 這是一個內部工具，沒有直接的斜線指令。
+*   **[完整文件](./docs/cogs/math.md)**
 
 ## 📚 開發者：技術文件
 

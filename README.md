@@ -163,22 +163,105 @@ python main.py
 
 ## 📦 Features / Cogs Overview
 
-The bot uses a modular "Cogs" design, where each file represents a distinct feature set.
+The bot's functionality is divided into modules called "Cogs". Here are the key features available:
 
-*   **Channel Manager**: Manages channel-specific settings and permissions.
-*   **Image Generation**: Generates images from text prompts using AI.
-*   **Internet Search**: Performs web searches to fetch up-to-date information.
-*   **Language Manager**: Handles multi-language support and translations.
-*   **Math**: Performs mathematical calculations.
-*   **Memory System**: Manages the long-term conversation memory, enabling semantic search and context retrieval.
-*   **Model Management**: Handles the loading and unloading of local AI models to manage resources.
-*   **Music**: Provides full music playback functionality.
-*   **Reminder**: Allows users to set and manage reminders.
-*   **Story Manager**: Facilitates interactive, AI-driven story generation.
-*   **System Prompt Manager**: Manages system prompts for different channels or servers.
-*   **Update Manager**: Manages the automatic update process.
-*   **User Data**: Manages user-specific data and profiles.
-*   **Eat**: Provides intelligent restaurant and food recommendations.
+---
+
+### 🧠 Memory System
+*   **Description:** Manages long-term conversation memory, enabling the bot to recall past interactions. It uses semantic search to find the most relevant context.
+*   **Key Commands:** `/memory_search`, `/memory_stats`, `/memory_config`
+*   **[Full Documentation](./docs/cogs/memory/index.md)**
+
+---
+
+### 🎵 Music
+*   **Description:** Provides full music playback from YouTube, supporting song requests, queue management, playlists, and various playback modes.
+*   **Key Commands:** `/play`, `/mode`, `/shuffle`
+*   **[Full Documentation](./docs/cogs/music_lib/index.md)**
+
+---
+
+### 📖 Story Manager
+*   **Description:** Facilitates interactive, collaborative storytelling using a multi-agent AI architecture to create dynamic narratives guided by user actions.
+*   **Key Commands:** `/story`
+*   **[Full Documentation](./docs/cogs/story/index.md)**
+
+---
+
+### 🍽️ Eat (Restaurant Recommendations)
+*   **Description:** An intelligent engine that recommends restaurants by learning a server's food preferences through user ratings and feedback.
+*   **Key Commands:** `/internet_search search_type: eat`
+*   **[Full Documentation](./docs/cogs/eat/index.md)**
+
+---
+
+### 🖼️ Image Generation
+*   **Description:** Generates and edits images from text prompts using advanced AI models, supporting both creation and instruction-based modification.
+*   **Key Commands:** `/generate_image`
+*   **[Full Documentation](./docs/cogs/gen_img.md)**
+
+---
+
+### 🌐 Internet Search
+*   **Description:** A versatile tool to search the web, find images, look up YouTube videos, or fetch content from a URL.
+*   **Key Commands:** `/internet_search`
+*   **[Full Documentation](./docs/cogs/internet_search.md)**
+
+---
+
+### ⚙️ System Prompt Manager
+*   **Description:** Allows deep customization of the bot's personality and behavior on a per-server or per-channel basis using a three-tiered inheritance model.
+*   **Key Commands:** `/system_prompt`
+*   **[Full Documentation](./docs/cogs/system_prompt/index.md)**
+
+---
+
+### ⏰ Reminder
+*   **Description:** Allows users to set reminders for themselves or others using natural language for timing (e.g., "in 10 minutes" or a specific date).
+*   **Key Commands:** `/remind`
+*   **[Full Documentation](./docs/cogs/remind.md)**
+
+---
+
+### 🔄 Update Manager
+*   **Description:** Provides a command interface to check for, initiate, and monitor the bot's automatic update process from GitHub.
+*   **Key Commands:** `/update_check`, `/update_now`
+*   **[Full Documentation](./docs/cogs/update_manager.md)**
+
+---
+
+### 🛂 Channel Manager
+*   **Description:** Provides administrators with tools to control where the bot can interact, using server-wide policies and per-channel overrides.
+*   **Key Commands:** `/set_server_mode`, `/set_channel_mode`, `/auto_response`
+*   **[Full Documentation](./docs/cogs/channel_manager.md)**
+
+---
+
+### 👤 User Data
+*   **Description:** A system for storing and managing user-specific data, which can be updated manually or merged intelligently by the AI.
+*   **Key Commands:** `/userdata`
+*   **[Full Documentation](./docs/cogs/userdata.md)**
+
+---
+
+### 🌍 Language Manager
+*   **Description:** Manages multi-language support, allowing servers to set their preferred language for bot responses and commands.
+*   **Key Commands:** `/set_language`, `/current_language`
+*   **[Full Documentation](./docs/cogs/language_manager.md)**
+
+---
+
+### 🧠 Model Management
+*   **Description:** A developer tool for the bot owner to dynamically load and unload the local AI model to manage GPU resources.
+*   **Key Commands:** `/model_management`
+*   **[Full Documentation](./docs/cogs/model_management.md)**
+
+---
+
+### 🧮 Math Calculator
+*   **Description:** A secure tool for evaluating a wide range of mathematical expressions using the `sympy` library.
+*   **Key Commands:** This is an internal tool, not a direct slash command.
+*   **[Full Documentation](./docs/cogs/math.md)**
 
 ## 📚 For Developers: Technical Documentation
 
