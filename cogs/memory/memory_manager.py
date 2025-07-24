@@ -177,54 +177,58 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"孤兒向量清理期間發生錯誤: {e}", exc_info=True)
 
-    async def find_and_remove_orphan_vectors(self) -> None:
-        """查找並刪除孤立的向量"""
+    async def cleanup_orphan_segments(self) -> Dict[str, int]:
+        """
+        查找並刪除所有孤兒片段（在向量索引中存在但在資料庫中沒有對應記錄的片段）。
+        
+        Returns:
+            Dict[str, int]: {channel_id: removed_count}
+        """
         if not self.vector_manager or not self.db_manager:
-            self.logger.warning("VectorManager 或 DatabaseManager 未初始化。跳過孤兒向量清理。")
-            return
+            self.logger.warning("VectorManager 或 DatabaseManager 未初始化，跳過孤兒片段清理。")
+            return {}
 
-        self.logger.info("開始孤兒向量清理...")
+        self.logger.info("開始孤兒片段清理...")
+        removed_stats = {}
         try:
-            # 取得所有向量索引中的 ID
-            all_vector_ids = []
-            with self.vector_manager._indices_lock:
-                for channel_id, index in self.vector_manager._indices.items():
-                    try:
-                        all_vector_ids.extend(index.get_all_ids())
-                    except Exception as e:
-                        self.logger.error(f"從頻道 {channel_id} 獲取向量 ID 失敗: {e}")
+            # 步驟 1: 獲取所有向量索引中的 segment ID，按頻道分組
+            all_vector_segments_by_channel = self.vector_manager.get_all_segment_ids_by_channel()
 
-            # 取得資料庫中所有訊息的 ID
-            all_message_ids = await asyncio.to_thread(self.db_manager.get_all_message_ids)
+            # 步驟 2: 獲取資料庫中所有有效的 segment ID，按頻道分組
+            all_db_segments_by_channel = await asyncio.to_thread(
+                self.db_manager.get_all_segment_ids_by_channel
+            )
 
-            # 找出孤兒向量
-            orphan_ids = set(all_vector_ids) - set(all_message_ids)
-
-            if orphan_ids:
-                self.logger.info(f"找到 {len(orphan_ids)} 個孤兒向量。正在刪除...")
+            # 步驟 3: 遍歷每個頻道，找出孤兒
+            all_channels = set(all_vector_segments_by_channel.keys()) | set(all_db_segments_by_channel.keys())
+            
+            for channel_id in all_channels:
+                vector_ids = set(all_vector_segments_by_channel.get(channel_id, []))
+                db_ids = set(all_db_segments_by_channel.get(channel_id, []))
                 
-                # 根據頻道分組孤兒 ID
-                orphans_by_channel = {}
-                with self.vector_manager._indices_lock:
-                    for channel_id, index in self.vector_manager._indices.items():
-                        channel_vector_ids = set(index.get_all_ids())
-                        channel_orphans = list(channel_vector_ids.intersection(orphan_ids))
-                        if channel_orphans:
-                            orphans_by_channel[channel_id] = channel_orphans
-
-                # 批次刪除
-                for channel_id, ids_to_remove in orphans_by_channel.items():
+                orphan_ids = list(vector_ids - db_ids)
+                
+                if orphan_ids:
+                    self.logger.info(f"在頻道 {channel_id} 中找到 {len(orphan_ids)} 個孤兒片段。")
                     try:
-                        removed_count = self.vector_manager.remove_vectors(channel_id, ids_to_remove)
-                        self.logger.info(f"從頻道 {channel_id} 移除了 {removed_count} 個孤兒向量。")
+                        removed_count = self.vector_manager.remove_vectors(channel_id, orphan_ids)
+                        if removed_count > 0:
+                            removed_stats[channel_id] = removed_count
+                            self.logger.info(f"成功從頻道 {channel_id} 移除了 {removed_count} 個孤兒片段。")
                     except Exception as e:
-                        self.logger.error(f"從頻道 {channel_id} 移除孤兒向量時發生錯誤: {e}")
+                        self.logger.error(f"從頻道 {channel_id} 移除孤兒片段時發生錯誤: {e}")
 
+            total_removed = sum(removed_stats.values())
+            if total_removed > 0:
+                self.logger.info(f"孤兒片段清理完成，共移除了 {total_removed} 個片段。")
             else:
-                self.logger.info("未找到孤兒向量。")
+                self.logger.info("未找到需要清理的孤兒片段。")
+
+            return removed_stats
 
         except Exception as e:
-            self.logger.error(f"孤兒向量清理期間發生錯誤: {e}", exc_info=True)
+            self.logger.error(f"孤兒片段清理期間發生錯誤: {e}", exc_info=True)
+            return removed_stats
 
     async def initialize(self) -> bool:
         """初始化記憶系統
@@ -397,8 +401,8 @@ class MemoryManager:
             # 掃描現有的索引檔案
             await self._load_existing_indices()
 
-            # 在啟動時執行孤兒向量清理
-            asyncio.create_task(self.find_and_remove_orphan_vectors())
+            # 在啟動時執行孤兒片段清理
+            asyncio.create_task(self.cleanup_orphan_segments())
             
             self.logger.info("向量搜尋組件初始化完成")
             
@@ -945,7 +949,7 @@ class MemoryManager:
                     self.vector_manager.add_vectors(
                         channel_id=segment.channel_id,
                         vectors=np.array([embedding]),
-                        ids=[f"seg_{segment.segment_id}"]
+                        ids=[segment.segment_id]
                     )
                 except Exception as e:
                     self.logger.error(f"處理片段向量時發生錯誤: {e}")

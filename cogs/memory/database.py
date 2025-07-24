@@ -51,6 +51,18 @@ class DatabaseManager:
             self._user_manager = SQLiteUserManager(self)
         return self._user_manager
     
+    def _sanitize_segment_id(self, segment_id: str) -> str:
+        """清理 segment_id，確保 'seg_' 前綴只有一個。"""
+        if not isinstance(segment_id, str):
+            return segment_id
+        
+        # 移除所有 'seg_'，然後在開頭加上一個
+        sanitized_id = segment_id
+        while sanitized_id.startswith("seg_"):
+            sanitized_id = sanitized_id[4:]
+            
+        return f"seg_{sanitized_id}"
+    
     def _initialize_database(self) -> None:
         """初始化資料庫結構"""
         try:
@@ -720,36 +732,55 @@ class DatabaseManager:
             raise DatabaseError(f"記錄效能指標失敗: {e}", operation="record_metric", table="performance_metrics")
 
     # 資料清理
-    def cleanup_old_data(self, retention_days: int = 90) -> int:
-        """清理舊資料
+    def cleanup_old_data(self, retention_days: int = 90) -> Tuple[int, List[str]]:
+        """清理舊資料，並返回被刪除訊息關聯的 segment_id
         
         Args:
             retention_days: 資料保留天數
             
         Returns:
-            int: 刪除的訊息數量
+            Tuple[int, List[str]]: (刪除的訊息數量, 關聯的 segment_id 列表)
         """
+        cutoff_date = datetime.now() - timedelta(days=retention_days)
+        self.logger.info(f"開始清理 {retention_days} 天前的舊資料 (截止日期: {cutoff_date})")
+        
         try:
-            cutoff_date = datetime.now() - timedelta(days=retention_days)
-            deleted_count = 0
             with self.get_connection() as conn:
+                # 步驟 1: 找出即將被刪除的訊息 ID
                 cursor = conn.execute(
-                    "SELECT COUNT(*) FROM messages WHERE timestamp < ?",
+                    "SELECT message_id FROM messages WHERE timestamp < ?",
                     (cutoff_date,)
                 )
-                count_row = cursor.fetchone()
-                if count_row:
-                    deleted_count = count_row[0]
+                message_ids_to_delete = [row[0] for row in cursor.fetchall()]
                 
-                if deleted_count > 0:
-                    conn.execute("DELETE FROM messages WHERE timestamp < ?", (cutoff_date,))
-                    conn.commit()
-                    self.logger.info(f"已清理 {deleted_count} 則舊訊息")
-            
-            return deleted_count
+                if not message_ids_to_delete:
+                    self.logger.info("沒有找到需要清理的舊資料")
+                    return 0, []
+
+                # 步驟 2: 根據訊息 ID 找出關聯的 segment_id
+                placeholders = ','.join('?' * len(message_ids_to_delete))
+                cursor = conn.execute(
+                    f"SELECT DISTINCT segment_id FROM segment_messages WHERE message_id IN ({placeholders})",
+                    message_ids_to_delete
+                )
+                segment_ids_to_check = [row[0] for row in cursor.fetchall()]
+
+                # 步驟 3: 刪除訊息 (由於 ON DELETE CASCADE, segment_messages 會自動清理)
+                cursor = conn.execute(
+                    f"DELETE FROM messages WHERE message_id IN ({placeholders})",
+                    message_ids_to_delete
+                )
+                deleted_count = cursor.rowcount
+                conn.commit()
+                
+                self.logger.info(f"成功刪除 {deleted_count} 條舊訊息")
+                
+                # 步驟 4: 返回被刪除的訊息數量和可能需要清理的 segment_id
+                return deleted_count, segment_ids_to_check
+                
         except Exception as e:
             self.logger.error(f"清理舊資料失敗: {e}")
-            raise DatabaseError(f"清理舊資料失敗: {e}", operation="cleanup", table="messages")
+            raise DatabaseError(f"清理舊資料失敗: {e}", operation="cleanup_old_data")
 
     # 統計資訊
     def get_channel_count(self) -> int:
@@ -864,6 +895,11 @@ class DatabaseManager:
         Returns:
             str: 新建立的片段 ID
         """
+        # 防禦性清理，避免 'seg_seg_' 問題
+        sanitized_segment_id = self._sanitize_segment_id(segment_id)
+        if sanitized_segment_id != segment_id:
+            self.logger.warning(f"偵測到並修正了格式錯誤的 segment ID：'{segment_id}' -> '{sanitized_segment_id}'")
+
         try:
             with self.get_connection() as conn:
                 conn.execute("""
@@ -872,13 +908,13 @@ class DatabaseManager:
                      semantic_coherence_score, activity_level, segment_summary,
                      vector_data, metadata, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (segment_id, channel_id, start_time, end_time, message_count,
+                """, (sanitized_segment_id, channel_id, start_time, end_time, message_count,
                       semantic_coherence_score, activity_level, segment_summary,
                       vector_data, metadata))
                 conn.commit()
             
-            self.logger.debug(f"建立對話片段: {segment_id}")
-            return segment_id
+            self.logger.debug(f"建立對話片段: {sanitized_segment_id}")
+            return sanitized_segment_id
             
         except Exception as e:
             self.logger.error(f"建立對話片段失敗: {e}")
@@ -906,6 +942,15 @@ class DatabaseManager:
         if not segment_id:
             raise ValueError("segment_data 中必須包含 'segment_id'")
 
+        # 防禦性清理，避免 'seg_seg_' 問題
+        sanitized_segment_id = self._sanitize_segment_id(segment_id)
+        if sanitized_segment_id != segment_id:
+            self.logger.warning(f"偵測到並修正了格式錯誤的 segment ID：'{segment_id}' -> '{sanitized_segment_id}'")
+            # 更新字典中的值，以確保後續操作使用正確的 ID
+            segment_data['segment_id'] = sanitized_segment_id
+        else:
+            sanitized_segment_id = segment_id
+ 
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
@@ -936,7 +981,7 @@ class DatabaseManager:
                         vector_data, metadata
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    segment_id,
+                    sanitized_segment_id,
                     segment_data['channel_id'],
                     segment_data['start_time'],
                     segment_data['end_time'],
@@ -953,7 +998,7 @@ class DatabaseManager:
                 message_ids = [msg['message_id'] for msg in messages_data]
                 if message_ids:
                     message_links = [
-                        (segment_id, message_id, i)
+                        (sanitized_segment_id, message_id, i)
                         for i, message_id in enumerate(message_ids)
                     ]
                     cursor.executemany("""
@@ -964,11 +1009,11 @@ class DatabaseManager:
 
                 # 提交交易
                 conn.commit()
-                self.logger.info(f"原子性地建立了片段 {segment_id} 並儲存/關聯了 {len(messages_data)} 條訊息。")
-                return segment_id
-
+                self.logger.info(f"原子性地建立了片段 {sanitized_segment_id} 並儲存/關聯了 {len(messages_data)} 條訊息。")
+                return sanitized_segment_id
+ 
         except Exception as e:
-            self.logger.error(f"原子性建立片段 {segment_id} 失敗: {e}", exc_info=True)
+            self.logger.error(f"原子性建立片段 {sanitized_segment_id} 失敗: {e}", exc_info=True)
             # get_connection() 的上下文管理器會自動 rollback
             raise DatabaseError(f"原子性建立片段失敗: {e}", operation="create_segment_with_messages")
 
@@ -1156,18 +1201,30 @@ class DatabaseManager:
             self.logger.error(f"取得重疊片段失敗: {e}")
             raise DatabaseError(f"取得重疊片段失敗: {e}", operation="get_overlapping_segments", table="conversation_segments")
 
-    def get_all_valid_segment_ids(self) -> List[str]:
-        """
-        從 conversation_segments 表中獲取所有有效的 segment_id。
-
+    def get_all_segment_ids_by_channel(self) -> Dict[str, List[str]]:
+        """獲取每個頻道所有有效的 segment_id
+        
         Returns:
-            List[str]: 所有 segment_id 的列表。
+            Dict[str, List[str]]: {channel_id: [segment_id, ...]}
         """
         try:
             with self.get_connection() as conn:
-                cursor = conn.execute("SELECT segment_id FROM conversation_segments")
+                cursor = conn.execute("""
+                    SELECT c.channel_id, s.segment_id
+                    FROM conversation_segments s
+                    JOIN channels c ON s.channel_id = c.channel_id
+                    WHERE s.segment_id IN (SELECT DISTINCT segment_id FROM segment_messages)
+                    ORDER BY c.channel_id
+                """)
                 rows = cursor.fetchall()
-                return [row['segment_id'] for row in rows]
+                
+                result = {}
+                for row in rows:
+                    channel_id, segment_id = row
+                    if channel_id not in result:
+                        result[channel_id] = []
+                    result[channel_id].append(segment_id)
+                return result
         except Exception as e:
-            self.logger.error(f"獲取所有有效的 segment_id 失敗: {e}")
-            raise DatabaseError(f"獲取所有有效的 segment_id 失敗: {e}", operation="get_all_valid_segment_ids", table="conversation_segments")
+            self.logger.error(f"獲取所有 segment id 失敗: {e}")
+            raise DatabaseError(f"獲取所有 segment id 失敗: {e}", operation="get_all_segment_ids_by_channel")

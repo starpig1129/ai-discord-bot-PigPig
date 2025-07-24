@@ -2582,6 +2582,21 @@ class VectorManager:
             for channel_id in self._indices:
                 stats[channel_id] = self.get_index_stats(channel_id)
         return stats
+
+    def get_all_segment_ids_by_channel(self) -> Dict[str, List[str]]:
+        """
+        獲取所有頻道及其對應的所有 segment ID。
+        """
+        all_ids = {}
+        with self._indices_lock:
+            for channel_id, index in self._indices.items():
+                try:
+                    # 確保索引已載入
+                    if self.create_channel_index(channel_id):
+                        all_ids[channel_id] = index.get_all_ids()
+                except Exception as e:
+                    self.logger.error(f"從頻道 {channel_id} 獲取所有 ID 失敗: {e}")
+        return all_ids
     
     def check_and_repair_all_indices(self) -> Dict[str, Dict[str, any]]:
         """檢查並修復所有頻道索引的完整性

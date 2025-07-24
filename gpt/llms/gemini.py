@@ -38,7 +38,7 @@ class GeminiError(Exception):
 
 
 cache_manager: Optional[GeminiCacheManager] = None
-async def initialize_cache_manager(max_cache_count: int = 50):
+def initialize_cache_manager(max_cache_count: int = 50):
     global cache_manager
     if cache_manager is None:
         cache_manager = GeminiCacheManager(client, max_cache_count)
@@ -48,7 +48,7 @@ async def initialize_cache_manager(max_cache_count: int = 50):
 async def get_cache_manager() -> Optional[GeminiCacheManager]:
     global cache_manager
     if cache_manager is None:
-        cache_manager = await initialize_cache_manager()
+        cache_manager = initialize_cache_manager()
     return cache_manager
 
 def _download_and_process_pdf(pdf_url_or_path: str) -> pathlib.Path:
@@ -570,7 +570,7 @@ async def generate_response(inst: str,
                     cache_args["tools"] = tool_list
 
                 # 3b. 呼叫管理器來創建並註冊這個新的快取
-                cache = await cache_mgr.create_and_register_cache(
+                cache = cache_mgr.create_and_register_cache(
                     **cache_args
                 )
             except Exception as e:
