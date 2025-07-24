@@ -356,6 +356,108 @@ class TextSegmentationService:
             return False
         
         return hybrid_result
+
+    async def _batch_segment_channel_text(self, messages_to_process: List[Dict[str, Any]]) -> List[ConversationSegment]:
+        """
+        批次處理訊息並進行分割，採用獨立的、原子性的儲存邏輯。
+        """
+        if not self.config.enabled or not messages_to_process:
+            return []
+
+        self.logger.info(f"[重構] 開始批次分割 {len(messages_to_process)} 條訊息...")
+        
+        completed_segments_info = []
+        messages_by_channel = {}
+        for msg in messages_to_process:
+            messages_by_channel.setdefault(msg['channel_id'], []).append(msg)
+
+        for channel_id, messages in messages_by_channel.items():
+            self.logger.debug(f"[重構] 正在處理頻道 {channel_id} 的 {len(messages)} 條訊息...")
+            messages.sort(key=lambda m: m['timestamp'])
+
+            current_segment_messages = []
+            
+            for message in messages:
+                if not current_segment_messages:
+                    current_segment_messages.append(message)
+                    continue
+
+                # 使用與即時處理相同的邏輯判斷是否分割
+                # 為了判斷，需要一個臨時的 ConversationSegment 物件
+                temp_segment_obj = ConversationSegment(
+                    segment_id="temp",
+                    channel_id=channel_id,
+                    start_time=current_segment_messages[0]['timestamp'],
+                    end_time=current_segment_messages[-1]['timestamp'],
+                    message_ids=[m['message_id'] for m in current_segment_messages]
+                )
+
+                should_segment = await self._should_create_new_segment(
+                    channel_id, message['timestamp'], message['content']
+                )
+
+                if should_segment:
+                    # 完成當前片段並準備儲存
+                    self.logger.debug(f"[重構] 發現分割點。完成片段，包含 {len(current_segment_messages)} 條訊息。")
+                    completed_segments_info.append({
+                        "channel_id": channel_id,
+                        "messages": list(current_segment_messages)
+                    })
+                    current_segment_messages.clear()
+
+                current_segment_messages.append(message)
+
+            # 處理迴圈結束後剩餘的最後一個片段
+            if current_segment_messages:
+                self.logger.debug(f"[重構] 處理剩餘的最後一個片段，包含 {len(current_segment_messages)} 條訊息。")
+                completed_segments_info.append({
+                    "channel_id": channel_id,
+                    "messages": list(current_segment_messages)
+                })
+
+        # 原子性地儲存所有已完成的片段
+        if not completed_segments_info:
+            self.logger.info("[重構] 批次分割未產生任何新片段。")
+            return []
+
+        self.logger.info(f"[重構] 批次分割完成，共生成 {len(completed_segments_info)} 個片段，準備進行原子性儲存...")
+        
+        try:
+            for seg_info in completed_segments_info:
+                messages_in_seg = seg_info['messages']
+                channel_id = seg_info['channel_id']
+                
+                segment_id = f"seg_{channel_id}_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}"
+                
+                segment_data = {
+                    "segment_id": segment_id,
+                    "channel_id": channel_id,
+                    "start_time": messages_in_seg[0]['timestamp'],
+                    "end_time": messages_in_seg[-1]['timestamp'],
+                    "message_count": len(messages_in_seg),
+                    # 其他屬性可以在此處或之後計算並更新
+                    "semantic_coherence_score": 0.0,
+                    "activity_level": 0.0,
+                    "segment_summary": None,
+                    "vector_data": None,
+                    "metadata": "{'source': 'batch'}"
+                }
+
+                # 呼叫重構後的原子性儲存函式
+                await asyncio.to_thread(
+                    self.db_manager.create_segment_with_messages,
+                    segment_data=segment_data,
+                    messages_data=messages_in_seg
+                )
+            
+            self.logger.info(f"[重構] 成功原子性地儲存了 {len(completed_segments_info)} 個片段。")
+            # 注意：此處返回的不是 ConversationSegment 物件，因為它們是異步建立的。
+            # 如果需要返回物件，需要從資料庫重新查詢，但目前對於呼叫者來說非必要。
+            return [] # 返回空列表以符合原始函式簽章
+
+        except Exception as e:
+            self.logger.error(f"[重構] 批次儲存片段時發生嚴重錯誤: {e}", exc_info=True)
+            raise MemorySystemError(f"批次儲存失敗: {e}")
     
     async def _calculate_dynamic_interval(self, channel_id: str) -> timedelta:
         """計算動態時間間隔
@@ -631,6 +733,10 @@ class TextSegmentationService:
         if current_segment:
             current_segment.message_ids.append(message_id)
             current_segment.end_time = timestamp
+            
+            # 此處不應有資料庫操作。
+            # 所有資料庫寫入都應在 _finalize_current_segment 中原子性地完成。
+            # self.logger.debug(f"訊息 {message_id} 已在記憶體中加入片段 {current_segment.segment_id}")
     
     async def _calculate_segment_coherence(self, segment: ConversationSegment) -> float:
         """計算片段的語義連貫性分數
@@ -731,36 +837,48 @@ class TextSegmentationService:
             segment: 對話片段
         """
         try:
-            # 序列化向量資料
-            vector_data = None
-            if segment.vector_representation is not None:
-                vector_data = segment.vector_representation.tobytes()
+            self.logger.info(f"開始原子性儲存片段 {segment.segment_id}，包含 {segment.message_count} 條訊息。")
+
+            # 準備要傳遞給新方法的資料
+            vector_data = segment.vector_representation.tobytes() if segment.vector_representation is not None else None
             
-            # 儲存片段資訊
-            self.db_manager.create_conversation_segment(
-                segment_id=segment.segment_id,
-                channel_id=segment.channel_id,
-                start_time=segment.start_time,
-                end_time=segment.end_time,
-                message_count=segment.message_count,
-                semantic_coherence_score=segment.semantic_coherence_score,
-                activity_level=segment.activity_level,
-                segment_summary=segment.segment_summary,
-                vector_data=vector_data,
-                metadata=str(segment.metadata) if segment.metadata else None
+            segment_data = {
+                "segment_id": segment.segment_id,
+                "channel_id": segment.channel_id,
+                "start_time": segment.start_time,
+                "end_time": segment.end_time,
+                "message_count": segment.message_count,
+                "semantic_coherence_score": segment.semantic_coherence_score,
+                "activity_level": segment.activity_level,
+                "segment_summary": segment.segment_summary,
+                "vector_data": vector_data,
+                "metadata": str(segment.metadata) if segment.metadata else None
+            }
+
+            # 為了呼叫新的原子性方法，我們需要完整的訊息資料
+            # 注意：這裡假設訊息已經存在於資料庫中，這對於即時流程是成立的
+            messages_data = await asyncio.to_thread(
+                self.db_manager.get_messages_by_ids,
+                segment.message_ids
             )
+
+            if len(messages_data) != len(segment.message_ids):
+                self.logger.warning(f"[{segment.segment_id}] 資料庫中的訊息數量與片段記錄不符，可能存在資料不一致。")
+
+            # 呼叫新的原子性資料庫方法
+            self.logger.debug(f"[{segment.segment_id}] 呼叫 create_segment_with_messages...")
             
-            # 儲存訊息與片段的關聯
-            for i, message_id in enumerate(segment.message_ids):
-                self.db_manager.add_message_to_segment(
-                    segment_id=segment.segment_id,
-                    message_id=message_id,
-                    position=i
-                )
-                
+            persisted_segment_id = await asyncio.to_thread(
+                self.db_manager.create_segment_with_messages,
+                segment_data=segment_data,
+                messages_data=messages_data
+            )
+
+            self.logger.info(f"片段 {persisted_segment_id} 已成功透過原子操作儲存到資料庫。")
+
         except Exception as e:
-            self.logger.error(f"儲存片段到資料庫失敗: {e}")
-            raise MemorySystemError(f"片段儲存失敗: {e}")
+            self.logger.error(f"儲存片段 {segment.segment_id} 到資料庫時發生嚴重錯誤: {e}", exc_info=True)
+            raise MemorySystemError(f"片段 {segment.segment_id} 儲存失敗: {e}")
     
     async def get_segments_for_timerange(
         self,

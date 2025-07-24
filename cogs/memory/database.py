@@ -498,6 +498,67 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"批次查詢訊息失敗: {e}")
             raise DatabaseError(f"批次查詢訊息失敗: {e}", operation="get_messages_by_ids", table="messages")
+
+    def add_messages(self, messages: List[Dict[str, Any]]) -> bool:
+        """批次儲存訊息
+
+        Args:
+            messages: 訊息資料字典的列表
+
+        Returns:
+            bool: 是否成功儲存
+        """
+        if not messages:
+            return True
+
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # 準備訊息資料
+                message_data = [
+                    (
+                        msg['message_id'], msg['channel_id'], msg['user_id'],
+                        msg['content'], msg.get('content_processed'), msg['timestamp'],
+                        msg.get('message_type', 'user'), msg.get('metadata')
+                    )
+                    for msg in messages
+                ]
+                
+                # 批次插入訊息
+                cursor.executemany("""
+                    INSERT OR REPLACE INTO messages
+                    (message_id, channel_id, user_id, content, content_processed,
+                     timestamp, message_type, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, message_data)
+
+                # 批次更新頻道活動
+                channel_updates = {}
+                for msg in messages:
+                    channel_id = msg['channel_id']
+                    if channel_id not in channel_updates:
+                        channel_updates[channel_id] = {'count': 0, 'last_active': msg['timestamp']}
+                    channel_updates[channel_id]['count'] += 1
+                    if msg['timestamp'] > channel_updates[channel_id]['last_active']:
+                        channel_updates[channel_id]['last_active'] = msg['timestamp']
+
+                for channel_id, update in channel_updates.items():
+                    self._ensure_channel_exists(conn, channel_id)
+                    cursor.execute("""
+                        UPDATE channels
+                        SET last_active = ?,
+                            message_count = message_count + ?
+                        WHERE channel_id = ?
+                    """, (update['last_active'], update['count'], channel_id))
+
+                conn.commit()
+                self.logger.debug(f"成功批次儲存 {len(messages)} 條訊息")
+                return True
+
+        except Exception as e:
+            self.logger.error(f"批次儲存訊息失敗: {e}")
+            raise DatabaseError(f"批次儲存訊息失敗: {e}", operation="add_messages", table="messages")
     
     def search_messages_by_keywords(
         self,
@@ -768,8 +829,8 @@ class DatabaseManager:
         segment_summary: Optional[str] = None,
         vector_data: Optional[bytes] = None,
         metadata: Optional[str] = None
-    ) -> bool:
-        """建立對話片段
+    ) -> str:
+        """建立對話片段並返回其 ID
         
         Args:
             segment_id: 片段 ID
@@ -784,7 +845,7 @@ class DatabaseManager:
             metadata: 元資料
             
         Returns:
-            bool: 是否成功建立
+            str: 新建立的片段 ID
         """
         try:
             with self.get_connection() as conn:
@@ -800,11 +861,99 @@ class DatabaseManager:
                 conn.commit()
             
             self.logger.debug(f"建立對話片段: {segment_id}")
-            return True
+            return segment_id
             
         except Exception as e:
             self.logger.error(f"建立對話片段失敗: {e}")
             raise DatabaseError(f"建立對話片段失敗: {e}", operation="create_segment", table="conversation_segments")
+
+    def create_segment_with_messages(
+        self,
+        segment_data: Dict[str, Any],
+        messages_data: List[Dict[str, Any]]
+    ) -> str:
+        """
+        以原子操作建立對話片段、其包含的訊息以及它們之間的關聯。
+
+        Args:
+            segment_data: 包含對話片段主記錄所需資料的字典。
+            messages_data: 要儲存並關聯到此片段的訊息資料字典列表。
+
+        Returns:
+            str: 成功建立的對話片段 ID。
+
+        Raises:
+            DatabaseError: 如果資料庫操作失敗。
+        """
+        segment_id = segment_data.get("segment_id")
+        if not segment_id:
+            raise ValueError("segment_data 中必須包含 'segment_id'")
+
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                # 1. 批次儲存訊息 (如果有的話)
+                if messages_data:
+                    message_tuples = [
+                        (
+                            msg['message_id'], msg['channel_id'], msg['user_id'],
+                            msg['content'], msg.get('content_processed'), msg['timestamp'],
+                            msg.get('message_type', 'user'), msg.get('metadata')
+                        )
+                        for msg in messages_data
+                    ]
+                    cursor.executemany("""
+                        INSERT OR IGNORE INTO messages
+                        (message_id, channel_id, user_id, content, content_processed,
+                         timestamp, message_type, metadata)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, message_tuples)
+                    self.logger.debug(f"[{segment_id}] 原子操作：插入或忽略了 {len(messages_data)} 條訊息。")
+
+                # 2. 建立對話片段主記錄
+                cursor.execute("""
+                    INSERT INTO conversation_segments (
+                        segment_id, channel_id, start_time, end_time, message_count,
+                        semantic_coherence_score, activity_level, segment_summary,
+                        vector_data, metadata
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    segment_id,
+                    segment_data['channel_id'],
+                    segment_data['start_time'],
+                    segment_data['end_time'],
+                    segment_data['message_count'],
+                    segment_data.get('semantic_coherence_score', 0.0),
+                    segment_data.get('activity_level', 0.0),
+                    segment_data.get('segment_summary'),
+                    segment_data.get('vector_data'),
+                    segment_data.get('metadata')
+                ))
+                self.logger.debug(f"[{segment_id}] 原子操作：插入了 conversation_segments 主記錄。")
+
+                # 3. 批次建立訊息與片段的關聯
+                message_ids = [msg['message_id'] for msg in messages_data]
+                if message_ids:
+                    message_links = [
+                        (segment_id, message_id, i)
+                        for i, message_id in enumerate(message_ids)
+                    ]
+                    cursor.executemany("""
+                        INSERT INTO segment_messages (segment_id, message_id, position_in_segment)
+                        VALUES (?, ?, ?)
+                    """, message_links)
+                    self.logger.debug(f"[{segment_id}] 原子操作：插入了 {len(message_links)} 條 segment_messages 關聯。")
+
+                # 提交交易
+                conn.commit()
+                self.logger.info(f"原子性地建立了片段 {segment_id} 並儲存/關聯了 {len(messages_data)} 條訊息。")
+                return segment_id
+
+        except Exception as e:
+            self.logger.error(f"原子性建立片段 {segment_id} 失敗: {e}", exc_info=True)
+            # get_connection() 的上下文管理器會自動 rollback
+            raise DatabaseError(f"原子性建立片段失敗: {e}", operation="create_segment_with_messages")
 
     def get_conversation_segments(
         self,
@@ -848,8 +997,7 @@ class DatabaseManager:
         self,
         segment_id: str,
         message_id: str,
-        position: int,
-        contribution_score: float = 0.0
+        position: int
     ) -> bool:
         """將訊息新增到片段
         
@@ -857,23 +1005,29 @@ class DatabaseManager:
             segment_id: 片段 ID
             message_id: 訊息 ID
             position: 在片段中的位置
-            contribution_score: 語義貢獻分數
             
         Returns:
             bool: 是否成功新增
         """
+        if not message_id:
+            self.logger.error("新增訊息到片段失敗：無效的 message_id")
+            return False
+            
         try:
             with self.get_connection() as conn:
                 conn.execute("""
                     INSERT OR REPLACE INTO segment_messages
-                    (segment_id, message_id, position_in_segment, semantic_contribution_score)
-                    VALUES (?, ?, ?, ?)
-                """, (segment_id, message_id, position, contribution_score))
+                    (segment_id, message_id, position_in_segment)
+                    VALUES (?, ?, ?)
+                """, (segment_id, message_id, position))
                 conn.commit()
+            
+            self.logger.debug(f"訊息 {message_id} 已新增到片段 {segment_id}")
             return True
+            
         except Exception as e:
-            self.logger.error(f"新增訊息至片段失敗: {e}")
-            raise DatabaseError(f"新增訊息至片段失敗: {e}", operation="add_message_to_segment", table="segment_messages")
+            self.logger.error(f"新增訊息到片段失敗: {e}")
+            raise DatabaseError(f"新增訊息到片段失敗: {e}", operation="add_message_to_segment", table="segment_messages")
 
     def get_segment_messages(self, segment_id: str) -> List[Dict[str, Any]]:
         """取得片段中的訊息

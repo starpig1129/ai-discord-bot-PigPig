@@ -341,7 +341,7 @@ class SearchEngine:
         segment_to_message_map = self.database_manager.get_segment_to_message_map(segment_ids)
         
         all_message_ids = [
-            msg_id for seg_id in segment_ids 
+            msg_id for seg_id in segment_ids
             for msg_id in segment_to_message_map.get(seg_id, [])
         ]
         unique_message_ids = list(dict.fromkeys(all_message_ids))
@@ -357,14 +357,35 @@ class SearchEngine:
         db_messages = self.database_manager.get_messages_by_ids(unique_message_ids)
         message_map = {msg['message_id']: msg for msg in db_messages}
 
-        missing_ids = [msg_id for msg_id in unique_message_ids if msg_id not in message_map]
+        # 識別資料庫中完全缺失的 ID
+        found_message_ids = set(message_map.keys())
+        missing_ids = set(unique_message_ids) - found_message_ids
         if missing_ids:
-            self.logger.info(f"在本地資料庫中找不到 {len(missing_ids)} 則訊息，嘗試從 Discord 回退。")
+            self.logger.debug(f"本地查詢遺失 {len(missing_ids)} 個 IDs: {missing_ids}")
+        
+        db_missing_ids = {msg_id for msg_id in unique_message_ids if msg_id not in message_map}
+
+        # 識別資料庫中存在但內容無效的 ID
+        invalid_ids = set()
+        for msg_id, msg in message_map.items():
+            content = msg.get('content', '')
+            content_processed = msg.get('content_processed', '')
+            has_valid_content = (content and content.strip()) or \
+                                (content_processed and content_processed.strip() and content_processed != 'None')
+            if not has_valid_content:
+                invalid_ids.add(msg_id)
+        
+        # 合併所有需要從 Discord 獲取的 ID
+        ids_to_fetch = list(db_missing_ids.union(invalid_ids))
+
+        if ids_to_fetch:
+            self.logger.info(f"在本地資料庫中找不到或內容無效，需要從 Discord 回退 {len(ids_to_fetch)} 則訊息。")
             fetched_messages = await asyncio.gather(
-                *[self._fetch_message_from_discord(query.channel_id, msg_id) for msg_id in missing_ids]
+                *[self._fetch_message_from_discord(query.channel_id, msg_id) for msg_id in ids_to_fetch]
             )
             for msg_data in fetched_messages:
                 if msg_data:
+                    # 無論如何都更新/覆蓋 message_map 中的資料
                     message_map[msg_data['message_id']] = msg_data
 
         message_to_segment_map = {
@@ -959,6 +980,7 @@ class SearchEngine:
                 None, self.database_manager.store_message, **message_data
             )
             
+            self.logger.debug(f"[DEBUG_SEARCH] Discord 回退: 成功獲取 message_id={message_id}")
             self.logger.info(f"從 Discord 回退成功並儲存訊息: {message_id}")
             
             # 返回從 message 物件轉換的字典，而不是 store_message 的結果
@@ -973,13 +995,17 @@ class SearchEngine:
             }
 
         except (discord.NotFound, ValueError):
+            self.logger.warning(f"[DEBUG_SEARCH] Discord 回退: 獲取 message_id={message_id} 失敗: 訊息不存在 (NotFound) 或 ID 格式錯誤")
             self.logger.warning(f"在 Discord 上找不到訊息 ID: {message_id} 或 ID 格式錯誤")
+            return None
         except discord.Forbidden:
+            self.logger.warning(f"[DEBUG_SEARCH] Discord 回退: 獲取 message_id={message_id} 失敗: 沒有權限 (Forbidden)")
             self.logger.error(f"沒有權限獲取訊息 ID: {message_id} (頻道: {channel_id})")
+            return None
         except Exception as e:
+            self.logger.warning(f"[DEBUG_SEARCH] Discord 回退: 獲取 message_id={message_id} 失敗: {e}")
             self.logger.error(f"從 Discord 獲取訊息時發生未知錯誤 (訊息 ID: {message_id}): {e}", exc_info=True)
-        
-        return None
+            return None
 
     def cleanup(self) -> None:
         """清理搜尋引擎資源和快取
