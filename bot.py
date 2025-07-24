@@ -51,20 +51,31 @@ from gpt.optimization_integration import (
 from gpt.optimization_config_manager import is_optimization_enabled
 # 配置 logging
 def setup_logger(server_name):
-    # 減少第三方套件的日誌等級
-    logging.getLogger("faiss").setLevel(logging.WARNING)
-    logging.getLogger("WDM").setLevel(logging.WARNING)
-    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("google_genai").setLevel(logging.WARNING)
-    logging.getLogger("discord").setLevel(logging.WARNING)
+    # 1. 將根記錄器的預設級別設定為 WARNING
+    # 這樣可以抑制所有未明確設定級別的記錄器的 INFO 和 DEBUG 訊息。
+    logging.getLogger().setLevel(logging.WARNING)
 
+    # 2. 明確將特定第三方函式庫的日誌級別也設定為 WARNING
+    # 雖然根記錄器已經是 WARNING，但明確設定可以防止它們自己的程式碼
+    # 以任何方式覆蓋級別。
+    third_party_loggers = [
+        "faiss", "WDM", "sqlalchemy", "httpx", "google_genai",
+        "discord", "websockets", "cogs.memory", "gpt", "jieba"
+    ]
+    for logger_name in third_party_loggers:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+    # 3. 為我們的應用程式（每個 guild）設定特定的 logger
     logger = logging.getLogger(server_name)
-    logger.setLevel(logging.INFO)
-    handler = TimedRotatingFileHandler(server_name)
-    formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)  # 讓我們的應用程式日誌從 INFO 開始記錄
+
+    # 確保只為每個 logger 添加一次 handler，以避免日誌重複
+    if not logger.handlers:
+        handler = TimedRotatingFileHandler(server_name)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        
     return logger
 class PigPig(commands.Bot):
     def __init__(self, *args, **kwargs):
@@ -195,8 +206,15 @@ class PigPig(commands.Bot):
         channel_manager = self.get_cog('ChannelManager')
         if channel_manager:
             guild_id = str(message.guild.id)
-            is_allowed, auto_response_enabled, _ = channel_manager.is_allowed_channel(message.channel, guild_id)
-            
+            is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(message.channel, guild_id)
+
+            # 檢查是否為故事模式頻道
+            if channel_mode == 'story':
+                story_manager_cog = self.get_cog('StoryManagerCog')
+                if story_manager_cog:
+                    await story_manager_cog.handle_story_message(message)
+                return # 故事模式下，不繼續執行一般訊息處理
+
             # 只有在允許的頻道且被提及或啟用自動回應時，才觸發 handle_message
             if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
                 await self.message_handler.handle_message(message)
