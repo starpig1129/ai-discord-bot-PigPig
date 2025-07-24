@@ -38,16 +38,17 @@ class GeminiError(Exception):
 
 
 cache_manager: Optional[GeminiCacheManager] = None
-def initialize_cache_manager(max_cache_count: int = 50):
+async def initialize_cache_manager(max_cache_count: int = 50):
     global cache_manager
     if cache_manager is None:
         cache_manager = GeminiCacheManager(client, max_cache_count)
         logger.info(f"全域快取管理器初始化完成，最大快取數量: {max_cache_count}")
     return cache_manager
 
-def get_cache_manager() -> Optional[GeminiCacheManager]:
+async def get_cache_manager() -> Optional[GeminiCacheManager]:
     global cache_manager
-    if cache_manager is None: cache_manager = initialize_cache_manager()
+    if cache_manager is None:
+        cache_manager = await initialize_cache_manager()
     return cache_manager
 
 def _download_and_process_pdf(pdf_url_or_path: str) -> pathlib.Path:
@@ -519,7 +520,7 @@ async def generate_response(inst: str,
     帶有通用快取功能的 Gemini API 回應生成器。
     此函數現在會為所有輸入類型的組合嘗試使用快取。
     """
-    cache_mgr = get_cache_manager()
+    cache_mgr = await get_cache_manager()
     cache_key = None
     generation_config_args = {}
     is_streaming = not bool(response_schema)
@@ -542,7 +543,7 @@ async def generate_response(inst: str,
             pdf_input=pdf_input
         )
         # 嘗試獲取快取
-        cache = cache_mgr.get_cache_by_key(cache_key)
+        cache = await cache_mgr.get_cache_by_key(cache_key)
         
         # <<< 步驟 3: 如果快取未命中，則動態創建它
         if cache is None:
@@ -569,7 +570,7 @@ async def generate_response(inst: str,
                     cache_args["tools"] = tool_list
 
                 # 3b. 呼叫管理器來創建並註冊這個新的快取
-                cache = cache_mgr.create_and_register_cache(
+                cache = await cache_mgr.create_and_register_cache(
                     **cache_args
                 )
             except Exception as e:
@@ -598,10 +599,10 @@ async def generate_response(inst: str,
             }
             if response_schema:
                 logger.info("使用快取模式生成結構化回應")
-                response_object = client.models.generate_content(**api_kwargs)
+                response_object = await asyncio.to_thread(client.models.generate_content, **api_kwargs)
             else:
                 logger.info("使用快取模式生成流式回應")
-                response_object = client.models.generate_content_stream(**api_kwargs)
+                response_object = await asyncio.to_thread(client.models.generate_content_stream, **api_kwargs)
         
         except Exception as e:
             logger.warning(f"快取模式生成失敗，將自動降級為非快取模式。錯誤: {e}")
@@ -627,10 +628,9 @@ async def generate_response(inst: str,
         config = GenerateContentConfig(system_instruction=system_prompt, **generation_config_args)
         
         if is_streaming:
-            response_object = client.models.generate_content_stream(model=model_id, contents=contents, config=config)
+            response_object = await asyncio.to_thread(client.models.generate_content_stream, model=model_id, contents=contents, config=config)
         else:
-
-            response_object = client.models.generate_content(model=model_id, contents=contents, config=config)
+            response_object = await asyncio.to_thread(client.models.generate_content, model=model_id, contents=contents, config=config)
 
     try:
         if is_streaming:
@@ -670,7 +670,8 @@ async def generate_response(inst: str,
                                             tools=tool_list
                                         )
                                         # 使用快取中繼資料中儲存的模型，確保一致性
-                                        fallback_response = client.models.generate_content(
+                                        fallback_response = await asyncio.to_thread(
+                                            client.models.generate_content,
                                             model=cache.model,
                                             contents=contents,
                                             config=fallback_config
@@ -681,8 +682,8 @@ async def generate_response(inst: str,
                                             tools=tool_list,
                                             response_modalities=["TEXT"],
                                         )
-                                        
-                                        fallback_response = client.models.generate_content(
+                                        fallback_response = await asyncio.to_thread(
+                                            client.models.generate_content,
                                             model=model_id,
                                             contents=contents,
                                             config=fallback_config
@@ -693,7 +694,6 @@ async def generate_response(inst: str,
                                         return
                                     else:
                                         raise GeminiError(f"Gemini API 流式和非流式回應都失敗: {error_message}")
-                                        
                                 except Exception as fallback_error:
                                     raise GeminiError(f"Gemini API 降級處理失敗: {fallback_error}")
                         

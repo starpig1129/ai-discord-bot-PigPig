@@ -71,6 +71,7 @@ class PigPig(commands.Bot):
         super().__init__(*args, **kwargs)
         self.loggers = {}
         # ActionDispatcher 將在 setup_hook 中被創建和注入
+        self.action_dispatcher: Optional[ActionDispatcher] = None
         self.message_handler: Optional[MessageHandler] = None
         
         # 記憶系統初始化
@@ -263,8 +264,8 @@ class PigPig(commands.Bot):
                     print(traceback.format_exc())
 
         # 初始化核心服務
-        action_dispatcher = ActionDispatcher(self)
-        self.message_handler = MessageHandler(self, action_dispatcher, self.performance_monitor)
+        self.action_dispatcher = ActionDispatcher(self)
+        self.message_handler = MessageHandler(self, self.action_dispatcher, self.performance_monitor)
 
         # 初始化記憶系統
         await self.initialize_memory_system()
