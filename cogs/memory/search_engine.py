@@ -19,7 +19,7 @@ import numpy as np
 from .config import MemoryProfile
 from .embedding_service import EmbeddingService
 from .exceptions import SearchError
-from .vector_manager import VectorManager
+from .vector_manager import VectorManager, get_vector_manager
 from .reranker_service import RerankerService
 
 
@@ -231,9 +231,11 @@ class SearchEngine:
             enable_reranker: 是否啟用重排序
         """
         self.logger = logging.getLogger(__name__)
+        self.logger.info(f"SearchEngine __init__: 實例已創建，記憶體位址: {id(self)}")
         self.profile = profile
         self.embedding_service = embedding_service
         self.vector_manager = vector_manager
+        self.logger.info(f"SearchEngine: 持有的 VectorManager 實例，記憶體位址: {id(self.vector_manager)}")
         self.database_manager = database_manager
         self.bot = bot
         self.reranker_service = reranker_service

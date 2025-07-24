@@ -23,7 +23,7 @@ import tqdm
 from .database import DatabaseManager
 from .config import MemoryConfig, MemoryProfile
 from .embedding_service import EmbeddingService, embedding_service_manager
-from .vector_manager import VectorManager
+from .vector_manager import get_vector_manager, VectorManager
 from .search_engine import SearchEngine, SearchQuery, SearchResult, SearchType, TimeRange, SearchCache
 from .segmentation_service import (
     TextSegmentationService,
@@ -114,6 +114,7 @@ class MemoryManager:
         """
         self.bot = bot
         self.logger = logging.getLogger(__name__)
+        self.logger.info("MemoryManager __init__: 實例已創建。")
         self._initialized = False
         self._enabled = False
         
@@ -179,55 +180,88 @@ class MemoryManager:
 
     async def cleanup_orphan_segments(self) -> Dict[str, int]:
         """
-        查找並刪除所有孤兒片段（在向量索引中存在但在資料庫中沒有對應記錄的片段）。
+        查找並刪除所有孤兒向量，包括片段和單一訊息向量。
         
         Returns:
             Dict[str, int]: {channel_id: removed_count}
         """
+        self.logger.info("cleanup_orphan_segments: 函式開始執行。")
         if not self.vector_manager or not self.db_manager:
-            self.logger.warning("VectorManager 或 DatabaseManager 未初始化，跳過孤兒片段清理。")
+            self.logger.warning("VectorManager 或 DatabaseManager 未初始化，跳過孤兒向量清理。")
             return {}
 
-        self.logger.info("開始孤兒片段清理...")
+        self.logger.info("開始全面的孤兒向量清理...")
         removed_stats = {}
         try:
-            # 步驟 1: 獲取所有向量索引中的 segment ID，按頻道分組
-            all_vector_segments_by_channel = self.vector_manager.get_all_segment_ids_by_channel()
+            # 新增步驟：確保所有索引都已載入，以解決時序問題
+            self.logger.info("cleanup_orphan_segments: 正在確保所有向量索引都已載入...")
+            await self.vector_manager.load_all_indexes()
+            self.logger.info("cleanup_orphan_segments: 所有索引載入完成。")
 
-            # 步驟 2: 獲取資料庫中所有有效的 segment ID，按頻道分組
-            all_db_segments_by_channel = await asyncio.to_thread(
-                self.db_manager.get_all_segment_ids_by_channel
-            )
+            # 步驟 1: 獲取所有向量 ID，按頻道分組
+            all_vector_ids_by_channel = self.vector_manager.get_all_segment_ids_by_channel()
+            vector_ids_count = sum(len(ids) for ids in all_vector_ids_by_channel.values())
+            self.logger.info(f"cleanup_orphan_segments: 從向量資料庫獲取到 {vector_ids_count} 個 ID。")
+            if vector_ids_count > 0:
+                sample_ids = next(iter(all_vector_ids_by_channel.values()), [])[:5]
+                self.logger.info(f"cleanup_orphan_segments: 向量 ID 範例: {sample_ids}")
+
+            # 步驟 2: 獲取所有資料庫中的有效 ID
+            all_db_segment_ids = await asyncio.to_thread(self.db_manager.get_all_segment_ids)
+            self.logger.info(f"cleanup_orphan_segments: 從 db_manager.get_all_segment_ids() 獲取到 {len(all_db_segment_ids)} 個片段 ID。")
+            
+            all_db_message_ids = await asyncio.to_thread(self.db_manager.get_all_message_ids)
+            self.logger.info(f"cleanup_orphan_segments: 從 db_manager.get_all_message_ids() 獲取到 {len(all_db_message_ids)} 個訊息 ID。")
+            
+            # 將 ID 轉換為字串集合以便快速查找
+            valid_segment_ids = {f"seg_{sid}" for sid in all_db_segment_ids}
+            valid_message_ids = {f"msg_{mid}" for mid in all_db_message_ids}
+            valid_legacy_message_ids = {str(mid) for mid in all_db_message_ids}
 
             # 步驟 3: 遍歷每個頻道，找出孤兒
-            all_channels = set(all_vector_segments_by_channel.keys()) | set(all_db_segments_by_channel.keys())
-            
-            for channel_id in all_channels:
-                vector_ids = set(all_vector_segments_by_channel.get(channel_id, []))
-                db_ids = set(all_db_segments_by_channel.get(channel_id, []))
-                
-                orphan_ids = list(vector_ids - db_ids)
+            for channel_id, vector_ids in all_vector_ids_by_channel.items():
+                orphan_ids = []
+                for vec_id in vector_ids:
+                    is_orphan = False
+                    if vec_id.startswith('seg_'):
+                        if vec_id not in valid_segment_ids:
+                            is_orphan = True
+                    elif vec_id.startswith('msg_'):
+                        if vec_id not in valid_message_ids:
+                            is_orphan = True
+                    elif vec_id.isdigit(): # 處理歷史遺留的純數字 ID
+                        if vec_id not in valid_legacy_message_ids:
+                            is_orphan = True
+                    else:
+                        # 處理無法識別格式的 ID，可能也需要清理
+                        self.logger.warning(f"在頻道 {channel_id} 中發現無法識別格式的向量 ID: {vec_id}")
+                        is_orphan = True # 假設格式不符的都是孤兒
+
+                    if is_orphan:
+                        orphan_ids.append(vec_id)
                 
                 if orphan_ids:
-                    self.logger.info(f"在頻道 {channel_id} 中找到 {len(orphan_ids)} 個孤兒片段。")
+                    self.logger.info(f"cleanup_orphan_segments: 頻道 {channel_id} 計算出 {len(orphan_ids)} 個待刪除的孤兒 ID: {orphan_ids[:10]}")
                     try:
                         removed_count = self.vector_manager.remove_vectors(channel_id, orphan_ids)
+                        self.logger.info(f"cleanup_orphan_segments: vector_manager.remove_vectors 呼叫結果: 移除了 {removed_count} 個向量。")
                         if removed_count > 0:
-                            removed_stats[channel_id] = removed_count
-                            self.logger.info(f"成功從頻道 {channel_id} 移除了 {removed_count} 個孤兒片段。")
+                            removed_stats[channel_id] = removed_stats.get(channel_id, 0) + removed_count
+                            self.logger.info(f"成功從頻道 {channel_id} 移除了 {removed_count} 個孤兒向量。")
                     except Exception as e:
-                        self.logger.error(f"從頻道 {channel_id} 移除孤兒片段時發生錯誤: {e}")
+                        self.logger.error(f"從頻道 {channel_id} 移除孤兒向量時發生錯誤: {e}")
+                        self.logger.error(f"cleanup_orphan_segments: vector_manager.remove_vectors 呼叫失敗。錯誤: {e}")
 
             total_removed = sum(removed_stats.values())
             if total_removed > 0:
-                self.logger.info(f"孤兒片段清理完成，共移除了 {total_removed} 個片段。")
+                self.logger.info(f"孤兒向量清理完成，共移除了 {total_removed} 個向量。")
             else:
-                self.logger.info("未找到需要清理的孤兒片段。")
+                self.logger.info("未找到需要清理的孤兒向量。")
 
             return removed_stats
 
         except Exception as e:
-            self.logger.error(f"孤兒片段清理期間發生錯誤: {e}", exc_info=True)
+            self.logger.error(f"孤兒向量清理期間發生錯誤: {e}", exc_info=True)
             return removed_stats
 
     async def initialize(self) -> bool:
@@ -343,10 +377,12 @@ class MemoryManager:
             
             self.vector_manager = await loop.run_in_executor(
                 None,
-                VectorManager,
+                get_vector_manager,
                 self.current_profile,
                 indices_path
             )
+            
+            self.logger.info("MemoryManager: 持有的 VectorManager 實例已初始化。")
             
             # 初始化搜尋快取
             if memory_config.get("cache", {}).get("enabled", True):
@@ -808,10 +844,11 @@ class MemoryManager:
             )
 
             # 在主事件循環中新增向量到索引
+            # 為 message_id 加上 "msg_" 前綴，以區分 segment ID
             success = self.vector_manager.add_vectors(
                 channel_id=channel_id,
                 vectors=np.array([embedding]),
-                ids=[message_id]
+                ids=[f"msg_{message_id}"]
             )
 
             if success:

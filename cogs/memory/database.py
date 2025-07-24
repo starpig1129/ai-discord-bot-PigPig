@@ -853,6 +853,22 @@ class DatabaseManager:
             self.logger.error(f"取得所有訊息 ID 失敗: {e}")
             raise DatabaseError(f"取得所有訊息 ID 失敗: {e}", operation="get_all_message_ids", table="messages")
 
+    def get_all_segment_ids(self) -> List[str]:
+        """取得資料庫中所有片段的 ID
+        
+        Returns:
+            List[str]: 片段 ID 列表
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("SELECT segment_id FROM conversation_segments")
+                # 移除 'seg_' 前綴，因為呼叫者會加上它
+                return [row[0].replace('seg_', '') for row in cursor.fetchall()]
+                
+        except Exception as e:
+            self.logger.error(f"取得所有片段 ID 失敗: {e}")
+            raise DatabaseError(f"取得所有片段 ID 失敗: {e}", operation="get_all_segment_ids", table="conversation_segments")
+
     def close_connections(self) -> None:
         """關閉所有資料庫連接"""
         with self._lock:

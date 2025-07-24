@@ -1725,6 +1725,7 @@ class VectorManager:
             storage_path: 索引儲存路徑
         """
         self.logger = logging.getLogger(__name__)
+        self.logger.info(f"VectorManager __init__: 實例已創建，記憶體位址: {id(self)}")
         self.profile = profile
         self.storage_path = storage_path or Path("data/memory/indices")
         self.storage_path.mkdir(parents=True, exist_ok=True)
@@ -2809,6 +2810,57 @@ class VectorManager:
                 'status': 'failed'
             }
 
+    async def load_all_indexes(self) -> None:
+        """
+        載入所有存在於磁碟上的但尚未載入到記憶體中的索引。
+        """
+        self.logger.info("開始載入所有磁碟上的向量索引...")
+        if not self.storage_path or not self.storage_path.exists():
+            self.logger.warning("索引儲存路徑不存在，無法載入索引。")
+            return
+
+        loaded_count = 0
+        failed_count = 0
+        
+        # 先收集所有需要載入的 channel_id
+        channels_to_load = []
+        try:
+            index_files = list(self.storage_path.glob("*.index"))
+            for index_file in index_files:
+                channel_id = index_file.stem
+                # 使用鎖來安全地檢查 self.indices
+                with self._indices_lock:
+                    if channel_id not in self._indices:
+                        channels_to_load.append(channel_id)
+        except Exception as e:
+            self.logger.error(f"掃描索引檔案時發生錯誤: {e}")
+            return
+        
+        if not channels_to_load:
+            self.logger.info("沒有需要載入的新索引。")
+            return
+
+        self.logger.info(f"準備載入 {len(channels_to_load)} 個索引...")
+        loop = asyncio.get_event_loop()
+
+        for channel_id in channels_to_load:
+            self.logger.debug(f"發現磁碟上的索引 {channel_id}，開始載入。")
+            try:
+                # create_channel_index 是 CPU 密集型操作，在執行緒池中運行
+                success = await loop.run_in_executor(
+                    None, self.create_channel_index, channel_id
+                )
+                if success:
+                    loaded_count += 1
+                else:
+                    failed_count += 1
+                    self.logger.error(f"載入索引 {channel_id} 失敗。")
+            except Exception as e:
+                failed_count += 1
+                self.logger.error(f"載入索引 {channel_id} 時發生例外: {e}")
+
+        self.logger.info(f"所有索引載入完成。成功載入 {loaded_count} 個，失敗 {failed_count} 個。")
+
     async def cleanup(self) -> None:
         """清理向量管理器資源和快取
         
@@ -2873,3 +2925,33 @@ class VectorManager:
 
         end_time = time.time()
         self.logger.info(f"所有 {len(indices_to_move)} 個 GPU 索引已移至 CPU，總耗時: {end_time - start_time:.2f} 秒")
+
+# --- 單例模式實作 ---
+_vector_manager_instance: Optional[VectorManager] = None
+_vector_manager_lock = threading.Lock()
+
+def get_vector_manager(
+    profile: Optional[MemoryProfile] = None,
+    storage_path: Optional[Path] = None
+) -> VectorManager:
+    """
+    獲取 VectorManager 的單例實例。
+
+    Args:
+        profile: 記憶系統配置檔案 (僅在首次初始化時需要)。
+        storage_path: 索引儲存路徑 (僅在首次初始化時需要)。
+
+    Returns:
+        VectorManager: VectorManager 的單例實例。
+        
+    Raises:
+        ValueError: 如果在未初始化時未提供 profile 或 storage_path。
+    """
+    global _vector_manager_instance
+    if _vector_manager_instance is None:
+        with _vector_manager_lock:
+            if _vector_manager_instance is None:
+                if profile is None or storage_path is None:
+                    raise ValueError("首次初始化 VectorManager 時必須提供 profile 和 storage_path。")
+                _vector_manager_instance = VectorManager(profile, storage_path)
+    return _vector_manager_instance
