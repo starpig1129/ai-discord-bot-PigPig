@@ -30,7 +30,8 @@ import json
 import logging
 import asyncio
 from typing import Optional
-from discord.ext import commands
+from discord.ext import commands, tasks
+from itertools import cycle
 from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
 from gpt.core.action_dispatcher import ActionDispatcher
@@ -97,6 +98,34 @@ class PigPig(commands.Bot):
         self.optimization_enabled = False
         self.optimized_bot = None
         self.performance_monitor = PerformanceMonitor()
+        
+        self.status_cycle = cycle([
+            (discord.ActivityType.listening, "大家的聲音"),
+            (discord.ActivityType.playing, "泥巴 在 {n} 個伺服器裡")
+        ])
+
+    @tasks.loop(seconds=15)
+    async def change_status_task(self):
+        """每 15 秒更換一次機器人狀態"""
+        activity_type, name = next(self.status_cycle)
+        
+        if "{n}" in name:
+            name = name.format(n=len(self.guilds))
+        
+        await self._change_presence(
+            activity=discord.Activity(
+                type=activity_type,
+                name=name
+            )
+        )
+
+    async def _change_presence(self, *args, **kwargs):
+        """包裝 change_presence 以處理連線錯誤"""
+        try:
+            await self.change_presence(*args, **kwargs)
+        except ConnectionResetError:
+            print("Connection reset error while changing presence, retrying in 60 seconds...")
+            await asyncio.sleep(60)
 
     def setup_logger_for_guild(self, guild_name):
         if guild_name not in self.loggers:
@@ -330,9 +359,9 @@ class PigPig(commands.Bot):
             json.dump(data, f, ensure_ascii=False, indent=4)
         print('update succesfully guilds_and_channels.json')
         func.tokens.client_id = self.user.id
-        while True:
-            await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="大家的聲音"))
-            await asyncio.sleep(5)
+        
+        # 啟動狀態更新任務
+        self.change_status_task.start()
     
     async def close(self):
         """優雅關閉機器人和所有系統"""
