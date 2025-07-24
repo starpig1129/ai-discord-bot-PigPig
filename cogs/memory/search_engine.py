@@ -347,7 +347,7 @@ class SearchEngine:
         unique_message_ids = list(dict.fromkeys(all_message_ids))
 
         if not unique_message_ids:
-            self.logger.warning("語義搜尋找到片段，但無法對應到任何訊息。")
+            self.logger.warning(f"語義搜尋找到片段，但無法對應到任何訊息。孤兒 Segment IDs: {segment_ids}")
             return SearchResult(
                 messages=[], relevance_scores=[], total_found=0,
                 search_time_ms=0.0, search_method="semantic_no_messages",
