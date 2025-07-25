@@ -22,7 +22,7 @@ async def internet_search(
         context (ToolExecutionContext): The execution context, providing access to the bot,
                                         logger, and the original message.
         query (str): The search query, URL, or keyword for the search.
-        search_type (Literal["image", "youtube", "url", "eat"]): The type of search
+        search_type (Literal["general", "image", "youtube", "url", "eat"]): The type of search
                                                                            to perform.
 
     Returns:

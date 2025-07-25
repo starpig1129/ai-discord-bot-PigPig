@@ -65,7 +65,7 @@ class InternetSearchCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    async def internet_search(self, ctx, query: str, search_type: str, message_to_edit: discord.Message = None, guild_id: str = None):
+    async def internet_search(self, ctx, query: str, search_type: str = "general", message_to_edit: discord.Message = None, guild_id: str = None):
         if message_to_edit:
             searching_message = self.lang_manager.translate(
                 guild_id,

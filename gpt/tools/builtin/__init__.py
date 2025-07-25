@@ -10,7 +10,7 @@ and the tools are registered in the central tool registry.
 
 from . import internet_search
 from . import math
-from . import image
 from . import schedule
 from . import reminder
 from . import user_data
+from . import image

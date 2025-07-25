@@ -131,22 +131,60 @@ class ReminderCog(commands.Cog):
             interaction=interaction
         )
 
+    def _parse_relative_time_regex(self, time_str: str) -> Optional[datetime]:
+        """使用正規表示式解析簡單的相對時間，例如 '10 分鐘後'"""
+        # 支援的單位及其對應的 timedelta
+        time_units = {
+            'seconds': timedelta(seconds=1), 'second': timedelta(seconds=1), '秒': timedelta(seconds=1),
+            'minutes': timedelta(minutes=1), 'minute': timedelta(minutes=1), '分鐘': timedelta(minutes=1),
+            'hours': timedelta(hours=1),   'hour': timedelta(hours=1),   '小時': timedelta(hours=1),
+            'days': timedelta(days=1),    'day': timedelta(days=1),    '天': timedelta(days=1),
+            'weeks': timedelta(weeks=1),   'week': timedelta(weeks=1),   '週': timedelta(weeks=1),
+        }
+        
+        # 正規表示式，匹配數字和單位
+        pattern = r"(\d+)\s*(" + "|".join(time_units.keys()) + r")"
+        match = re.search(pattern, time_str, re.IGNORECASE)
+        
+        if match:
+            value = int(match.group(1))
+            unit = match.group(2).lower()
+            
+            # 處理複數形式
+            if not unit.endswith('s') and value > 1:
+                unit += 's'
+            if unit not in time_units: # 修正單數詞如 'day'
+                 unit = unit.rstrip('s')
+
+            delta = time_units.get(unit)
+            if delta:
+                return datetime.now() + (delta * value)
+                
+        return None
+
     def parse_time(self, time_str: str, guild_id: str = None) -> Optional[datetime]:
         """
-        使用 dateparser 解析時間字串，支援多種自然語言格式。
-        例如: "15 minutes from now", "in 2 hours", "2023-12-31 20:00"
+        使用 dateparser 解析時間字串，並提供基於正規表示式的備用方案。
         """
         try:
-            # PREFER_DATES_FROM: 'future' 確保相對時間 (例如 "in 15 minutes") 被解析為未來時間
-            # RETURN_AS_TIMEZONE_AWARE: False 讓其返回 naive datetime, 與專案其他部分保持一致
+            # 首先嘗試使用 dateparser
             parsed_time = dateparser.parse(
                 time_str,
                 settings={'PREFER_DATES_FROM': 'future', 'RETURN_AS_TIMEZONE_AWARE': False}
             )
-            return parsed_time
+            if parsed_time:
+                return parsed_time
         except Exception:
-            # 如果 dateparser 發生任何錯誤，返回 None
-            return None
+            # 如果 dateparser 失敗，繼續嘗試正規表示式
+            pass
+
+        # 如果 dateparser 失敗或沒有回傳結果，嘗試使用正規表示式備用方案
+        parsed_time = self._parse_relative_time_regex(time_str)
+        if parsed_time:
+            return parsed_time
+
+        # 如果所有方法都失敗
+        return None
 
     def format_timedelta(self, td: timedelta, guild_id: str = None) -> str:
         """格式化時間長度為本地化字串"""
