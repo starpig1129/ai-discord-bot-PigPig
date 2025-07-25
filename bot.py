@@ -295,10 +295,6 @@ class PigPig(commands.Bot):
             # 2. 排除 __init__.py（包初始化文件）
             # 3. 排除以 _ 開頭的文件（私有模組）
             # 4. 排除以 . 開頭的文件（隱藏文件）
-            if module == 'gen_img.py':
-                # 由於 triton 套件安裝問題，暫時禁用 gen_img
-                print(f"Skipping cog: {module[:-3]}")
-                continue
             if (module.endswith('.py') and
                 module != '__init__.py' and
                 not module.startswith('_') and

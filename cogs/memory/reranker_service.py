@@ -473,11 +473,18 @@ class RerankerService:
             return []
         
         try:
-            # 準備格式化的輸入對
+            # 準備格式化的輸入對並過濾空文本
             pairs = []
-            for text in candidate_texts:
-                formatted_input = self.format_instruction(instruction, query, text)
-                pairs.append(formatted_input)
+            valid_indices = []
+            for i, text in enumerate(candidate_texts):
+                if text and text.strip():
+                    formatted_input = self.format_instruction(instruction, query, text)
+                    pairs.append(formatted_input)
+                    valid_indices.append(i)
+            
+            if not pairs:
+                self.logger.warning("所有候選文本均為空，跳過重排序")
+                return [0.0] * len(candidate_texts)
             
             # 分批處理（考慮記憶體限制）
             batch_size = min(4, len(pairs))  # Reranker 使用較小的批次大小
@@ -497,7 +504,12 @@ class RerankerService:
                 if self._device == "cuda":
                     torch.cuda.empty_cache()
             
-            return all_scores
+            # 根據有效索引重構分數列表
+            final_scores = [0.0] * len(candidate_texts)
+            for i, score in zip(valid_indices, all_scores):
+                final_scores[i] = score
+            
+            return final_scores
             
         except Exception as e:
             self.logger.error(f"計算重排序分數失敗: {e}")

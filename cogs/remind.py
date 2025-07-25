@@ -25,6 +25,7 @@ from discord.ext import commands
 import asyncio
 from datetime import datetime, timedelta
 import re
+import dateparser
 
 from typing import Optional
 from .language_manager import LanguageManager
@@ -130,58 +131,22 @@ class ReminderCog(commands.Cog):
             interaction=interaction
         )
 
-    def parse_time(self, time_str: str, guild_id: str = None) -> datetime:
-        """解析時間字串，支援多語言格式"""
-        current_time = datetime.now()
-        
-        # 多語言相對時間解析模式
-        relative_patterns = [
-            # 繁體中文
-            (r'(\d+)(秒|分鐘|小時|天)後', {'秒': 'seconds', '分鐘': 'minutes', '小時': 'hours', '天': 'days'}),
-            # 簡體中文
-            (r'(\d+)(秒|分钟|小时|天)后', {'秒': 'seconds', '分钟': 'minutes', '小时': 'hours', '天': 'days'}),
-            # 英文
-            (r'(\d+)\s*(seconds?|minutes?|hours?|days?)\s*later', {
-                'second': 'seconds', 'seconds': 'seconds',
-                'minute': 'minutes', 'minutes': 'minutes',
-                'hour': 'hours', 'hours': 'hours',
-                'day': 'days', 'days': 'days'
-            }),
-            # 日文
-            (r'(\d+)(秒|分|時間|日)後', {'秒': 'seconds', '分': 'minutes', '時間': 'hours', '日': 'days'})
-        ]
-        
-        for pattern, unit_map in relative_patterns:
-            time_match = re.match(pattern, time_str, re.IGNORECASE)
-            if time_match:
-                amount = int(time_match.group(1))
-                unit_key = time_match.group(2).lower()
-                unit = unit_map.get(unit_key)
-                
-                if unit == 'seconds':
-                    return current_time + timedelta(seconds=amount)
-                elif unit == 'minutes':
-                    return current_time + timedelta(minutes=amount)
-                elif unit == 'hours':
-                    return current_time + timedelta(hours=amount)
-                elif unit == 'days':
-                    return current_time + timedelta(days=amount)
-        
-        # 絕對時間解析（支援多種格式）
-        absolute_patterns = [
-            '%Y年%m月%d日%H:%M:%S',  # 中文格式
-            '%Y-%m-%d %H:%M:%S',     # 英文格式
-            '%Y/%m/%d %H:%M:%S',     # 另一種英文格式
-            '%Y年%m月%d日%H時%M分%S秒' # 完整中文格式
-        ]
-        
-        for pattern in absolute_patterns:
-            try:
-                return datetime.strptime(time_str, pattern)
-            except ValueError:
-                continue
-
-        return None
+    def parse_time(self, time_str: str, guild_id: str = None) -> Optional[datetime]:
+        """
+        使用 dateparser 解析時間字串，支援多種自然語言格式。
+        例如: "15 minutes from now", "in 2 hours", "2023-12-31 20:00"
+        """
+        try:
+            # PREFER_DATES_FROM: 'future' 確保相對時間 (例如 "in 15 minutes") 被解析為未來時間
+            # RETURN_AS_TIMEZONE_AWARE: False 讓其返回 naive datetime, 與專案其他部分保持一致
+            parsed_time = dateparser.parse(
+                time_str,
+                settings={'PREFER_DATES_FROM': 'future', 'RETURN_AS_TIMEZONE_AWARE': False}
+            )
+            return parsed_time
+        except Exception:
+            # 如果 dateparser 發生任何錯誤，返回 None
+            return None
 
     def format_timedelta(self, td: timedelta, guild_id: str = None) -> str:
         """格式化時間長度為本地化字串"""

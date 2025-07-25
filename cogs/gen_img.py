@@ -29,8 +29,6 @@ import aiohttp
 from google import genai
 from google.genai import types
 from PIL import Image
-import torch
-from diffusers import StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
 from typing import List, Optional, Dict
 from addons.settings import TOKENS
 from gpt.utils.media import image_to_base64

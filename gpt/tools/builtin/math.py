@@ -45,7 +45,7 @@ async def calculate_math(
 
         # 呼叫 cog 中的核心 calculate_math 方法
         # 注意：我們需要從 context 中獲取 guild_id
-        guild_id = str(context.interaction.guild_id) if context.interaction and context.interaction.guild_id else None
+        guild_id = str(context.message.guild.id) if context.message and context.message.guild else None
         result = await cog.calculate_math(expression, guild_id=guild_id)
         
         logger.info(f'Delegated calculation for "{expression}". Result: {result}')

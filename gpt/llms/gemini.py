@@ -569,10 +569,30 @@ async def generate_response(inst: str,
                 if response_schema is None:
                     cache_args["tools"] = tool_list
 
-                # 3b. 呼叫管理器來創建並註冊這個新的快取
-                cache = cache_mgr.create_and_register_cache(
-                    **cache_args
+                # 3b. 檢查 token 數量是否足夠
+                token_count_response = await asyncio.to_thread(
+                    client.models.count_tokens,
+                    contents=contents,
+                    model=model_id
                 )
+                total_tokens = token_count_response.total_tokens
+                
+                min_tokens_for_caching = 1024  # Gemini API 的最低要求
+
+                if total_tokens >= min_tokens_for_caching:
+                    # 3c. 呼叫管理器來創建並註冊這個新的快取
+                    logger.info(f"內容 token ({total_tokens}) 足夠，正在創建快取...")
+                    cache = cache_mgr.create_and_register_cache(
+                        **cache_args
+                    )
+                else:
+                    logger.warning(
+                        f"內容 token ({total_tokens}) 過少，"
+                        f"未達到快取所需的最小數量 ({min_tokens_for_caching})。"
+                        "將跳過快取創建。"
+                    )
+                    cache = None # 確保在 token 不足時，後續流程不會使用快取
+
             except Exception as e:
                 logger.error(f"在動態創建快取時發生錯誤，將降級為非快取模式: {e}")
                 cache = None # 確保出錯時 cache 為 None
