@@ -22,11 +22,13 @@
 
 import io
 from typing import Optional, TYPE_CHECKING
+import discord
 
 from PIL import Image
 
 from gpt.tools.registry import tool
 from gpt.tools.tool_context import ToolExecutionContext
+from gpt.core.message_sender import gpt_message
 
 if TYPE_CHECKING:
     from cogs.gen_img import ImageGenerationCog
@@ -79,14 +81,30 @@ async def generate_image(
         guild_id=guild_id,
         channel_id=channel_id,
         input_images=input_images,
-        channel=None,
+        channel=context.message.channel,
     )
 
     if "error" in result:
         logger.error(f"Image generation failed: {result['error']}")
         return f"Error: {result['error']}"
 
+    if "file" in result and result["file"]:
+        discord_file = result["file"]
+        
+        # 從 context 中獲取 message 和 message_to_edit
+        message = context.message
+        message_to_edit = context.message_to_edit
+        
+        await gpt_message(
+            message_to_edit=message_to_edit,
+            message=message,
+            prompt='',
+            history_dict={},
+            files=[discord_file]
+        )
+        return "Image sent successfully."
+
     if "content" in result and result["content"]:
         return result["content"]
 
-    return "Image generated successfully."
+    return "Image generated successfully, but no image data was returned."

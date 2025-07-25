@@ -708,7 +708,8 @@ async def gpt_message(
     message: discord.Message,
     prompt: str,
     history_dict: Dict[str, Any],
-    image_data: Optional[Any] = None
+    image_data: Optional[Any] = None,
+    files: Optional[List[discord.File]] = None
 ) -> str:
     """生成並發送 GPT 回應訊息。支援文字和 GIF 回應。
 
@@ -718,6 +719,7 @@ async def gpt_message(
         prompt: 輸入的提示文字。
         history_dict: 對話歷史字典。
         image_data: 可選的圖片資料。
+        files: 可選的檔案列表。
 
     Returns:
         str | None: 生成的回應文字，如果生成失敗則返回 None。
@@ -725,6 +727,21 @@ async def gpt_message(
     
     channel = message.channel
     channel_id = str(channel.id)
+
+    # 如果有檔案，直接發送新訊息，不使用串流
+    if files:
+        try:
+            # 如果 prompt 為空，提供一個預設訊息
+            content = prompt if prompt and prompt.strip() else ""
+            new_message = await channel.send(content=content, files=files)
+            # 刪除原始的 "正在生成..." 訊息
+            if message_to_edit and message_to_edit.author == message.guild.me:
+                await message_to_edit.delete()
+            message_to_edit = new_message
+        except Exception as e:
+            logging.error(f"發送帶有檔案的訊息時發生錯誤: {e}")
+            await channel.send(content=f"抱歉，發送圖片時發生錯誤: {e}")
+            return ""
     
     print(prompt)
     
@@ -817,8 +834,9 @@ async def gpt_message(
                                 "responses",
                                 "processing"
                             )
-                    # 創建新消息
-                    current_message = await channel.send(processing_message)
+                    # 創建新消息，並將回傳的 Message 物件賦值給 current_message
+                    new_chunk_message = await channel.send(processing_message)
+                    current_message = new_chunk_message
                     responsesall = ""
                 responsesall += responses
                 cleaned_response = responsesall.replace('<|eot_id|>', "")
@@ -839,7 +857,13 @@ async def gpt_message(
                     converted_response = cleaned_response
                 
                 # 保持原有的純文字回覆
-                await current_message.edit(content=converted_response)
+                try:
+                    await current_message.edit(content=converted_response)
+                except discord.errors.NotFound:
+                    logging.warning(f"訊息 {current_message.id} 在編輯時找不到，可能已被刪除。")
+                    # 訊息被刪除，我們無法繼續編輯，但可以嘗試發送新訊息
+                    # 不過在串流中，最好是等待下一次更新或最終訊息
+                    pass
                 
                 # 檢查是否需要發送GIF
                 gif_tasks = await process_tenor_tags(converted_response, channel)
@@ -853,48 +877,36 @@ async def gpt_message(
         # 處理剩餘的文本
         try:
             if responses:  # 如果還有未處理的回應
-                if len(responsesall+responses) > 1900:
-                    # 使用正確的語言轉換器
-                    if message and message.guild:
-                        bot = message.guild.me._state._get_client()
-                        if lang_manager := bot.get_cog("LanguageManager"):
-                            guild_id = str(message.guild.id)
-                            lang = lang_manager.get_server_lang(guild_id)
-                            converter = get_converter(lang)
-                            if converter:
-                                converted_response = converter.convert(responses)
-                            else:
-                                converted_response = responses
-                        else:
-                            converted_response = responses
-                    else:
-                        converted_response = responses
-                    # 創建新消息
-                    current_message = await channel.send(converted_response)
-                else:
-                    responsesall += responses
-                    cleaned_response = responsesall.replace('<|eot_id|>', "")
-                    if message and message.guild:
-                        bot = message.guild.me._state._get_client()
-                        if lang_manager := bot.get_cog("LanguageManager"):
-                            guild_id = str(message.guild.id)
-                            lang = lang_manager.get_server_lang(guild_id)
-                            converter = get_converter(lang)
-                            if converter:
-                                converted_response = converter.convert(cleaned_response)
-                            else:
-                                converted_response = cleaned_response
+                responsesall += responses
+                cleaned_response = responsesall.replace('<|eot_id|>', "")
+                # 根據伺服器語言選擇轉換器
+                if message and message.guild:
+                    bot = message.guild.me._state._get_client()
+                    if lang_manager := bot.get_cog("LanguageManager"):
+                        guild_id = str(message.guild.id)
+                        lang = lang_manager.get_server_lang(guild_id)
+                        converter = get_converter(lang)
+                        if converter:
+                            converted_response = converter.convert(cleaned_response)
                         else:
                             converted_response = cleaned_response
                     else:
                         converted_response = cleaned_response
+                else:
+                    converted_response = cleaned_response
+                
+                # 編輯最後一則訊息
+                try:
                     await current_message.edit(content=converted_response)
-                    
-                    # 檢查是否需要發送GIF
-                    gif_tasks = await process_tenor_tags(converted_response, channel)
-                    if gif_tasks:
-                        for task in gif_tasks:
-                            await task
+                except discord.errors.NotFound:
+                    logging.warning(f"最終訊息 {current_message.id} 在編輯時找不到，將作為新訊息發送。")
+                    await channel.send(content=converted_response)
+                
+                # 檢查是否需要發送GIF
+                gif_tasks = await process_tenor_tags(converted_response, channel)
+                if gif_tasks:
+                    for task in gif_tasks:
+                        await task
         
         except Exception as cleanup_error:
             logging.warning(f"處理剩餘回應時發生錯誤: {cleanup_error}")
@@ -905,5 +917,10 @@ async def gpt_message(
         logging.error(f"生成 GPT 回應時發生錯誤: {e}")
         import traceback
         logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
-        await message_to_edit.edit(content=f"An error occurred: {e}")
+        error_message = f"An error occurred: {e}"
+        try:
+            if message_to_edit:
+                await message_to_edit.edit(content=error_message)
+        except discord.errors.NotFound:
+            await message.channel.send(content=error_message)
         return ""
