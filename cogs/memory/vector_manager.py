@@ -597,16 +597,39 @@ class VectorIndex:
                 return removed_count
 
             # 對於支援 remove_ids 的索引
-            removed_count = index.remove_ids(faiss.IDSelectorBatch(np.array(faiss_ids_to_remove, dtype=np.int64)))
+            # 加鎖以確保與映射更新的原子性
+            if not hasattr(self, "_mapping_lock"):
+                self._mapping_lock = threading.Lock()
+            with self._mapping_lock:
+                removed_count = index.remove_ids(
+                    faiss.IDSelectorBatch(np.array(faiss_ids_to_remove, dtype=np.int64))
+                )
 
-            if removed_count > 0:
-                # 更新 ID 映射
-                for id_str in ids:
-                    if id_str in self._reverse_id_map:
-                        faiss_id = self._reverse_id_map.pop(id_str)
-                        self._id_map.pop(faiss_id, None)
+                if removed_count > 0:
+                    # 更新 ID 映射
+                    removed_from_maps = 0
+                    for id_str in ids:
+                        if id_str in self._reverse_id_map:
+                            faiss_id = self._reverse_id_map.pop(id_str)
+                            if faiss_id in self._id_map:
+                                self._id_map.pop(faiss_id, None)
+                            removed_from_maps += 1
 
-                self.logger.info(f"成功移除了 {removed_count} 個向量。")
+                    # 標記需要重建映射（在大量刪除後可選擇重建）
+                    if removed_from_maps != removed_count:
+                        # 記錄不一致以便後續診斷
+                        self.logger.warning(
+                            f"FAISS 移除數量({removed_count})與映射移除數量({removed_from_maps})不一致，"
+                            "將標記為需要映射重建。"
+                        )
+                        self._needs_mapping_rebuild = True
+
+                    self.logger.debug(
+                        f"remove_vectors: 成功自 FAISS 移除 {removed_count} 個ID，"
+                        f"並自映射移除 {removed_from_maps} 個鍵。"
+                    )
+                else:
+                    self.logger.debug("remove_vectors: 沒有任何向量被 FAISS 移除。")
             
             return removed_count
         except Exception as e:

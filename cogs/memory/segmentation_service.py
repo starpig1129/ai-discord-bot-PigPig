@@ -403,9 +403,12 @@ class TextSegmentationService:
                         "channel_id": channel_id,
                         "messages": list(current_segment_messages)
                     })
-                    current_segment_messages.clear()
-
-                current_segment_messages.append(message)
+                    # 用觸發分割的訊息重新初始化新片段
+                    current_segment_messages = [message]
+                    self.logger.debug(f"[重構] 新片段已開始，以訊息 {message['message_id']} 為起點。")
+                else:
+                    # 將訊息加入當前片段
+                    current_segment_messages.append(message)
 
             # 處理迴圈結束後剩餘的最後一個片段
             if current_segment_messages:
@@ -831,17 +834,16 @@ class TextSegmentationService:
             return None
     
     async def _save_segment_to_database(self, segment: ConversationSegment) -> None:
-        """儲存片段到資料庫
+        """使用原子性操作儲存片段及其關聯訊息到資料庫。
         
         Args:
-            segment: 對話片段
+            segment: 要儲存的片段。
         """
         try:
             self.logger.info(f"開始原子性儲存片段 {segment.segment_id}，包含 {segment.message_count} 條訊息。")
-
-            # 準備要傳遞給新方法的資料
             vector_data = segment.vector_representation.tobytes() if segment.vector_representation is not None else None
-            
+
+            # 準備片段資料
             segment_data = {
                 "segment_id": segment.segment_id,
                 "channel_id": segment.channel_id,
@@ -855,30 +857,25 @@ class TextSegmentationService:
                 "metadata": str(segment.metadata) if segment.metadata else None
             }
 
-            # 為了呼叫新的原子性方法，我們需要完整的訊息資料
-            # 注意：這裡假設訊息已經存在於資料庫中，這對於即時流程是成立的
-            messages_data = await asyncio.to_thread(
-                self.db_manager.get_messages_by_ids,
-                segment.message_ids
-            )
+            # 準備訊息關聯資料
+            message_links = [
+                {"message_id": msg_id, "position": i}
+                for i, msg_id in enumerate(segment.message_ids)
+            ]
 
-            if len(messages_data) != len(segment.message_ids):
-                self.logger.warning(f"[{segment.segment_id}] 資料庫中的訊息數量與片段記錄不符，可能存在資料不一致。")
-
-            # 呼叫新的原子性資料庫方法
-            self.logger.debug(f"[{segment.segment_id}] 呼叫 create_segment_with_messages...")
-            
-            persisted_segment_id = await asyncio.to_thread(
+            # 呼叫原子性的資料庫方法
+            await asyncio.to_thread(
                 self.db_manager.create_segment_with_messages,
                 segment_data=segment_data,
-                messages_data=messages_data
+                message_links=message_links
             )
 
-            self.logger.info(f"片段 {persisted_segment_id} 已成功透過原子操作儲存到資料庫。")
+            self.logger.info(f"片段 {segment.segment_id} 已成功透過原子性操作儲存。")
 
         except Exception as e:
-            self.logger.error(f"儲存片段 {segment.segment_id} 到資料庫時發生嚴重錯誤: {e}", exc_info=True)
-            raise MemorySystemError(f"片段 {segment.segment_id} 儲存失敗: {e}")
+            self.logger.error(f"儲存片段 {segment.segment_id} 失敗: {e}", exc_info=True)
+            # 即使失敗，也不再需要手動清理，因為交易會自動回滾
+            raise MemorySystemError(f"儲存片段失敗: {e}")
     
     async def get_segments_for_timerange(
         self,

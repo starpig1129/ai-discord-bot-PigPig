@@ -49,6 +49,7 @@ import asyncio
 
 from typing import Optional
 from .language_manager import LanguageManager
+from gpt.utils.discord_utils import safe_edit_message
 
 def install_driver():
     return ChromeDriverManager().install()
@@ -74,7 +75,18 @@ class InternetSearchCog(commands.Cog):
                 "responses",
                 "searching"
             )
-            await message_to_edit.edit(content=searching_message)
+            try:
+                await safe_edit_message(message_to_edit, searching_message)
+            except discord.errors.NotFound:
+                # 原訊息不存在，改為送出新訊息以維持體驗
+                fallback_text = f"🔍 {searching_message}" if searching_message else f"🔍 正在為您搜尋：{query}"
+                try:
+                    await ctx.channel.send(fallback_text)
+                except Exception:
+                    # 保底：忽略發送失敗，避免中斷後續流程
+                    pass
+                import logging
+                logging.getLogger(__name__).info("internet_search: 原始訊息已不存在，已改為發送新訊息。")
         
         search_functions = {
             "general": self.google_search,
@@ -292,7 +304,7 @@ class InternetSearchCog(commands.Cog):
         if isinstance(ctx, discord.Interaction):
             await ctx.followup.send(content=content)
         else:
-            await message_to_edit.edit(content=content)
+            await safe_edit_message(message_to_edit, content)
 
     async def youtube_search(self, ctx, query, message_to_edit=None):
         try:

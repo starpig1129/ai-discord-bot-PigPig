@@ -9,6 +9,8 @@ import logging
 import os
 import time
 import threading
+import asyncio
+import functools
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -350,10 +352,10 @@ class RerankerService:
         
         return scores
     
-    def rerank_results(
-        self, 
-        query: str, 
-        candidates: List[Dict], 
+    async def rerank_results(
+        self,
+        query: str,
+        candidates: List[Dict],
         score_field: str = "content",
         top_k: Optional[int] = None,
         instruction: Optional[str] = None
@@ -406,7 +408,7 @@ class RerankerService:
                 return candidates
             
             # 計算重排序分數
-            rerank_scores = self._compute_rerank_scores(query, candidate_texts, instruction)
+            rerank_scores = await self._compute_rerank_scores(query, candidate_texts, instruction)
             
             # 添加重排序分數到候選結果
             limited_candidates = []
@@ -453,10 +455,10 @@ class RerankerService:
             # 降級處理：返回原始結果
             return candidates
     
-    def _compute_rerank_scores(
-        self, 
-        query: str, 
-        candidate_texts: List[str], 
+    async def _compute_rerank_scores(
+        self,
+        query: str,
+        candidate_texts: List[str],
         instruction: Optional[str] = None
     ) -> List[float]:
         """計算重排序分數（使用官方範例的邏輯）
@@ -490,14 +492,17 @@ class RerankerService:
             batch_size = min(4, len(pairs))  # Reranker 使用較小的批次大小
             all_scores = []
             
+            loop = asyncio.get_running_loop()
+            
             for i in range(0, len(pairs), batch_size):
                 batch_pairs = pairs[i:i + batch_size]
                 
                 # 處理輸入
                 inputs = self.process_inputs(batch_pairs)
                 
-                # 計算分數
-                batch_scores = self.compute_logits(inputs)
+                # 使用執行器異步計算分數
+                compute_task = functools.partial(self.compute_logits, inputs)
+                batch_scores = await loop.run_in_executor(None, compute_task)
                 all_scores.extend(batch_scores)
                 
                 # 釋放記憶體

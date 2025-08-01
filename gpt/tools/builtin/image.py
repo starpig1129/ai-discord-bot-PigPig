@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 import io
+import aiohttp
 from typing import Optional, TYPE_CHECKING
 import discord
 
@@ -61,17 +62,26 @@ async def generate_image(
 
     input_images = []
     if image_url:
-        try:
-            async with cog.session.get(image_url) as response:
-                response.raise_for_status()
-                image_data = await response.read()
-                img = Image.open(io.BytesIO(image_data))
-                input_images.append(img)
-        except Exception as e:
-            logger.error(
-                f"Failed to download or process image from URL '{image_url}': {e}"
-            )
-            return f"Error: Failed to process the provided image URL. {e}"
+       try:
+           async with cog.session.get(image_url) as response:
+               response.raise_for_status()
+               image_data = await response.read()
+               img = Image.open(io.BytesIO(image_data))
+               input_images.append(img)
+       except aiohttp.ClientResponseError as e:
+           if e.status == 404:
+               logger.warning(f"Failed to download image from {image_url} (404 Not Found).")
+               return "Error: The provided image URL is invalid or has expired (404 Not Found)."
+           else:
+               logger.error(
+                   f"Failed to download image from URL '{image_url}': {e}"
+               )
+               return f"Error: Failed to download the provided image URL. Status: {e.status}"
+       except Exception as e:
+           logger.error(
+               f"Failed to process image from URL '{image_url}': {e}"
+           )
+           return f"Error: Failed to process the provided image URL. {e}"
 
     guild_id = getattr(context, "guild_id", "0")
     channel_id = getattr(context, "channel_id", 0)

@@ -20,6 +20,7 @@ class ToolExecutor:
     async def execute_tools(self, action_list: List[Dict], context: ToolExecutionContext) -> List[Dict]:
         """
         根據動作列表執行工具，並產生結構化的執行報告。
+        實現了「快速失敗」機制，任何工具執行失敗都會立即中止並回報錯誤。
 
         Args:
             action_list: 從 LLM 獲取的工具調用列表。
@@ -41,27 +42,25 @@ class ToolExecutor:
                 tool = self.tool_registry.get_tool(tool_name)
                 result = await tool.execute(context, **parameters)
 
-                # 處理圖片生成的特殊情況
                 if tool_name == "gen_img" and isinstance(result, io.BytesIO):
                     result.seek(0)
                     file = discord.File(result, filename="generated_image.png")
                     await context.message.channel.send(content="這張圖給你參考:", file=file)
-                    # 將圖片結果轉換為可報告的格式
                     result = "成功生成並發送了一張圖片。"
 
                 report = self._create_structured_report(tool_name, "success", result)
                 tool_execution_report.append(report)
 
-            except KeyError:
-                error_message = f"錯誤: 找不到名為 '{tool_name}' 的工具。"
-                context.logger.warning(error_message)
-                report = self._create_structured_report(tool_name, "failure", error_message, error_type="ToolNotFound")
-                tool_execution_report.append(report)
             except Exception as e:
-                error_message = f"執行工具 '{tool_name}' 時發生內部錯誤: {str(e)}"
+                error_message = f"執行工具 '{tool_name}' 時發生錯誤: {str(e)}"
                 context.logger.error(f"執行工具 '{tool_name}' 時發生錯誤: {e}", exc_info=True)
-                report = self._create_structured_report(tool_name, "failure", error_message, error_type=type(e).__name__)
-                tool_execution_report.append(report)
+                
+                # 快速失敗：立即建立錯誤報告並返回
+                error_report = self._create_structured_report(
+                    tool_name, "failure", error_message, error_type=type(e).__name__
+                )
+                # 返回單一的錯誤報告，以便上層處理
+                return self._format_report_for_llm([error_report])
         
         return self._format_report_for_llm(tool_execution_report)
 

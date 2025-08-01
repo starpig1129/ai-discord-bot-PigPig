@@ -323,11 +323,46 @@ class SearchEngine:
                 search_time_ms=0.0, search_method="semantic_disabled"
             )
 
+        # 檢查索引健康狀態並採取降級策略，避免因索引異常拖垮流程
+        degraded_mode = False
+        try:
+            if self.vector_manager:
+                stats_map = self.vector_manager.get_all_stats()
+                high_risk = False
+                for cid, st in (stats_map or {}).items():
+                    if not isinstance(st, dict):
+                        continue
+                    missing_ratio = st.get('missing_mapping_ratio')
+                    max_faiss_id = st.get('max_faiss_id')
+                    index_size = st.get('index_size')
+                    # 啟發式條件：映射缺失比例過高或最大 ID 超界
+                    if (isinstance(missing_ratio, (int, float)) and missing_ratio > 0.1) or (
+                        isinstance(max_faiss_id, int) and isinstance(index_size, int) and index_size >= 1 and max_faiss_id >= index_size
+                    ):
+                        high_risk = True
+                        break
+                if high_risk:
+                    degraded_mode = True
+                    original_limit = query.limit
+                    query.limit = max(1, min(query.limit, 3))
+                    self.logger.warning(
+                        "vector_index_degraded_mode | channel_id=%s limit_downgrade=%s->%s",
+                        query.channel_id, original_limit, query.limit
+                    )
+        except Exception as chk_e:
+            # 健康檢查失敗不阻斷語義搜尋
+            self.logger.warning("vector_index_health_check_runtime_error | reason=%s", str(chk_e))
+
         query_vector = self.embedding_service.encode_text(query.text)
         
+        # 若降級，減少檢索的 k 降低壓力與錯誤幅度
+        top_k = (query.limit * 3)
+        if degraded_mode:
+            top_k = max(1, min(top_k, 3))
+
         vector_results = self.vector_manager.search_similar(
             channel_id=query.channel_id, query_vector=query_vector,
-            k=query.limit * 3, score_threshold=query.score_threshold
+            k=top_k, score_threshold=query.score_threshold
         )
         
         if not vector_results:
@@ -350,6 +385,14 @@ class SearchEngine:
 
         if not unique_message_ids:
             self.logger.warning(f"語義搜尋找到片段，但無法對應到任何訊息。孤兒 Segment IDs: {segment_ids}")
+            
+            # 自動清理孤兒 segments
+            try:
+                removed_count = self.vector_manager.remove_vectors(query.channel_id, segment_ids)
+                self.logger.info(f"已自動清理 {removed_count} 個孤兒 segments。")
+            except Exception as e:
+                self.logger.error(f"自動清理孤兒 segments 失敗: {e}")
+
             return SearchResult(
                 messages=[], relevance_scores=[], total_found=0,
                 search_time_ms=0.0, search_method="semantic_no_messages",
@@ -445,7 +488,7 @@ class SearchEngine:
                 rerank_count = min(len(messages), query.limit * 2)
                 rerank_messages = messages[:rerank_count]
                 
-                reranked_messages = self.reranker_service.rerank_results(
+                reranked_messages = await self.reranker_service.rerank_results(
                     query=query.text,
                     candidates=rerank_messages,
                     score_field="content_processed" if (rerank_messages and rerank_messages[0].get("content_processed")) else "content",

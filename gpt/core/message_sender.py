@@ -279,23 +279,30 @@ def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
                 - Clearly indicate the source of information in your answers (e.g., "According to the processed image/video/PDF...")
                 - When referencing sources, use the format: [標題](<URL>)
 
-                3. Language Requirements (語言要求):
+                3. CRITICAL: Tool Error Handling (工具錯誤處理) - MANDATORY:
+                - When you receive tool execution results showing failures or errors, you MUST directly and clearly report the error to the user.
+                - NEVER use anthropomorphic language like "the tool is playing hide and seek" or similar playful descriptions for errors.
+                - NEVER fabricate or imagine successful scenarios when tools have actually failed.
+                - For tool failures, respond with factual, direct language such as: "Sorry, the [tool name] tool encountered an error: [specific error description]"
+                - Always base your responses on the actual tool execution results you receive, not on assumptions or imagination.
+
+                4. Language Requirements (語言要求):
                 - Always answer in Traditional Chinese.
                 - Appropriately use Chinese idioms or playful expressions to add interest to the conversation.
                 - Keep casual chat responses short and natural, like a friendly Discord conversation.
                 - Only provide longer, detailed responses for technical or educational topics when necessary.
 
-                4. Professionalism:
+                5. Professionalism:
                 - While maintaining a humorous style, keep appropriate professionalism when dealing with professional or serious topics.
                 - Provide in-depth explanations only when specifically requested.
 
-                5. Interaction:
+                6. Interaction:
                 - Engage in natural chat-like interactions.
                 - Keep responses concise and interactive.
                 - Only elaborate when users specifically ask for more details.
                 - Stay focused on the current topic and avoid bringing up old conversations
 
-                6. Discord Markdown Formatting:
+                7. Discord Markdown Formatting:
                 - Use **bold** for emphasis
                 - Use *italics* for subtle emphasis
                 - Use __underline__ for underlining
@@ -306,7 +313,7 @@ def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
                 - Use [標題](<URL>) for references
                 - Use <@user_id> to mention users
 
-                Remember: You're in a Discord chat environment - keep responses brief and engaging for casual conversations. Only provide detailed responses when specifically discussing technical or educational topics. Focus on the current message and avoid unnecessary references to past conversations.'''
+                Remember: You're in a Discord chat environment - keep responses brief and engaging for casual conversations. Only provide detailed responses when specifically discussing technical or educational topics. Focus on the current message and avoid unnecessary references to past conversations. ALWAYS accurately report tool execution results without embellishment or fabrication.'''
     
     # 保持原有的語言管理邏輯
     default_lang = "zh_TW"
@@ -819,28 +826,44 @@ async def gpt_message(
             responses += response
             message_result += response
             if len(responses) >= buffer_size:
-                # 檢查是否超過 2000 字符
-                if len(responsesall+responses) > 1900:
-                    # 獲取多語言提示
-                    processing_message = "繼續輸出中..."  # 預設值
+                # 先準備拼接與轉換
+                pending_all = responsesall + responses
+                # 分段門檻與上限
+                ROLLOVER_THRESHOLD = 1900
+                HARD_LIMIT = 2000
+
+                # 需要 rollover：先確保前一段編輯完成，再建立新段
+                if len(pending_all) > ROLLOVER_THRESHOLD:
+                    # 取得多語言提示
+                    processing_message = "繼續輸出中..."
                     if message and message.guild:
                         bot = message.guild.me._state._get_client()
                         if lang_manager := bot.get_cog("LanguageManager"):
                             guild_id = str(message.guild.id)
                             processing_message = lang_manager.translate(
-                                guild_id,
-                                "system",
-                                "chat_bot",
-                                "responses",
-                                "processing"
+                                guild_id, "system", "chat_bot", "responses", "processing"
                             )
-                    # 創建新消息，並將回傳的 Message 物件賦值給 current_message
-                    new_chunk_message = await channel.send(processing_message)
+
+                    # 等待上一段的編輯完成（current_message 的最後一次編輯）
+                    # 此段程式目前每次都 await edit，已天然序列化；這裡保留語意說明
+
+                    # 建立新段，並更新 current_message
+                    from gpt.utils.discord_utils import safe_create_next_block
+                    from gpt.core.retry_controller import RetryController
+                    retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
+                    new_chunk_message = await safe_create_next_block(
+                        channel=channel,
+                        content=processing_message,
+                        reference_message_id=getattr(current_message, "id", None),
+                        trace_id="segment_rollover",
+                        retry=retry,
+                    )
                     current_message = new_chunk_message
                     responsesall = ""
+
+                # 累積並轉換
                 responsesall += responses
                 cleaned_response = responsesall.replace('<|eot_id|>', "")
-                # 根據伺服器語言選擇轉換器
                 if message and message.guild:
                     bot = message.guild.me._state._get_client()
                     if lang_manager := bot.get_cog("LanguageManager"):
@@ -855,15 +878,21 @@ async def gpt_message(
                         converted_response = cleaned_response
                 else:
                     converted_response = cleaned_response
-                
-                # 保持原有的純文字回覆
+
+                # 確保不超出硬上限（保守切割）
+                if len(converted_response) > HARD_LIMIT:
+                    converted_response = converted_response[:HARD_LIMIT]
+
+                # 序列化編輯：等待本次 edit 完成後再進下一輪
+                from gpt.utils.discord_utils import safe_edit
+                from gpt.core.retry_controller import RetryController
+                retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
                 try:
-                    await current_message.edit(content=converted_response)
+                    await safe_edit(current_message, converted_response, trace_id="message_edit_retry", retry=retry)
                 except discord.errors.NotFound:
-                    logging.warning(f"訊息 {current_message.id} 在編輯時找不到，可能已被刪除。")
-                    # 訊息被刪除，我們無法繼續編輯，但可以嘗試發送新訊息
-                    # 不過在串流中，最好是等待下一次更新或最終訊息
-                    pass
+                    logging.warning(f"訊息 {getattr(current_message,'id',None)} 在編輯時找不到，改以新段承接。")
+                    from gpt.utils.discord_utils import safe_send
+                    current_message = await safe_send(channel, converted_response, trace_id="message_edit_fallback", retry=retry)
                 
                 # 檢查是否需要發送GIF
                 gif_tasks = await process_tenor_tags(converted_response, channel)
@@ -895,12 +924,15 @@ async def gpt_message(
                 else:
                     converted_response = cleaned_response
                 
-                # 編輯最後一則訊息
+                # 編輯最後一則訊息（序列化，並統一走 safe_*）
+                from gpt.utils.discord_utils import safe_edit, safe_send
+                from gpt.core.retry_controller import RetryController
+                retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
                 try:
-                    await current_message.edit(content=converted_response)
+                    await safe_edit(current_message, converted_response, trace_id="final_edit", retry=retry)
                 except discord.errors.NotFound:
-                    logging.warning(f"最終訊息 {current_message.id} 在編輯時找不到，將作為新訊息發送。")
-                    await channel.send(content=converted_response)
+                    logging.warning(f"最終訊息 {getattr(current_message,'id',None)} 在編輯時找不到，將作為新訊息發送。")
+                    await safe_send(channel, converted_response, trace_id="final_send_fallback", retry=retry)
                 
                 # 檢查是否需要發送GIF
                 gif_tasks = await process_tenor_tags(converted_response, channel)
@@ -917,10 +949,21 @@ async def gpt_message(
         logging.error(f"生成 GPT 回應時發生錯誤: {e}")
         import traceback
         logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
+        # 嚴禁以空字串掩蓋錯誤：直接拋出，交由上層處理，或維持既有最小入侵時發送明確錯誤訊息
         error_message = f"An error occurred: {e}"
         try:
             if message_to_edit:
-                await message_to_edit.edit(content=error_message)
-        except discord.errors.NotFound:
-            await message.channel.send(content=error_message)
-        return ""
+                from gpt.utils.discord_utils import safe_edit, safe_send
+                from gpt.core.retry_controller import RetryController
+                retry = RetryController(max_retries=2, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
+                try:
+                    await safe_edit(message_to_edit, error_message, trace_id="error_edit", retry=retry)
+                except discord.errors.NotFound:
+                    await safe_send(message.channel, error_message, trace_id="error_send_fallback", retry=retry)
+            else:
+                from gpt.utils.discord_utils import safe_send
+                await safe_send(message.channel, error_message, trace_id="error_send_noedit", retry=None)
+        finally:
+            # 維持介面語意最小入侵：仍回傳累積訊息，但不回傳空字串
+            # 若需要更嚴格，可 raise；此處保留 message_result 內容。
+            return (message_result or error_message).replace("<|eot_id|>", "")

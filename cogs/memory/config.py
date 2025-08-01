@@ -84,12 +84,12 @@ class HardwareSpec:
 @dataclass
 class MemoryProfile:
     """記憶系統效能配置檔案"""
-    name: str
-    min_ram_gb: float
-    gpu_required: bool
-    vector_enabled: bool
-    embedding_dimension: int
-    cache_size_mb: int
+    name: str = "medium_performance"
+    min_ram_gb: float = 4.0
+    gpu_required: bool = False
+    vector_enabled: bool = True
+    embedding_dimension: int = 384
+    cache_size_mb: int = 512
     batch_size: int = 50
     max_concurrent_queries: int = 10
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -98,7 +98,31 @@ class MemoryProfile:
     memory_threshold_mb: int = 2048
     gpu_memory_limit_mb: int = 1024  # FAISS GPU 記憶體限制（MB）
     gpu_temp_memory_mb: int = 256    # GPU 暫存記憶體限制（MB）
-    
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'MemoryProfile':
+        """從字典建立配置檔案，安全地處理缺失的鍵。"""
+        # 為了獲取正確的動態預設值（如 device, cpu_only），我們先建立一個預設實例
+        defaults = cls()
+        
+        # 使用 .get() 安全地從字典中讀取值，如果鍵不存在，則使用預設實例中的值
+        return cls(
+            name=data.get('name', defaults.name),
+            min_ram_gb=data.get('min_ram_gb', defaults.min_ram_gb),
+            gpu_required=data.get('gpu_required', defaults.gpu_required),
+            vector_enabled=data.get('vector_enabled', defaults.vector_enabled),
+            embedding_dimension=data.get('embedding_dimension', defaults.embedding_dimension),
+            cache_size_mb=data.get('cache_size_mb', defaults.cache_size_mb),
+            batch_size=data.get('batch_size', defaults.batch_size),
+            max_concurrent_queries=data.get('max_concurrent_queries', defaults.max_concurrent_queries),
+            embedding_model=data.get('embedding_model', defaults.embedding_model),
+            device=data.get('device', defaults.device),
+            cpu_only=data.get('cpu_only', defaults.cpu_only),
+            memory_threshold_mb=data.get('memory_threshold_mb', defaults.memory_threshold_mb),
+            gpu_memory_limit_mb=data.get('gpu_memory_limit_mb', defaults.gpu_memory_limit_mb),
+            gpu_temp_memory_mb=data.get('gpu_temp_memory_mb', defaults.gpu_temp_memory_mb),
+        )
+
     def is_compatible(self, hardware: HardwareSpec) -> bool:
         """檢查硬體是否相容此配置檔案
         
@@ -230,86 +254,89 @@ class MemoryConfig:
         
         # 預設配置檔案
         self.default_profiles = {
-            "qwen3_high_performance": MemoryProfile(
-                name="qwen3_high_performance",
-                min_ram_gb=12.0,
-                gpu_required=True,
-                vector_enabled=True,
-                embedding_dimension=1024,
-                cache_size_mb=1024,
-                batch_size=32,
-                max_concurrent_queries=12,
-                embedding_model="Qwen/Qwen3-Embedding-0.6B",
-                device="cuda" if _is_cuda_available() else "cpu",
-                cpu_only=False,
-                memory_threshold_mb=4096,
-                gpu_memory_limit_mb=1536,
-                gpu_temp_memory_mb=384
-            ),
-            "qwen3_medium_performance": MemoryProfile(
-                name="qwen3_medium_performance",
-                min_ram_gb=8.0,
-                gpu_required=False,
-                vector_enabled=True,
-                embedding_dimension=1024,
-                cache_size_mb=1024,
-                batch_size=32,
-                max_concurrent_queries=12,
-                embedding_model="Qwen/Qwen3-Embedding-0.6B",
-                device="cuda" if _is_cuda_available() else "cpu",
-                cpu_only=not _is_cuda_available(),
-                memory_threshold_mb=4096,
-                gpu_memory_limit_mb=2048,
-                gpu_temp_memory_mb=512
-            ),
-            "high_performance": MemoryProfile(
-                name="high_performance",
-                min_ram_gb=8.0,
-                gpu_required=True,
-                vector_enabled=True,
-                embedding_dimension=768,
-                cache_size_mb=1024,
-                batch_size=100,
-                max_concurrent_queries=20,
-                embedding_model="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
-                device="cuda" if _is_cuda_available() else "cpu",
-                cpu_only=False,
-                memory_threshold_mb=4096,
-                gpu_memory_limit_mb=2048,  # 高效能模式允許更多 GPU 記憶體
-                gpu_temp_memory_mb=512
-            ),
-            "medium_performance": MemoryProfile(
-                name="medium_performance",
-                min_ram_gb=4.0,
-                gpu_required=False,
-                vector_enabled=True,
-                embedding_dimension=384,
-                cache_size_mb=512,
-                batch_size=50,
-                max_concurrent_queries=10,
-                embedding_model="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-                device="cuda" if _is_cuda_available() else "cpu",
-                cpu_only=not _is_cuda_available(),
-                memory_threshold_mb=2048,
-                gpu_memory_limit_mb=1024,  # 中等效能模式限制 GPU 記憶體
-                gpu_temp_memory_mb=256
-            ),
-            "low_performance": MemoryProfile(
-                name="low_performance",
-                min_ram_gb=2.0,
-                gpu_required=False,
-                vector_enabled=False,
-                embedding_dimension=0,
-                cache_size_mb=256,
-                batch_size=25,
-                max_concurrent_queries=5,
-                embedding_model="",
-                device="cpu",
-                cpu_only=True,
-                memory_threshold_mb=1024,
-                gpu_memory_limit_mb=512,   # 低效能模式最小 GPU 記憶體
-                gpu_temp_memory_mb=128
-            )
+            profile_name: MemoryProfile.from_dict(profile_data)
+            for profile_name, profile_data in {
+                "qwen3_high_performance": {
+                    "name": "qwen3_high_performance",
+                    "min_ram_gb": 12.0,
+                    "gpu_required": True,
+                    "vector_enabled": True,
+                    "embedding_dimension": 1024,
+                    "cache_size_mb": 1024,
+                    "batch_size": 32,
+                    "max_concurrent_queries": 12,
+                    "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
+                    "device": "cuda" if _is_cuda_available() else "cpu",
+                    "cpu_only": False,
+                    "memory_threshold_mb": 4096,
+                    "gpu_memory_limit_mb": 1536,
+                    "gpu_temp_memory_mb": 384
+                },
+                "qwen3_medium_performance": {
+                    "name": "qwen3_medium_performance",
+                    "min_ram_gb": 8.0,
+                    "gpu_required": False,
+                    "vector_enabled": True,
+                    "embedding_dimension": 1024,
+                    "cache_size_mb": 1024,
+                    "batch_size": 32,
+                    "max_concurrent_queries": 12,
+                    "embedding_model": "Qwen/Qwen3-Embedding-0.6B",
+                    "device": "cuda" if _is_cuda_available() else "cpu",
+                    "cpu_only": not _is_cuda_available(),
+                    "memory_threshold_mb": 4096,
+                    "gpu_memory_limit_mb": 2048,
+                    "gpu_temp_memory_mb": 512
+                },
+                "high_performance": {
+                    "name": "high_performance",
+                    "min_ram_gb": 8.0,
+                    "gpu_required": True,
+                    "vector_enabled": True,
+                    "embedding_dimension": 768,
+                    "cache_size_mb": 1024,
+                    "batch_size": 100,
+                    "max_concurrent_queries": 20,
+                    "embedding_model": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+                    "device": "cuda" if _is_cuda_available() else "cpu",
+                    "cpu_only": False,
+                    "memory_threshold_mb": 4096,
+                    "gpu_memory_limit_mb": 2048,
+                    "gpu_temp_memory_mb": 512
+                },
+                "medium_performance": {
+                    "name": "medium_performance",
+                    "min_ram_gb": 4.0,
+                    "gpu_required": False,
+                    "vector_enabled": True,
+                    "embedding_dimension": 384,
+                    "cache_size_mb": 512,
+                    "batch_size": 50,
+                    "max_concurrent_queries": 10,
+                    "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                    "device": "cuda" if _is_cuda_available() else "cpu",
+                    "cpu_only": not _is_cuda_available(),
+                    "memory_threshold_mb": 2048,
+                    "gpu_memory_limit_mb": 1024,
+                    "gpu_temp_memory_mb": 256
+                },
+                "low_performance": {
+                    "name": "low_performance",
+                    "min_ram_gb": 2.0,
+                    "gpu_required": False,
+                    "vector_enabled": False,
+                    "embedding_dimension": 0,
+                    "cache_size_mb": 256,
+                    "batch_size": 25,
+                    "max_concurrent_queries": 5,
+                    "embedding_model": "",
+                    "device": "cpu",
+                    "cpu_only": True,
+                    "memory_threshold_mb": 1024,
+                    "gpu_memory_limit_mb": 512,
+                    "gpu_temp_memory_mb": 128
+                }
+            }.items()
         }
         
         self._config: Optional[Dict[str, Any]] = None

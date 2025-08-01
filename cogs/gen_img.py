@@ -33,6 +33,7 @@ from typing import List, Optional, Dict
 from addons.settings import TOKENS
 from gpt.utils.media import image_to_base64
 from .language_manager import LanguageManager
+from gpt.utils.discord_utils import safe_edit_message
 
 
 class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
@@ -261,7 +262,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     "responses",
                     "local_model_processing"
                 )
-                await message_to_edit.edit(content=processing_message)
+                await safe_edit_message(message_to_edit, processing_message, caller_name="ImageGenerationCog")
             else:
                 processing_message = self.lang_manager.translate(
                     guild_id,
@@ -304,7 +305,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     "responses",
                     "local_model_complete"
                 )
-                await message_to_edit.edit(content=success_message)
+                await safe_edit_message(message_to_edit, success_message, caller_name="ImageGenerationCog")
             return image_buffer
 
         except Exception as e:

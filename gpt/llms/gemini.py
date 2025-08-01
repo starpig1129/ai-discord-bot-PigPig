@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from addons.settings import TOKENS
 from gpt.utils.media import image_to_base64
 from gpt.caching.gemini_cache import GeminiCacheManager
+from gpt.core.exceptions import LLMProviderError  # PR#2: 統一錯誤類導入
 # Initialize the Gemini model
 tokens = TOKENS()
 
@@ -35,6 +36,75 @@ except Exception as e:
 
 class GeminiError(Exception):
     pass
+
+
+def _map_httpx_error(e: Exception, trace_id: str) -> LLMProviderError:
+    code = "connection_error"
+    retriable = True
+    status = None
+    if isinstance(e, httpx.TimeoutException):
+        code = "network_timeout"
+        retriable = True
+    elif isinstance(e, httpx.ConnectError):
+        code = "connection_error"
+        retriable = True
+    elif isinstance(e, httpx.HTTPStatusError):
+        status = int(getattr(e.response, "status_code", 0) or 0)
+        if status == 429:
+            code = "rate_limited"
+            retriable = True
+        elif 500 <= status < 600:
+            code = "gateway_error"
+            retriable = True
+        elif status in (401, 403):
+            code = "auth_failed"
+            retriable = False
+        else:
+            code = "invalid_request"
+            retriable = False
+    return LLMProviderError(
+        code=code,
+        retriable=retriable,
+        status=status,
+        provider="gemini",
+        details={"original_error": str(e), "type": type(e).__name__},
+        trace_id=trace_id,
+    )
+
+
+def _map_httpx_error(e: Exception, trace_id: str) -> "LLMProviderError":
+    from gpt.core.exceptions import LLMProviderError
+    code = "connection_error"
+    retriable = True
+    status = None
+    if isinstance(e, httpx.TimeoutException):
+        code = "network_timeout"
+        retriable = True
+    elif isinstance(e, httpx.ConnectError):
+        code = "connection_error"
+        retriable = True
+    elif isinstance(e, httpx.HTTPStatusError):
+        status = int(getattr(e.response, "status_code", 0) or 0)
+        if status == 429:
+            code = "rate_limited"
+            retriable = True
+        elif 500 <= status < 600:
+            code = "gateway_error"
+            retriable = True
+        elif status == 401 or status == 403:
+            code = "auth_failed"
+            retriable = False
+        else:
+            code = "invalid_request"
+            retriable = False
+    return LLMProviderError(
+        code=code,
+        retriable=retriable,
+        status=status,
+        provider="gemini",
+        details={"original_error": str(e), "type": type(e).__name__},
+        trace_id=trace_id,
+    )
 
 
 cache_manager: Optional[GeminiCacheManager] = None

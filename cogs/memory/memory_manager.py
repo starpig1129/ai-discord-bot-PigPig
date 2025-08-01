@@ -313,7 +313,30 @@ class MemoryManager:
                 startup_logger.end_startup_phase()
             
             self.logger.info(f"記憶系統初始化完成 (配置檔案: {self.current_profile.name})")
-            
+
+            # 啟動完成後：進行向量索引健康檢查與快速修復（不中斷啟動）
+            try:
+                if self.vector_manager and self.current_profile and self.current_profile.vector_enabled:
+                    self.logger.info("vector_index_health_check_start")
+                    results = await asyncio.get_event_loop().run_in_executor(
+                        None, self.vector_manager.check_and_repair_all_indices
+                    )
+                    self.logger.info("vector_index_health_check_finish | summary=%s", results.get('summary', {}))
+                    # 若仍有高風險索引，提出警告但不中斷
+                    problematic = [
+                        (cid, r) for cid, r in results.items()
+                        if isinstance(r, dict) and r.get('has_issues', False) and not r.get('repair_successful', False)
+                    ]
+                    if problematic:
+                        self.logger.warning(
+                            "vector_index_health_check_finish | residual_risk=%d 建議執行離線重建以獲得最佳完整性",
+                            len(problematic)
+                        )
+                else:
+                    self.logger.info("vector_index_health_check_skip | vector_disabled_or_manager_missing")
+            except Exception as ve:
+                self.logger.warning("vector_index_health_check_error | reason=%s", str(ve))
+
             return True
             
         except Exception as e:

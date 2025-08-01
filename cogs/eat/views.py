@@ -9,6 +9,7 @@ from cogs.eat.train.train import Train
 from cogs.eat.embeds import eatEmbed
 import random
 from gpt.core.response_generator import generate_response
+from gpt.utils.discord_utils import safe_edit_message
 map = GoogleMapCrawler()
 class EatWhatView(discord.ui.View):
     def __init__(self,result,predict:str,keyword:str, db: DB, record_id: int, discord_id:str):
@@ -144,13 +145,13 @@ class EatWhatView(discord.ui.View):
                 # 達到緩衝區大小時即時更新 Discord 訊息
                 if len(responses) >= buffer_size:
                     responsesall += responses
-                    await message_to_edit.edit(content=responsesall)
+                    await safe_edit_message(message_to_edit, responsesall)
                     responses = ""  # 清空緩衝區
 
             # 處理剩餘的回應內容並清理特殊標記
             responsesall += responses
             responsesall = responsesall.replace('<|eot_id|>', "").strip()
-            await message_to_edit.edit(content=responsesall)
+            await safe_edit_message(message_to_edit, responsesall)
             
             # 等待執行緒完成（向後相容性處理）
             if thread:

@@ -939,14 +939,15 @@ class DatabaseManager:
     def create_segment_with_messages(
         self,
         segment_data: Dict[str, Any],
-        messages_data: List[Dict[str, Any]]
+        message_links: List[Dict[str, Any]]
     ) -> str:
         """
-        以原子操作建立對話片段、其包含的訊息以及它們之間的關聯。
+        以原子操作建立對話片段及其與訊息的關聯。
+        此方法假設訊息已存在於資料庫中。
 
         Args:
             segment_data: 包含對話片段主記錄所需資料的字典。
-            messages_data: 要儲存並關聯到此片段的訊息資料字典列表。
+            message_links: 包含 'message_id' 和 'position' 的字典列表。
 
         Returns:
             str: 成功建立的對話片段 ID。
@@ -958,38 +959,16 @@ class DatabaseManager:
         if not segment_id:
             raise ValueError("segment_data 中必須包含 'segment_id'")
 
-        # 防禦性清理，避免 'seg_seg_' 問題
         sanitized_segment_id = self._sanitize_segment_id(segment_id)
         if sanitized_segment_id != segment_id:
-            self.logger.warning(f"偵測到並修正了格式錯誤的 segment ID：'{segment_id}' -> '{sanitized_segment_id}'")
-            # 更新字典中的值，以確保後續操作使用正確的 ID
+            self.logger.warning(f"修正了格式錯誤的 segment ID：'{segment_id}' -> '{sanitized_segment_id}'")
             segment_data['segment_id'] = sanitized_segment_id
-        else:
-            sanitized_segment_id = segment_id
- 
+        
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
 
-                # 1. 批次儲存訊息 (如果有的話)
-                if messages_data:
-                    message_tuples = [
-                        (
-                            msg['message_id'], msg['channel_id'], msg['user_id'],
-                            msg['content'], msg.get('content_processed'), msg['timestamp'],
-                            msg.get('message_type', 'user'), msg.get('metadata')
-                        )
-                        for msg in messages_data
-                    ]
-                    cursor.executemany("""
-                        INSERT OR IGNORE INTO messages
-                        (message_id, channel_id, user_id, content, content_processed,
-                         timestamp, message_type, metadata)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, message_tuples)
-                    self.logger.debug(f"[{segment_id}] 原子操作：插入或忽略了 {len(messages_data)} 條訊息。")
-
-                # 2. 建立對話片段主記錄
+                # 1. 建立對話片段主記錄
                 cursor.execute("""
                     INSERT INTO conversation_segments (
                         segment_id, channel_id, start_time, end_time, message_count,
@@ -1008,29 +987,38 @@ class DatabaseManager:
                     segment_data.get('vector_data'),
                     segment_data.get('metadata')
                 ))
-                self.logger.debug(f"[{segment_id}] 原子操作：插入了 conversation_segments 主記錄。")
+                self.logger.debug(f"[{sanitized_segment_id}] 原子操作：插入了 conversation_segments 主記錄。")
 
-                # 3. 批次建立訊息與片段的關聯
-                message_ids = [msg['message_id'] for msg in messages_data]
-                if message_ids:
-                    message_links = [
-                        (sanitized_segment_id, message_id, i)
-                        for i, message_id in enumerate(message_ids)
-                    ]
+                # 2. 批次建立訊息與片段的關聯（加入去重與容錯保護）
+                if message_links:
+                    # 2.1 基於 (segment_id, message_id) 去重，保持第一個 position_in_segment
+                    seen = set()
+                    deduped = []
+                    for link in message_links:
+                        key = (sanitized_segment_id, link['message_id'])
+                        if key not in seen:
+                            seen.add(key)
+                            deduped.append((sanitized_segment_id, link['message_id'], link['position']))
+                    ignored_count = len(message_links) - len(deduped)
+                    if ignored_count > 0:
+                        # 僅在發生忽略時記錄一則 DEBUG，避免噪音
+                        sample_ids = [link['message_id'] for link in message_links][:2]
+                        self.logger.debug(f"[{sanitized_segment_id}] 去重 segment_messages：忽略 {ignored_count} 條重複關聯，樣本 message_id={sample_ids}")
+
+                    # 2.2 使用 SQLite 最小入侵容錯：INSERT OR IGNORE 避免 UNIQUE 衝突導致整批失敗
                     cursor.executemany("""
-                        INSERT INTO segment_messages (segment_id, message_id, position_in_segment)
+                        INSERT OR IGNORE INTO segment_messages (segment_id, message_id, position_in_segment)
                         VALUES (?, ?, ?)
-                    """, message_links)
-                    self.logger.debug(f"[{segment_id}] 原子操作：插入了 {len(message_links)} 條 segment_messages 關聯。")
+                    """, deduped)
+                    self.logger.debug(f"[{sanitized_segment_id}] 原子操作：插入了 {len(deduped)} 條 segment_messages 關聯（已去重，採用 OR IGNORE）。")
 
                 # 提交交易
                 conn.commit()
-                self.logger.info(f"原子性地建立了片段 {sanitized_segment_id} 並儲存/關聯了 {len(messages_data)} 條訊息。")
+                self.logger.info(f"原子性地建立了片段 {sanitized_segment_id} 並關聯了 {len(message_links)} 條訊息。")
                 return sanitized_segment_id
- 
+
         except Exception as e:
             self.logger.error(f"原子性建立片段 {sanitized_segment_id} 失敗: {e}", exc_info=True)
-            # get_connection() 的上下文管理器會自動 rollback
             raise DatabaseError(f"原子性建立片段失敗: {e}", operation="create_segment_with_messages")
 
     def get_conversation_segments(

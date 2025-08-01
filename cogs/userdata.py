@@ -28,6 +28,7 @@ from discord import app_commands
 import discord
 from gpt.core.response_generator import generate_response
 from addons.settings import Settings
+from gpt.utils.discord_utils import safe_edit_message
 
 from typing import Optional, Dict, Any, List, Union
 from gpt.tools.tool_context import ToolExecutionContext
@@ -256,7 +257,7 @@ class UserDataCog(commands.Cog):
                 message_key = "processing" # Generic fallback
             
             status_message = self._translate(guild_id, "commands", "userdata", "responses", message_key, fallback_key=message_key)
-            await message_to_edit.edit(content=status_message)
+            await safe_edit_message(message_to_edit, status_message)
 
         if action == 'read':
             return await self._read_user_data(user_id, context)

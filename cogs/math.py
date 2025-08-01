@@ -30,6 +30,7 @@ from sympy.parsing.sympy_parser import (
 )
 from typing import Optional
 from .language_manager import LanguageManager
+from gpt.utils.discord_utils import safe_edit_message
 
 class MathCalculatorCog(commands.Cog):
     def __init__(self, bot):
@@ -48,7 +49,7 @@ class MathCalculatorCog(commands.Cog):
             processing_message = self.lang_manager.translate(
                 guild_id, "commands", "calculate", "responses", "processing"
             ) if self.lang_manager else "計算中..."
-            await message_to_edit.edit(content=processing_message)
+            await safe_edit_message(message_to_edit, processing_message)
         try:
             # 限制表達式長度，防止過長的輸入
             if len(expression) > 200:
