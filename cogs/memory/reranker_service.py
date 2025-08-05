@@ -605,14 +605,52 @@ class RerankerService:
             # 即使預熱失敗，也應繼續運行
             pass
     
-    def __del__(self):
-        """析構函數，清理資源"""
-        import sys
-        # 僅在直譯器未處於關閉狀態時才嘗試清理，以避免不可預測的錯誤
-        if sys and sys.meta_path is not None:
+    def cleanup(self) -> None:
+        """釋放 RerankerService 相關資源，允許安全重入呼叫。"""
+        try:
+            # 安全釋放模型與 tokenizer
+            with self._model_lock:
+                if hasattr(self, "_model") and self._model is not None:
+                    try:
+                        del self._model
+                    except Exception:
+                        pass
+                    self._model = None
+
+                if hasattr(self, "_tokenizer") and self._tokenizer is not None:
+                    try:
+                        del self._tokenizer
+                    except Exception:
+                        pass
+                    self._tokenizer = None
+
+                # 重置 token 與 prompt 快取
+                self._token_true_id = None
+                self._token_false_id = None
+                self._prefix_tokens = None
+                self._suffix_tokens = None
+
+            # 強制垃圾回收
             try:
-                self.clear_cache()
+                import gc
+                gc.collect()
             except Exception:
-                # 在 __del__ 中，即使是日誌記錄也可能不安全，因此靜默處理異常
                 pass
+
+            # 清理 GPU 快取
+            try:
+                if getattr(self, "_device", None) == "cuda" and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+
+            # 紀錄
+            try:
+                if hasattr(self, "logger") and self.logger:
+                    self.logger.info("RerankerService 資源清理完成")
+            except Exception:
+                pass
+        except Exception:
+            # 清理階段任何例外都不應向外擴散
+            pass
 

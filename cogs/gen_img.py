@@ -96,15 +96,28 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                 response_text = response_text or ""
                 
                 if image_buffer:
+                    # 不回傳 discord.File，改回傳 base64 附件描述，讓上游統一合併發送
                     image_buffer.seek(0)
-                    file = discord.File(image_buffer, filename="generated_image.png")
+                    b64 = base64.b64encode(image_buffer.read()).decode("utf-8")
                     success_message = self.lang_manager.translate(
                         guild_id, "commands", "generate_image", "responses", "image_generated"
                     )
                     self._update_conversation_history(
-                        channel_id, "assistant", response_text.strip() or success_message, [image_buffer]
+                        channel_id, "assistant", (response_text or success_message).strip(), [image_buffer]
                     )
-                    return {"content": response_text, "file": file}
+                    payload = {
+                        "content": (response_text or "").strip() or success_message,
+                        "attachments": [
+                            {
+                                "type": "image",
+                                "filename": "generated_image.png",
+                                "mime_type": "image/png",
+                                "data_base64": b64,
+                                "caption": None
+                            }
+                        ]
+                    }
+                    return payload
                 elif response_text.strip():
                     self._update_conversation_history(channel_id, "assistant", response_text, None)
                     return {"content": response_text}
@@ -118,8 +131,18 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                 image_buffer = await self.generate_with_local_model(channel, prompt, guild_id=guild_id)
                 if image_buffer:
                     image_buffer.seek(0)
-                    file = discord.File(image_buffer, filename="generated_image.png")
-                    return {"file": file}
+                    b64 = base64.b64encode(image_buffer.read()).decode("utf-8")
+                    return {
+                        "attachments": [
+                            {
+                                "type": "image",
+                                "filename": "generated_image.png",
+                                "mime_type": "image/png",
+                                "data_base64": b64,
+                                "caption": None
+                            }
+                        ]
+                    }
 
             error_message = self.lang_manager.translate(
                 guild_id, "commands", "generate_image", "responses", "all_methods_failed"
@@ -161,10 +184,25 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
             channel=interaction.channel
         )
 
+        # Slash 指令仍沿用立即回覆，但改為支援 attachments（base64 → discord.File）
         if "error" in result:
             await interaction.followup.send(result["error"])
         else:
-            await interaction.followup.send(content=result.get("content"), file=result.get("file"))
+            files = []
+            attachments = result.get("attachments") or []
+            for att in attachments:
+                try:
+                    if att.get("type") == "image" and "data_base64" in att:
+                        data = base64.b64decode(att["data_base64"])
+                        fname = att.get("filename", "image.png")
+                        files.append(discord.File(io.BytesIO(data), filename=fname))
+                except Exception as e:
+                    print(f"Slash 回覆轉檔失敗: {e}")
+            content = result.get("content")
+            if files:
+                await interaction.followup.send(content=content, files=files)
+            else:
+                await interaction.followup.send(content=content)
 
     def _image_to_base64(self, image: Image.Image) -> str:
         """將 PIL Image 轉換為 base64 字符串"""

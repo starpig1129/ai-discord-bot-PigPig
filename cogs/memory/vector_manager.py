@@ -14,7 +14,7 @@ import time
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Set
 
 import faiss
 import numpy as np
@@ -317,6 +317,18 @@ class VectorIndex:
         self._gpu_fallback_warned = False  # GPU 降級警告標記
         self._needs_mapping_rebuild = False  # 標記是否需要重建映射
         self.logger = logging.getLogger(__name__)
+        # 統一的可重入狀態鎖，保護索引與映射之間的原子性
+        self._state_lock = threading.RLock()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
     
     def _create_index(self) -> faiss.Index:
         """建立 FAISS 索引
@@ -460,178 +472,174 @@ class VectorIndex:
             return 512  # 預設值
     
     def add_vectors(self, vectors: np.ndarray, ids: List[str], batch_size: int = 50) -> bool:
-        """新增向量到索引（支援批次處理）
-        
-        Args:
-            vectors: 向量陣列，形狀為 (n, dimension)
-            ids: 對應的 ID 列表
-            batch_size: 批次大小
-            
-        Returns:
-            bool: 是否成功
-        """
+        """新增向量到索引（支援批次處理），以統一鎖確保原子性。"""
         try:
             if len(vectors) != len(ids):
                 raise ValueError("向量數量與 ID 數量不符")
-            
-            # 轉換為 float32
             vectors = vectors.astype('float32')
-            
-            # 建立 ID 映射
-            new_vectors = []
-            new_ids = []
-            
-            for i, id_str in enumerate(ids):
-                if id_str not in self._reverse_id_map:
-                    faiss_id = self._next_id
+
+            with self._state_lock:
+                index = self.get_index()
+                ntotal_before = getattr(index, 'ntotal', -1)
+                self.logger.debug(f"add_vectors: 取得鎖，索引 ntotal(before)={ntotal_before}, 現有映射數={len(self._id_map)}")
+
+                # 準備暫存對應，不觸碰正式映射與 next_id
+                temp_pairs: List[Tuple[int, int]] = []  # (source_vec_idx, temp_faiss_id)
+                new_vectors_buf: List[np.ndarray] = []
+                new_faiss_ids: List[int] = []
+
+                temp_next_id = self._next_id
+                for i, id_str in enumerate(ids):
+                    if id_str in self._reverse_id_map:
+                        self.logger.debug(f"add_vectors: ID 已存在，跳過 id={id_str}")
+                        continue
+                    faiss_id = temp_next_id
+                    temp_next_id += 1
+                    temp_pairs.append((i, faiss_id))
+                    new_vectors_buf.append(vectors[i])
+                    new_faiss_ids.append(faiss_id)
+
+                if not new_vectors_buf:
+                    self.logger.debug("add_vectors: 無需新增，新向量數=0")
+                    return True
+
+                new_vectors_arr = np.array(new_vectors_buf, dtype='float32')
+
+                # 在鎖內決定本次寫入目標，並傳遞給批次寫入
+                write_target = 'gpu' if self._gpu_index is not None else 'cpu'
+                self.logger.debug(f"add_vectors: 決定寫入目標 write_target={write_target}，批次大小={batch_size}，待新增數量={len(new_vectors_arr)}")
+
+                # 先將向量寫入 FAISS 索引
+                success = self._add_vectors_batch(new_vectors_arr, new_faiss_ids, batch_size, write_target)
+                index = self.get_index()
+                ntotal_after_add = getattr(index, 'ntotal', -1)
+                self.logger.debug(f"add_vectors: 寫入 FAISS 完成，success={success}，ntotal(after_add)={ntotal_after_add}")
+
+                if not success:
+                    self.logger.warning("add_vectors: _add_vectors_batch 失敗，放棄映射更新以保持一致性")
+                    return False
+
+                # 僅在成功後一次性更新映射與 next_id
+                for (src_idx, faiss_id) in temp_pairs:
+                    id_str = ids[src_idx]
                     self._id_map[faiss_id] = id_str
                     self._reverse_id_map[id_str] = faiss_id
-                    self._next_id += 1
-                    new_vectors.append(vectors[i])
-                    new_ids.append(faiss_id)
-                else:
-                    # 已存在的向量，跳過
-                    self.logger.debug(f"向量 ID {id_str} 已存在，跳過")
-                    continue
-            
-            if not new_vectors:
+                self._next_id = temp_next_id
+
+                self.logger.debug(
+                    f"add_vectors: 更新映射完成，新增映射數={len(temp_pairs)}，"
+                    f"next_id={self._next_id}，映射總數={len(self._id_map)}，索引 ntotal={getattr(index, 'ntotal', -1)}"
+                )
                 return True
-            
-            new_vectors = np.array(new_vectors)
-            
-            # 批次處理新增向量
-            return self._add_vectors_batch(new_vectors, new_ids, batch_size)
-            
+
         except Exception as e:
             self.logger.error(f"新增向量失敗: {e}")
             return False
     
-    def _add_vectors_batch(self, vectors: np.ndarray, faiss_ids: List[int], batch_size: int) -> bool:
-        """批次新增向量到索引
-        
-        Args:
-            vectors: 向量陣列
-            faiss_ids: FAISS ID 列表
-            batch_size: 批次大小
-            
-        Returns:
-            bool: 是否成功
-        """
+    def _add_vectors_batch(self, vectors: np.ndarray, faiss_ids: List[int], batch_size: int, write_target: str) -> bool:
+        """批次新增向量到索引（遵循外部決策的寫入目標）。"""
         try:
             index = self.get_index()
             total_vectors = len(vectors)
-            
+
+            self.logger.debug(f"_add_vectors_batch: ntotal(before)={getattr(index, 'ntotal', -1)}, 批次總數={total_vectors}, 對應暫存ID數={len(faiss_ids)}，write_target={write_target}")
+
             for i in range(0, total_vectors, batch_size):
                 end_idx = min(i + batch_size, total_vectors)
                 batch_vectors = vectors[i:end_idx]
-                
-                # 檢查 GPU 記憶體（如果使用 GPU）
-                if (self._gpu_index is not None and
-                    self.gpu_memory_manager is not None):
-                    
-                    # 估算批次記憶體需求
-                    batch_memory_mb = (len(batch_vectors) * self.dimension * 4) // (1024 * 1024)
-                    
-                    if not self.gpu_memory_manager.is_memory_available(batch_memory_mb + 128):
-                        self.logger.warning(
-                            f"GPU 記憶體不足，批次 {i//batch_size + 1} 降級使用 CPU"
-                        )
-                        # 暫時降級到 CPU
-                        if self._index is not None:
-                            self._index.add(batch_vectors)
-                        else:
-                            self.logger.error("CPU 索引不可用")
-                            return False
-                    else:
-                        index.add(batch_vectors)
-                else:
+
+                # 嚴格依照寫入目標，避免動態切換導致的非原子性
+                if write_target == 'gpu':
+                    if self._gpu_index is None:
+                        self.logger.error("_add_vectors_batch: 預期 GPU 寫入但 _gpu_index 為 None")
+                        return False
                     index.add(batch_vectors)
-                
-                self.logger.debug(f"批次 {i//batch_size + 1}/{(total_vectors + batch_size - 1)//batch_size} 完成")
-                
-                # 定期清理記憶體
-                if (i + batch_size) % (batch_size * 4) == 0:  # 每 4 個批次清理一次
+                elif write_target == 'cpu':
+                    if self._index is None:
+                        self.logger.error("_add_vectors_batch: 預期 CPU 寫入但 _index 為 None")
+                        return False
+                    self._index.add(batch_vectors)
+                else:
+                    self.logger.error(f"_add_vectors_batch: 非法 write_target={write_target}")
+                    return False
+
+                self.logger.debug(f"_add_vectors_batch: 批次 {i//batch_size + 1}/{(total_vectors + batch_size - 1)//batch_size} 完成")
+
+                # 定期清理記憶體（避免長批次造成壓力）
+                if (i + batch_size) % (batch_size * 4) == 0:
                     gc.collect()
-            
-            self.logger.debug(f"成功新增 {total_vectors} 個向量到索引")
+
+            # 追加一次 ntotal 記錄
+            index_after = self.get_index()
+            self.logger.debug(f"_add_vectors_batch: ntotal(after)={getattr(index_after, 'ntotal', -1)} 成功新增 {total_vectors} 個向量到索引")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"批次新增向量失敗: {e}")
             return False
 
     def remove_vectors(self, ids: List[str]) -> int:
-        """
-        從索引中移除向量。
-
-        Args:
-            ids: 要移除的向量的真實 ID 列表。
-
-        Returns:
-            int: 成功移除的向量數量。
-        """
+        """從索引中移除向量，使用統一鎖確保與映射更新的原子性。"""
         if not ids:
             return 0
 
-        faiss_ids_to_remove = [self._reverse_id_map[id_str] for id_str in ids if id_str in self._reverse_id_map]
-
-        if not faiss_ids_to_remove:
-            return 0
-
         try:
-            index = self.get_index()
-            
-            # HNSW 不支援 remove_ids，需要特殊處理
-            if "HNSW" in self.index_type:
-                self.logger.warning(f"HNSW 索引不直接支援移除操作。將標記為已刪除，但空間不會立即釋放。建議定期重建索引。")
-                # 對於 HNSW，我們只能從映射中移除，讓它們無法被訪問
-                removed_count = 0
-                for id_str in ids:
-                    if id_str in self._reverse_id_map:
-                        faiss_id = self._reverse_id_map.pop(id_str)
-                        if faiss_id in self._id_map:
-                            self._id_map.pop(faiss_id)
-                        removed_count += 1
-                if removed_count > 0:
-                    self._needs_mapping_rebuild = True
-                return removed_count
+            with self._state_lock:
+                index = self.get_index()
+                ntotal_before = getattr(index, 'ntotal', -1)
 
-            # 對於支援 remove_ids 的索引
-            # 加鎖以確保與映射更新的原子性
-            if not hasattr(self, "_mapping_lock"):
-                self._mapping_lock = threading.Lock()
-            with self._mapping_lock:
-                removed_count = index.remove_ids(
-                    faiss.IDSelectorBatch(np.array(faiss_ids_to_remove, dtype=np.int64))
+                # 在鎖內先確定要移除的 FAISS ID 集合（精準且不可變）
+                faiss_ids_to_remove = [self._reverse_id_map[id_str] for id_str in ids if id_str in self._reverse_id_map]
+                if not faiss_ids_to_remove:
+                    self.logger.debug("remove_vectors: 取得鎖後無可移除 ID，直接返回 0")
+                    return 0
+
+                self.logger.debug(
+                    f"remove_vectors: 取得鎖，ntotal(before)={ntotal_before}，預計移除數={len(faiss_ids_to_remove)}"
                 )
 
-                if removed_count > 0:
-                    # 更新 ID 映射
-                    removed_from_maps = 0
-                    for id_str in ids:
-                        if id_str in self._reverse_id_map:
-                            faiss_id = self._reverse_id_map.pop(id_str)
-                            if faiss_id in self._id_map:
-                                self._id_map.pop(faiss_id, None)
-                            removed_from_maps += 1
+                # 將待移除的 FAISS ID 轉為 NumPy int64，符合 FAISS 綁定需求
+                ids_to_remove_np = np.asarray(faiss_ids_to_remove, dtype=np.int64)
+                if ids_to_remove_np.size == 0:
+                    self.logger.debug("remove_vectors: 轉換後無可移除 ID，返回 0")
+                    return 0
 
-                    # 標記需要重建映射（在大量刪除後可選擇重建）
-                    if removed_from_maps != removed_count:
-                        # 記錄不一致以便後續診斷
-                        self.logger.warning(
-                            f"FAISS 移除數量({removed_count})與映射移除數量({removed_from_maps})不一致，"
-                            "將標記為需要映射重建。"
-                        )
-                        self._needs_mapping_rebuild = True
+                # 執行移除操作（強制使用 IDSelectorArray，避免 dtype 與指標型別不匹配）
+                removed_count_before = getattr(index, 'ntotal', -1)
+                try:
+                    if hasattr(faiss, "IDSelectorArray"):
+                        selector = faiss.IDSelectorArray(int(ids_to_remove_np.size), faiss.swig_ptr(ids_to_remove_np))
+                        index.remove_ids(selector)
+                    else:
+                        # 後備路徑：直接用 int64 陣列
+                        index.remove_ids(ids_to_remove_np)
+                except Exception as e:
+                    self.logger.error(f"remove_vectors: remove_ids 失敗: {e}")
+                    return 0
 
-                    self.logger.debug(
-                        f"remove_vectors: 成功自 FAISS 移除 {removed_count} 個ID，"
-                        f"並自映射移除 {removed_from_maps} 個鍵。"
-                    )
-                else:
-                    self.logger.debug("remove_vectors: 沒有任何向量被 FAISS 移除。")
-            
-            return removed_count
+                removed_count_after = getattr(index, 'ntotal', -1)
+                actually_removed = max(0, removed_count_before - removed_count_after) if removed_count_before != -1 and removed_count_after != -1 else len(ids_to_remove_np)
+                self.logger.debug(f"remove_vectors: remove_ids 完成，實際移除數={actually_removed}")
+
+            # 移除操作已於鎖內完成；此處不再重複呼叫 remove_ids 以避免型別與狀態競爭問題
+            removed_count = len(faiss_ids_to_remove)
+
+            # 無論 removed_count 如何，都移除最初決定的映射
+            for id_str in ids:
+                if id_str in self._reverse_id_map:
+                    faiss_id = self._reverse_id_map.pop(id_str)
+                    self._id_map.pop(faiss_id, None)
+
+            if removed_count != len(faiss_ids_to_remove):
+                self.logger.warning(
+                    f"remove_vectors: remove_ids 實際移除 {removed_count} 與預期 {len(faiss_ids_to_remove)} 不符，標記需要重建映射"
+                )
+                self._needs_mapping_rebuild = True
+
+            ntotal_after = getattr(index, 'ntotal', -1)
+            self.logger.debug(f"remove_vectors: 完成，ntotal(after)={ntotal_after}，removed_count={removed_count}，映射剩餘={len(self._id_map)}")
+            return len(faiss_ids_to_remove)
+
         except Exception as e:
             self.logger.error(f"移除向量時發生錯誤: {e}")
             return 0

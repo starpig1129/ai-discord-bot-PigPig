@@ -491,9 +491,22 @@ async def generate_response(
                     trace_id=trace_id or "",
                 )
 
+            # 為避免在失敗嘗試時輸出任何 token 導致後續重試被「附加」拼接，
+            # 我們改為採用「延遲輸出」策略：在確認生成穩定前先暫存輸出，若立刻出錯則不對外輸出任何內容。
             gen = result
 
             async def unified_gen():
+                # 附帶診斷資訊以便追蹤來源
+                source_kind = "TextIteratorStreamer" if isinstance(gen, TextIteratorStreamer) else "async_gen"
+                logging.info(
+                    "unified_gen.start | provider=%s model=%s source=%s attempt=%d trace_id=%s gen_id=%s",
+                    mask_text(provider_name),
+                    mask_text(model_name),
+                    source_kind,
+                    attempt_counter["n"],
+                    mask_text(trace_id or ""),
+                    hex(id(gen)),
+                )
                 try:
                     if isinstance(gen, TextIteratorStreamer):
                         try:
@@ -507,6 +520,13 @@ async def generate_response(
                                 if chunk is None:
                                     break
                                 if chunk:
+                                    logging.debug(
+                                        "unified_gen.yield | provider=%s attempt=%d len=%d trace_id=%s",
+                                        mask_text(provider_name),
+                                        attempt_counter["n"],
+                                        len(chunk) if isinstance(chunk, str) else -1,
+                                        mask_text(trace_id or ""),
+                                    )
                                     yield chunk
                             except Exception as e:
                                 logging.error(f"迭代 TextIteratorStreamer 時發生錯誤: {str(e)}")
@@ -521,12 +541,19 @@ async def generate_response(
                     else:
                         async for chunk in gen:
                             if chunk:
+                                logging.debug(
+                                    "unified_gen.yield | provider=%s attempt=%d len=%d trace_id=%s",
+                                    mask_text(provider_name),
+                                    attempt_counter["n"],
+                                    len(chunk) if isinstance(chunk, str) else -1,
+                                    mask_text(trace_id or ""),
+                                )
                                 yield chunk
                 except LLMProviderError:
                     raise
                 except Exception as e:
                     logging.error(f"生成過程錯誤: {str(e)}")
-                    raise LLMProviderError(
+                    raise LLLMProviderError(
                         code="malformed_response",
                         retriable=False,
                         status=None,
@@ -538,6 +565,7 @@ async def generate_response(
             try:
                 gen_instance = unified_gen()
                 try:
+                    # 延遲輸出策略：先嘗試抓第一個與第二個片段，確保生成穩定後再一次性對外輸出
                     first_response = await anext(gen_instance)
                     if not first_response:
                         raise LLMProviderError(
@@ -549,8 +577,29 @@ async def generate_response(
                             trace_id=trace_id or "",
                         )
 
+                    # 嘗試抓第二個片段以確認生成器穩定性；若 StopAsyncIteration，表示單段輸出亦可視為成功
+                    second_response = None
+                    got_second = False
+                    try:
+                        second_response = await anext(gen_instance)
+                        got_second = second_response is not None
+                    except StopAsyncIteration:
+                        got_second = False
+
                     async def final_gen():
+                        # 僅在此處開始對外輸出，確保若稍早出錯不會遺留部分輸出
+                        logging.info(
+                            "final_gen.start | provider=%s attempt=%d trace_id=%s gen_id=%s",
+                            mask_text(provider_name),
+                            attempt_counter["n"],
+                            mask_text(trace_id or ""),
+                            hex(id(gen_instance)),
+                        )
+                        # 先 flush 暫存的 first / second
                         yield first_response
+                        if got_second and second_response:
+                            yield second_response
+                        # 再繼續輸出剩餘的生成內容
                         try:
                             async for item in gen_instance:
                                 if item:
@@ -558,9 +607,10 @@ async def generate_response(
                         except StopAsyncIteration:
                             return
 
-                    logging.info(f"成功使用 {model_name} 模型生成回應")
+                    logging.info(f"成功使用 {model_name} 模型生成回應（延遲輸出策略已啟用）")
                     return thread, final_gen()
                 except StopAsyncIteration:
+                    # 在尚未開始對外輸出前就結束，視為無有效回應，乾淨失敗，不會殘留輸出導致拼接
                     raise LLMProviderError(
                         code="malformed_response",
                         retriable=False,
@@ -570,11 +620,9 @@ async def generate_response(
                         trace_id=trace_id or "",
                     )
             except LLMProviderError as e:
+                # 任何在延遲輸出前的錯誤都不會對外輸出 token，避免下次嘗試時「附加」拼接
                 last_provider_err = e
                 _event_provider_fail(provider_name, e.code, e.retriable, e.status)
-                # provider 已嘗試且失敗，切換 failover
-                # 記錄 failover 目標（若有下一個）
-                # 這裡不提前知道下一個 provider 名稱，於下個迴圈開始時補打一筆 from -> to
                 continue
         except Exception as e:
             # 初始化或參數準備等非 LLMProviderError 的未知錯誤

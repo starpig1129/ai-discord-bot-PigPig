@@ -362,9 +362,13 @@ class PigPig(commands.Bot):
     async def close(self):
         """優雅關閉機器人和所有系統"""
         try:
-            # 關閉記憶系統
+            # 關閉記憶系統（先於 super().close()）
             if self.memory_manager:
-                await self.memory_manager.cleanup()
+                # 若提供 shutdown，優先使用以確保外部資源先被釋放
+                if hasattr(self.memory_manager, "shutdown"):
+                    await self.memory_manager.shutdown()
+                else:
+                    await self.memory_manager.cleanup()
                 print("記憶系統已優雅關閉")
             
             # 關閉優化系統

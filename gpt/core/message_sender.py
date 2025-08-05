@@ -19,7 +19,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import os
+import io
 import json
 import logging
 import opencc
@@ -27,7 +27,7 @@ import asyncio
 import re
 import datetime
 import discord
-import torch
+import base64
 from typing import Optional, List, Dict, Any
 
 from gpt.core.response_generator import generate_response, is_model_available
@@ -832,8 +832,30 @@ async def gpt_message(
                 ROLLOVER_THRESHOLD = 1900
                 HARD_LIMIT = 2000
 
-                # 需要 rollover：先確保前一段編輯完成，再建立新段
-                if len(pending_all) > ROLLOVER_THRESHOLD:
+                # 僅在確實需要時才建立新訊息，避免多重發送新訊息造成過早分割
+                # 先預估本次若繼續在同一訊息內累積後的實際內容長度
+                HARD_LIMIT = 2000
+                candidate_all = responsesall + responses
+                cleaned_candidate = candidate_all.replace('<|eot_id|>', "")
+                if message and message.guild:
+                    bot = message.guild.me._state._get_client()
+                    if lang_manager := bot.get_cog("LanguageManager"):
+                        guild_id = str(message.guild.id)
+                        lang = lang_manager.get_server_lang(guild_id)
+                        converter = get_converter(lang)
+                        if converter:
+                            converted_candidate = converter.convert(cleaned_candidate)
+                        else:
+                            converted_candidate = cleaned_candidate
+                    else:
+                        converted_candidate = cleaned_candidate
+                else:
+                    converted_candidate = cleaned_candidate
+
+                # 僅當在同一訊息內的內容確實超過 Discord 上限時，才建立新訊息區塊
+                if len(converted_candidate) > HARD_LIMIT:
+                    from gpt.utils.discord_utils import safe_create_next_block
+                    from gpt.core.retry_controller import RetryController
                     # 取得多語言提示
                     processing_message = "繼續輸出中..."
                     if message and message.guild:
@@ -843,13 +865,6 @@ async def gpt_message(
                             processing_message = lang_manager.translate(
                                 guild_id, "system", "chat_bot", "responses", "processing"
                             )
-
-                    # 等待上一段的編輯完成（current_message 的最後一次編輯）
-                    # 此段程式目前每次都 await edit，已天然序列化；這裡保留語意說明
-
-                    # 建立新段，並更新 current_message
-                    from gpt.utils.discord_utils import safe_create_next_block
-                    from gpt.core.retry_controller import RetryController
                     retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
                     new_chunk_message = await safe_create_next_block(
                         channel=channel,
@@ -859,9 +874,26 @@ async def gpt_message(
                         retry=retry,
                     )
                     current_message = new_chunk_message
+                    # 針對新訊息重新開始累積，避免多重新訊息
                     responsesall = ""
+                    # 重新計算第一段內容（以本輪 responses 為起點）
+                    cleaned_candidate = responses.replace('<|eot_id|>', "")
+                    if message and message.guild:
+                        bot = message.guild.me._state._get_client()
+                        if (lang_manager := bot.get_cog("LanguageManager")):
+                            guild_id = str(message.guild.id)
+                            lang = lang_manager.get_server_lang(guild_id)
+                            converter = get_converter(lang)
+                            if converter:
+                                converted_candidate = converter.convert(cleaned_candidate)
+                            else:
+                                converted_candidate = cleaned_candidate
+                        else:
+                            converted_candidate = cleaned_candidate
+                    else:
+                        converted_candidate = cleaned_candidate
 
-                # 累積並轉換
+                # 累積並轉換（保持單一訊息優先）
                 responsesall += responses
                 cleaned_response = responsesall.replace('<|eot_id|>', "")
                 if message and message.guild:
@@ -879,7 +911,7 @@ async def gpt_message(
                 else:
                     converted_response = cleaned_response
 
-                # 確保不超出硬上限（保守切割）
+                # 理論上不會超出，保留最後防護
                 if len(converted_response) > HARD_LIMIT:
                     converted_response = converted_response[:HARD_LIMIT]
 
@@ -907,42 +939,93 @@ async def gpt_message(
         try:
             if responses:  # 如果還有未處理的回應
                 responsesall += responses
-                cleaned_response = responsesall.replace('<|eot_id|>', "")
-                # 根據伺服器語言選擇轉換器
-                if message and message.guild:
-                    bot = message.guild.me._state._get_client()
-                    if lang_manager := bot.get_cog("LanguageManager"):
-                        guild_id = str(message.guild.id)
-                        lang = lang_manager.get_server_lang(guild_id)
-                        converter = get_converter(lang)
-                        if converter:
-                            converted_response = converter.convert(cleaned_response)
-                        else:
-                            converted_response = cleaned_response
+            cleaned_response = responsesall.replace('<|eot_id|>', "")
+            # 根據伺服器語言選擇轉換器
+            if message and message.guild:
+                bot = message.guild.me._state._get_client()
+                if lang_manager := bot.get_cog("LanguageManager"):
+                    guild_id = str(message.guild.id)
+                    lang = lang_manager.get_server_lang(guild_id)
+                    converter = get_converter(lang)
+                    if converter:
+                        converted_response = converter.convert(cleaned_response)
                     else:
                         converted_response = cleaned_response
                 else:
                     converted_response = cleaned_response
-                
-                # 編輯最後一則訊息（序列化，並統一走 safe_*）
+            else:
+                converted_response = cleaned_response
+
+            # 解析工具附件以合併同訊息發送
+            files_to_send = []
+            attachments_found = 0
+
+            def _extract_attachments_from_function_blob(blob_text: str):
+                nonlocal files_to_send, attachments_found
+                if not blob_text:
+                    return
+                # 嘗試解析多個 JSON 區塊
+                # 先粗略抓出可能的 JSON 區塊，避免把整段當成單一 JSON
+                for match in re.finditer(r'\{[\s\S]*?\}', blob_text):
+                    seg = match.group(0)
+                    try:
+                        data = json.loads(seg)
+                    except Exception:
+                        continue
+                    items = data if isinstance(data, list) else [data]
+                    for it in items:
+                        if not isinstance(it, dict):
+                            continue
+                        out = it.get("output")
+                        if not out:
+                            continue
+                        payload = out if isinstance(out, dict) else {}
+                        attach_list = payload.get("attachments") if isinstance(payload, dict) else None
+                        if not isinstance(attach_list, list):
+                            continue
+                        for att in attach_list:
+                            try:
+                                if isinstance(att, dict) and att.get("type") == "image" and "data_base64" in att:
+                                    raw = att["data_base64"]
+                                    data_bytes = base64.b64decode(raw)
+                                    fname = att.get("filename", "image.png")
+                                    files_to_send.append(discord.File(io.BytesIO(data_bytes), filename=fname))
+                                    attachments_found += 1
+                            except Exception as fe:
+                                logging.warning(f"附件轉檔失敗: {fe}")
+
+            # 嘗試從 responsesall 與 responses 中解析 function 報告（若保留於文字中）
+            try:
+                _extract_attachments_from_function_blob(responsesall)
+                _extract_attachments_from_function_blob(responses)
+            except Exception as parse_err:
+                logging.debug(f"解析工具附件時發生例外（可忽略，僅影響附件合併）: {parse_err}")
+
+            # 最終一次性發送：若有附件，與主文字同一則訊息送出
+            from gpt.utils.discord_utils import safe_send
+            from gpt.core.retry_controller import RetryController
+            retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
+            if files_to_send:
+                logging.info(f"合併發送文字與圖片附件 | files={len(files_to_send)}")
+                await safe_send(channel, converted_response, files=files_to_send, trace_id="final_send_with_files", retry=retry)
+            else:
+                # 如果沒有附件，沿用原本最後編輯邏輯，盡可能不打擾歷史訊息的外觀
                 from gpt.utils.discord_utils import safe_edit, safe_send
-                from gpt.core.retry_controller import RetryController
-                retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
                 try:
                     await safe_edit(current_message, converted_response, trace_id="final_edit", retry=retry)
                 except discord.errors.NotFound:
                     logging.warning(f"最終訊息 {getattr(current_message,'id',None)} 在編輯時找不到，將作為新訊息發送。")
                     await safe_send(channel, converted_response, trace_id="final_send_fallback", retry=retry)
-                
-                # 檢查是否需要發送GIF
-                gif_tasks = await process_tenor_tags(converted_response, channel)
-                if gif_tasks:
-                    for task in gif_tasks:
-                        await task
-        
+
+            # 檢查是否需要發送GIF（保持行為）
+            gif_tasks = await process_tenor_tags(converted_response, channel)
+            if gif_tasks:
+                for task in gif_tasks:
+                    await task
+
         except Exception as cleanup_error:
             logging.warning(f"處理剩餘回應時發生錯誤: {cleanup_error}")
-        
+
         return message_result.replace("<|eot_id|>", "")
         
     except Exception as e:

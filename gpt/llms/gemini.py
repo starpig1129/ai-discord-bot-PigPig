@@ -14,6 +14,10 @@ from addons.settings import TOKENS
 from gpt.utils.media import image_to_base64
 from gpt.caching.gemini_cache import GeminiCacheManager
 from gpt.core.exceptions import LLMProviderError  # PR#2: 統一錯誤類導入
+
+# Sentinel for safely terminating async iteration from executor threads
+_SENTINEL = object()
+
 # Initialize the Gemini model
 tokens = TOKENS()
 
@@ -730,23 +734,35 @@ async def generate_response(inst: str,
                 try:
                     accumulated_text = ""
                     chunk_count = 0
-                    
+
                     try:
-                        for chunk in response_object:
+                        # 使用執行緒執行阻塞的同步迭代，以免阻塞 asyncio 事件迴圈
+                        loop = asyncio.get_running_loop()
+                        sync_iterator = iter(response_object)
+
+                        # 在本地定義同步輔助函式以捕獲 StopIteration 並返回哨兵值
+                        def _sync_next_chunk(iterator):
+                            try:
+                                return next(iterator)
+                            except StopIteration:
+                                return _SENTINEL
+
+                        while True:
+                            chunk = await loop.run_in_executor(None, _sync_next_chunk, sync_iterator)
+                            if chunk is _SENTINEL:
+                                break
+
                             chunk_count += 1
                             if chunk and hasattr(chunk, 'text') and chunk.text:
                                 chunk_text = chunk.text.strip()
                                 if chunk_text:
                                     accumulated_text += chunk_text
                                     yield chunk_text
-                                    await asyncio.sleep(0.01)
                             elif chunk is None:
                                 break
-                    except StopIteration:
-                        pass
                     except Exception as stream_error:
                         error_message = str(stream_error)
-                        
+
                         if "Response not read" in error_message or "400 Bad Request" in error_message:
                             if accumulated_text:
                                 yield accumulated_text
@@ -778,7 +794,7 @@ async def generate_response(inst: str,
                                             contents=contents,
                                             config=fallback_config
                                         )
-                                    
+
                                     if fallback_response and fallback_response.text:
                                         yield fallback_response.text
                                         return
@@ -786,7 +802,7 @@ async def generate_response(inst: str,
                                         raise GeminiError(f"Gemini API 流式和非流式回應都失敗: {error_message}")
                                 except Exception as fallback_error:
                                     raise GeminiError(f"Gemini API 降級處理失敗: {fallback_error}")
-                        
+
                         elif "RESOURCE_PROJECT_INVALID" in error_message:
                             raise GeminiError(f"Gemini API 項目設定錯誤: {error_message}")
                         elif "PERMISSION_DENIED" in error_message:
@@ -799,10 +815,10 @@ async def generate_response(inst: str,
                                 return
                             else:
                                 raise GeminiError(f"Gemini API 錯誤: {error_message}")
-                    
+
                     if not accumulated_text:
                         raise GeminiError("Gemini API 沒有生成任何回應內容")
-                        
+
                 except Exception as e:
                     logger.error(f"在流式生成過程中發生錯誤: {e}")
                     raise GeminiError(f"流式生成失敗: {e}") from e

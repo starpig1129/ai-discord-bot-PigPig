@@ -1282,8 +1282,53 @@ class MemoryManager:
                 except Exception as e:
                     self.logger.error(f"GPU 記憶體清理失敗: {e}")
             
+            # 清理由 RerankerService 佔用的資源
+            try:
+                if self.reranker_service and hasattr(self.reranker_service, "cleanup"):
+                    self.reranker_service.cleanup()
+                    self.logger.debug("RerankerService 清理完成")
+            except Exception as e:
+                self.logger.error(f"RerankerService 清理失敗: {e}")
+            
+            # 清理由 EmbeddingService 佔用的資源（若提供 cleanup）
+            try:
+                if self.embedding_service and hasattr(self.embedding_service, "cleanup"):
+                    if asyncio.iscoroutinefunction(self.embedding_service.cleanup):
+                        await self.embedding_service.cleanup()
+                    else:
+                        self.embedding_service.cleanup()
+                    self.logger.debug("EmbeddingService 清理完成")
+            except Exception as e:
+                self.logger.error(f"EmbeddingService 清理失敗: {e}")
+            
             self._initialized = False
             self.logger.info("記憶體系統清理完成")
             
         except Exception as e:
             self.logger.error(f"記憶體清理時發生嚴重錯誤: {e}")
+    
+    async def shutdown(self) -> None:
+        """優雅關閉 MemoryManager，集中釋放所有下游資源。"""
+        try:
+            # 先處理 reranker/embedding 等持有外部模組與 GPU 記憶體的服務
+            try:
+                if self.reranker_service and hasattr(self.reranker_service, "cleanup"):
+                    self.reranker_service.cleanup()
+                    self.logger.debug("RerankerService 在 shutdown 中清理完成")
+            except Exception as e:
+                self.logger.error(f"RerankerService 在 shutdown 清理失敗: {e}")
+            
+            try:
+                if self.embedding_service and hasattr(self.embedding_service, "cleanup"):
+                    if asyncio.iscoroutinefunction(self.embedding_service.cleanup):
+                        await self.embedding_service.cleanup()
+                    else:
+                        self.embedding_service.cleanup()
+                    self.logger.debug("EmbeddingService 在 shutdown 中清理完成")
+            except Exception as e:
+                self.logger.error(f"EmbeddingService 在 shutdown 清理失敗: {e}")
+            
+            # 再呼叫既有的 cleanup 流程以釋放其餘資源
+            await self.cleanup()
+        except Exception as e:
+            self.logger.error(f"MemoryManager.shutdown 發生錯誤: {e}")

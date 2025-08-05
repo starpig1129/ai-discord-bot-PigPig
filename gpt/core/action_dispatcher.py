@@ -484,45 +484,62 @@ Based on the user's request and the available tools, select the appropriate tool
     def _format_tool_results_summary(self, tool_results: List[Dict]) -> Dict[str, Any]:
         """
         將工具執行結果格式化為易於 LLM 理解的 Markdown 摘要。
+        嚴格解析與保護：任何單筆解析失敗都僅標示該筆為「解析失敗」，不覆蓋其他成功結果。
         """
-        success_reports = []
-        failure_reports = []
+        success_reports: List[str] = []
+        failure_reports: List[str] = []
 
-        for result in tool_results:
+        for idx, result in enumerate(tool_results):
+            raw_content = result.get("content", "")
+            raw_name = result.get("name", "")
             try:
-                # 內容是 JSON 字串，需要解析
-                content_data = json.loads(result.get("content", "[]"))
-                # 處理單一和多個工具報告的情況
-                if isinstance(content_data, dict):
-                    reports = [content_data]
-                else:
-                    reports = content_data
-                
-                for report in reports:
-                    tool_name = report.get("tool_name")
-                    status = report.get("status")
-                    output = report.get("output")
+                content_data = json.loads(raw_content) if isinstance(raw_content, str) and raw_content else []
+                # 正規化為 list[dict]
+                reports = content_data if isinstance(content_data, list) else [content_data]
+                normalized_reports: List[Dict[str, Any]] = []
+                for rep in reports:
+                    if not isinstance(rep, dict):
+                        continue
+                    tool_name = rep.get("tool_name", raw_name or "unknown_tool")
+                    status = rep.get("status", "failure")
+                    output = rep.get("output", None)
 
                     if status == "success":
-                        success_reports.append(f"- `{tool_name}`: {output}")
+                        preview = str(output)[:200]
+                        success_reports.append(f"- `{tool_name}`: {preview}")
                     else:
-                        error_message = output.get('error_message', '未知錯誤')
-                        failure_reports.append(f"- `{tool_name}`: 錯誤 - `{error_message}`")
-            except (json.JSONDecodeError, AttributeError) as e:
-                logging.error(f"解析工具結果時出錯: {e}\n原始結果: {result}")
-                failure_reports.append(f"- `unknown_tool`: 解析結果時發生錯誤。")
+                        # 失敗結構標準化
+                        err_msg = ""
+                        if isinstance(output, dict):
+                            err_msg = str(output.get("error_message", "未知錯誤"))
+                        else:
+                            err_msg = "未知錯誤"
+                        failure_reports.append(f"- `{tool_name}`: 錯誤 - `{err_msg}`")
+                # 觀測性：記錄每則工具結果的摘要
+                logging.info(
+                    "tool_summary_item | idx=%d name=%s parsed=%s",
+                    idx, raw_name, "ok"
+                )
+            except json.JSONDecodeError as e:
+                logging.error("tool_summary_parse_error | idx=%d name=%s err=%s preview=%s",
+                              idx, raw_name, str(e), str(raw_content)[:200])
+                failure_reports.append(f"- `{raw_name or 'unknown_tool'}`: 解析結果時發生錯誤。")
+            except Exception as e:
+                logging.error("tool_summary_unexpected_error | idx=%d name=%s err=%s preview=%s",
+                              idx, raw_name, str(e), str(raw_content)[:200])
+                failure_reports.append(f"- `{raw_name or 'unknown_tool'}`: 解析結果處理時發生未知錯誤。")
 
-        summary_parts = ["### 工具執行摘要"]
+        summary_parts: List[str] = ["### 工具執行摘要"]
         if success_reports:
             summary_parts.append("\n**✅ 成功執行的工具:**")
             summary_parts.extend(success_reports)
-        
+
         if failure_reports:
             summary_parts.append("\n**❌ 失敗的工具:**")
             summary_parts.extend(failure_reports)
 
         final_summary = "\n".join(summary_parts)
-        
+
         return {
             "role": "function",
             "name": "tool_execution_summary",
