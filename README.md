@@ -1,8 +1,6 @@
 # PigPig: Advanced Multi-modal LLM Discord Bot
 
-<p align="center">
-  <a href="README.md">English</a> | <a href="README_zh-TW.md">繁體中文</a>
-</p>
+English | [繁體中文](README_zh-TW.md)
 
 <p align="center">
   <a href="https://discord.gg/BvP64mqKzR">
@@ -10,173 +8,106 @@
   </a>
 </p>
 
-PigPig is a powerful Discord bot based on multi-modal Large Language Models (LLM), designed to interact with users through natural language. It combines advanced AI capabilities with practical features, offering a rich experience for Discord communities.
+## Introduction
 
-[Invite PigPig to your server](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot)
+PigPig is a powerful, multi-modal Discord bot powered by Large Language Models (LLMs). It's designed to interact with users through natural language, combining advanced AI capabilities with practical, fun features to enrich any Discord community.
+
+[**Invite PigPig to your server!**](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot)
 
 ## 🌟 Key Features
 
-- 🧠 **AI-Powered Conversations**: Utilizes LLMs and LangChain for natural language understanding and generation.
-- 🖼️ **Multi-modal Capabilities**: Visual question answering and image generation.
-- 🍽️ **Practical Features**: Set reminders, get recommendations, and perform calculations.
-- 👤 **User Information Management**: Create and maintain user profiles.
-- 📊 **Channel Data RAG**: Use channel history for context-aware responses.
-- 🧠 **Intelligent Channel Memory System**: Permanently stores and intelligently retrieves channel conversation history, providing semantic search and context enhancement
-- 💭 **Chain of Thought Reasoning**: Employs Chain of Thought reasoning to provide detailed, step-by-step explanations of its thought process, enhancing transparency and understanding.  This feature allows the bot to break down complex problems into smaller, manageable steps, providing a more comprehensive and insightful response.
-- 🔄 **Auto-Update System**: Automatically checks for and downloads GitHub updates with secure backup and rollback mechanisms.
-
-
-## 🖥️ System Requirements
-
-### Essential Dependencies
-- [Python 3.10+](https://www.python.org/downloads/)
-- [MongoDB](https://www.mongodb.com/) (for user data and restaurant recommendation features)
-- [FFmpeg](https://ffmpeg.org/) (for music playback functionality)
-- [Modules in requirements](requirements.txt)
-
-### Hardware Requirements
-- **GPU (Optional)**: NVIDIA GPU with at least 12GB VRAM (recommended for local model inference)
-- **Note**: The bot prioritizes API services over local models, making GPU optional for most use cases
+*   🧠 **AI-Powered Conversations**: Utilizes advanced LLMs for natural language understanding and generation.
+*   🖼️ **Multi-modal Capabilities**: Supports visual question answering (VQA) and AI image generation.
+*   🎵 **Music Playback**: Plays music from YouTube with queue and playlist management.
+*   🧠 **Intelligent Channel Memory**: Permanently stores and intelligently retrieves conversation history with semantic search to provide enhanced context for responses.
+*   🔄 **Auto-Update System**: Automatically checks for and applies GitHub updates with secure backups and rollback functionality.
+*   🍽️ **Practical Tools**: Set reminders, get restaurant recommendations, perform calculations, and more.
+*   💭 **Chain of Thought Reasoning**: Provides detailed, step-by-step explanations of its thought process for enhanced transparency.
 
 ## 📸 Feature Showcase
-### Discord Bot
 
 ![alt text](readmeimg/image-4.png)
-
 ![alt text](readmeimg/image.png)
-
 ![alt text](readmeimg/image-1.png)
-
 ![alt text](readmeimg/image-2.png)
-
 ![alt text](readmeimg/image-3.png)
 
-## 🚀 Quick Start
+## 🚀 Getting Started
+
+### System Requirements
+
+*   **Essential Dependencies:**
+    *   [Python 3.10+](https://www.python.org/downloads/)
+    *   [MongoDB](https://www.mongodb.com/) (For user data and certain features)
+    *   [FFmpeg](https://ffmpeg.org/) (For music playback)
+    *   Python packages listed in [`requirements.txt`](./requirements.txt)
+*   **Hardware Requirements:**
+    *   **GPU (Optional)**: An NVIDIA GPU with at least 12GB VRAM is recommended for running local models. The bot prioritizes API services, so a GPU is not required for most features.
+
+### Installation Steps
+
+```bash
+# Clone the repository
+git clone https://github.com/starpig1129/discord-LLM-bot-PigPig.git
+
+# Navigate to the project directory
+cd discord-LLM-bot-PigPig
+
+# Install required Python packages
+pip install -r requirements.txt
 ```
-
-### FFmpeg Configuration
-
-The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
-
-| Setting | Description |
-| --- | --- |
-| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
-| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
-| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
-| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
-| `ffmpeg.http_headers` | HTTP headers for download requests |
-
-These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.sh
-git clone https://github.com/starpig1129/discord-LLM-bot-PigPig.git  #Clone the repository
-cd discord-LLM-bot-PigPig                                        #Go to the directory
-python -m pip install -r requirements.txt          #Install required packages
-```
-
-### FFmpeg Configuration
-
-The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
-
-| Setting | Description |
-| --- | --- |
-| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
-| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
-| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
-| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
-| `ffmpeg.http_headers` | HTTP headers for download requests |
-
-These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.
-
-Start your bot with `python main.py`
 
 ## ⚙️ Configuration
-1. **Rename `.env Example` to `.env` and fill all the values**
+
+Follow these steps to configure your bot instance.
+
+### Step 1: Configure `.env` file
+
+Rename the `.env Example` file to `.env` and fill in the required values.
+
+```env
+# .env
+
+# --- Discord Bot Credentials ---
+TOKEN=XXXXXXXXXXXXXXXXXXXXXXXX.XXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXX
+CLIENT_ID=123456789012345678
+CLIENT_SECRET_ID=XXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXX
+SERCET_KEY=DASHBOARD_SERCET_KEY
+
+# --- Bot Configuration ---
+BOT_OWNER_ID=123456789012345678
+BUG_REPORT_CHANNEL_ID=123456789012345678
+
+# --- AI Model Configuration ---
+MODEL_NAME=openbmb/MiniCPM-o-2_6
+ANTHROPIC_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+OPENAI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+GEMINI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
-### FFmpeg Configuration
+| Variable              | Description                                                                                                |
+| --------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `TOKEN`               | **(Required)** Your Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications). |
+| `CLIENT_ID`           | **(Required)** Your bot's client ID from the Developer Portal.                                             |
+| `CLIENT_SECRET_ID`    | *(Optional)* Your bot's client secret, used for specific API interactions.                                 |
+| `SERCET_KEY`          | *(Optional)* A secret key for dashboard authentication.                                                    |
+| `BOT_OWNER_ID`        | **(Required)** Your Discord User ID. Grants owner-level privileges and is required for the auto-update system. |
+| `BUG_REPORT_CHANNEL_ID` | *(Optional)* A Discord channel ID where error messages and bug reports will be sent.                       |
+| `MODEL_NAME`          | The default local multi-modal model to use.                                                                |
+| `ANTHROPIC_API_KEY`   | *(Optional)* Your API key for Anthropic's Claude models.                                                   |
+| `OPENAI_API_KEY`      | *(Optional)* Your API key for OpenAI's GPT models.                                                         |
+| `GEMINI_API_KEY`      | *(Optional)* Your API key for Google's Gemini models.                                                      |
 
-The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
+### Step 2: Configure `settings.json` file
 
-| Setting | Description |
-| --- | --- |
-| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
-| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
-| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
-| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
-| `ffmpeg.http_headers` | HTTP headers for download requests |
+If a `settingsExample.json` file exists, rename it to `settings.json`. Otherwise, create it. This file controls the bot's behavior, features, and other operational parameters. Do not change the key names.
 
-These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.sh
-TOKEN = XXXXXXXXXXXXXXXXXXXXXXXX.XXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXX
-CLIENT_ID = 123456789012345678
-CLIENT_SECRET_ID = XXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXX
-SERCET_KEY = DASHBOARD_SERCET_KEY
-
-BUG_REPORT_CHANNEL_ID = 123456789012345678
-
-LLM_MODEL_NAME = shenzhi-wang/Llama3-8B-Chinese-Chat
-VQA_MODEL_NAME = openbmb/MiniCPM-Llama3-V-2_5-int4
-ANTHROPIC_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-OPENAI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-GEMINI_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
-# Bot Owner ID (for auto-update system and admin operations)
-BOT_OWNER_ID = 123456789012345678
-
-# MongoDB Configuration (required for user data and restaurant features)
-MONGODB_URI = mongodb://localhost:27017/pigpig
-```
-
-### FFmpeg Configuration
-
-The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
-
-| Setting | Description |
-| --- | --- |
-| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
-| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
-| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
-| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
-| `ffmpeg.http_headers` | HTTP headers for download requests |
-
-These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.
-| Values | Description |
-| --- | --- |
-| TOKEN | Your Discord bot token [(Discord Portal)](https://discord.com/developers/applications) |
-| CLIENT_ID | Your Discord bot client id [(Discord Portal)](https://discord.com/developers/applications) |
-| CLIENT_SECRET_ID | Your Discord bot client secret id [(Discord Portal)](https://discord.com/developers/applications) ***(optional)*** |
-| SERCET_KEY | Secret key for dashboard ***(optional)*** |
-| BUG_REPORT_CHANNEL_ID | All the error messages will send to this text channel ***(optional)*** |
-| ANTHROPIC_API_KEY | Your Anthropic api key [(Anthropic API)](https://www.anthropic.com/api) ***(optional)*** |
-| OPENAI_API_KEY | Your OpenAI api key [(OpenAI API)](https://openai.com/api/) ***(optional)*** |
-| GEMINI_API_KEY | Your GEMINI API key [(GEMINI API)](https://aistudio.google.com/app/apikey/) ***(optional)*** |
-| BOT_OWNER_ID | Your Discord User ID for bot owner privileges and auto-update system ***(required for auto-update)*** |
-| MONGODB_URI | MongoDB connection string for user data storage ***(required for user data and restaurant features)*** |
-2. **Rename `settingsExample.json` to `settings.json` and customize your settings**
-***(Note: Do not change any keys from `settings.json`)***
-```
-
-### FFmpeg Configuration
-
-The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
-
-| Setting | Description |
-| --- | --- |
-| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
-| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
-| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
-| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
-| `ffmpeg.http_headers` | HTTP headers for download requests |
-
-These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.json
+```json
 {
     "prefix": "/",
     "activity": [
         {
-            "paly": "\u5b78\u7fd2\u8aaa\u8a71"
+            "paly": "學習說話"
         }
     ],
     "ipc_server": {
@@ -207,7 +138,7 @@ These settings allow you to customize the music download and processing behavior
     },
     "restart": {
         "graceful_shutdown_timeout": 30,
-        "restart_command": "python main.py",
+        "restart_command": "python bot.py",
         "pre_restart_delay": 5
     },
     "github": {
@@ -217,109 +148,136 @@ These settings allow you to customize the music download and processing behavior
     },
     "ffmpeg": {
         "location": "/usr/bin/ffmpeg",
-        "audio_quality": "192",
-        "audio_codec": "mp3",
-        "postprocessor_args": {
-            "threads": 2,
-            "loglevel": "warning",
-            "overwrite_output": true,
-            "max_muxing_queue_size": 2048,
-            "analyzeduration": "20M",
-            "probesize": "20M",
-            "reconnect": true,
-            "reconnect_streamed": true,
-            "reconnect_delay_max": 30,
-            "timeout": 30000000,
-            "rw_timeout": 30000000
-        },
-        "ytdlp_options": {
-            "socket_timeout": 300,
-            "retries": 10,
-            "concurrent_fragment_downloads": 1,
-            "file_access_retries": 5,
-            "fragment_retries": 10,
-            "retry_sleep_http": 5
-        },
-        "http_headers": {
-            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "accept_language": "en-us,en;q=0.5",
-            "sec_fetch_mode": "navigate"
-        }
+        "audio_quality": "192"
     }
 }
 ```
 
-### FFmpeg Configuration
+### Step 3: Start the Bot
 
-The bot now supports configurable FFmpeg settings through the `settings.json` file. Key configuration options include:
+Once configured, you can start the bot with the following command:
 
-| Setting | Description |
-| --- | --- |
-| `ffmpeg.location` | Path to FFmpeg executable (default: `/usr/bin/ffmpeg`) |
-| `ffmpeg.audio_quality` | Audio quality for music downloads (default: `192` kbps) |
-| `ffmpeg.audio_codec` | Audio codec for conversion (default: `mp3`) |
-| `ffmpeg.postprocessor_args` | FFmpeg postprocessor arguments for optimization |
-| `ffmpeg.ytdlp_options` | yt-dlp specific options for download behavior |
-| `ffmpeg.http_headers` | HTTP headers for download requests |
+```bash
+python main.py
+```
 
-These settings allow you to customize the music download and processing behavior according to your system requirements and preferences.
+## 📦 Features / Cogs Overview
 
-## 🧠 Memory System Configuration
+The bot's functionality is divided into modules called "Cogs". Here are the key features available:
 
-The bot includes an intelligent channel memory system that provides permanent conversation storage and semantic search capabilities. Key features include:
+---
 
-### Memory System Features
-- **Permanent Storage**: All channel conversations are automatically stored in a local SQLite database
-- **Semantic Search**: Advanced vector-based search using sentence transformers for meaningful context retrieval
-- **Multilingual Support**: Works with multiple languages including English, Chinese, Japanese, and more
-- **Hybrid Search**: Combines keyword and semantic search for optimal results
-- **Context Enhancement**: Automatically provides relevant conversation history to improve AI responses
+### 🧠 Memory System
+*   **Description:** Manages long-term conversation memory, enabling the bot to recall past interactions. It uses semantic search to find the most relevant context.
+*   **Key Commands:** `/memory_search`, `/memory_stats`, `/memory_config`
+*   **[Full Documentation](./docs/cogs/memory/index.md)**
 
-### Memory System Commands
-- `/memory_search <query>`: Search through conversation history using semantic search
-- `/memory_stats`: View memory system statistics and storage information
-- `/memory_config`: Manage memory system configuration settings
+---
 
-### Hardware Requirements for Memory System
-- **CPU**: Standard CPU sufficient for basic operations
-- **RAM**: Minimum 4GB recommended for vector operations
-- **Storage**: Local storage for SQLite database and vector indices
-- **Optional GPU**: NVIDIA GPU can accelerate vector computations (install `faiss-gpu` instead of `faiss-cpu`)
+### 🎵 Music
+*   **Description:** Provides full music playback from YouTube, supporting song requests, queue management, playlists, and various playback modes.
+*   **Key Commands:** `/play`, `/mode`, `/shuffle`
+*   **[Full Documentation](./docs/cogs/music_lib/index.md)**
 
-### Memory System Dependencies
-The memory system uses the following key dependencies (automatically installed with requirements.txt):
-- `faiss-cpu>=1.7.4`: Vector similarity search engine
-- `sentence-transformers>=2.2.2`: Multilingual sentence embeddings
-- `scikit-learn>=1.0.0`: Machine learning utilities for similarity calculations
-- `psutil>=5.9.8`: System monitoring for performance optimization
-For detailed setup and usage instructions, see the [Memory System Quick Start Guide](docs/memory_system_quick_start_guide.md).
+---
 
-## Cogs Overview
+### 📖 Story Manager
+*   **Description:** Facilitates interactive, collaborative storytelling using a multi-agent AI architecture to create dynamic narratives guided by user actions.
+*   **Key Commands:** `/story`
+*   **[Full Documentation](./docs/cogs/story/index.md)**
 
-This bot utilizes a modular design with several cogs (modules) to handle different functionalities. Here's a brief overview:
+---
 
-- **CoT_AI:** Implements Chain of Thought reasoning for detailed, step-by-step responses.
-- **Channel Manager:** Manages channel-specific settings and permissions.
-- **Discord Manager Agent:** Handles Discord-specific management operations and automation.
-- **Image Generation:** Generates images based on text prompts.
-- **GIF Tools:** Provides GIF creation and manipulation functionality.
-- **Help:** Provides a list of available commands and assistance.
-- **Internet Search:** Performs various web searches (general, image, YouTube, URL content).
-- **Language Manager:** Manages multi-language support and translations.
-- **Math:** Performs mathematical calculations and problem-solving.
-- **Memory System:** Intelligent channel memory system providing permanent conversation storage, semantic search, and intelligent context enhancement with multilingual vector search and hybrid search strategies.
-- **Memory Commands:** Memory system management commands including memory search, statistics, configuration management, and other functions.
-- **Model Management:** Loads and unloads language models for optimal performance.
-- **Music:** Provides music playback using custom YouTube integration (yt_dlp + PyNaCl), supporting playlists, queues, and various playback modes.
-- **Reminder:** Sets and manages reminders for users.
-- **Schedule:** Manages user schedules and calendar functionality.
-- **System Prompt Manager:** Manages channel and server-specific system prompts with permission validation, caching, and modular prompt system integration.
-- **Update Manager:** Manages the auto-update system, providing version checking, secure downloading, and system restart functionality.
-- **User Data:** Manages user-specific data and profiles.
-- **Eat:** Provides intelligent food recommendations with MongoDB integration.
+### 🍽️ Eat (Restaurant Recommendations)
+*   **Description:** An intelligent engine that recommends restaurants by learning a server's food preferences through user ratings and feedback.
+*   **Key Commands:** `/internet_search search_type: eat`
+*   **[Full Documentation](./docs/cogs/eat/index.md)**
 
+---
+
+### 🖼️ Image Generation
+*   **Description:** Generates and edits images from text prompts using advanced AI models, supporting both creation and instruction-based modification.
+*   **Key Commands:** `/generate_image`
+*   **[Full Documentation](./docs/cogs/gen_img.md)**
+
+---
+
+### 🌐 Internet Search
+*   **Description:** A versatile tool to search the web, find images, look up YouTube videos, or fetch content from a URL.
+*   **Key Commands:** `/internet_search`
+*   **[Full Documentation](./docs/cogs/internet_search.md)**
+
+---
+
+### ⚙️ System Prompt Manager
+*   **Description:** Allows deep customization of the bot's personality and behavior on a per-server or per-channel basis using a three-tiered inheritance model.
+*   **Key Commands:** `/system_prompt`
+*   **[Full Documentation](./docs/cogs/system_prompt/index.md)**
+
+---
+
+### ⏰ Reminder
+*   **Description:** Allows users to set reminders for themselves or others using natural language for timing (e.g., "in 10 minutes" or a specific date).
+*   **Key Commands:** `/remind`
+*   **[Full Documentation](./docs/cogs/remind.md)**
+
+---
+
+### 🔄 Update Manager
+*   **Description:** Provides a command interface to check for, initiate, and monitor the bot's automatic update process from GitHub.
+*   **Key Commands:** `/update_check`, `/update_now`
+*   **[Full Documentation](./docs/cogs/update_manager.md)**
+
+---
+
+### 🛂 Channel Manager
+*   **Description:** Provides administrators with tools to control where the bot can interact, using server-wide policies and per-channel overrides.
+*   **Key Commands:** `/set_server_mode`, `/set_channel_mode`, `/auto_response`
+*   **[Full Documentation](./docs/cogs/channel_manager.md)**
+
+---
+
+### 👤 User Data
+*   **Description:** A system for storing and managing user-specific data, which can be updated manually or merged intelligently by the AI.
+*   **Key Commands:** `/userdata`
+*   **[Full Documentation](./docs/cogs/userdata.md)**
+
+---
+
+### 🌍 Language Manager
+*   **Description:** Manages multi-language support, allowing servers to set their preferred language for bot responses and commands.
+*   **Key Commands:** `/set_language`, `/current_language`
+*   **[Full Documentation](./docs/cogs/language_manager.md)**
+
+---
+
+### 🧠 Model Management
+*   **Description:** A developer tool for the bot owner to dynamically load and unload the local AI model to manage GPU resources.
+*   **Key Commands:** `/model_management`
+*   **[Full Documentation](./docs/cogs/model_management.md)**
+
+---
+
+### 🧮 Math Calculator
+*   **Description:** A secure tool for evaluating a wide range of mathematical expressions using the `sympy` library.
+*   **Key Commands:** This is an internal tool, not a direct slash command.
+*   **[Full Documentation](./docs/cogs/math.md)**
+
+## 📚 For Developers: Technical Documentation
+
+The codebase is extensively documented. Below are links to the main documentation sections for developers:
+
+| Module Category | Description | Documentation Link |
+|---|---|---|
+| **Core GPT Engine** | Handles LLM integration, response generation, and tools. | [`gpt/`](./docs/gpt/core/index.md) |
+| **Addons** | Manages system-level features like auto-updates. | [`addons/`](./docs/addons/update/index.md) |
+| **Cogs (Features)** | Core bot features and commands. | [`cogs/`](./docs/cogs/) |
+| ↳ Eat System | Intelligent food recommendation module. | [`cogs/eat/`](./docs/cogs/eat/index.md) |
+| ↳ Memory System | Manages long-term conversation memory. | [`cogs/memory/`](./docs/cogs/memory/index.md) |
+| ↳ Music System | Handles music playback and queues. | [`cogs/music_lib/`](./docs/cogs/music_lib/index.md) |
+| ↳ Story System | Interactive story generation module. | [`cogs/story/`](./docs/cogs/story/index.md) |
+| ↳ System Prompt | Manages server and channel system prompts. | [`cogs/system_prompt/`](./docs/cogs/system_prompt/index.md) |
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the `LICENSE` file for details.

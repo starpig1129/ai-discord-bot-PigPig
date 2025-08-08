@@ -19,7 +19,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-import os
+import io
 import json
 import logging
 import opencc
@@ -27,7 +27,7 @@ import asyncio
 import re
 import datetime
 import discord
-import torch
+import base64
 from typing import Optional, List, Dict, Any
 
 from gpt.core.response_generator import generate_response, is_model_available
@@ -56,6 +56,21 @@ def _get_prompt_manager():
             logging.error(f"Failed to initialize PromptManager: {e}")
             _prompt_manager = None
     return _prompt_manager
+
+def _get_final_summary_prompt() -> str:
+    """
+    取得「最終總結者」的追加限制性規則字串。
+    注意：這裡不再回傳完整系統提示，而是回傳要附加到現有 system prompt 後方的關鍵限制。
+    僅在對話歷史中存在 role=function 且 name=tool_execution_summary 時使用。
+    """
+    return (
+        "\n\n--- CRITICAL SUMMARY INSTRUCTIONS ---\n"
+        "You MUST base your entire response on the provided 'tool_execution_summary'.\n"
+        "You MUST NOT invent, hallucinate, or re-run any tools.\n"
+        "Your task is ONLY to present the results from the summary, while adhering to your established personality from the preceding instructions.\n"
+        "--- END CRITICAL INSTRUCTIONS ---\n"
+    )
+
 
 def get_system_prompt(bot_id: str, message=None) -> str:
     """
@@ -279,23 +294,30 @@ def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
                 - Clearly indicate the source of information in your answers (e.g., "According to the processed image/video/PDF...")
                 - When referencing sources, use the format: [標題](<URL>)
 
-                3. Language Requirements (語言要求):
+                3. CRITICAL: Tool Error Handling (工具錯誤處理) - MANDATORY:
+                - When you receive tool execution results showing failures or errors, you MUST directly and clearly report the error to the user.
+                - NEVER use anthropomorphic language like "the tool is playing hide and seek" or similar playful descriptions for errors.
+                - NEVER fabricate or imagine successful scenarios when tools have actually failed.
+                - For tool failures, respond with factual, direct language such as: "Sorry, the [tool name] tool encountered an error: [specific error description]"
+                - Always base your responses on the actual tool execution results you receive, not on assumptions or imagination.
+
+                4. Language Requirements (語言要求):
                 - Always answer in Traditional Chinese.
                 - Appropriately use Chinese idioms or playful expressions to add interest to the conversation.
                 - Keep casual chat responses short and natural, like a friendly Discord conversation.
                 - Only provide longer, detailed responses for technical or educational topics when necessary.
 
-                4. Professionalism:
+                5. Professionalism:
                 - While maintaining a humorous style, keep appropriate professionalism when dealing with professional or serious topics.
                 - Provide in-depth explanations only when specifically requested.
 
-                5. Interaction:
+                6. Interaction:
                 - Engage in natural chat-like interactions.
                 - Keep responses concise and interactive.
                 - Only elaborate when users specifically ask for more details.
                 - Stay focused on the current topic and avoid bringing up old conversations
 
-                6. Discord Markdown Formatting:
+                7. Discord Markdown Formatting:
                 - Use **bold** for emphasis
                 - Use *italics* for subtle emphasis
                 - Use __underline__ for underlining
@@ -306,7 +328,7 @@ def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
                 - Use [標題](<URL>) for references
                 - Use <@user_id> to mention users
 
-                Remember: You're in a Discord chat environment - keep responses brief and engaging for casual conversations. Only provide detailed responses when specifically discussing technical or educational topics. Focus on the current message and avoid unnecessary references to past conversations.'''
+                Remember: You're in a Discord chat environment - keep responses brief and engaging for casual conversations. Only provide detailed responses when specifically discussing technical or educational topics. Focus on the current message and avoid unnecessary references to past conversations. ALWAYS accurately report tool execution results without embellishment or fabrication.'''
     
     # 保持原有的語言管理邏輯
     default_lang = "zh_TW"
@@ -708,8 +730,9 @@ async def gpt_message(
     message: discord.Message,
     prompt: str,
     history_dict: Dict[str, Any],
-    image_data: Optional[Any] = None
-) -> Optional[str]:
+    image_data: Optional[Any] = None,
+    files: Optional[List[discord.File]] = None
+) -> str:
     """生成並發送 GPT 回應訊息。支援文字和 GIF 回應。
 
     Args:
@@ -718,6 +741,7 @@ async def gpt_message(
         prompt: 輸入的提示文字。
         history_dict: 對話歷史字典。
         image_data: 可選的圖片資料。
+        files: 可選的檔案列表。
 
     Returns:
         str | None: 生成的回應文字，如果生成失敗則返回 None。
@@ -725,6 +749,21 @@ async def gpt_message(
     
     channel = message.channel
     channel_id = str(channel.id)
+
+    # 如果有檔案，直接發送新訊息，不使用串流
+    if files:
+        try:
+            # 如果 prompt 為空，提供一個預設訊息
+            content = prompt if prompt and prompt.strip() else ""
+            new_message = await channel.send(content=content, files=files)
+            # 刪除原始的 "正在生成..." 訊息
+            if message_to_edit and message_to_edit.author == message.guild.me:
+                await message_to_edit.delete()
+            message_to_edit = new_message
+        except Exception as e:
+            logging.error(f"發送帶有檔案的訊息時發生錯誤: {e}")
+            await channel.send(content=f"抱歉，發送圖片時發生錯誤: {e}")
+            return ""
     
     print(prompt)
     
@@ -768,22 +807,86 @@ async def gpt_message(
         combined_prompt = f"[{message.author.display_name}<@{message.author.id}>]: {prompt}"
         logging.info("使用智慧背景知識系統建構的結構化上下文")
     
-    # 將結構化歷史合併到 history_dict 中
+    # 將結構化歷史合併到 history_dict 中，並確保保留 tool_execution_summary
+    def _extract_tool_summary(msgs):
+        """從提供的訊息列表中提取所有 role=function 且 name=tool_execution_summary 的訊息"""
+        summaries = []
+        try:
+            for m in msgs or []:
+                if isinstance(m, dict) and m.get("role") == "function" and m.get("name") == "tool_execution_summary":
+                    summaries.append(m)
+        except Exception as _e:
+            logging.debug(f"_extract_tool_summary 解析歷史時發生例外，可忽略: {_e}")
+        return summaries
+
+    # 取得上游傳入歷史（list 或 dict.messages）中的工具摘要
+    upstream_messages = history_dict if isinstance(history_dict, list) else conversation_history
+    tool_summaries = _extract_tool_summary(upstream_messages)
+
     if isinstance(history_dict, list):
-        # 在使用者訊息前插入工具結果
-        enhanced_history = structured_history + history_dict
+        # 在使用者訊息前插入工具結果，且附加保留下游工具摘要
+        enhanced_history = structured_history + tool_summaries + history_dict
     else:
-        # 如果是字典格式，需要適當處理
-        enhanced_history = structured_history + conversation_history
+        # 如果是字典格式，需要適當處理，同樣保留工具摘要
+        enhanced_history = structured_history + tool_summaries + conversation_history
     
     try:
         responses = ""
         responsesall = ""
         message_result = ""
         bot_system_prompt = get_system_prompt(str(message.guild.me.id), message)
+        # 關鍵診斷：在呼叫 ResponseGenerator 前記錄即將送出的對話歷史
+        try:
+            def _shorten(x, n=200):
+                try:
+                    s = str(x)
+                    return s if len(s) <= n else s[:n] + "...(truncated)"
+                except Exception:
+                    return "<non-str>"
+            pre_summary = []
+            if isinstance(enhanced_history, list):
+                for i, m in enumerate(enhanced_history):
+                    if isinstance(m, dict):
+                        pre_summary.append({
+                            "idx": i,
+                            "role": m.get("role"),
+                            "name": m.get("name"),
+                            "content_preview": _shorten(m.get("content"))
+                        })
+                    else:
+                        pre_summary.append({"idx": i, "type": type(m).__name__, "preview": _shorten(m)})
+            else:
+                pre_summary = _shorten(enhanced_history)
+            logging.info("diagnostic.pre_generate_history | count=%s detail=%s",
+                         str(len(enhanced_history) if isinstance(enhanced_history, list) else 0),
+                         pre_summary)
+        except Exception as _e:
+            logging.warning("diagnostic.pre_generate_history.log_fail err=%s", str(_e))
+        # 條件式套用「最終總結者」系統提示詞：
+        # 當 enhanced_history 中存在 role=function 且 name=tool_execution_summary 的訊息時，
+        # 使用高度限制性的最終總結提示，避免模型幻想新的工具執行流程或遺失附件。
+        try:
+            def _has_tool_execution_summary(msgs):
+                try:
+                    for _m in msgs or []:
+                        if isinstance(_m, dict) and _m.get("role") == "function" and _m.get("name") == "tool_execution_summary":
+                            return True
+                    return False
+                except Exception:
+                    return False
+
+            use_final_summary_prompt = False
+            if isinstance(enhanced_history, list) and _has_tool_execution_summary(enhanced_history):
+                use_final_summary_prompt = True
+
+            effective_system_prompt = _get_final_summary_prompt() if use_final_summary_prompt else bot_system_prompt
+        except Exception as _choose_err:
+            logging.debug(f"選擇系統提示詞時發生例外，回退至一般提示: {_choose_err}")
+            effective_system_prompt = bot_system_prompt
+
         thread, streamer = await generate_response(
             inst=combined_prompt,
-            system_prompt=bot_system_prompt,
+            system_prompt=effective_system_prompt,
             dialogue_history=enhanced_history,
             image_input=image_data
         )
@@ -794,7 +897,7 @@ async def gpt_message(
         bot = message.guild.me._state._get_client()
         logger = bot.get_logger_for_guild(message.guild.name)
         for model_name in settings.model_priority:
-            if is_model_available(model_name):
+            if await is_model_available(model_name):
                 logger.info(f"使用模型: {model_name}")
                 break
     
@@ -802,27 +905,76 @@ async def gpt_message(
             responses += response
             message_result += response
             if len(responses) >= buffer_size:
-                # 檢查是否超過 2000 字符
-                if len(responsesall+responses) > 1900:
-                    # 獲取多語言提示
-                    processing_message = "繼續輸出中..."  # 預設值
+                # 先準備拼接與轉換
+                pending_all = responsesall + responses
+                # 分段門檻與上限
+                ROLLOVER_THRESHOLD = 1900
+                HARD_LIMIT = 2000
+
+                # 僅在確實需要時才建立新訊息，避免多重發送新訊息造成過早分割
+                # 先預估本次若繼續在同一訊息內累積後的實際內容長度
+                HARD_LIMIT = 2000
+                candidate_all = responsesall + responses
+                cleaned_candidate = candidate_all.replace('<|eot_id|>', "")
+                if message and message.guild:
+                    bot = message.guild.me._state._get_client()
+                    if lang_manager := bot.get_cog("LanguageManager"):
+                        guild_id = str(message.guild.id)
+                        lang = lang_manager.get_server_lang(guild_id)
+                        converter = get_converter(lang)
+                        if converter:
+                            converted_candidate = converter.convert(cleaned_candidate)
+                        else:
+                            converted_candidate = cleaned_candidate
+                    else:
+                        converted_candidate = cleaned_candidate
+                else:
+                    converted_candidate = cleaned_candidate
+
+                # 僅當在同一訊息內的內容確實超過 Discord 上限時，才建立新訊息區塊
+                if len(converted_candidate) > HARD_LIMIT:
+                    from gpt.utils.discord_utils import safe_create_next_block
+                    from gpt.core.retry_controller import RetryController
+                    # 取得多語言提示
+                    processing_message = "繼續輸出中..."
                     if message and message.guild:
                         bot = message.guild.me._state._get_client()
                         if lang_manager := bot.get_cog("LanguageManager"):
                             guild_id = str(message.guild.id)
                             processing_message = lang_manager.translate(
-                                guild_id,
-                                "system",
-                                "chat_bot",
-                                "responses",
-                                "processing"
+                                guild_id, "system", "chat_bot", "responses", "processing"
                             )
-                    # 創建新消息
-                    current_message = await channel.send(processing_message)
+                    retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
+                    new_chunk_message = await safe_create_next_block(
+                        channel=channel,
+                        content=processing_message,
+                        reference_message_id=getattr(current_message, "id", None),
+                        trace_id="segment_rollover",
+                        retry=retry,
+                    )
+                    current_message = new_chunk_message
+                    # 針對新訊息重新開始累積，避免多重新訊息
                     responsesall = ""
+                    # 重新計算第一段內容（以本輪 responses 為起點）
+                    cleaned_candidate = responses.replace('<|eot_id|>', "")
+                    if message and message.guild:
+                        bot = message.guild.me._state._get_client()
+                        if (lang_manager := bot.get_cog("LanguageManager")):
+                            guild_id = str(message.guild.id)
+                            lang = lang_manager.get_server_lang(guild_id)
+                            converter = get_converter(lang)
+                            if converter:
+                                converted_candidate = converter.convert(cleaned_candidate)
+                            else:
+                                converted_candidate = cleaned_candidate
+                        else:
+                            converted_candidate = cleaned_candidate
+                    else:
+                        converted_candidate = cleaned_candidate
+
+                # 累積並轉換（保持單一訊息優先）
                 responsesall += responses
                 cleaned_response = responsesall.replace('<|eot_id|>', "")
-                # 根據伺服器語言選擇轉換器
                 if message and message.guild:
                     bot = message.guild.me._state._get_client()
                     if lang_manager := bot.get_cog("LanguageManager"):
@@ -837,9 +989,21 @@ async def gpt_message(
                         converted_response = cleaned_response
                 else:
                     converted_response = cleaned_response
-                
-                # 保持原有的純文字回覆
-                await current_message.edit(content=converted_response)
+
+                # 理論上不會超出，保留最後防護
+                if len(converted_response) > HARD_LIMIT:
+                    converted_response = converted_response[:HARD_LIMIT]
+
+                # 序列化編輯：等待本次 edit 完成後再進下一輪
+                from gpt.utils.discord_utils import safe_edit
+                from gpt.core.retry_controller import RetryController
+                retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
+                try:
+                    await safe_edit(current_message, converted_response, trace_id="message_edit_retry", retry=retry)
+                except discord.errors.NotFound:
+                    logging.warning(f"訊息 {getattr(current_message,'id',None)} 在編輯時找不到，改以新段承接。")
+                    from gpt.utils.discord_utils import safe_send
+                    current_message = await safe_send(channel, converted_response, trace_id="message_edit_fallback", retry=retry)
                 
                 # 檢查是否需要發送GIF
                 gif_tasks = await process_tenor_tags(converted_response, channel)
@@ -853,56 +1017,201 @@ async def gpt_message(
         # 處理剩餘的文本
         try:
             if responses:  # 如果還有未處理的回應
-                if len(responsesall+responses) > 1900:
-                    # 使用正確的語言轉換器
-                    if message and message.guild:
-                        bot = message.guild.me._state._get_client()
-                        if lang_manager := bot.get_cog("LanguageManager"):
-                            guild_id = str(message.guild.id)
-                            lang = lang_manager.get_server_lang(guild_id)
-                            converter = get_converter(lang)
-                            if converter:
-                                converted_response = converter.convert(responses)
-                            else:
-                                converted_response = responses
-                        else:
-                            converted_response = responses
-                    else:
-                        converted_response = responses
-                    # 創建新消息
-                    current_message = await channel.send(converted_response)
-                else:
-                    responsesall += responses
-                    cleaned_response = responsesall.replace('<|eot_id|>', "")
-                    if message and message.guild:
-                        bot = message.guild.me._state._get_client()
-                        if lang_manager := bot.get_cog("LanguageManager"):
-                            guild_id = str(message.guild.id)
-                            lang = lang_manager.get_server_lang(guild_id)
-                            converter = get_converter(lang)
-                            if converter:
-                                converted_response = converter.convert(cleaned_response)
-                            else:
-                                converted_response = cleaned_response
-                        else:
-                            converted_response = cleaned_response
+                responsesall += responses
+            cleaned_response = responsesall.replace('<|eot_id|>', "")
+            # 根據伺服器語言選擇轉換器
+            if message and message.guild:
+                bot = message.guild.me._state._get_client()
+                if lang_manager := bot.get_cog("LanguageManager"):
+                    guild_id = str(message.guild.id)
+                    lang = lang_manager.get_server_lang(guild_id)
+                    converter = get_converter(lang)
+                    if converter:
+                        converted_response = converter.convert(cleaned_response)
                     else:
                         converted_response = cleaned_response
-                    await current_message.edit(content=converted_response)
-                    
-                    # 檢查是否需要發送GIF
-                    gif_tasks = await process_tenor_tags(converted_response, channel)
-                    if gif_tasks:
-                        for task in gif_tasks:
-                            await task
-        
+                else:
+                    converted_response = cleaned_response
+            else:
+                converted_response = cleaned_response
+
+            # 解析工具附件以合併同訊息發送
+            files_to_send = []
+            attachments_found = 0
+
+            def _extract_attachments_from_function_blob(blob_text: str):
+                nonlocal files_to_send, attachments_found
+                if not blob_text:
+                    return
+
+                def _strip_data_url_prefix(b64: str) -> str:
+                    # 支援 data URL 前綴，例如: data:image/png;base64,AAAA...
+                    if isinstance(b64, str) and b64.startswith("data:"):
+                        comma_idx = b64.find(",")
+                        if comma_idx != -1:
+                            return b64[comma_idx + 1 :]
+                    return b64
+
+                def _fix_padding(b64: str) -> str:
+                    # 自動補齊 base64 padding
+                    if not isinstance(b64, str):
+                        return b64
+                    mod = len(b64) % 4
+                    if mod:
+                        b64 += "=" * (4 - mod)
+                    return b64
+
+                # 嘗試解析多個 JSON 區塊
+                # 先粗略抓出可能的 JSON 區塊，避免把整段當成單一 JSON
+                for match in re.finditer(r'\{[\s\S]*?\}', blob_text):
+                    seg = match.group(0)
+                    try:
+                        data = json.loads(seg)
+                    except Exception:
+                        continue
+
+                    items = data if isinstance(data, list) else [data]
+                    for it in items:
+                        if not isinstance(it, dict):
+                            continue
+                        out = it.get("output")
+                        if not out:
+                            continue
+
+                        payload = out if isinstance(out, dict) else {}
+                        attach_list = payload.get("attachments") if isinstance(payload, dict) else None
+                        if not isinstance(attach_list, list):
+                            continue
+
+                        for att in attach_list:
+                            try:
+                                if not isinstance(att, dict):
+                                    continue
+                                # 支援不同欄位命名：data_base64 / base64 / b64 / image_base64
+                                b64_val = (
+                                    att.get("data_base64")
+                                    or att.get("base64")
+                                    or att.get("b64")
+                                    or att.get("image_base64")
+                                )
+                                if att.get("type") != "image" or not b64_val:
+                                    continue
+
+                                b64_clean = _fix_padding(_strip_data_url_prefix(b64_val))
+                                try:
+                                    data_bytes = base64.b64decode(b64_clean, validate=False)
+                                except Exception as dec_err:
+                                    # 若 validate 失敗，再嘗試不嚴格模式
+                                    logging.warning(f"附件 base64 解碼失敗，嘗試不嚴格模式: {dec_err}")
+                                    data_bytes = base64.b64decode(b64_clean + "===")
+
+                                if not data_bytes:
+                                    logging.warning("附件解碼後為空位元組，跳過此附件")
+                                    continue
+
+                                # 決定檔名，若未提供則預設為 png
+                                fname = att.get("filename")
+                                if not fname or not isinstance(fname, str):
+                                    # 嘗試從 mime 推斷副檔名
+                                    mime = att.get("mime") or att.get("content_type")
+                                    ext = "png"
+                                    if isinstance(mime, str):
+                                        if "jpeg" in mime:
+                                            ext = "jpg"
+                                        elif "gif" in mime:
+                                            ext = "gif"
+                                        elif "webp" in mime:
+                                            ext = "webp"
+                                        elif "png" in mime:
+                                            ext = "png"
+                                    fname = f"image.{ext}"
+
+                                file_obj = discord.File(io.BytesIO(data_bytes), filename=fname)
+                                files_to_send.append(file_obj)
+                                attachments_found += 1
+                                logging.info(f"已解析附件: filename={fname}, size={len(data_bytes)} bytes")
+                            except Exception as fe:
+                                # 記錄更完整的錯誤資訊以利診斷
+                                sample = ""
+                                try:
+                                    s = str(att.get('data_base64', ''))[:48]
+                                    sample = s + ("..." if len(s) == 48 else "")
+                                except Exception:
+                                    pass
+                                logging.warning(f"附件轉檔失敗: {fe} | filename={att.get('filename')} | sample_b64={sample}")
+
+            # 先從對話歷史中的工具摘要提取附件（正確來源）
+            try:
+                if isinstance(enhanced_history, list):
+                    tool_blob_count = 0
+                    for m in enhanced_history:
+                        try:
+                            if isinstance(m, dict) and m.get("role") == "function" and m.get("name") == "tool_execution_summary":
+                                content = m.get("content")
+                                if isinstance(content, (str, bytes)):
+                                    _extract_attachments_from_function_blob(content if isinstance(content, str) else content.decode("utf-8", errors="ignore"))
+                                    tool_blob_count += 1
+                        except Exception as _ih_err:
+                            logging.debug(f"解析單一工具摘要時發生例外（忽略並繼續）: {_ih_err}")
+                    logging.info(f"從 enhanced_history 掃描工具摘要完成，數量={tool_blob_count}，解析到附件數={attachments_found}")
+                else:
+                    logging.debug("enhanced_history 不是 list，略過工具摘要掃描")
+            except Exception as hist_parse_err:
+                logging.debug(f"從歷史解析工具附件時發生例外（可忽略）: {hist_parse_err}")
+
+            # 兼容：再嘗試從 responsesall 與 responses 中解析（若模型把摘要回吐到輸出文字中）
+            try:
+                _extract_attachments_from_function_blob(responsesall)
+                _extract_attachments_from_function_blob(responses)
+            except Exception as parse_err:
+                logging.debug(f"解析工具附件時發生例外（可忽略，僅影響附件合併）: {parse_err}")
+
+            # 最終一次性發送：若有附件，與主文字同一則訊息送出
+            from gpt.utils.discord_utils import safe_send
+            from gpt.core.retry_controller import RetryController
+            retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
+            if files_to_send:
+                logging.info(f"合併發送文字與圖片附件 | files={len(files_to_send)}")
+                await safe_send(channel, converted_response, files=files_to_send, trace_id="final_send_with_files", retry=retry)
+            else:
+                # 如果沒有附件，沿用原本最後編輯邏輯，盡可能不打擾歷史訊息的外觀
+                from gpt.utils.discord_utils import safe_edit, safe_send
+                try:
+                    await safe_edit(current_message, converted_response, trace_id="final_edit", retry=retry)
+                except discord.errors.NotFound:
+                    logging.warning(f"最終訊息 {getattr(current_message,'id',None)} 在編輯時找不到，將作為新訊息發送。")
+                    await safe_send(channel, converted_response, trace_id="final_send_fallback", retry=retry)
+
+            # 檢查是否需要發送GIF（保持行為）
+            gif_tasks = await process_tenor_tags(converted_response, channel)
+            if gif_tasks:
+                for task in gif_tasks:
+                    await task
+
         except Exception as cleanup_error:
             logging.warning(f"處理剩餘回應時發生錯誤: {cleanup_error}")
-        
+
         return message_result.replace("<|eot_id|>", "")
         
     except Exception as e:
         logging.error(f"生成 GPT 回應時發生錯誤: {e}")
         import traceback
         logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
-        return None
+        # 嚴禁以空字串掩蓋錯誤：直接拋出，交由上層處理，或維持既有最小入侵時發送明確錯誤訊息
+        error_message = f"An error occurred: {e}"
+        try:
+            if message_to_edit:
+                from gpt.utils.discord_utils import safe_edit, safe_send
+                from gpt.core.retry_controller import RetryController
+                retry = RetryController(max_retries=2, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
+                try:
+                    await safe_edit(message_to_edit, error_message, trace_id="error_edit", retry=retry)
+                except discord.errors.NotFound:
+                    await safe_send(message.channel, error_message, trace_id="error_send_fallback", retry=retry)
+            else:
+                from gpt.utils.discord_utils import safe_send
+                await safe_send(message.channel, error_message, trace_id="error_send_noedit", retry=None)
+        finally:
+            # 維持介面語意最小入侵：仍回傳累積訊息，但不回傳空字串
+            # 若需要更嚴格，可 raise；此處保留 message_result 內容。
+            return (message_result or error_message).replace("<|eot_id|>", "")

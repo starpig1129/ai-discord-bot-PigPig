@@ -2,10 +2,10 @@ import requests, zipfile, os, shutil, argparse
 from io import BytesIO
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))  # 獲取當前腳本所在的目錄路徑
-__version__ = "v2.6.0"  # 當前版本號
+__version__ = "v2.7.0"  # 當前版本號
 
-GITHUB_API_URL = "https://api.github.com/repos/PigPig-discord-LLM-bot/releases/latest"  # GitHub API 地址,用於獲取最新版本信息
-PIGPIG_URL = "https://github.com/PigPig-discord-LLM-bot/archive/"  # 下載 PigPig Bot 的 URL
+GITHUB_API_URL = "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest"  # GitHub API 地址,用於獲取最新版本信息
+PIGPIG_URL = "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"  # 下載 PigPig Bot 的 URL
 IGNORE_FILES = [
     "settings.json", ".env", "data/", "systemPrompt.yaml",
     "logs/", "temp/", "__pycache__/", "*.pyc", "models/", 
@@ -89,9 +89,9 @@ def install(response, version):
             
             # 嘗試不同的可能目錄名稱
             possible_dirs = [
-                f"PigPig-discord-LLM-bot-{version_clean}",
-                f"PigPig-discord-LLM-bot-{version}",
-                "PigPig-discord-LLM-bot-main"
+                f"ai-discord-bot-PigPig-{version_clean}",
+                f"ai-discord-bot-PigPig-{version}",
+                "ai-discord-bot-PigPig-main"
             ]
             
             source_dir = None

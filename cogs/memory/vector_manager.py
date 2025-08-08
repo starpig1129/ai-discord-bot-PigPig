@@ -1,3 +1,4 @@
+import asyncio
 """向量管理模組
 
 提供 FAISS 向量索引的建立、管理和搜尋功能。
@@ -13,7 +14,7 @@ import time
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Set
 
 import faiss
 import numpy as np
@@ -289,7 +290,8 @@ class VectorIndex:
         index_type: str = "Flat",
         metric: str = "L2",
         use_gpu: bool = False,
-        gpu_memory_manager: Optional[GPUMemoryManager] = None
+        gpu_memory_manager: Optional[GPUMemoryManager] = None,
+        hnsw_m: int = 64
     ):
         """初始化向量索引
         
@@ -299,12 +301,14 @@ class VectorIndex:
             metric: 距離度量 ("L2", "IP")
             use_gpu: 是否使用 GPU
             gpu_memory_manager: GPU 記憶體管理器
+            hnsw_m: HNSW 索引的 M 參數
         """
         self.dimension = dimension
         self.index_type = index_type
         self.metric = metric
         self.use_gpu = use_gpu
         self.gpu_memory_manager = gpu_memory_manager
+        self.hnsw_m = hnsw_m
         self._index: Optional[faiss.Index] = None
         self._gpu_index: Optional[faiss.Index] = None
         self._id_map: Dict[int, str] = {}  # FAISS ID -> 實際 ID 映射
@@ -313,6 +317,18 @@ class VectorIndex:
         self._gpu_fallback_warned = False  # GPU 降級警告標記
         self._needs_mapping_rebuild = False  # 標記是否需要重建映射
         self.logger = logging.getLogger(__name__)
+        # 統一的可重入狀態鎖，保護索引與映射之間的原子性
+        self._state_lock = threading.RLock()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
+        # HNSW 延遲刪除標記集合
+        self._deleted_marks: Set[str] = set()
     
     def _create_index(self) -> faiss.Index:
         """建立 FAISS 索引
@@ -327,7 +343,7 @@ class VectorIndex:
                 quantizer = faiss.IndexFlatL2(self.dimension)
                 index = faiss.IndexIVFFlat(quantizer, self.dimension, 100)
             elif self.index_type == "HNSW":
-                index = faiss.IndexHNSWFlat(self.dimension, 32)
+                index = faiss.IndexHNSWFlat(self.dimension, self.hnsw_m)
             else:
                 self.logger.warning(f"不支援的索引類型: {self.index_type}，使用 Flat")
                 index = faiss.IndexFlatL2(self.dimension)
@@ -456,105 +472,177 @@ class VectorIndex:
             return 512  # 預設值
     
     def add_vectors(self, vectors: np.ndarray, ids: List[str], batch_size: int = 50) -> bool:
-        """新增向量到索引（支援批次處理）
-        
-        Args:
-            vectors: 向量陣列，形狀為 (n, dimension)
-            ids: 對應的 ID 列表
-            batch_size: 批次大小
-            
-        Returns:
-            bool: 是否成功
-        """
+        """新增向量到索引（支援批次處理），以統一鎖確保原子性。"""
         try:
             if len(vectors) != len(ids):
                 raise ValueError("向量數量與 ID 數量不符")
-            
-            # 轉換為 float32
             vectors = vectors.astype('float32')
-            
-            # 建立 ID 映射
-            new_vectors = []
-            new_ids = []
-            
-            for i, id_str in enumerate(ids):
-                if id_str not in self._reverse_id_map:
-                    faiss_id = self._next_id
+
+            with self._state_lock:
+                index = self.get_index()
+                ntotal_before = getattr(index, 'ntotal', -1)
+                self.logger.debug(f"add_vectors: 取得鎖，索引 ntotal(before)={ntotal_before}, 現有映射數={len(self._id_map)}")
+
+                # 準備暫存對應，不觸碰正式映射與 next_id
+                temp_pairs: List[Tuple[int, int]] = []  # (source_vec_idx, temp_faiss_id)
+                new_vectors_buf: List[np.ndarray] = []
+                new_faiss_ids: List[int] = []
+
+                temp_next_id = self._next_id
+                for i, id_str in enumerate(ids):
+                    if id_str in self._reverse_id_map:
+                        self.logger.debug(f"add_vectors: ID 已存在，跳過 id={id_str}")
+                        continue
+                    faiss_id = temp_next_id
+                    temp_next_id += 1
+                    temp_pairs.append((i, faiss_id))
+                    new_vectors_buf.append(vectors[i])
+                    new_faiss_ids.append(faiss_id)
+
+                if not new_vectors_buf:
+                    self.logger.debug("add_vectors: 無需新增，新向量數=0")
+                    return True
+
+                new_vectors_arr = np.array(new_vectors_buf, dtype='float32')
+
+                # 在鎖內決定本次寫入目標，並傳遞給批次寫入
+                write_target = 'gpu' if self._gpu_index is not None else 'cpu'
+                self.logger.debug(f"add_vectors: 決定寫入目標 write_target={write_target}，批次大小={batch_size}，待新增數量={len(new_vectors_arr)}")
+
+                # 先將向量寫入 FAISS 索引
+                success = self._add_vectors_batch(new_vectors_arr, new_faiss_ids, batch_size, write_target)
+                index = self.get_index()
+                ntotal_after_add = getattr(index, 'ntotal', -1)
+                self.logger.debug(f"add_vectors: 寫入 FAISS 完成，success={success}，ntotal(after_add)={ntotal_after_add}")
+
+                if not success:
+                    self.logger.warning("add_vectors: _add_vectors_batch 失敗，放棄映射更新以保持一致性")
+                    return False
+
+                # 僅在成功後一次性更新映射與 next_id
+                for (src_idx, faiss_id) in temp_pairs:
+                    id_str = ids[src_idx]
                     self._id_map[faiss_id] = id_str
                     self._reverse_id_map[id_str] = faiss_id
-                    self._next_id += 1
-                    new_vectors.append(vectors[i])
-                    new_ids.append(faiss_id)
-                else:
-                    # 已存在的向量，跳過
-                    self.logger.debug(f"向量 ID {id_str} 已存在，跳過")
-                    continue
-            
-            if not new_vectors:
+                self._next_id = temp_next_id
+
+                self.logger.debug(
+                    f"add_vectors: 更新映射完成，新增映射數={len(temp_pairs)}，"
+                    f"next_id={self._next_id}，映射總數={len(self._id_map)}，索引 ntotal={getattr(index, 'ntotal', -1)}"
+                )
                 return True
-            
-            new_vectors = np.array(new_vectors)
-            
-            # 批次處理新增向量
-            return self._add_vectors_batch(new_vectors, new_ids, batch_size)
-            
+
         except Exception as e:
             self.logger.error(f"新增向量失敗: {e}")
             return False
     
-    def _add_vectors_batch(self, vectors: np.ndarray, faiss_ids: List[int], batch_size: int) -> bool:
-        """批次新增向量到索引
-        
-        Args:
-            vectors: 向量陣列
-            faiss_ids: FAISS ID 列表
-            batch_size: 批次大小
-            
-        Returns:
-            bool: 是否成功
-        """
+    def _add_vectors_batch(self, vectors: np.ndarray, faiss_ids: List[int], batch_size: int, write_target: str) -> bool:
+        """批次新增向量到索引（遵循外部決策的寫入目標）。"""
         try:
             index = self.get_index()
             total_vectors = len(vectors)
-            
+
+            self.logger.debug(f"_add_vectors_batch: ntotal(before)={getattr(index, 'ntotal', -1)}, 批次總數={total_vectors}, 對應暫存ID數={len(faiss_ids)}，write_target={write_target}")
+
             for i in range(0, total_vectors, batch_size):
                 end_idx = min(i + batch_size, total_vectors)
                 batch_vectors = vectors[i:end_idx]
-                
-                # 檢查 GPU 記憶體（如果使用 GPU）
-                if (self._gpu_index is not None and
-                    self.gpu_memory_manager is not None):
-                    
-                    # 估算批次記憶體需求
-                    batch_memory_mb = (len(batch_vectors) * self.dimension * 4) // (1024 * 1024)
-                    
-                    if not self.gpu_memory_manager.is_memory_available(batch_memory_mb + 128):
-                        self.logger.warning(
-                            f"GPU 記憶體不足，批次 {i//batch_size + 1} 降級使用 CPU"
-                        )
-                        # 暫時降級到 CPU
-                        if self._index is not None:
-                            self._index.add(batch_vectors)
-                        else:
-                            self.logger.error("CPU 索引不可用")
-                            return False
-                    else:
-                        index.add(batch_vectors)
-                else:
+
+                # 嚴格依照寫入目標，避免動態切換導致的非原子性
+                if write_target == 'gpu':
+                    if self._gpu_index is None:
+                        self.logger.error("_add_vectors_batch: 預期 GPU 寫入但 _gpu_index 為 None")
+                        return False
                     index.add(batch_vectors)
-                
-                self.logger.debug(f"批次 {i//batch_size + 1}/{(total_vectors + batch_size - 1)//batch_size} 完成")
-                
-                # 定期清理記憶體
-                if (i + batch_size) % (batch_size * 4) == 0:  # 每 4 個批次清理一次
+                elif write_target == 'cpu':
+                    if self._index is None:
+                        self.logger.error("_add_vectors_batch: 預期 CPU 寫入但 _index 為 None")
+                        return False
+                    self._index.add(batch_vectors)
+                else:
+                    self.logger.error(f"_add_vectors_batch: 非法 write_target={write_target}")
+                    return False
+
+                self.logger.debug(f"_add_vectors_batch: 批次 {i//batch_size + 1}/{(total_vectors + batch_size - 1)//batch_size} 完成")
+
+                # 定期清理記憶體（避免長批次造成壓力）
+                if (i + batch_size) % (batch_size * 4) == 0:
                     gc.collect()
-            
-            self.logger.debug(f"成功新增 {total_vectors} 個向量到索引")
+
+            # 追加一次 ntotal 記錄
+            index_after = self.get_index()
+            self.logger.debug(f"_add_vectors_batch: ntotal(after)={getattr(index_after, 'ntotal', -1)} 成功新增 {total_vectors} 個向量到索引")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"批次新增向量失敗: {e}")
             return False
+
+    def remove_vectors(self, ids: List[str]) -> int:
+        """從索引中移除向量，使用統一鎖確保與映射更新的原子性。"""
+        if not ids:
+            return 0
+
+        try:
+            with self._state_lock:
+                index = self.get_index()
+                ntotal_before = getattr(index, 'ntotal', -1)
+
+                # 在鎖內先確定要移除的 FAISS ID 集合（精準且不可變）
+                faiss_ids_to_remove = [self._reverse_id_map[id_str] for id_str in ids if id_str in self._reverse_id_map]
+                if not faiss_ids_to_remove:
+                    self.logger.debug("remove_vectors: 取得鎖後無可移除 ID，直接返回 0")
+                    return 0
+
+                self.logger.debug(
+                    f"remove_vectors: 取得鎖，ntotal(before)={ntotal_before}，預計移除數={len(faiss_ids_to_remove)}"
+                )
+
+                # 將待移除的 FAISS ID 轉為 NumPy int64，符合 FAISS 綁定需求
+                ids_to_remove_np = np.asarray(faiss_ids_to_remove, dtype=np.int64)
+                if ids_to_remove_np.size == 0:
+                    self.logger.debug("remove_vectors: 轉換後無可移除 ID，返回 0")
+                    return 0
+
+                # 執行移除操作（強制使用 IDSelectorArray，避免 dtype 與指標型別不匹配）
+                removed_count_before = getattr(index, 'ntotal', -1)
+                try:
+                    if hasattr(faiss, "IDSelectorArray"):
+                        selector = faiss.IDSelectorArray(int(ids_to_remove_np.size), faiss.swig_ptr(ids_to_remove_np))
+                        index.remove_ids(selector)
+                    else:
+                        # 後備路徑：直接用 int64 陣列
+                        index.remove_ids(ids_to_remove_np)
+                except Exception as e:
+                    self.logger.error(f"remove_vectors: remove_ids 失敗: {e}")
+                    return 0
+
+                removed_count_after = getattr(index, 'ntotal', -1)
+                actually_removed = max(0, removed_count_before - removed_count_after) if removed_count_before != -1 and removed_count_after != -1 else len(ids_to_remove_np)
+                self.logger.debug(f"remove_vectors: remove_ids 完成，實際移除數={actually_removed}")
+
+            # 移除操作已於鎖內完成；此處不再重複呼叫 remove_ids 以避免型別與狀態競爭問題
+            removed_count = len(faiss_ids_to_remove)
+
+            # 無論 removed_count 如何，都移除最初決定的映射
+            for id_str in ids:
+                if id_str in self._reverse_id_map:
+                    faiss_id = self._reverse_id_map.pop(id_str)
+                    self._id_map.pop(faiss_id, None)
+
+            if removed_count != len(faiss_ids_to_remove):
+                self.logger.warning(
+                    f"remove_vectors: remove_ids 實際移除 {removed_count} 與預期 {len(faiss_ids_to_remove)} 不符，標記需要重建映射"
+                )
+                self._needs_mapping_rebuild = True
+
+            ntotal_after = getattr(index, 'ntotal', -1)
+            self.logger.debug(f"remove_vectors: 完成，ntotal(after)={ntotal_after}，removed_count={removed_count}，映射剩餘={len(self._id_map)}")
+            return len(faiss_ids_to_remove)
+
+        except Exception as e:
+            self.logger.error(f"移除向量時發生錯誤: {e}")
+            return 0
     
     def search(
         self,
@@ -684,6 +772,10 @@ class VectorIndex:
             "use_gpu": self.use_gpu,
             "is_trained": index.is_trained if hasattr(index, 'is_trained') and index else True
         }
+
+    def get_all_ids(self) -> List[str]:
+        """取得此索引中的所有真實 ID"""
+        return list(self._reverse_id_map.keys())
     
     async def save(self, file_path: Path) -> bool:
         """非同步儲存索引到檔案（原子性操作）
@@ -1664,6 +1756,7 @@ class VectorManager:
             storage_path: 索引儲存路徑
         """
         self.logger = logging.getLogger(__name__)
+        self.logger.info(f"VectorManager __init__: 實例已創建，記憶體位址: {id(self)}")
         self.profile = profile
         self.storage_path = storage_path or Path("data/memory/indices")
         self.storage_path.mkdir(parents=True, exist_ok=True)
@@ -1789,11 +1882,16 @@ class VectorManager:
             self.logger.error(f"建立頻道 {channel_id} 索引失敗: {e}")
             return False
     
+    def get_channel_index(self, channel_id: str) -> Optional['VectorIndex']:
+        """取得指定頻道的向量索引實例。"""
+        with self._indices_lock:
+            return self._indices.get(channel_id)
+
     def add_vectors(
         self,
         channel_id: str,
         vectors: np.ndarray,
-        message_ids: List[str],
+        ids: List[str],
         batch_size: int = None
     ) -> bool:
         """新增向量到頻道索引
@@ -1822,11 +1920,11 @@ class VectorManager:
                 if batch_size is None:
                     batch_size = getattr(self.profile, 'batch_size', 50)
                 
-                success = index.add_vectors(vectors, message_ids, batch_size)
+                success = index.add_vectors(vectors, ids, batch_size)
                 
                 if success:
                     self.logger.debug(
-                        f"已新增 {len(message_ids)} 個向量到頻道 {channel_id}"
+                        f"已新增 {len(ids)} 個向量到頻道 {channel_id}"
                     )
                 
                 return success
@@ -1834,6 +1932,35 @@ class VectorManager:
         except Exception as e:
             self.logger.error(f"新增向量到頻道 {channel_id} 失敗: {e}")
             return False
+
+    def remove_vectors(self, channel_id: str, ids: List[str]) -> int:
+        """從頻道索引中移除向量。
+
+        Args:
+            channel_id: 頻道的 ID。
+            ids: 要移除的向量的真實 ID 列表。
+
+        Returns:
+            int: 成功移除的向量數量。
+        """
+        if not ids:
+            return 0
+        
+        try:
+            with self._indices_lock:
+                index = self._indices.get(channel_id)
+                if index:
+                    self.logger.info(f"在頻道 {channel_id} 中移除 {len(ids)} 個向量。")
+                    removed_count = index.remove_vectors(ids)
+                    if removed_count > 0:
+                        self.logger.info(f"成功從頻道 {channel_id} 的索引中移除了 {removed_count} 個向量。")
+                    return removed_count
+                else:
+                    self.logger.warning(f"嘗試從未載入的索引 {channel_id} 中移除向量。")
+                    return 0
+        except Exception as e:
+            self.logger.error(f"從頻道 {channel_id} 移除向量時發生錯誤: {e}", exc_info=True)
+            raise VectorOperationError(f"從頻道 {channel_id} 移除向量失敗: {e}")
     
     def search_similar(
         self,
@@ -1949,6 +2076,34 @@ class VectorManager:
             self.logger.error(f"取得頻道 {channel_id} 索引統計失敗: {e}")
             return {"error": str(e)}
     
+    def unload_channel_index(self, channel_id: str) -> bool:
+        """從記憶體中卸載特定頻道的索引。
+
+        Args:
+            channel_id: 要卸載索引的頻道 ID。
+
+        Returns:
+            bool: 如果成功卸載或索引本來就不存在，則返回 True。
+        """
+        try:
+            with self._indices_lock:
+                if channel_id in self._indices:
+                    # 釋放與索引相關的資源
+                    if hasattr(self._indices[channel_id], 'clear_gpu_resources'):
+                        self._indices[channel_id].clear_gpu_resources()
+                    
+                    del self._indices[channel_id]
+                    self.logger.info(f"成功從記憶體中卸載頻道 {channel_id} 的索引。")
+                    # 觸發垃圾回收以釋放記憶體
+                    gc.collect()
+                    return True
+                else:
+                    self.logger.debug(f"頻道 {channel_id} 的索引未載入，無需卸載。")
+                    return True
+        except Exception as e:
+            self.logger.error(f"卸載頻道 {channel_id} 的索引時發生錯誤: {e}")
+            return False
+
     async def save_index(self, channel_id: str) -> bool:
         """非同步儲存頻道索引
 
@@ -2077,6 +2232,156 @@ class VectorManager:
         stats["total_vectors"] = total_vectors
         
         return stats
+    
+    def rebuild_all_indexes(self) -> dict:
+        """重建所有頻道/伺服器的向量索引（同步、供上層以執行緒池呼叫）
+        
+        掃描索引存放目錄的 *.index/.mapping，解析頻道 ID，從資料庫讀取原始訊息，
+        重新分段、重新嵌入並建立乾淨索引後，以原子方式覆蓋舊檔。
+        
+        Returns:
+            dict: {'rebuilt_count': int, 'failed_count': int, 'errors': List[str]}
+        """
+        summary = {'rebuilt_count': 0, 'failed_count': 0, 'errors': []}
+        try:
+            # 延伸：允許沒有現有檔案也重建（例如只有資料庫資料）
+            existing_files = list(self.storage_path.glob("*.index"))
+            channel_ids = set([p.stem for p in existing_files])
+            
+            # 若目錄存在但沒有檔案，仍嘗試從資料庫列出所有 channel
+            try:
+                from .database import DatabaseManager
+                db_path = Path("data/memory/memory.db")
+                db_manager = DatabaseManager(db_path) if db_path.exists() else None
+            except Exception as e:
+                db_manager = None
+                self.logger.warning(f"初始化 DatabaseManager 失敗，僅重建現有索引檔案: {e}")
+            
+            # 當能訪問資料庫時，補齊所有 channels
+            if db_manager:
+                try:
+                    # 讀出所有 channel_id
+                    with db_manager.get_connection() as conn:
+                        cursor = conn.execute("SELECT channel_id FROM channels")
+                        for row in cursor.fetchall():
+                            channel_ids.add(row[0])
+                except Exception as e:
+                    self.logger.warning(f"掃描資料庫頻道失敗，僅使用檔案清單: {e}")
+            
+            # 需要嵌入與分段服務，從上層 MemoryManager 初始化後掛載於此管理器
+            embedding_service = getattr(self, "_embedding_service", None)
+            segmentation_service = getattr(self, "_segmentation_service", None)
+            
+            if embedding_service is None or self.profile.embedding_dimension <= 0:
+                raise VectorOperationError("嵌入服務未初始化或維度配置無效，無法重建索引")
+            
+            # 逐一重建
+            for channel_id in sorted(channel_ids):
+                try:
+                    # 卸載記憶體中的舊索引，以避免佔用資源
+                    self.unload_channel_index(channel_id)
+                    
+                    # 重新建立空索引容器
+                    if not self.create_channel_index(channel_id):
+                        raise VectorOperationError("建立空索引容器失敗")
+                    
+                    index = self.get_channel_index(channel_id)
+                    if index is None:
+                        raise VectorOperationError("取得索引實例失敗")
+                    
+                    # 從資料庫讀取該頻道所有訊息
+                    messages = []
+                    if db_manager:
+                        try:
+                            with db_manager.get_connection() as conn:
+                                cursor = conn.execute(
+                                    "SELECT message_id, content, timestamp, user_id FROM messages WHERE channel_id = ? ORDER BY timestamp ASC",
+                                    (channel_id,)
+                                )
+                                messages = [dict(row) for row in cursor.fetchall()]
+                        except Exception as e:
+                            raise VectorOperationError(f"讀取資料庫訊息失敗: {e}")
+                    
+                    if not messages:
+                        # 沒有資料，則建立空索引並覆蓋舊檔（若有）
+                        index_file = self.storage_path / f"{channel_id}.index"
+                        faiss.write_index(index.get_index(), str(index_file))
+                        # 同步寫入空映射
+                        mapping_path = index_file.with_suffix(".mapping")
+                        with open(mapping_path, "wb") as f:
+                            pickle.dump({'id_map': {}, 'reverse_id_map': {}, 'next_id': 0}, f)
+                        summary['rebuilt_count'] += 1
+                        self.logger.info(f"頻道 {channel_id}: 無訊息資料，已重置為空索引")
+                        continue
+                    
+                    # 重新嵌入（簡化：直接使用訊息文本，若分段服務存在，可在此做分段）
+                    texts = [m.get("content", "") for m in messages]
+                    # 以批次方式產生嵌入以降低峰值記憶體
+                    batch = getattr(self.profile, 'batch_size', 50) or 50
+                    vectors: list = []
+                    for i in range(0, len(texts), batch):
+                        chunk = texts[i:i+batch]
+                        embeds = embedding_service.encode(chunk)
+                        # 支援 torch/np 兩種返回
+                        if hasattr(embeds, 'cpu'):
+                            embeds = embeds.cpu().numpy()
+                        vectors.append(embeds.astype('float32'))
+                    if vectors:
+                        vectors_np = np.vstack(vectors)
+                    else:
+                        vectors_np = np.zeros((0, self.profile.embedding_dimension), dtype='float32')
+                    
+                    # 建立對應 ID（以 message_id 綁定）
+                    ids = [str(m.get("message_id")) for m in messages]
+                    
+                    # 寫入全新索引（在記憶體，確保原子性保存時才覆蓋檔案）
+                    if vectors_np.shape[0] != len(ids):
+                        raise VectorOperationError("嵌入向量數與 ID 數量不一致")
+                    
+                    add_ok = index.add_vectors(vectors_np, ids, batch_size=batch)
+                    if not add_ok:
+                        raise VectorOperationError("新增向量至索引失敗")
+                    
+                    # 原子性覆寫檔案
+                    index_file = self.storage_path / f"{channel_id}.index"
+                    if not asyncio.get_event_loop().is_running():
+                        # 在同步環境下直接存
+                        faiss.write_index(index.get_index(), str(index_file))
+                        # 同步寫映射
+                        mapping_path = index_file.with_suffix(".mapping")
+                        with open(mapping_path, "wb") as f:
+                            pickle.dump({
+                                'id_map': index._id_map,
+                                'reverse_id_map': index._reverse_id_map,
+                                'next_id': index._next_id,
+                                'dimension': index.dimension,
+                                'index_type': index.index_type,
+                                'metric': index.metric,
+                                'timestamp': time.time(),
+                                'checksum': index._calculate_mapping_checksum(),
+                            }, f)
+                    else:
+                        # 若在事件迴圈中，使用既有的異步存檔方法
+                        save_ok = asyncio.get_event_loop().run_until_complete(index.save(index_file))  # type: ignore
+                        if not save_ok:
+                            raise VectorOperationError("索引保存失敗")
+                    
+                    summary['rebuilt_count'] += 1
+                    self.logger.info(f"頻道 {channel_id}: 重建完成（{len(ids)} 筆）")
+                
+                except Exception as ce:
+                    summary['failed_count'] += 1
+                    err = f"頻道 {channel_id} 重建失敗: {ce}"
+                    summary['errors'].append(err)
+                    self.logger.error(err, exc_info=True)
+            
+            return summary
+        
+        except Exception as e:
+            summary['failed_count'] += 1
+            summary['errors'].append(str(e))
+            self.logger.error(f"重建所有索引流程失敗: {e}", exc_info=True)
+            return summary
     
     def optimize_memory_usage(self) -> bool:
         """優化記憶體使用
@@ -2459,6 +2764,21 @@ class VectorManager:
             for channel_id in self._indices:
                 stats[channel_id] = self.get_index_stats(channel_id)
         return stats
+
+    def get_all_segment_ids_by_channel(self) -> Dict[str, List[str]]:
+        """
+        獲取所有頻道及其對應的所有 segment ID。
+        """
+        all_ids = {}
+        with self._indices_lock:
+            for channel_id, index in self._indices.items():
+                try:
+                    # 確保索引已載入
+                    if self.create_channel_index(channel_id):
+                        all_ids[channel_id] = index.get_all_ids()
+                except Exception as e:
+                    self.logger.error(f"從頻道 {channel_id} 獲取所有 ID 失敗: {e}")
+        return all_ids
     
     def check_and_repair_all_indices(self) -> Dict[str, Dict[str, any]]:
         """檢查並修復所有頻道索引的完整性
@@ -2671,6 +2991,57 @@ class VectorManager:
                 'status': 'failed'
             }
 
+    async def load_all_indexes(self) -> None:
+        """
+        載入所有存在於磁碟上的但尚未載入到記憶體中的索引。
+        """
+        self.logger.info("開始載入所有磁碟上的向量索引...")
+        if not self.storage_path or not self.storage_path.exists():
+            self.logger.warning("索引儲存路徑不存在，無法載入索引。")
+            return
+
+        loaded_count = 0
+        failed_count = 0
+        
+        # 先收集所有需要載入的 channel_id
+        channels_to_load = []
+        try:
+            index_files = list(self.storage_path.glob("*.index"))
+            for index_file in index_files:
+                channel_id = index_file.stem
+                # 使用鎖來安全地檢查 self.indices
+                with self._indices_lock:
+                    if channel_id not in self._indices:
+                        channels_to_load.append(channel_id)
+        except Exception as e:
+            self.logger.error(f"掃描索引檔案時發生錯誤: {e}")
+            return
+        
+        if not channels_to_load:
+            self.logger.info("沒有需要載入的新索引。")
+            return
+
+        self.logger.info(f"準備載入 {len(channels_to_load)} 個索引...")
+        loop = asyncio.get_event_loop()
+
+        for channel_id in channels_to_load:
+            self.logger.debug(f"發現磁碟上的索引 {channel_id}，開始載入。")
+            try:
+                # create_channel_index 是 CPU 密集型操作，在執行緒池中運行
+                success = await loop.run_in_executor(
+                    None, self.create_channel_index, channel_id
+                )
+                if success:
+                    loaded_count += 1
+                else:
+                    failed_count += 1
+                    self.logger.error(f"載入索引 {channel_id} 失敗。")
+            except Exception as e:
+                failed_count += 1
+                self.logger.error(f"載入索引 {channel_id} 時發生例外: {e}")
+
+        self.logger.info(f"所有索引載入完成。成功載入 {loaded_count} 個，失敗 {failed_count} 個。")
+
     async def cleanup(self) -> None:
         """清理向量管理器資源和快取
         
@@ -2735,3 +3106,33 @@ class VectorManager:
 
         end_time = time.time()
         self.logger.info(f"所有 {len(indices_to_move)} 個 GPU 索引已移至 CPU，總耗時: {end_time - start_time:.2f} 秒")
+
+# --- 單例模式實作 ---
+_vector_manager_instance: Optional[VectorManager] = None
+_vector_manager_lock = threading.Lock()
+
+def get_vector_manager(
+    profile: Optional[MemoryProfile] = None,
+    storage_path: Optional[Path] = None
+) -> VectorManager:
+    """
+    獲取 VectorManager 的單例實例。
+
+    Args:
+        profile: 記憶系統配置檔案 (僅在首次初始化時需要)。
+        storage_path: 索引儲存路徑 (僅在首次初始化時需要)。
+
+    Returns:
+        VectorManager: VectorManager 的單例實例。
+        
+    Raises:
+        ValueError: 如果在未初始化時未提供 profile 或 storage_path。
+    """
+    global _vector_manager_instance
+    if _vector_manager_instance is None:
+        with _vector_manager_lock:
+            if _vector_manager_instance is None:
+                if profile is None or storage_path is None:
+                    raise ValueError("首次初始化 VectorManager 時必須提供 profile 和 storage_path。")
+                _vector_manager_instance = VectorManager(profile, storage_path)
+    return _vector_manager_instance

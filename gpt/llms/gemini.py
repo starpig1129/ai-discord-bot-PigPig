@@ -13,6 +13,11 @@ from pydantic import BaseModel
 from addons.settings import TOKENS
 from gpt.utils.media import image_to_base64
 from gpt.caching.gemini_cache import GeminiCacheManager
+from gpt.core.exceptions import LLMProviderError  # PR#2: 統一錯誤類導入
+
+# Sentinel for safely terminating async iteration from executor threads
+_SENTINEL = object()
+
 # Initialize the Gemini model
 tokens = TOKENS()
 
@@ -37,6 +42,75 @@ class GeminiError(Exception):
     pass
 
 
+def _map_httpx_error(e: Exception, trace_id: str) -> LLMProviderError:
+    code = "connection_error"
+    retriable = True
+    status = None
+    if isinstance(e, httpx.TimeoutException):
+        code = "network_timeout"
+        retriable = True
+    elif isinstance(e, httpx.ConnectError):
+        code = "connection_error"
+        retriable = True
+    elif isinstance(e, httpx.HTTPStatusError):
+        status = int(getattr(e.response, "status_code", 0) or 0)
+        if status == 429:
+            code = "rate_limited"
+            retriable = True
+        elif 500 <= status < 600:
+            code = "gateway_error"
+            retriable = True
+        elif status in (401, 403):
+            code = "auth_failed"
+            retriable = False
+        else:
+            code = "invalid_request"
+            retriable = False
+    return LLMProviderError(
+        code=code,
+        retriable=retriable,
+        status=status,
+        provider="gemini",
+        details={"original_error": str(e), "type": type(e).__name__},
+        trace_id=trace_id,
+    )
+
+
+def _map_httpx_error(e: Exception, trace_id: str) -> "LLMProviderError":
+    from gpt.core.exceptions import LLMProviderError
+    code = "connection_error"
+    retriable = True
+    status = None
+    if isinstance(e, httpx.TimeoutException):
+        code = "network_timeout"
+        retriable = True
+    elif isinstance(e, httpx.ConnectError):
+        code = "connection_error"
+        retriable = True
+    elif isinstance(e, httpx.HTTPStatusError):
+        status = int(getattr(e.response, "status_code", 0) or 0)
+        if status == 429:
+            code = "rate_limited"
+            retriable = True
+        elif 500 <= status < 600:
+            code = "gateway_error"
+            retriable = True
+        elif status == 401 or status == 403:
+            code = "auth_failed"
+            retriable = False
+        else:
+            code = "invalid_request"
+            retriable = False
+    return LLMProviderError(
+        code=code,
+        retriable=retriable,
+        status=status,
+        provider="gemini",
+        details={"original_error": str(e), "type": type(e).__name__},
+        trace_id=trace_id,
+    )
+
+
 cache_manager: Optional[GeminiCacheManager] = None
 def initialize_cache_manager(max_cache_count: int = 50):
     global cache_manager
@@ -45,9 +119,10 @@ def initialize_cache_manager(max_cache_count: int = 50):
         logger.info(f"全域快取管理器初始化完成，最大快取數量: {max_cache_count}")
     return cache_manager
 
-def get_cache_manager() -> Optional[GeminiCacheManager]:
+async def get_cache_manager() -> Optional[GeminiCacheManager]:
     global cache_manager
-    if cache_manager is None: cache_manager = initialize_cache_manager()
+    if cache_manager is None:
+        cache_manager = initialize_cache_manager()
     return cache_manager
 
 def _download_and_process_pdf(pdf_url_or_path: str) -> pathlib.Path:
@@ -519,7 +594,7 @@ async def generate_response(inst: str,
     帶有通用快取功能的 Gemini API 回應生成器。
     此函數現在會為所有輸入類型的組合嘗試使用快取。
     """
-    cache_mgr = get_cache_manager()
+    cache_mgr = await get_cache_manager()
     cache_key = None
     generation_config_args = {}
     is_streaming = not bool(response_schema)
@@ -542,7 +617,7 @@ async def generate_response(inst: str,
             pdf_input=pdf_input
         )
         # 嘗試獲取快取
-        cache = cache_mgr.get_cache_by_key(cache_key)
+        cache = await cache_mgr.get_cache_by_key(cache_key)
         
         # <<< 步驟 3: 如果快取未命中，則動態創建它
         if cache is None:
@@ -568,10 +643,30 @@ async def generate_response(inst: str,
                 if response_schema is None:
                     cache_args["tools"] = tool_list
 
-                # 3b. 呼叫管理器來創建並註冊這個新的快取
-                cache = cache_mgr.create_and_register_cache(
-                    **cache_args
+                # 3b. 檢查 token 數量是否足夠
+                token_count_response = await asyncio.to_thread(
+                    client.models.count_tokens,
+                    contents=contents,
+                    model=model_id
                 )
+                total_tokens = token_count_response.total_tokens
+                
+                min_tokens_for_caching = 1024  # Gemini API 的最低要求
+
+                if total_tokens >= min_tokens_for_caching:
+                    # 3c. 呼叫管理器來創建並註冊這個新的快取
+                    logger.info(f"內容 token ({total_tokens}) 足夠，正在創建快取...")
+                    cache = cache_mgr.create_and_register_cache(
+                        **cache_args
+                    )
+                else:
+                    logger.warning(
+                        f"內容 token ({total_tokens}) 過少，"
+                        f"未達到快取所需的最小數量 ({min_tokens_for_caching})。"
+                        "將跳過快取創建。"
+                    )
+                    cache = None # 確保在 token 不足時，後續流程不會使用快取
+
             except Exception as e:
                 logger.error(f"在動態創建快取時發生錯誤，將降級為非快取模式: {e}")
                 cache = None # 確保出錯時 cache 為 None
@@ -598,10 +693,10 @@ async def generate_response(inst: str,
             }
             if response_schema:
                 logger.info("使用快取模式生成結構化回應")
-                response_object = client.models.generate_content(**api_kwargs)
+                response_object = await asyncio.to_thread(client.models.generate_content, **api_kwargs)
             else:
                 logger.info("使用快取模式生成流式回應")
-                response_object = client.models.generate_content_stream(**api_kwargs)
+                response_object = await asyncio.to_thread(client.models.generate_content_stream, **api_kwargs)
         
         except Exception as e:
             logger.warning(f"快取模式生成失敗，將自動降級為非快取模式。錯誤: {e}")
@@ -627,10 +722,9 @@ async def generate_response(inst: str,
         config = GenerateContentConfig(system_instruction=system_prompt, **generation_config_args)
         
         if is_streaming:
-            response_object = client.models.generate_content_stream(model=model_id, contents=contents, config=config)
+            response_object = await asyncio.to_thread(client.models.generate_content_stream, model=model_id, contents=contents, config=config)
         else:
-
-            response_object = client.models.generate_content(model=model_id, contents=contents, config=config)
+            response_object = await asyncio.to_thread(client.models.generate_content, model=model_id, contents=contents, config=config)
 
     try:
         if is_streaming:
@@ -640,23 +734,35 @@ async def generate_response(inst: str,
                 try:
                     accumulated_text = ""
                     chunk_count = 0
-                    
+
                     try:
-                        for chunk in response_object:
+                        # 使用執行緒執行阻塞的同步迭代，以免阻塞 asyncio 事件迴圈
+                        loop = asyncio.get_running_loop()
+                        sync_iterator = iter(response_object)
+
+                        # 在本地定義同步輔助函式以捕獲 StopIteration 並返回哨兵值
+                        def _sync_next_chunk(iterator):
+                            try:
+                                return next(iterator)
+                            except StopIteration:
+                                return _SENTINEL
+
+                        while True:
+                            chunk = await loop.run_in_executor(None, _sync_next_chunk, sync_iterator)
+                            if chunk is _SENTINEL:
+                                break
+
                             chunk_count += 1
                             if chunk and hasattr(chunk, 'text') and chunk.text:
                                 chunk_text = chunk.text.strip()
                                 if chunk_text:
                                     accumulated_text += chunk_text
                                     yield chunk_text
-                                    await asyncio.sleep(0.01)
                             elif chunk is None:
                                 break
-                    except StopIteration:
-                        pass
                     except Exception as stream_error:
                         error_message = str(stream_error)
-                        
+
                         if "Response not read" in error_message or "400 Bad Request" in error_message:
                             if accumulated_text:
                                 yield accumulated_text
@@ -670,7 +776,8 @@ async def generate_response(inst: str,
                                             tools=tool_list
                                         )
                                         # 使用快取中繼資料中儲存的模型，確保一致性
-                                        fallback_response = client.models.generate_content(
+                                        fallback_response = await asyncio.to_thread(
+                                            client.models.generate_content,
                                             model=cache.model,
                                             contents=contents,
                                             config=fallback_config
@@ -681,22 +788,21 @@ async def generate_response(inst: str,
                                             tools=tool_list,
                                             response_modalities=["TEXT"],
                                         )
-                                        
-                                        fallback_response = client.models.generate_content(
+                                        fallback_response = await asyncio.to_thread(
+                                            client.models.generate_content,
                                             model=model_id,
                                             contents=contents,
                                             config=fallback_config
                                         )
-                                    
+
                                     if fallback_response and fallback_response.text:
                                         yield fallback_response.text
                                         return
                                     else:
                                         raise GeminiError(f"Gemini API 流式和非流式回應都失敗: {error_message}")
-                                        
                                 except Exception as fallback_error:
                                     raise GeminiError(f"Gemini API 降級處理失敗: {fallback_error}")
-                        
+
                         elif "RESOURCE_PROJECT_INVALID" in error_message:
                             raise GeminiError(f"Gemini API 項目設定錯誤: {error_message}")
                         elif "PERMISSION_DENIED" in error_message:
@@ -709,10 +815,10 @@ async def generate_response(inst: str,
                                 return
                             else:
                                 raise GeminiError(f"Gemini API 錯誤: {error_message}")
-                    
+
                     if not accumulated_text:
                         raise GeminiError("Gemini API 沒有生成任何回應內容")
-                        
+
                 except Exception as e:
                     logger.error(f"在流式生成過程中發生錯誤: {e}")
                     raise GeminiError(f"流式生成失敗: {e}") from e

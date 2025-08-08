@@ -23,16 +23,14 @@ except ImportError:
 from gpt.core.response_generator import generate_response
 from gpt.cache_utils import  cleanup_caches
 from gpt.processing_cache import (
-    get_processing_result, cache_processing_result,
-    get_memory_search_result, cache_memory_search_result
+    processing_cache, memory_search_cache
 )
 from gpt.parallel_tool_manager import (
     ParallelToolManager, ToolRequest, create_tool_request,
     execute_tools_in_parallel
 )
 from gpt.performance_monitor import (
-    PerformanceMonitor, PerformanceMetrics,
-    record_performance_metrics, get_performance_stats
+    PerformanceMonitor
 )
 from gpt.optimization_config_manager import (
     get_optimization_settings,
@@ -125,9 +123,9 @@ class OptimizedDiscordBot:
         Returns:
             處理結果和異步生成器
         """
-        start_time = time.time()
-        metrics = PerformanceMetrics(timestamp=start_time)
-        
+        if self.performance_monitor:
+            self.performance_monitor.start_timer('process_user_input')
+
         try:
             # 自動清理檢查
             await self._auto_cleanup_check()
@@ -135,24 +133,25 @@ class OptimizedDiscordBot:
             # Step 1: 檢查處理結果快取
             cached_result = None
             if self.config.enable_processing_cache:
-                cached_result = get_processing_result(
+                cached_result = processing_cache.get_cached_result(
                     user_input, user_id, channel_id, system_prompt
                 )
                 if cached_result is not None:
-                    metrics.processing_cache_hits = 1
-                    metrics.response_time = time.time() - start_time
-                    
-                    if self.config.enable_performance_monitoring:
-                        record_performance_metrics(metrics)
+                    if self.performance_monitor:
+                        self.performance_monitor.increment_counter('processing_cache_hits')
+                        self.performance_monitor.stop_timer('process_user_input')
                     
                     self.logger.info("使用處理結果快取")
                     return cached_result
                 else:
-                    metrics.processing_cache_misses = 1
+                    if self.performance_monitor:
+                        self.performance_monitor.increment_counter('processing_cache_misses')
             
             # Step 2: 啟動異步記憶搜索（如果啟用）
             memory_search_task = None
             if self.config.enable_memory_cache and dialogue_history:
+                if self.performance_monitor:
+                    self.performance_monitor.start_timer('memory_search')
                 memory_search_task = self._start_memory_search(user_input, user_id)
             
             # Step 3: 準備並行工具執行（如果需要）
@@ -161,30 +160,35 @@ class OptimizedDiscordBot:
                 # 這裡可以根據具體需求分析用戶輸入，決定需要執行哪些工具
                 tool_requests = self._analyze_tool_requirements(user_input, user_id, channel_id)
                 if tool_requests:
-                    tool_start = time.time()
+                    if self.performance_monitor:
+                        self.performance_monitor.start_timer('parallel_tool_execution')
                     tool_results = await execute_tools_in_parallel(tool_requests)
-                    metrics.parallel_execution_time = time.time() - tool_start
-                    metrics.parallel_tools_executed = len(tool_requests)
+                    if self.performance_monitor:
+                        self.performance_monitor.stop_timer('parallel_tool_execution')
+                        self.performance_monitor.increment_counter('parallel_tools_executed', len(tool_requests))
             
             # Step 4: 獲取記憶搜索結果
             memory_context = ""
             if memory_search_task:
-                memory_start = time.time()
                 memory_result = await memory_search_task
-                metrics.memory_search_time = time.time() - memory_start
+                if self.performance_monitor:
+                    self.performance_monitor.stop_timer('memory_search')
                 
                 if memory_result and memory_result.get('context'):
                     memory_context = memory_result['context']
-                    metrics.memory_cache_hits = 1
+                    if self.performance_monitor:
+                        self.performance_monitor.increment_counter('memory_cache_hits')
                 else:
-                    metrics.memory_cache_misses = 1
+                    if self.performance_monitor:
+                        self.performance_monitor.increment_counter('memory_cache_misses')
             
             # Step 5: 整合上下文並使用快取生成回應
             enhanced_system_prompt = self._build_enhanced_system_prompt(
                 system_prompt, memory_context, tool_results
             )
             
-            api_start = time.time()
+            if self.performance_monitor:
+                self.performance_monitor.start_timer('api_call')
             result, response_generator = await generate_response(
                 inst=user_input,
                 system_prompt=enhanced_system_prompt,
@@ -193,39 +197,37 @@ class OptimizedDiscordBot:
                 audio_input=audio_input,
                 video_input=video_input
             )
-            
-            metrics.api_call_time = time.time() - api_start
-            metrics.api_call_count = 1
+            if self.performance_monitor:
+                self.performance_monitor.stop_timer('api_call')
+                self.performance_monitor.increment_counter('api_call_count')
             
             # 如果使用了 Gemini 快取
             if self.config.enable_gemini_cache:
-                metrics.gemini_cache_hits = 1  # 簡化處理，實際應該從 cache_manager 獲取
+                if self.performance_monitor:
+                    self.performance_monitor.increment_counter('gemini_cache_hits')  # 簡化處理
             else:
-                metrics.gemini_cache_misses = 1
+                if self.performance_monitor:
+                    self.performance_monitor.increment_counter('gemini_cache_misses')
             
             # Step 6: 快取處理結果
             if self.config.enable_processing_cache:
-                cache_processing_result(
-                    user_input, user_id, channel_id, 
+                processing_cache.cache_result(
+                    user_input, user_id, channel_id,
                     (result, response_generator), system_prompt
                 )
             
-            # Step 7: 記錄性能指標
-            metrics.response_time = time.time() - start_time
+            # Step 7: 記錄性能指標 (已透過計時器完成)
+            if self.performance_monitor:
+                self.performance_monitor.stop_timer('process_user_input')
             
-            if self.config.enable_performance_monitoring:
-                record_performance_metrics(metrics)
-            
-            self.logger.info(f"優化處理完成，總耗時: {metrics.response_time:.2f}s")
+            self.logger.info(f"優化處理完成")
             
             return result, response_generator
             
         except Exception as e:
-            metrics.error_count = 1
-            metrics.response_time = time.time() - start_time
-            
-            if self.config.enable_performance_monitoring:
-                record_performance_metrics(metrics)
+            if self.performance_monitor:
+                self.performance_monitor.increment_counter('error_count')
+                self.performance_monitor.stop_timer('process_user_input')
             
             self.logger.error(f"優化處理失敗: {str(e)}")
             raise
@@ -242,7 +244,7 @@ class OptimizedDiscordBot:
         """
         try:
             # 檢查記憶搜索快取
-            cached_memory = get_memory_search_result(query, user_id)
+            cached_memory = memory_search_cache.get_search_result(query, user_id)
             if cached_memory:
                 return cached_memory
             
@@ -261,7 +263,7 @@ class OptimizedDiscordBot:
             }
             
             # 快取搜索結果
-            cache_memory_search_result(query, user_id, search_result)
+            memory_search_cache.cache_search_result(query, user_id, search_result)
             
             return search_result
             
@@ -424,8 +426,8 @@ class OptimizedDiscordBot:
             status["gpu_memory"] = {"error": str(e)}
         
         # 添加性能統計
-        if self.config.enable_performance_monitoring:
-            status["performance"] = get_performance_stats()
+        if self.config.enable_performance_monitoring and self.performance_monitor:
+            status["performance"] = self.performance_monitor.get_performance_stats()
         
         # 添加工具執行統計
         if self.parallel_tool_manager:
@@ -549,10 +551,3 @@ async def process_optimized_request(user_input: str,
     return await optimized_bot.process_user_input(
         user_input, user_id, channel_id, system_prompt, **kwargs
     )
-
-def get_optimization_status() -> Dict[str, Any]:
-    """便捷函數：獲取優化狀態"""
-    if optimized_bot is None:
-        return {"status": "not_initialized"}
-    
-    return optimized_bot.get_optimization_status()

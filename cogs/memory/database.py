@@ -51,10 +51,23 @@ class DatabaseManager:
             self._user_manager = SQLiteUserManager(self)
         return self._user_manager
     
+    def _sanitize_segment_id(self, segment_id: str) -> str:
+        """清理 segment_id，確保 'seg_' 前綴只有一個。"""
+        if not isinstance(segment_id, str):
+            return segment_id
+        
+        # 移除所有 'seg_'，然後在開頭加上一個
+        sanitized_id = segment_id
+        while sanitized_id.startswith("seg_"):
+            sanitized_id = sanitized_id[4:]
+            
+        return f"seg_{sanitized_id}"
+    
     def _initialize_database(self) -> None:
         """初始化資料庫結構"""
         try:
             with self.get_connection() as conn:
+                # 建立資料表和索引
                 self._create_tables(conn)
                 self._create_indexes(conn)
                 conn.commit()
@@ -64,7 +77,7 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"資料庫初始化失敗: {e}")
             raise DatabaseError(f"資料庫初始化失敗: {e}")
-    
+
     @contextmanager
     def get_connection(self):
         """取得資料庫連接 (上下文管理器)
@@ -158,7 +171,6 @@ class DatabaseManager:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id TEXT PRIMARY KEY,
-                discord_id TEXT UNIQUE NOT NULL,
                 display_name TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -255,7 +267,6 @@ class DatabaseManager:
             "CREATE INDEX IF NOT EXISTS idx_channels_last_active ON channels(last_active)",
             
             # 使用者表索引 (新增)
-            "CREATE INDEX IF NOT EXISTS idx_users_discord_id ON users(discord_id)",
             "CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active)",
             "CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id)",
             
@@ -452,8 +463,11 @@ class DatabaseManager:
                     query += " AND timestamp > ?"
                     params.append(after)
                 
-                query += " ORDER BY timestamp DESC LIMIT ?"
-                params.append(limit)
+                query += " ORDER BY timestamp DESC"
+                
+                if limit is not None:
+                    query += " LIMIT ?"
+                    params.append(limit)
                 
                 cursor = conn.execute(query, params)
                 rows = cursor.fetchall()
@@ -496,6 +510,67 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"批次查詢訊息失敗: {e}")
             raise DatabaseError(f"批次查詢訊息失敗: {e}", operation="get_messages_by_ids", table="messages")
+
+    def add_messages(self, messages: List[Dict[str, Any]]) -> bool:
+        """批次儲存訊息
+
+        Args:
+            messages: 訊息資料字典的列表
+
+        Returns:
+            bool: 是否成功儲存
+        """
+        if not messages:
+            return True
+
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # 準備訊息資料
+                message_data = [
+                    (
+                        msg['message_id'], msg['channel_id'], msg['user_id'],
+                        msg['content'], msg.get('content_processed'), msg['timestamp'],
+                        msg.get('message_type', 'user'), msg.get('metadata')
+                    )
+                    for msg in messages
+                ]
+                
+                # 批次插入訊息
+                cursor.executemany("""
+                    INSERT OR REPLACE INTO messages
+                    (message_id, channel_id, user_id, content, content_processed,
+                     timestamp, message_type, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, message_data)
+
+                # 批次更新頻道活動
+                channel_updates = {}
+                for msg in messages:
+                    channel_id = msg['channel_id']
+                    if channel_id not in channel_updates:
+                        channel_updates[channel_id] = {'count': 0, 'last_active': msg['timestamp']}
+                    channel_updates[channel_id]['count'] += 1
+                    if msg['timestamp'] > channel_updates[channel_id]['last_active']:
+                        channel_updates[channel_id]['last_active'] = msg['timestamp']
+
+                for channel_id, update in channel_updates.items():
+                    self._ensure_channel_exists(conn, channel_id)
+                    cursor.execute("""
+                        UPDATE channels
+                        SET last_active = ?,
+                            message_count = message_count + ?
+                        WHERE channel_id = ?
+                    """, (update['last_active'], update['count'], channel_id))
+
+                conn.commit()
+                self.logger.debug(f"成功批次儲存 {len(messages)} 條訊息")
+                return True
+
+        except Exception as e:
+            self.logger.error(f"批次儲存訊息失敗: {e}")
+            raise DatabaseError(f"批次儲存訊息失敗: {e}", operation="add_messages", table="messages")
     
     def search_messages_by_keywords(
         self,
@@ -515,142 +590,72 @@ class DatabaseManager:
             after: 在此時間之後
             
         Returns:
-            List[Dict[str, Any]]: 匹配的訊息列表，包含匹配分數
+            List[Dict[str, Any]]: 訊息列表
         """
         if not keywords:
             return []
         
         try:
             with self.get_connection() as conn:
-                # 建立基本查詢
-                query_parts = ["SELECT *, 0 as match_score FROM messages WHERE channel_id = ?"]
-                params = [channel_id]
+                # 基礎查詢
+                query = "SELECT * FROM messages WHERE channel_id = ?"
+                params: List[Any] = [channel_id]
                 
-                # 添加關鍵字搜尋條件
-                keyword_conditions = []
-                for keyword in keywords:
-                    # 搜尋原始內容和處理後內容
-                    keyword_conditions.append(
-                        "(content LIKE ? OR content_processed LIKE ?)"
-                    )
-                    keyword_param = f"%{keyword}%"
-                    params.extend([keyword_param, keyword_param])
-                
-                if keyword_conditions:
-                    query_parts.append("AND (" + " OR ".join(keyword_conditions) + ")")
-                
-                # 添加時間過濾
+                # 時間範圍過濾
                 if before:
-                    query_parts.append("AND timestamp < ?")
+                    query += " AND timestamp < ?"
                     params.append(before)
-                
                 if after:
-                    query_parts.append("AND timestamp > ?")
+                    query += " AND timestamp > ?"
                     params.append(after)
                 
+                # 關鍵字過濾
+                keyword_clauses = " AND ".join(["(content LIKE ? OR content_processed LIKE ?)" for _ in keywords])
+                query += f" AND ({keyword_clauses})"
+                for keyword in keywords:
+                    like_pattern = f"%{keyword}%"
+                    params.extend([like_pattern, like_pattern])
+                
                 # 排序和限制
-                query_parts.append("ORDER BY timestamp DESC LIMIT ?")
+                query += " ORDER BY timestamp DESC LIMIT ?"
                 params.append(limit)
-                
-                query = " ".join(query_parts)
-                
-                self.logger.debug(f"關鍵字搜尋查詢: {query}")
-                self.logger.debug(f"搜尋參數: 關鍵字={keywords}, 頻道={channel_id}")
                 
                 cursor = conn.execute(query, params)
                 rows = cursor.fetchall()
                 
-                # 轉換為字典並計算匹配分數
-                messages = []
-                for row in rows:
-                    message_dict = dict(row)
-                    
-                    # 計算關鍵字匹配分數
-                    content = message_dict.get('content', '') or ''
-                    content_processed = message_dict.get('content_processed', '') or ''
-                    
-                    match_score = self._calculate_keyword_match_score(
-                        content, content_processed, keywords
-                    )
-                    message_dict['match_score'] = match_score
-                    
-                    messages.append(message_dict)
+                # 計算匹配分數並排序
+                messages = [dict(row) for row in rows]
+                for msg in messages:
+                    msg['match_score'] = self._calculate_keyword_match_score(msg['content'], keywords)
                 
-                # 按匹配分數排序
                 messages.sort(key=lambda x: x['match_score'], reverse=True)
                 
-                self.logger.info(f"關鍵字搜尋完成: 找到 {len(messages)} 個結果")
                 return messages
                 
         except Exception as e:
             self.logger.error(f"關鍵字搜尋失敗: {e}")
-            raise DatabaseError(f"關鍵字搜尋失敗: {e}", operation="search_messages_by_keywords", table="messages")
-    
-    def _calculate_keyword_match_score(
-        self,
-        content: str,
-        content_processed: str,
-        keywords: List[str]
-    ) -> float:
-        """計算關鍵字匹配分數
-        
-        Args:
-            content: 原始內容
-            content_processed: 處理後內容
-            keywords: 關鍵字列表
-            
-        Returns:
-            float: 匹配分數 (0.0-1.0)
-        """
-        if not keywords:
-            return 0.0
-        
-        # 合併內容進行搜尋
-        combined_content = f"{content} {content_processed}".lower()
-        
-        if not combined_content.strip():
-            return 0.0
-        
-        total_score = 0.0
-        content_length = len(combined_content)
-        
+            raise DatabaseError(f"關鍵字搜尋失敗: {e}", operation="search_by_keywords", table="messages")
+
+    def _calculate_keyword_match_score(self, content: str, keywords: List[str]) -> float:
+        """計算內容與關鍵字的匹配分數"""
+        score = 0.0
+        content_lower = content.lower()
         for keyword in keywords:
-            keyword_lower = keyword.lower()
-            
-            # 計算關鍵字出現次數
-            count = combined_content.count(keyword_lower)
-            if count > 0:
-                # 基礎分數：出現次數 / 內容長度
-                base_score = min(count * len(keyword_lower) / content_length, 0.5)
-                
-                # 完整匹配加分
-                if keyword_lower in combined_content:
-                    base_score += 0.3
-                
-                # 開頭匹配加分
-                if combined_content.startswith(keyword_lower):
-                    base_score += 0.2
-                
-                total_score += base_score
-        
-        # 正規化分數
-        return min(total_score / len(keywords), 1.0)
-    
+            if keyword.lower() in content_lower:
+                score += 1.0
+        return score / len(keywords) if keywords else 0.0
+
     def _ensure_channel_exists(self, conn: sqlite3.Connection, channel_id: str) -> None:
-        """確保頻道記錄存在
-        
-        Args:
-            conn: 資料庫連接
-            channel_id: 頻道 ID
-        """
-        cursor = conn.execute("SELECT channel_id FROM channels WHERE channel_id = ?", (channel_id,))
-        if not cursor.fetchone():
-            # 建立預設頻道記錄
-            conn.execute("""
-                INSERT INTO channels (channel_id, guild_id)
-                VALUES (?, ?)
-            """, (channel_id, "unknown"))
-    
+        """確保頻道存在，若不存在則建立"""
+        cursor = conn.execute("SELECT 1 FROM channels WHERE channel_id = ?", (channel_id,))
+        if cursor.fetchone() is None:
+            # 假設 guild_id 可以從某處獲取，或設為預設值
+            # 這裡我們暫時設為 'unknown'，實際應用中可能需要更複雜的邏輯
+            conn.execute(
+                "INSERT OR IGNORE INTO channels (channel_id, guild_id) VALUES (?, ?)",
+                (channel_id, 'unknown')
+            )
+
     # 配置操作方法
     def set_config(self, key: str, value: str, config_type: str = "string") -> bool:
         """設定配置值
@@ -658,7 +663,7 @@ class DatabaseManager:
         Args:
             key: 配置鍵
             value: 配置值
-            config_type: 配置類型
+            config_type: 值類型
             
         Returns:
             bool: 是否成功設定
@@ -666,18 +671,15 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 conn.execute("""
-                    INSERT OR REPLACE INTO memory_config 
-                    (config_key, config_value, config_type, updated_at)
-                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT OR REPLACE INTO memory_config (config_key, config_value, config_type)
+                    VALUES (?, ?, ?)
                 """, (key, value, config_type))
                 conn.commit()
-            
             return True
-            
         except Exception as e:
             self.logger.error(f"設定配置失敗: {e}")
-            return False
-    
+            raise DatabaseError(f"設定配置失敗: {e}", operation="set_config", table="memory_config")
+
     def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """取得配置值
         
@@ -686,25 +688,20 @@ class DatabaseManager:
             default: 預設值
             
         Returns:
-            Optional[str]: 配置值，若不存在則返回預設值
+            Optional[str]: 配置值或預設值
         """
         try:
             with self.get_connection() as conn:
-                cursor = conn.execute(
-                    "SELECT config_value FROM memory_config WHERE config_key = ?",
-                    (key,)
-                )
+                cursor = conn.execute("SELECT config_value FROM memory_config WHERE config_key = ?", (key,))
                 row = cursor.fetchone()
-                
                 if row:
-                    return row[0]
+                    return row['config_value']
                 return default
-                
         except Exception as e:
             self.logger.error(f"取得配置失敗: {e}")
-            return default
-    
-    # 效能指標操作方法
+            raise DatabaseError(f"取得配置失敗: {e}", operation="get_config", table="memory_config")
+
+    # 效能指標操作
     def record_metric(
         self,
         metric_type: str,
@@ -723,143 +720,167 @@ class DatabaseManager:
         """
         try:
             metric_id = f"{metric_type}_{datetime.now().isoformat()}"
-            
             with self.get_connection() as conn:
                 conn.execute("""
-                    INSERT INTO performance_metrics 
-                    (metric_id, metric_type, value, metadata)
+                    INSERT INTO performance_metrics (metric_id, metric_type, value, metadata)
                     VALUES (?, ?, ?, ?)
                 """, (metric_id, metric_type, value, metadata))
                 conn.commit()
-            
             return True
-            
         except Exception as e:
             self.logger.error(f"記錄效能指標失敗: {e}")
-            return False
-    
-    # 清理和維護方法
-    def cleanup_old_data(self, retention_days: int = 90) -> int:
-        """清理舊資料
+            raise DatabaseError(f"記錄效能指標失敗: {e}", operation="record_metric", table="performance_metrics")
+
+    # 資料清理
+    def cleanup_old_data(self, retention_days: int = 90) -> Tuple[int, List[str]]:
+        """清理舊資料，並返回被刪除訊息關聯的 segment_id
         
         Args:
-            retention_days: 保留天數
+            retention_days: 資料保留天數
             
         Returns:
-            int: 清理的記錄數量
+            Tuple[int, List[str]]: (刪除的訊息數量, 關聯的 segment_id 列表)
         """
-        cutoff_date = datetime.now().timestamp() - (retention_days * 24 * 3600)
+        cutoff_date = datetime.now() - timedelta(days=retention_days)
+        self.logger.info(f"開始清理 {retention_days} 天前的舊資料 (截止日期: {cutoff_date})")
         
         try:
-            deleted_count = 0
-            
             with self.get_connection() as conn:
-                # 清理舊訊息（將自動清理相關的嵌入記錄）
-                cursor = conn.execute("""
-                    DELETE FROM messages 
-                    WHERE timestamp < datetime(?, 'unixepoch')
-                """, (cutoff_date,))
-                deleted_count += cursor.rowcount
+                # 步驟 1: 找出即將被刪除的訊息 ID
+                cursor = conn.execute(
+                    "SELECT message_id FROM messages WHERE timestamp < ?",
+                    (cutoff_date,)
+                )
+                message_ids_to_delete = [row[0] for row in cursor.fetchall()]
                 
-                # 清理舊效能指標
-                cursor = conn.execute("""
-                    DELETE FROM performance_metrics 
-                    WHERE timestamp < datetime(?, 'unixepoch')
-                """, (cutoff_date,))
-                deleted_count += cursor.rowcount
-                
+                if not message_ids_to_delete:
+                    self.logger.info("沒有找到需要清理的舊資料")
+                    return 0, []
+
+                # 步驟 2: 根據訊息 ID 找出關聯的 segment_id
+                placeholders = ','.join('?' * len(message_ids_to_delete))
+                cursor = conn.execute(
+                    f"SELECT DISTINCT segment_id FROM segment_messages WHERE message_id IN ({placeholders})",
+                    message_ids_to_delete
+                )
+                segment_ids_to_check = [row[0] for row in cursor.fetchall()]
+
+                # 步驟 3: 刪除訊息 (由於 ON DELETE CASCADE, segment_messages 會自動清理)
+                cursor = conn.execute(
+                    f"DELETE FROM messages WHERE message_id IN ({placeholders})",
+                    message_ids_to_delete
+                )
+                deleted_count = cursor.rowcount
                 conn.commit()
-            
-            self.logger.info(f"清理舊資料完成，刪除 {deleted_count} 條記錄")
-            return deleted_count
-            
+                
+                self.logger.info(f"成功刪除 {deleted_count} 條舊訊息")
+                
+                # 步驟 4: 返回被刪除的訊息數量和可能需要清理的 segment_id
+                return deleted_count, segment_ids_to_check
+                
         except Exception as e:
             self.logger.error(f"清理舊資料失敗: {e}")
-            return 0
-    
-    # 統計和查詢方法
+            raise DatabaseError(f"清理舊資料失敗: {e}", operation="cleanup_old_data")
+
+    # 統計資訊
     def get_channel_count(self) -> int:
-        """取得頻道總數
-        
-        Returns:
-            int: 頻道數量
-        """
+        """取得頻道總數"""
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute("SELECT COUNT(*) FROM channels")
                 return cursor.fetchone()[0]
-                
         except Exception as e:
-            self.logger.error(f"取得頻道數量失敗: {e}")
-            return 0
-    
+            self.logger.error(f"取得頻道總數失敗: {e}")
+            raise DatabaseError(f"取得頻道總數失敗: {e}", operation="get_count", table="channels")
+
     def get_message_count(self, channel_id: Optional[str] = None) -> int:
         """取得訊息總數
         
         Args:
-            channel_id: 頻道 ID（可選）
+            channel_id: (可選) 頻道 ID，若提供則返回該頻道的訊息數
             
         Returns:
-            int: 訊息數量
+            int: 訊息總數
         """
         try:
             with self.get_connection() as conn:
                 if channel_id:
-                    cursor = conn.execute(
-                        "SELECT COUNT(*) FROM messages WHERE channel_id = ?",
-                        (channel_id,)
-                    )
+                    cursor = conn.execute("SELECT COUNT(*) FROM messages WHERE channel_id = ?", (channel_id,))
                 else:
                     cursor = conn.execute("SELECT COUNT(*) FROM messages")
-                
                 return cursor.fetchone()[0]
-                
         except Exception as e:
-            self.logger.error(f"取得訊息數量失敗: {e}")
-            return 0
-    
+            self.logger.error(f"取得訊息總數失敗: {e}")
+            raise DatabaseError(f"取得訊息總數失敗: {e}", operation="get_count", table="messages")
+
     def get_database_stats(self) -> Dict[str, Any]:
-        """取得資料庫統計資訊
-        
-        Returns:
-            Dict[str, Any]: 統計資訊
-        """
+        """取得資料庫統計資訊"""
         try:
             with self.get_connection() as conn:
                 stats = {}
+                stats['channels'] = self.get_channel_count()
+                stats['messages'] = self.get_message_count()
                 
-                # 表格行數統計
-                tables = ['channels', 'messages', 'embeddings', 'users', 'user_profiles', 
-                         'conversation_segments', 'performance_metrics']
-                for table in tables:
-                    cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
-                    stats[f"{table}_count"] = cursor.fetchone()[0]
+                # 取得資料庫檔案大小
+                db_size = self.db_path.stat().st_size
+                stats['db_size_mb'] = round(db_size / (1024 * 1024), 2)
                 
-                # 資料庫檔案大小
-                stats['database_size_bytes'] = self.db_path.stat().st_size
-                
-                # 最新活動時間
-                cursor = conn.execute("SELECT MAX(last_active) FROM channels")
-                result = cursor.fetchone()
-                stats['last_activity'] = result[0] if result[0] else None
+                # 取得 WAL 檔案大小
+                wal_path = self.db_path.with_suffix('.db-wal')
+                if wal_path.exists():
+                    wal_size = wal_path.stat().st_size
+                    stats['wal_size_mb'] = round(wal_size / (1024 * 1024), 2)
                 
                 return stats
+        except Exception as e:
+            self.logger.error(f"取得資料庫統計資訊失敗: {e}")
+            raise DatabaseError(f"取得資料庫統計資訊失敗: {e}", operation="get_stats")
+
+    def get_all_message_ids(self) -> List[str]:
+        """取得資料庫中所有訊息的 ID
+        
+        Returns:
+            List[str]: 所有訊息 ID 的列表
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("SELECT message_id FROM messages")
+                # 使用 cursor.fetchall() 取得所有結果
+                rows = cursor.fetchall()
+                # 從每行中提取第一個元素（message_id）
+                return [row[0] for row in rows]
+        except Exception as e:
+            self.logger.error(f"取得所有訊息 ID 失敗: {e}")
+            raise DatabaseError(f"取得所有訊息 ID 失敗: {e}", operation="get_all_message_ids", table="messages")
+
+    def get_all_segment_ids(self) -> List[str]:
+        """取得資料庫中所有片段的 ID
+        
+        Returns:
+            List[str]: 片段 ID 列表
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("SELECT segment_id FROM conversation_segments")
+                # 移除 'seg_' 前綴，因為呼叫者會加上它
+                return [row[0].replace('seg_', '') for row in cursor.fetchall()]
                 
         except Exception as e:
-            self.logger.error(f"取得資料庫統計失敗: {e}")
-            return {}
-    
+            self.logger.error(f"取得所有片段 ID 失敗: {e}")
+            raise DatabaseError(f"取得所有片段 ID 失敗: {e}", operation="get_all_segment_ids", table="conversation_segments")
+
     def close_connections(self) -> None:
         """關閉所有資料庫連接"""
         with self._lock:
-            for conn in self._connections.values():
+            for thread_id, conn in self._connections.items():
                 try:
                     conn.close()
                 except Exception as e:
-                    self.logger.warning(f"關閉資料庫連接時發生錯誤: {e}")
+                    self.logger.warning(f"關閉執行緒 {thread_id} 的連接時發生錯誤: {e}")
             self._connections.clear()
-    
-    # 對話片段操作方法
+            self.logger.info("所有資料庫連接已關閉")
+
+    # 對話片段操作
     def create_conversation_segment(
         self,
         segment_id: str,
@@ -872,8 +893,8 @@ class DatabaseManager:
         segment_summary: Optional[str] = None,
         vector_data: Optional[bytes] = None,
         metadata: Optional[str] = None
-    ) -> bool:
-        """建立對話片段
+    ) -> str:
+        """建立對話片段並返回其 ID
         
         Args:
             segment_id: 片段 ID
@@ -882,49 +903,138 @@ class DatabaseManager:
             end_time: 結束時間
             message_count: 訊息數量
             semantic_coherence_score: 語義連貫性分數
-            activity_level: 活動級別
+            activity_level: 活躍度等級
             segment_summary: 片段摘要
             vector_data: 向量資料
             metadata: 元資料
             
         Returns:
-            bool: 是否成功建立
+            str: 新建立的片段 ID
         """
+        # 防禦性清理，避免 'seg_seg_' 問題
+        sanitized_segment_id = self._sanitize_segment_id(segment_id)
+        if sanitized_segment_id != segment_id:
+            self.logger.warning(f"偵測到並修正了格式錯誤的 segment ID：'{segment_id}' -> '{sanitized_segment_id}'")
+
         try:
             with self.get_connection() as conn:
                 conn.execute("""
-                    INSERT OR REPLACE INTO conversation_segments 
+                    INSERT OR REPLACE INTO conversation_segments
                     (segment_id, channel_id, start_time, end_time, message_count,
                      semantic_coherence_score, activity_level, segment_summary,
-                     vector_data, metadata)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (segment_id, channel_id, start_time, end_time, message_count,
+                     vector_data, metadata, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (sanitized_segment_id, channel_id, start_time, end_time, message_count,
                       semantic_coherence_score, activity_level, segment_summary,
                       vector_data, metadata))
-                
                 conn.commit()
             
-            self.logger.debug(f"建立對話片段: {segment_id}")
-            return True
+            self.logger.debug(f"建立對話片段: {sanitized_segment_id}")
+            return sanitized_segment_id
             
         except Exception as e:
             self.logger.error(f"建立對話片段失敗: {e}")
-            return False
-    
+            raise DatabaseError(f"建立對話片段失敗: {e}", operation="create_segment", table="conversation_segments")
+
+    def create_segment_with_messages(
+        self,
+        segment_data: Dict[str, Any],
+        message_links: List[Dict[str, Any]]
+    ) -> str:
+        """
+        以原子操作建立對話片段及其與訊息的關聯。
+        此方法假設訊息已存在於資料庫中。
+
+        Args:
+            segment_data: 包含對話片段主記錄所需資料的字典。
+            message_links: 包含 'message_id' 和 'position' 的字典列表。
+
+        Returns:
+            str: 成功建立的對話片段 ID。
+
+        Raises:
+            DatabaseError: 如果資料庫操作失敗。
+        """
+        segment_id = segment_data.get("segment_id")
+        if not segment_id:
+            raise ValueError("segment_data 中必須包含 'segment_id'")
+
+        sanitized_segment_id = self._sanitize_segment_id(segment_id)
+        if sanitized_segment_id != segment_id:
+            self.logger.warning(f"修正了格式錯誤的 segment ID：'{segment_id}' -> '{sanitized_segment_id}'")
+            segment_data['segment_id'] = sanitized_segment_id
+        
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+
+                # 1. 建立對話片段主記錄
+                cursor.execute("""
+                    INSERT INTO conversation_segments (
+                        segment_id, channel_id, start_time, end_time, message_count,
+                        semantic_coherence_score, activity_level, segment_summary,
+                        vector_data, metadata
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    sanitized_segment_id,
+                    segment_data['channel_id'],
+                    segment_data['start_time'],
+                    segment_data['end_time'],
+                    segment_data['message_count'],
+                    segment_data.get('semantic_coherence_score', 0.0),
+                    segment_data.get('activity_level', 0.0),
+                    segment_data.get('segment_summary'),
+                    segment_data.get('vector_data'),
+                    segment_data.get('metadata')
+                ))
+                self.logger.debug(f"[{sanitized_segment_id}] 原子操作：插入了 conversation_segments 主記錄。")
+
+                # 2. 批次建立訊息與片段的關聯（加入去重與容錯保護）
+                if message_links:
+                    # 2.1 基於 (segment_id, message_id) 去重，保持第一個 position_in_segment
+                    seen = set()
+                    deduped = []
+                    for link in message_links:
+                        key = (sanitized_segment_id, link['message_id'])
+                        if key not in seen:
+                            seen.add(key)
+                            deduped.append((sanitized_segment_id, link['message_id'], link['position']))
+                    ignored_count = len(message_links) - len(deduped)
+                    if ignored_count > 0:
+                        # 僅在發生忽略時記錄一則 DEBUG，避免噪音
+                        sample_ids = [link['message_id'] for link in message_links][:2]
+                        self.logger.debug(f"[{sanitized_segment_id}] 去重 segment_messages：忽略 {ignored_count} 條重複關聯，樣本 message_id={sample_ids}")
+
+                    # 2.2 使用 SQLite 最小入侵容錯：INSERT OR IGNORE 避免 UNIQUE 衝突導致整批失敗
+                    cursor.executemany("""
+                        INSERT OR IGNORE INTO segment_messages (segment_id, message_id, position_in_segment)
+                        VALUES (?, ?, ?)
+                    """, deduped)
+                    self.logger.debug(f"[{sanitized_segment_id}] 原子操作：插入了 {len(deduped)} 條 segment_messages 關聯（已去重，採用 OR IGNORE）。")
+
+                # 提交交易
+                conn.commit()
+                self.logger.info(f"原子性地建立了片段 {sanitized_segment_id} 並關聯了 {len(message_links)} 條訊息。")
+                return sanitized_segment_id
+
+        except Exception as e:
+            self.logger.error(f"原子性建立片段 {sanitized_segment_id} 失敗: {e}", exc_info=True)
+            raise DatabaseError(f"原子性建立片段失敗: {e}", operation="create_segment_with_messages")
+
     def get_conversation_segments(
         self,
         channel_id: str,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None,
-        limit: int = 100
+        limit: int = 50,
+        before: Optional[datetime] = None,
+        after: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
         """取得對話片段
         
         Args:
             channel_id: 頻道 ID
-            start_time: 開始時間過濾
-            end_time: 結束時間過濾
             limit: 返回數量限制
+            before: 在此時間之前
+            after: 在此時間之後
             
         Returns:
             List[Dict[str, Any]]: 對話片段列表
@@ -933,61 +1043,58 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 query = "SELECT * FROM conversation_segments WHERE channel_id = ?"
                 params = [channel_id]
-                
-                if start_time:
-                    query += " AND start_time >= ?"
-                    params.append(start_time)
-                
-                if end_time:
-                    query += " AND end_time <= ?"
-                    params.append(end_time)
-                
+                if before:
+                    query += " AND end_time < ?"
+                    params.append(before)
+                if after:
+                    query += " AND start_time > ?"
+                    params.append(after)
                 query += " ORDER BY start_time DESC LIMIT ?"
                 params.append(limit)
                 
                 cursor = conn.execute(query, params)
                 rows = cursor.fetchall()
-                
                 return [dict(row) for row in rows]
-                
         except Exception as e:
             self.logger.error(f"取得對話片段失敗: {e}")
-            return []
-    
+            raise DatabaseError(f"取得對話片段失敗: {e}", operation="get_segments", table="conversation_segments")
+
     def add_message_to_segment(
         self,
         segment_id: str,
         message_id: str,
-        position_in_segment: int,
-        semantic_contribution_score: float = 0.0
+        position: int
     ) -> bool:
         """將訊息新增到片段
         
         Args:
             segment_id: 片段 ID
             message_id: 訊息 ID
-            position_in_segment: 在片段中的位置
-            semantic_contribution_score: 語義貢獻分數
+            position: 在片段中的位置
             
         Returns:
             bool: 是否成功新增
         """
+        if not message_id:
+            self.logger.error("新增訊息到片段失敗：無效的 message_id")
+            return False
+            
         try:
             with self.get_connection() as conn:
                 conn.execute("""
-                    INSERT OR REPLACE INTO segment_messages 
-                    (segment_id, message_id, position_in_segment, semantic_contribution_score)
-                    VALUES (?, ?, ?, ?)
-                """, (segment_id, message_id, position_in_segment, semantic_contribution_score))
-                
+                    INSERT OR REPLACE INTO segment_messages
+                    (segment_id, message_id, position_in_segment)
+                    VALUES (?, ?, ?)
+                """, (segment_id, message_id, position))
                 conn.commit()
             
+            self.logger.debug(f"訊息 {message_id} 已新增到片段 {segment_id}")
             return True
             
         except Exception as e:
             self.logger.error(f"新增訊息到片段失敗: {e}")
-            return False
-    
+            raise DatabaseError(f"新增訊息到片段失敗: {e}", operation="add_message_to_segment", table="segment_messages")
+
     def get_segment_messages(self, segment_id: str) -> List[Dict[str, Any]]:
         """取得片段中的訊息
         
@@ -995,25 +1102,57 @@ class DatabaseManager:
             segment_id: 片段 ID
             
         Returns:
-            List[Dict[str, Any]]: 訊息列表，按位置排序
+            List[Dict[str, Any]]: 訊息列表
         """
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute("""
-                    SELECT m.*, sm.position_in_segment, sm.semantic_contribution_score
-                    FROM segment_messages sm
-                    JOIN messages m ON sm.message_id = m.message_id
+                    SELECT m.* FROM messages m
+                    JOIN segment_messages sm ON m.message_id = sm.message_id
                     WHERE sm.segment_id = ?
                     ORDER BY sm.position_in_segment
                 """, (segment_id,))
-                
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
-                
         except Exception as e:
             self.logger.error(f"取得片段訊息失敗: {e}")
-            return []
-    
+            raise DatabaseError(f"取得片段訊息失敗: {e}", operation="get_segment_messages", table="segment_messages")
+    def get_segment_to_message_map(self, segment_ids: List[str]) -> Dict[str, List[str]]:
+        """根據片段 ID 列表，取得 segment_id 到 message_id 列表的映射
+        
+        Args:
+            segment_ids: 片段 ID 列表
+            
+        Returns:
+            Dict[str, List[str]]: segment_id 到 message_id 列表的映射
+        """
+        if not segment_ids:
+            return {}
+        
+        try:
+            with self.get_connection() as conn:
+                placeholders = ','.join('?' * len(segment_ids))
+                query = f"""
+                    SELECT segment_id, message_id
+                    FROM segment_messages
+                    WHERE segment_id IN ({placeholders})
+                    ORDER BY position_in_segment
+                """
+                cursor = conn.execute(query, segment_ids)
+                rows = cursor.fetchall()
+                
+                result_map = {seg_id: [] for seg_id in segment_ids}
+                for row in rows:
+                    result_map[row['segment_id']].append(row['message_id'])
+                
+                self.logger.debug(f"從 {len(segment_ids)} 個片段 ID 中查詢到 {len(result_map)} 個映射")
+                return result_map
+                
+        except Exception as e:
+            self.logger.error(f"查詢 segment-to-message map 失敗: {e}")
+            raise DatabaseError(f"查詢 segment-to-message map 失敗: {e}", operation="get_segment_to_message_map", table="segment_messages")
+
+
     def update_segment_coherence(self, segment_id: str, coherence_score: float) -> bool:
         """更新片段語義連貫性分數
         
@@ -1027,19 +1166,16 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 conn.execute("""
-                    UPDATE conversation_segments 
+                    UPDATE conversation_segments
                     SET semantic_coherence_score = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE segment_id = ?
                 """, (coherence_score, segment_id))
-                
                 conn.commit()
-            
             return True
-            
         except Exception as e:
             self.logger.error(f"更新片段連貫性分數失敗: {e}")
-            return False
-    
+            raise DatabaseError(f"更新片段連貫性分數失敗: {e}", operation="update_segment_coherence", table="conversation_segments")
+
     def get_overlapping_segments(
         self,
         channel_id: str,
@@ -1054,24 +1190,45 @@ class DatabaseManager:
             end_time: 結束時間
             
         Returns:
-            List[Dict[str, Any]]: 重疊的對話片段
+            List[Dict[str, Any]]: 重疊的片段列表
         """
         try:
             with self.get_connection() as conn:
                 cursor = conn.execute("""
-                    SELECT * FROM conversation_segments 
-                    WHERE channel_id = ? 
-                    AND (
-                        (start_time <= ? AND end_time >= ?) OR
-                        (start_time <= ? AND end_time >= ?) OR
-                        (start_time >= ? AND end_time <= ?)
-                    )
+                    SELECT * FROM conversation_segments
+                    WHERE channel_id = ? AND start_time < ? AND end_time > ?
                     ORDER BY start_time
-                """, (channel_id, start_time, start_time, end_time, end_time, start_time, end_time))
-                
+                """, (channel_id, end_time, start_time))
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
-                
         except Exception as e:
             self.logger.error(f"取得重疊片段失敗: {e}")
-            return []
+            raise DatabaseError(f"取得重疊片段失敗: {e}", operation="get_overlapping_segments", table="conversation_segments")
+
+    def get_all_segment_ids_by_channel(self) -> Dict[str, List[str]]:
+        """獲取每個頻道所有有效的 segment_id
+        
+        Returns:
+            Dict[str, List[str]]: {channel_id: [segment_id, ...]}
+        """
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.execute("""
+                    SELECT c.channel_id, s.segment_id
+                    FROM conversation_segments s
+                    JOIN channels c ON s.channel_id = c.channel_id
+                    WHERE s.segment_id IN (SELECT DISTINCT segment_id FROM segment_messages)
+                    ORDER BY c.channel_id
+                """)
+                rows = cursor.fetchall()
+                
+                result = {}
+                for row in rows:
+                    channel_id, segment_id = row
+                    if channel_id not in result:
+                        result[channel_id] = []
+                    result[channel_id].append(segment_id)
+                return result
+        except Exception as e:
+            self.logger.error(f"獲取所有 segment id 失敗: {e}")
+            raise DatabaseError(f"獲取所有 segment id 失敗: {e}", operation="get_all_segment_ids_by_channel")

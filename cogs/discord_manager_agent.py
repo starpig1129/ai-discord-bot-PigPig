@@ -11,6 +11,7 @@ import re
 import os
 
 from gpt.core.response_generator import generate_response, get_model_and_tokenizer
+from gpt.utils.discord_utils import safe_edit_message
 
 class DiscordManagerAgent(commands.Cog):
     """Discord管理代理人系統。"""
@@ -50,17 +51,17 @@ class DiscordManagerAgent(commands.Cog):
 
             # 驗證操作權限
             if not self.security.validate_operation(ctx.author, instruction):
-                await processing_msg.edit(content="⛔ 您沒有足夠的權限執行此操作")
+                await safe_edit_message(processing_msg, "⛔ 您沒有足夠的權限執行此操作")
                 return
 
             # 使用LLM解析指令
             parsed = await self.parser.parse(instruction)
             if not parsed:
-                await processing_msg.edit(content="❓ 無法理解該指令，請使用更清楚的描述")
+                await safe_edit_message(processing_msg, "❓ 無法理解該指令，請使用更清楚的描述")
                 return
 
             # 更新狀態訊息
-            await processing_msg.edit(content="⚙️ 正在執行操作...")
+            await safe_edit_message(processing_msg, "⚙️ 正在執行操作...")
 
             # 執行相應操作
             result = await self.execute_operation(ctx, parsed)
@@ -68,13 +69,13 @@ class DiscordManagerAgent(commands.Cog):
             # 記錄審計日誌
             self.security.audit_log(parsed, ctx.author, result)
 
-            await processing_msg.edit(content=f"✅ 操作完成: {result}")
+            await safe_edit_message(processing_msg, f"✅ 操作完成: {result}")
 
         except Exception as e:
             self.logger.error(f"執行管理指令時發生錯誤: {str(e)}")
             error_msg = f"❌ 執行指令時發生錯誤: {str(e)}"
             if processing_msg:
-                await processing_msg.edit(content=error_msg)
+                await safe_edit_message(processing_msg, error_msg)
             else:
                 await ctx.reply(error_msg)
 

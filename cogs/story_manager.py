@@ -22,26 +22,10 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.logger = logging.getLogger(__name__)
+        self.system_prompt_manager: Optional[SystemPromptManager] = None
         self.story_manager: Optional[StoryManager] = None
         self.ui_manager: Optional[UIManager] = None
         self.logger.info("StoryManagerCog (UI版本) 已初始化")
-
-    async def cog_load(self):
-        """
-        非同步初始化 Cog 及其管理器。
-        """
-        system_prompt_manager_cog = self.bot.get_cog("SystemPromptManagerCog")
-        if not system_prompt_manager_cog:
-            self.logger.error("無法找到 SystemPromptManagerCog，StoryManagerCog 將無法正常運作。")
-            return
-        
-        system_prompt_manager = system_prompt_manager_cog.manager
-        
-        self.story_manager = StoryManager(self.bot, self, system_prompt_manager)
-        self.ui_manager = UIManager(self.bot, self.story_manager, system_prompt_manager)
-        
-        await self.story_manager.initialize()
-        self.logger.info("StoryManagerCog has been loaded and initialized.")
 
     story = app_commands.Group(name="story", description="與故事模式相關的指令")
 
@@ -55,6 +39,10 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
         - 有故事：顯示故事控制面板（加入、暫停、結束等）
         """
         try:
+            if not self.ui_manager:
+                self.logger.warning("UIManager 未初始化，無法顯示選單。")
+                await interaction.response.send_message("🎭 故事模組正在啟動中，請稍後再試。", ephemeral=True)
+                return
             await self.ui_manager.show_main_menu(interaction)
             
         except Exception as e:
@@ -72,6 +60,11 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
         Allows a user to intervene in the story with OOC instructions for the director.
         """
         try:
+            if not self.story_manager:
+                self.logger.warning("StoryManager 未初始化，無法執行干預。")
+                await interaction.response.send_message("🎭 故事模組正在啟動中，請稍後再試。", ephemeral=True)
+                return
+
             # Check if a story is active in this channel
             db = self.story_manager._get_db(interaction.guild_id)
             story_instance = db.get_story_instance(interaction.channel_id)
@@ -97,8 +90,22 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        """Cog 準備就緒事件"""
-        self.logger.info("故事模組已準備就緒")
+        """
+        Cog 準備就緒事件。
+        此時所有 cogs 都已載入，可以安全地獲取其他 cog。
+        """
+        self.logger.info("StoryManagerCog 進入 on_ready 狀態，開始初始化依賴。")
+        
+        system_prompt_manager_cog = self.bot.get_cog("SystemPromptManagerCog")
+        if system_prompt_manager_cog:
+            self.system_prompt_manager = system_prompt_manager_cog.manager
+            self.story_manager = StoryManager(self.bot, self, self.system_prompt_manager)
+            self.ui_manager = UIManager(self.bot, self.story_manager, self.system_prompt_manager)
+            
+            await self.story_manager.initialize()
+            self.logger.info("StoryManagerCog 已成功連接到 SystemPromptManagerCog 並完成初始化。")
+        else:
+            self.logger.error("警告：StoryManagerCog 在 on_ready 後仍無法找到 SystemPromptManagerCog。模組將無法正常運作。")
 
     async def handle_story_message(self, message: discord.Message):
         """

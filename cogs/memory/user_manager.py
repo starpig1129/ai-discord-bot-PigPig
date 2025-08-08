@@ -20,7 +20,6 @@ from .exceptions import DatabaseError
 class UserInfo:
     """使用者資訊資料類別"""
     user_id: str
-    discord_id: str
     display_name: str = ""
     user_data: Optional[str] = None
     last_active: Optional[datetime] = None
@@ -85,7 +84,6 @@ class SQLiteUserManager:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         user_id TEXT PRIMARY KEY,
-                        discord_id TEXT UNIQUE NOT NULL,
                         display_name TEXT,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -109,8 +107,8 @@ class SQLiteUserManager:
                 
                 # 建立索引
                 conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_users_discord_id 
-                    ON users(discord_id)
+                    CREATE INDEX IF NOT EXISTS idx_users_user_id 
+                    ON users(user_id)
                 """)
                 conn.execute("""
                     CREATE INDEX IF NOT EXISTS idx_users_last_active 
@@ -145,7 +143,7 @@ class SQLiteUserManager:
         try:
             with self.db_manager.get_connection() as conn:
                 cursor = conn.execute("""
-                    SELECT u.user_id, u.discord_id, u.display_name, u.user_data, 
+                    SELECT u.user_id, u.display_name, u.user_data,
                            u.last_active, u.preferences, u.created_at, up.profile_data
                     FROM users u
                     LEFT JOIN user_profiles up ON u.user_id = up.user_id
@@ -156,39 +154,38 @@ class SQLiteUserManager:
                 if row:
                     # 解析 JSON 資料
                     preferences = None
-                    if row[5]:
+                    if row[4]:
                         try:
-                            preferences = json.loads(row[5])
+                            preferences = json.loads(row[4])
                         except json.JSONDecodeError:
                             self.logger.warning(f"無法解析使用者 {user_id} 的偏好設定")
                     
                     profile_data = None
-                    if row[7]:
+                    if row[6]:
                         try:
-                            profile_data = json.loads(row[7])
+                            profile_data = json.loads(row[6])
                         except json.JSONDecodeError:
                             self.logger.warning(f"無法解析使用者 {user_id} 的檔案資料")
                     
                     # 處理時間欄位
                     last_active = None
-                    if row[4]:
+                    if row[3]:
                         try:
-                            last_active = datetime.fromisoformat(row[4])
+                            last_active = datetime.fromisoformat(row[3])
                         except (ValueError, TypeError):
                             pass
                     
                     created_at = None
-                    if row[6]:
+                    if row[5]:
                         try:
-                            created_at = datetime.fromisoformat(row[6])
+                            created_at = datetime.fromisoformat(row[5])
                         except (ValueError, TypeError):
                             pass
                     
                     user_info = UserInfo(
                         user_id=row[0],
-                        discord_id=row[1],
-                        display_name=row[2] or "",
-                        user_data=row[3],
+                        display_name=row[1] or "",
+                        user_data=row[2],
                         last_active=last_active,
                         preferences=preferences,
                         created_at=created_at,
@@ -236,7 +233,7 @@ class SQLiteUserManager:
                 placeholders = ','.join('?' for _ in uncached_ids)
                 with self.db_manager.get_connection() as conn:
                     cursor = conn.execute(f"""
-                        SELECT u.user_id, u.discord_id, u.display_name, u.user_data, 
+                        SELECT u.user_id, u.display_name, u.user_data,
                                u.last_active, u.preferences, u.created_at, up.profile_data
                         FROM users u
                         LEFT JOIN user_profiles up ON u.user_id = up.user_id
@@ -246,38 +243,37 @@ class SQLiteUserManager:
                     for row in cursor.fetchall():
                         # 解析資料（與 get_user_info 相同的邏輯）
                         preferences = None
-                        if row[5]:
+                        if row[4]:
                             try:
-                                preferences = json.loads(row[5])
+                                preferences = json.loads(row[4])
                             except json.JSONDecodeError:
                                 pass
                         
                         profile_data = None
-                        if row[7]:
+                        if row[6]:
                             try:
-                                profile_data = json.loads(row[7])
+                                profile_data = json.loads(row[6])
                             except json.JSONDecodeError:
                                 pass
                         
                         last_active = None
-                        if row[4]:
+                        if row[3]:
                             try:
-                                last_active = datetime.fromisoformat(row[4])
+                                last_active = datetime.fromisoformat(row[3])
                             except (ValueError, TypeError):
                                 pass
                         
                         created_at = None
-                        if row[6]:
+                        if row[5]:
                             try:
-                                created_at = datetime.fromisoformat(row[6])
+                                created_at = datetime.fromisoformat(row[5])
                             except (ValueError, TypeError):
                                 pass
                         
                         user_info = UserInfo(
                             user_id=row[0],
-                            discord_id=row[1],
-                            display_name=row[2] or "",
-                            user_data=row[3],
+                            display_name=row[1] or "",
+                            user_data=row[2],
                             last_active=last_active,
                             preferences=preferences,
                             created_at=created_at,
@@ -330,9 +326,9 @@ class SQLiteUserManager:
                 else:
                     # 建立新使用者
                     conn.execute("""
-                        INSERT INTO users (user_id, discord_id, display_name, user_data, preferences)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (user_id, user_id, display_name, user_data, preferences_json))
+                        INSERT INTO users (user_id, display_name, user_data, preferences)
+                        VALUES (?, ?, ?, ?)
+                    """, (user_id, display_name, user_data, preferences_json))
                 
                 conn.commit()
                 
@@ -374,9 +370,9 @@ class SQLiteUserManager:
                 else:
                     # 建立新使用者記錄
                     conn.execute("""
-                        INSERT INTO users (user_id, discord_id, display_name)
-                        VALUES (?, ?, ?)
-                    """, (user_id, user_id, display_name))
+                        INSERT INTO users (user_id, display_name)
+                        VALUES (?, ?)
+                    """, (user_id, display_name))
                 
                 conn.commit()
                 
@@ -403,7 +399,7 @@ class SQLiteUserManager:
         try:
             with self.db_manager.get_connection() as conn:
                 cursor = conn.execute("""
-                    SELECT u.user_id, u.discord_id, u.display_name, u.user_data, 
+                    SELECT u.user_id, u.display_name, u.user_data,
                            u.last_active, u.preferences, u.created_at, up.profile_data
                     FROM users u
                     LEFT JOIN user_profiles up ON u.user_id = up.user_id
@@ -416,38 +412,37 @@ class SQLiteUserManager:
                 for row in cursor.fetchall():
                     # 解析資料（與 get_user_info 相同的邏輯）
                     preferences = None
-                    if row[5]:
+                    if row[4]:
                         try:
-                            preferences = json.loads(row[5])
+                            preferences = json.loads(row[4])
                         except json.JSONDecodeError:
                             pass
                     
                     profile_data = None
-                    if row[7]:
+                    if row[6]:
                         try:
-                            profile_data = json.loads(row[7])
+                            profile_data = json.loads(row[6])
                         except json.JSONDecodeError:
                             pass
                     
                     last_active = None
-                    if row[4]:
+                    if row[3]:
                         try:
-                            last_active = datetime.fromisoformat(row[4])
+                            last_active = datetime.fromisoformat(row[3])
                         except (ValueError, TypeError):
                             pass
                     
                     created_at = None
-                    if row[6]:
+                    if row[5]:
                         try:
-                            created_at = datetime.fromisoformat(row[6])
+                            created_at = datetime.fromisoformat(row[5])
                         except (ValueError, TypeError):
                             pass
                     
                     user_info = UserInfo(
                         user_id=row[0],
-                        discord_id=row[1],
-                        display_name=row[2] or "",
-                        user_data=row[3],
+                        display_name=row[1] or "",
+                        user_data=row[2],
                         last_active=last_active,
                         preferences=preferences,
                         created_at=created_at,

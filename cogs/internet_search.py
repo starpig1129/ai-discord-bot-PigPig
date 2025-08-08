@@ -49,6 +49,7 @@ import asyncio
 
 from typing import Optional
 from .language_manager import LanguageManager
+from gpt.utils.discord_utils import safe_edit_message
 
 def install_driver():
     return ChromeDriverManager().install()
@@ -65,7 +66,7 @@ class InternetSearchCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    async def internet_search(self, ctx, query: str, search_type: str, message_to_edit: discord.Message = None, guild_id: str = None):
+    async def internet_search(self, ctx, query: str, search_type: str = "general", message_to_edit: discord.Message = None, guild_id: str = None):
         if message_to_edit:
             searching_message = self.lang_manager.translate(
                 guild_id,
@@ -74,8 +75,30 @@ class InternetSearchCog(commands.Cog):
                 "responses",
                 "searching"
             )
-            await message_to_edit.edit(content=searching_message)
+            try:
+                await safe_edit_message(message_to_edit, searching_message)
+            except discord.errors.NotFound:
+                # 原訊息不存在，改為送出新訊息以維持體驗
+                fallback_text = f"🔍 {searching_message}" if searching_message else f"🔍 正在為您搜尋：{query}"
+                try:
+                    await ctx.channel.send(fallback_text)
+                except Exception:
+                    # 保底：忽略發送失敗，避免中斷後續流程
+                    pass
+                import logging
+                logging.getLogger(__name__).info("internet_search: 原始訊息已不存在，已改為發送新訊息。")
         
+        # 將外部傳入的 search_type 正規化，支援 'web' 作為一般網頁搜尋別名
+        normalized_type = (search_type or "").strip().lower()
+        if normalized_type == "web":
+            # 將 'web' 對應到現有的一般搜尋邏輯
+            normalized_type = "general"
+            import logging
+            logging.getLogger(__name__).info("internet_search: 收到 search_type='web'，已映射為 'general'。")
+        else:
+            # 若非已知型別，保留原字串，後續落入未知類型處理
+            pass
+
         search_functions = {
             "general": self.google_search,
             "image": self.send_img,
@@ -84,7 +107,7 @@ class InternetSearchCog(commands.Cog):
             "eat": self.eat_search
         }
         
-        search_func = search_functions.get(search_type)
+        search_func = search_functions.get(normalized_type)
         if search_func:
             if not guild_id and isinstance(ctx, discord.Interaction):
                 guild_id = str(ctx.guild_id)
@@ -97,6 +120,9 @@ class InternetSearchCog(commands.Cog):
                 return result
             return None
         else:
+            # 未知的 search_type，回傳本地化錯誤訊息，並記錄警告以便診斷
+            import logging
+            logging.getLogger(__name__).warning(f"internet_search: 未知的搜索類型：{search_type}")
             error_message = self.lang_manager.translate(
                 guild_id,
                 "commands",
@@ -218,9 +244,9 @@ class InternetSearchCog(commands.Cog):
                         self.save_image(f'./gpt/img/image_{idx}.jpg', img_url)
                     except:
                         pass
-
-            self.process_images(ctx, message_to_edit)
-
+        
+                await self.process_images(ctx, message_to_edit)
+        
         except Exception as e:
             print(f"Image download failed: {e}")
             error_message = self.lang_manager.translate(
@@ -230,9 +256,13 @@ class InternetSearchCog(commands.Cog):
                 "errors",
                 "image_download_failed"
             ) if self.lang_manager else "圖片下載失敗"
-            self.send_error_message(ctx, message_to_edit, error_message)
-
-        return None
+            try:
+                await self.send_error_message(ctx, message_to_edit, error_message)
+            except discord.errors.NotFound:
+                import logging
+                logging.getLogger(__name__).info("send_error_message: 臨時訊息不存在，略過錯誤訊息編輯。")
+    
+            return None
 
     @staticmethod
     def get_chrome_options():
@@ -281,7 +311,11 @@ class InternetSearchCog(commands.Cog):
             if isinstance(ctx, discord.Interaction):
                 await ctx.followup.send(file=picture)
             else:
-                await message_to_edit.edit(file=picture)
+                try:
+                    await message_to_edit.edit(file=picture)
+                except discord.errors.NotFound:
+                    import logging
+                    logging.getLogger(__name__).info("process_images: 臨時訊息不存在，略過圖片訊息編輯。")
 
         for file in os.listdir(directory):
             if file.endswith('.jpg'):
@@ -292,7 +326,11 @@ class InternetSearchCog(commands.Cog):
         if isinstance(ctx, discord.Interaction):
             await ctx.followup.send(content=content)
         else:
-            await message_to_edit.edit(content=content)
+            try:
+                await safe_edit_message(message_to_edit, content)
+            except discord.errors.NotFound:
+                import logging
+                logging.getLogger(__name__).info("send_error_message: 臨時訊息不存在，略過文字訊息編輯。")
 
     async def youtube_search(self, ctx, query, message_to_edit=None):
         try:
@@ -428,7 +466,11 @@ class InternetSearchCog(commands.Cog):
             if isinstance(ctx, discord.Interaction):
                 await ctx.followup.send(embed=embed, view=view)
             else:
-                await message_to_edit.edit(embed=embed, view=view)
+                try:
+                    await message_to_edit.edit(embed=embed, view=view)
+                except discord.errors.NotFound:
+                    import logging
+                    logging.getLogger(__name__).info("eat_search: 臨時訊息不存在，略過結果訊息編輯。")
 
             self.train.genModel(str(ctx.guild.id))
             return None  

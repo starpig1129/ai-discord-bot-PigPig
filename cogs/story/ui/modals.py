@@ -256,9 +256,9 @@ class StoryStartModal(discord.ui.Modal):
     收集故事開始時的初始世界狀態
     """
 
-    def __init__(self, manager: "StoryManager", bot: commands.Bot, guild_id: int, channel_id: int, world_name: str):
+    def __init__(self, story_manager: "StoryManager", bot: commands.Bot, guild_id: int, channel_id: int, world_name: str):
         super().__init__(title="🎬 設定故事初始狀態")
-        self.story_manager = manager
+        self.story_manager = story_manager
         self.bot = bot
         self.guild_id = guild_id
         self.channel_id = channel_id

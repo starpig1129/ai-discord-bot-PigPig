@@ -25,6 +25,7 @@ from discord.ext import commands
 import asyncio
 from datetime import datetime, timedelta
 import re
+import dateparser
 
 from typing import Optional
 from .language_manager import LanguageManager
@@ -130,57 +131,59 @@ class ReminderCog(commands.Cog):
             interaction=interaction
         )
 
-    def parse_time(self, time_str: str, guild_id: str = None) -> datetime:
-        """解析時間字串，支援多語言格式"""
-        current_time = datetime.now()
+    def _parse_relative_time_regex(self, time_str: str) -> Optional[datetime]:
+        """使用正規表示式解析簡單的相對時間，例如 '10 分鐘後'"""
+        # 支援的單位及其對應的 timedelta
+        time_units = {
+            'seconds': timedelta(seconds=1), 'second': timedelta(seconds=1), '秒': timedelta(seconds=1),
+            'minutes': timedelta(minutes=1), 'minute': timedelta(minutes=1), '分鐘': timedelta(minutes=1),
+            'hours': timedelta(hours=1),   'hour': timedelta(hours=1),   '小時': timedelta(hours=1),
+            'days': timedelta(days=1),    'day': timedelta(days=1),    '天': timedelta(days=1),
+            'weeks': timedelta(weeks=1),   'week': timedelta(weeks=1),   '週': timedelta(weeks=1),
+        }
         
-        # 多語言相對時間解析模式
-        relative_patterns = [
-            # 繁體中文
-            (r'(\d+)(秒|分鐘|小時|天)後', {'秒': 'seconds', '分鐘': 'minutes', '小時': 'hours', '天': 'days'}),
-            # 簡體中文
-            (r'(\d+)(秒|分钟|小时|天)后', {'秒': 'seconds', '分钟': 'minutes', '小时': 'hours', '天': 'days'}),
-            # 英文
-            (r'(\d+)\s*(seconds?|minutes?|hours?|days?)\s*later', {
-                'second': 'seconds', 'seconds': 'seconds',
-                'minute': 'minutes', 'minutes': 'minutes',
-                'hour': 'hours', 'hours': 'hours',
-                'day': 'days', 'days': 'days'
-            }),
-            # 日文
-            (r'(\d+)(秒|分|時間|日)後', {'秒': 'seconds', '分': 'minutes', '時間': 'hours', '日': 'days'})
-        ]
+        # 正規表示式，匹配數字和單位
+        pattern = r"(\d+)\s*(" + "|".join(time_units.keys()) + r")"
+        match = re.search(pattern, time_str, re.IGNORECASE)
         
-        for pattern, unit_map in relative_patterns:
-            time_match = re.match(pattern, time_str, re.IGNORECASE)
-            if time_match:
-                amount = int(time_match.group(1))
-                unit_key = time_match.group(2).lower()
-                unit = unit_map.get(unit_key)
-                
-                if unit == 'seconds':
-                    return current_time + timedelta(seconds=amount)
-                elif unit == 'minutes':
-                    return current_time + timedelta(minutes=amount)
-                elif unit == 'hours':
-                    return current_time + timedelta(hours=amount)
-                elif unit == 'days':
-                    return current_time + timedelta(days=amount)
-        
-        # 絕對時間解析（支援多種格式）
-        absolute_patterns = [
-            '%Y年%m月%d日%H:%M:%S',  # 中文格式
-            '%Y-%m-%d %H:%M:%S',     # 英文格式
-            '%Y/%m/%d %H:%M:%S',     # 另一種英文格式
-            '%Y年%m月%d日%H時%M分%S秒' # 完整中文格式
-        ]
-        
-        for pattern in absolute_patterns:
-            try:
-                return datetime.strptime(time_str, pattern)
-            except ValueError:
-                continue
+        if match:
+            value = int(match.group(1))
+            unit = match.group(2).lower()
+            
+            # 處理複數形式
+            if not unit.endswith('s') and value > 1:
+                unit += 's'
+            if unit not in time_units: # 修正單數詞如 'day'
+                 unit = unit.rstrip('s')
 
+            delta = time_units.get(unit)
+            if delta:
+                return datetime.now() + (delta * value)
+                
+        return None
+
+    def parse_time(self, time_str: str, guild_id: str = None) -> Optional[datetime]:
+        """
+        使用 dateparser 解析時間字串，並提供基於正規表示式的備用方案。
+        """
+        try:
+            # 首先嘗試使用 dateparser
+            parsed_time = dateparser.parse(
+                time_str,
+                settings={'PREFER_DATES_FROM': 'future', 'RETURN_AS_TIMEZONE_AWARE': False}
+            )
+            if parsed_time:
+                return parsed_time
+        except Exception:
+            # 如果 dateparser 失敗，繼續嘗試正規表示式
+            pass
+
+        # 如果 dateparser 失敗或沒有回傳結果，嘗試使用正規表示式備用方案
+        parsed_time = self._parse_relative_time_regex(time_str)
+        if parsed_time:
+            return parsed_time
+
+        # 如果所有方法都失敗
         return None
 
     def format_timedelta(self, td: timedelta, guild_id: str = None) -> str:

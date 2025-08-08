@@ -700,6 +700,16 @@ class EmbeddingService:
         except Exception:
             pass
     
+    def get_model_version(self) -> str:
+        """取得目前使用的嵌入模型版本
+        
+        Returns:
+            str: 模型名稱
+        """
+        if self._using_fallback:
+            return self._fallback_model
+        return self.profile.embedding_model
+    
     def cleanup(self) -> None:
         """清理嵌入服務資源和快取
         

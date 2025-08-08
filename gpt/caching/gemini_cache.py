@@ -6,6 +6,7 @@ Gemini API 快取工具模組
 
 import logging
 import time
+import asyncio
 from google.genai import types
 from google.genai.types import Tool
 from typing import Optional, Dict, Any, List
@@ -77,13 +78,13 @@ class GeminiCacheManager:
             self.logger.error(f"創建快取失敗: {str(e)}")
             return None
 
-    def get_cache_by_key(self, cache_key: str) -> Optional[Any]:
+    async def get_cache_by_key(self, cache_key: str) -> Optional[Any]:
         """根據（由內容生成的）唯一鍵值獲取快取"""
         if cache_key in self.active_caches:
             try:
                 cache = self.active_caches[cache_key]
                 # 驗證遠端快取是否仍然存在
-                self.client.caches.get(name=cache.name)
+                await asyncio.to_thread(self.client.caches.get, name=cache.name)
                 self.logger.info(f"本地快取命中: {cache_key} -> {cache.name}")
                 self.cache_access_times[cache_key] = time.time()
                 return cache
@@ -98,7 +99,7 @@ class GeminiCacheManager:
         if cache_key in self.cache_metadata: del self.cache_metadata[cache_key]
         if cache_key in self.cache_access_times: del self.cache_access_times[cache_key]
 
-    def delete_cache(self, cache_key: str) -> bool:
+    async def delete_cache(self, cache_key: str) -> bool:
         """根據本地 key 刪除遠端快取並清理本地記錄
         
         Args:
@@ -111,7 +112,7 @@ class GeminiCacheManager:
             cache = self.active_caches[cache_key]
             try:
                 self.logger.info(f"正在刪除遠端快取: {cache.name} (本地 key: {cache_key})")
-                self.client.caches.delete(name=cache.name)
+                await asyncio.to_thread(self.client.caches.delete, name=cache.name)
                 self.logger.info(f"成功刪除遠端快取: {cache.name}")
             except Exception as e:
                 # 如果遠端快取已不存在（例如，已過期或手動刪除），也視為成功
@@ -123,7 +124,7 @@ class GeminiCacheManager:
         self.logger.debug(f"嘗試刪除一個不存在的本地快取 key: {cache_key}")
         return False
         
-    def _cleanup_least_used_caches(self) -> int:
+    async def _cleanup_least_used_caches(self) -> int:
         """清理最少使用的快取
         
         Returns:
@@ -155,7 +156,7 @@ class GeminiCacheManager:
             # 清理最舊的快取
             for i in range(min(cleanup_count, len(cache_items))):
                 _, cache_key = cache_items[i]
-                if self.delete_cache(cache_key):
+                if await self.delete_cache(cache_key):
                     cleaned_count += 1
             
             self.logger.info(f"主動清理了 {cleaned_count} 個最少使用的快取，當前快取數量: {len(self.active_caches)}")
@@ -165,7 +166,7 @@ class GeminiCacheManager:
         
         return cleaned_count
     
-    def force_cleanup_all_caches(self) -> int:
+    async def force_cleanup_all_caches(self) -> int:
         """強制清理所有快取
         
         Returns:
@@ -175,7 +176,7 @@ class GeminiCacheManager:
         cache_keys = list(self.active_caches.keys())
         
         for cache_key in cache_keys:
-            if self.delete_cache(cache_key):
+            if await self.delete_cache(cache_key):
                 cleaned_count += 1
         
         self.logger.warning(f"強制清理了所有快取，共 {cleaned_count} 個")

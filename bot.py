@@ -30,11 +30,14 @@ import json
 import logging
 import asyncio
 from typing import Optional
-from discord.ext import commands
+from discord.ext import commands, tasks
+from itertools import cycle
 from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
 from gpt.core.action_dispatcher import ActionDispatcher
 from gpt.core.response_generator import get_model_and_tokenizer
+from gpt.core.message_handler import MessageHandler
+from gpt.performance_monitor import PerformanceMonitor
 from logs import TimedRotatingFileHandler
 from cogs.memory.memory_manager import MemoryManager
 import gpt.tools.builtin
@@ -45,23 +48,43 @@ from gpt.optimization_integration import (
     initialize_optimization_from_file,
     get_optimized_bot,
     process_optimized_request,
-    get_optimization_status
 )
 from gpt.optimization_config_manager import is_optimization_enabled
 # 配置 logging
 def setup_logger(server_name):
+    # 1. 將根記錄器的預設級別設定為 WARNING
+    # 這樣可以抑制所有未明確設定級別的記錄器的 INFO 和 DEBUG 訊息。
+    logging.getLogger().setLevel(logging.WARNING)
+
+    # 2. 明確將特定第三方函式庫的日誌級別也設定為 WARNING
+    # 雖然根記錄器已經是 WARNING，但明確設定可以防止它們自己的程式碼
+    # 以任何方式覆蓋級別。
+    third_party_loggers = [
+        "faiss", "WDM", "sqlalchemy", "httpx", "google_genai",
+        "discord", "websockets", "cogs.memory", "gpt", "jieba"
+    ]
+    for logger_name in third_party_loggers:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+
+    # 3. 為我們的應用程式（每個 guild）設定特定的 logger
     logger = logging.getLogger(server_name)
-    logger.setLevel(logging.INFO)
-    handler = TimedRotatingFileHandler(server_name)
-    formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)  # 讓我們的應用程式日誌從 INFO 開始記錄
+
+    # 確保只為每個 logger 添加一次 handler，以避免日誌重複
+    if not logger.handlers:
+        handler = TimedRotatingFileHandler(server_name)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        
     return logger
 class PigPig(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.loggers = {}
-        self.action_dispatcher = ActionDispatcher(self)
+        # ActionDispatcher 將在 setup_hook 中被創建和注入
+        self.action_dispatcher: Optional[ActionDispatcher] = None
+        self.message_handler: Optional[MessageHandler] = None
         
         # 記憶系統初始化
         self.memory_manager: Optional[MemoryManager] = None
@@ -74,6 +97,35 @@ class PigPig(commands.Bot):
         # 優化系統初始化
         self.optimization_enabled = False
         self.optimized_bot = None
+        self.performance_monitor = PerformanceMonitor()
+        
+        self.status_cycle = cycle([
+            (discord.ActivityType.listening, "大家的聲音"),
+            (discord.ActivityType.playing, "泥巴 在 {n} 個伺服器裡")
+        ])
+
+    @tasks.loop(seconds=15)
+    async def change_status_task(self):
+        """每 15 秒更換一次機器人狀態"""
+        activity_type, name = next(self.status_cycle)
+        
+        if "{n}" in name:
+            name = name.format(n=len(self.guilds))
+        
+        await self._change_presence(
+            activity=discord.Activity(
+                type=activity_type,
+                name=name
+            )
+        )
+
+    async def _change_presence(self, *args, **kwargs):
+        """包裝 change_presence 以處理連線錯誤"""
+        try:
+            await self.change_presence(*args, **kwargs)
+        except ConnectionResetError:
+            print("Connection reset error while changing presence, retrying in 60 seconds...")
+            await asyncio.sleep(60)
 
     def setup_logger_for_guild(self, guild_name):
         if guild_name not in self.loggers:
@@ -99,7 +151,7 @@ class PigPig(commands.Bot):
                 print("記憶系統已在設定中停用")
                 return
             
-            self.memory_manager = MemoryManager()
+            self.memory_manager = MemoryManager(self)
             self.memory_enabled = await self.memory_manager.initialize()
             
             if self.memory_enabled:
@@ -112,31 +164,29 @@ class PigPig(commands.Bot):
             self.memory_enabled = False
     
     async def initialize_optimization_system(self):
-        """初始化優化系統"""
+        """根據配置文件初始化各個優化模組。"""
         try:
-            # 檢查優化功能是否啟用
             if not is_optimization_enabled():
-                print("優化系統已在配置中停用")
+                print("優化系統已在配置中停用。")
+                self.optimization_enabled = False
                 return
+
+            print("正在初始化優化系統...")
+            # 這裡不再初始化一個完整的 Bot，而是根據需要初始化各個模組
+            # 例如，未來可以這樣做：
+            # config = get_optimization_config()
+            # if config.get('gemini_cache'):
+            #     self.gemini_cache = GeminiCache()
+            # if config.get('parallel_tools'):
+            #     self.tool_executor = ParallelToolExecutor()
             
-            # 初始化優化系統
-            self.optimized_bot = initialize_optimization_from_file()
+            # 目前，我們只設置一個標誌
             self.optimization_enabled = True
-            
-            print("優化系統初始化成功")
-            
-            # 顯示優化狀態
-            status = get_optimization_status()
-            config = status.get('config', {})
-            print(f"  - Gemini 快取: {'✓' if config.get('gemini_cache') else '✗'}")
-            print(f"  - 處理快取: {'✓' if config.get('processing_cache') else '✗'}")
-            print(f"  - 記憶快取: {'✓' if config.get('memory_cache') else '✗'}")
-            print(f"  - 並行工具: {'✓' if config.get('parallel_tools') else '✗'}")
-            print(f"  - 性能監控: {'✓' if config.get('performance_monitoring') else '✗'}")
-            
+            print("優化系統初始化完成。")
+
         except Exception as e:
             print(f"優化系統初始化失敗: {e}")
-            print("將使用傳統處理方式")
+            print("將使用傳統處理方式。")
             self.optimization_enabled = False
     
     async def store_message_to_memory(self, message: discord.Message):
@@ -180,41 +230,23 @@ class PigPig(commands.Bot):
         
         await self.process_commands(message)
         
-        guild_id = str(message.guild.id)
-        
-        prompt = message.content.replace(f"<@{self.user.id}>","")
-        
+        # 將訊息處理委派給 MessageHandler
+        # 檢查訊息是否需要由機器人處理 (例如 @mention 或在特定頻道)
         channel_manager = self.get_cog('ChannelManager')
         if channel_manager:
+            guild_id = str(message.guild.id)
             is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(message.channel, guild_id)
-            if not is_allowed:
-                return
 
-            # 如果是故事模式，將訊息交給 StoryManagerCog 處理
+            # 檢查是否為故事模式頻道
             if channel_mode == 'story':
-                story_cog = self.get_cog('StoryManagerCog')
-                if story_cog:
-                    # 使用 asyncio.create_task 在背景處理，避免阻塞 on_message
-                    asyncio.create_task(story_cog.handle_story_message(message))
-                return # 中斷後續的標準對話流程
+                story_manager_cog = self.get_cog('StoryManagerCog')
+                if story_manager_cog:
+                    await story_manager_cog.handle_story_message(message)
+                return # 故事模式下，不繼續執行一般訊息處理
 
-        # 實現生成回應的邏輯
-        if (self.user.id in message.raw_mentions and not message.mention_everyone) or auto_response_enabled:
-            # 發送初始訊息
-            global global_model, global_tokenizer
-
-            model, tokenizer = get_model_and_tokenizer()
-            # if model is None or tokenizer is None:
-            #     await message.reply("豬腦休息中")
-            #     self.save_dialogue_history()
-            #     return
-
-            message_to_edit = await message.reply("思考中...")
-            try:
-                execute_action = await self.action_dispatcher.choose_act(prompt, message, message_to_edit)
-                await execute_action(message_to_edit, prompt, message)
-            except Exception as e:
-                print(e)
+            # 只有在允許的頻道且被提及或啟用自動回應時，才觸發 handle_message
+            if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
+                await self.message_handler.handle_message(message)
     
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
         if before.author.bot or not before.guild:
@@ -274,6 +306,10 @@ class PigPig(commands.Bot):
                     print(f"Failed to load {module[:-3]}: {e}")
                     print(traceback.format_exc())
 
+        # 初始化核心服務
+        self.action_dispatcher = ActionDispatcher(self)
+        self.message_handler = MessageHandler(self, self.action_dispatcher, self.performance_monitor)
+
         # 初始化記憶系統
         await self.initialize_memory_system()
         
@@ -319,16 +355,20 @@ class PigPig(commands.Bot):
             json.dump(data, f, ensure_ascii=False, indent=4)
         print('update succesfully guilds_and_channels.json')
         func.tokens.client_id = self.user.id
-        while True:
-            await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="大家的聲音"))
-            await asyncio.sleep(5)
+        
+        # 啟動狀態更新任務
+        self.change_status_task.start()
     
     async def close(self):
         """優雅關閉機器人和所有系統"""
         try:
-            # 關閉記憶系統
+            # 關閉記憶系統（先於 super().close()）
             if self.memory_manager:
-                await self.memory_manager.cleanup()
+                # 若提供 shutdown，優先使用以確保外部資源先被釋放
+                if hasattr(self.memory_manager, "shutdown"):
+                    await self.memory_manager.shutdown()
+                else:
+                    await self.memory_manager.cleanup()
                 print("記憶系統已優雅關閉")
             
             # 關閉優化系統

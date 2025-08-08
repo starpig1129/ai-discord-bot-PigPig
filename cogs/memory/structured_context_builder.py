@@ -168,7 +168,7 @@ class StructuredContextBuilder:
         """
         try:
             # 基本資訊：使用 Discord 標籤
-            user_line = f"• <@{user_info.discord_id}>"
+            user_line = f"• <@{user_info.user_id}>"
             
             # 顯示名稱
             if user_info.display_name:

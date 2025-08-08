@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import logging
+import random
 from typing import Dict, List, Optional
 import aiohttp
 import json
@@ -326,14 +327,19 @@ class StoryManager:
                             speaking_character = next((c for c in characters if c.name == speaker_name), None)
 
                             if not speaking_character:
-                                self.logger.warning(f"Character '{speaker_name}' not found for dialogue.")
-                                await self._send_story_response(
-                                    channel=message.channel,
-                                    character=None,
-                                    story_instance=story_instance,
-                                    content=f"({speaker_name} 想要說話，但似乎走神了...)"
-                                )
-                                continue
+                                self.logger.warning(f"Character '{speaker_name}' not found for dialogue. Attempting to substitute a random character.")
+                                if characters:
+                                    speaking_character = random.choice(characters)
+                                    self.logger.info(f"Substituted with random character: '{speaking_character.name}'")
+                                else:
+                                    self.logger.error("No available characters to substitute.")
+                                    await self._send_story_response(
+                                        channel=message.channel,
+                                        character=None,
+                                        story_instance=story_instance,
+                                        content=f"({speaker_name} 想要說話，但現場沒有其他人可以代勞...)"
+                                    )
+                                    continue
 
                             # Fetch recent conversation history
                             history_messages = [msg async for msg in message.channel.history(limit=20)]
