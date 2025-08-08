@@ -38,7 +38,6 @@ PigPig is a powerful, multi-modal Discord bot powered by Large Language Models (
 
 *   **Essential Dependencies:**
     *   [Python 3.10+](https://www.python.org/downloads/)
-    *   [MongoDB](https://www.mongodb.com/) (For user data and certain features)
     *   [FFmpeg](https://ffmpeg.org/) (For music playback)
     *   Python packages listed in [`requirements.txt`](./requirements.txt)
 *   **Hardware Requirements:**

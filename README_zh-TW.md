@@ -38,7 +38,6 @@ PigPig 是一款由大型語言模型 (LLM) 驅動的強大、多模態 Discord 
 
 *   **基本依賴項目：**
     *   [Python 3.10+](https://www.python.org/downloads/)
-    *   [MongoDB](https://www.mongodb.com/) (用於使用者資料和特定功能)
     *   [FFmpeg](https://ffmpeg.org/) (用於音樂播放)
     *   [`requirements.txt`](./requirements.txt) 中列出的 Python 套件
 *   **硬體需求：**
