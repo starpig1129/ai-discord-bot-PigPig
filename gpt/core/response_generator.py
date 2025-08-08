@@ -340,6 +340,33 @@ async def generate_response(
     trace_id: Optional[str] = None,
 ):
     logging.info("--- 開始生成回應 ---")
+    try:
+        # 關鍵診斷：完整列印傳入 messages（避免洩露，遮罩部分內容長度）
+        def _shorten(x, n=200):
+            try:
+                s = str(x)
+                return s if len(s) <= n else s[:n] + "...(truncated)"
+            except Exception:
+                return "<non-str>"
+        summary = []
+        if isinstance(dialogue_history, list):
+            for i, m in enumerate(dialogue_history):
+                if isinstance(m, dict):
+                    summary.append({
+                        "idx": i,
+                        "role": m.get("role"),
+                        "name": m.get("name"),
+                        "content_preview": _shorten(m.get("content"))
+                    })
+                else:
+                    summary.append({"idx": i, "type": type(m).__name__, "preview": _shorten(m)})
+        else:
+            summary = _shorten(dialogue_history)
+        logging.info("diagnostic.dialogue_history | count=%s detail=%s",
+                     str(len(dialogue_history) if isinstance(dialogue_history, list) else 0),
+                     summary)
+    except Exception as _e:
+        logging.warning("diagnostic.dialogue_history.log_fail err=%s", str(_e))
     # 預設 RetryController（如未提供）
     if retry is None:
         retry = RetryController(

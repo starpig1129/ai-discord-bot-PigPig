@@ -57,6 +57,21 @@ def _get_prompt_manager():
             _prompt_manager = None
     return _prompt_manager
 
+def _get_final_summary_prompt() -> str:
+    """
+    取得「最終總結者」的追加限制性規則字串。
+    注意：這裡不再回傳完整系統提示，而是回傳要附加到現有 system prompt 後方的關鍵限制。
+    僅在對話歷史中存在 role=function 且 name=tool_execution_summary 時使用。
+    """
+    return (
+        "\n\n--- CRITICAL SUMMARY INSTRUCTIONS ---\n"
+        "You MUST base your entire response on the provided 'tool_execution_summary'.\n"
+        "You MUST NOT invent, hallucinate, or re-run any tools.\n"
+        "Your task is ONLY to present the results from the summary, while adhering to your established personality from the preceding instructions.\n"
+        "--- END CRITICAL INSTRUCTIONS ---\n"
+    )
+
+
 def get_system_prompt(bot_id: str, message=None) -> str:
     """
     取得系統提示（整合 YAML 提示管理系統和頻道系統提示）
@@ -792,22 +807,86 @@ async def gpt_message(
         combined_prompt = f"[{message.author.display_name}<@{message.author.id}>]: {prompt}"
         logging.info("使用智慧背景知識系統建構的結構化上下文")
     
-    # 將結構化歷史合併到 history_dict 中
+    # 將結構化歷史合併到 history_dict 中，並確保保留 tool_execution_summary
+    def _extract_tool_summary(msgs):
+        """從提供的訊息列表中提取所有 role=function 且 name=tool_execution_summary 的訊息"""
+        summaries = []
+        try:
+            for m in msgs or []:
+                if isinstance(m, dict) and m.get("role") == "function" and m.get("name") == "tool_execution_summary":
+                    summaries.append(m)
+        except Exception as _e:
+            logging.debug(f"_extract_tool_summary 解析歷史時發生例外，可忽略: {_e}")
+        return summaries
+
+    # 取得上游傳入歷史（list 或 dict.messages）中的工具摘要
+    upstream_messages = history_dict if isinstance(history_dict, list) else conversation_history
+    tool_summaries = _extract_tool_summary(upstream_messages)
+
     if isinstance(history_dict, list):
-        # 在使用者訊息前插入工具結果
-        enhanced_history = structured_history + history_dict
+        # 在使用者訊息前插入工具結果，且附加保留下游工具摘要
+        enhanced_history = structured_history + tool_summaries + history_dict
     else:
-        # 如果是字典格式，需要適當處理
-        enhanced_history = structured_history + conversation_history
+        # 如果是字典格式，需要適當處理，同樣保留工具摘要
+        enhanced_history = structured_history + tool_summaries + conversation_history
     
     try:
         responses = ""
         responsesall = ""
         message_result = ""
         bot_system_prompt = get_system_prompt(str(message.guild.me.id), message)
+        # 關鍵診斷：在呼叫 ResponseGenerator 前記錄即將送出的對話歷史
+        try:
+            def _shorten(x, n=200):
+                try:
+                    s = str(x)
+                    return s if len(s) <= n else s[:n] + "...(truncated)"
+                except Exception:
+                    return "<non-str>"
+            pre_summary = []
+            if isinstance(enhanced_history, list):
+                for i, m in enumerate(enhanced_history):
+                    if isinstance(m, dict):
+                        pre_summary.append({
+                            "idx": i,
+                            "role": m.get("role"),
+                            "name": m.get("name"),
+                            "content_preview": _shorten(m.get("content"))
+                        })
+                    else:
+                        pre_summary.append({"idx": i, "type": type(m).__name__, "preview": _shorten(m)})
+            else:
+                pre_summary = _shorten(enhanced_history)
+            logging.info("diagnostic.pre_generate_history | count=%s detail=%s",
+                         str(len(enhanced_history) if isinstance(enhanced_history, list) else 0),
+                         pre_summary)
+        except Exception as _e:
+            logging.warning("diagnostic.pre_generate_history.log_fail err=%s", str(_e))
+        # 條件式套用「最終總結者」系統提示詞：
+        # 當 enhanced_history 中存在 role=function 且 name=tool_execution_summary 的訊息時，
+        # 使用高度限制性的最終總結提示，避免模型幻想新的工具執行流程或遺失附件。
+        try:
+            def _has_tool_execution_summary(msgs):
+                try:
+                    for _m in msgs or []:
+                        if isinstance(_m, dict) and _m.get("role") == "function" and _m.get("name") == "tool_execution_summary":
+                            return True
+                    return False
+                except Exception:
+                    return False
+
+            use_final_summary_prompt = False
+            if isinstance(enhanced_history, list) and _has_tool_execution_summary(enhanced_history):
+                use_final_summary_prompt = True
+
+            effective_system_prompt = _get_final_summary_prompt() if use_final_summary_prompt else bot_system_prompt
+        except Exception as _choose_err:
+            logging.debug(f"選擇系統提示詞時發生例外，回退至一般提示: {_choose_err}")
+            effective_system_prompt = bot_system_prompt
+
         thread, streamer = await generate_response(
             inst=combined_prompt,
-            system_prompt=bot_system_prompt,
+            system_prompt=effective_system_prompt,
             dialogue_history=enhanced_history,
             image_input=image_data
         )
@@ -964,6 +1043,24 @@ async def gpt_message(
                 nonlocal files_to_send, attachments_found
                 if not blob_text:
                     return
+
+                def _strip_data_url_prefix(b64: str) -> str:
+                    # 支援 data URL 前綴，例如: data:image/png;base64,AAAA...
+                    if isinstance(b64, str) and b64.startswith("data:"):
+                        comma_idx = b64.find(",")
+                        if comma_idx != -1:
+                            return b64[comma_idx + 1 :]
+                    return b64
+
+                def _fix_padding(b64: str) -> str:
+                    # 自動補齊 base64 padding
+                    if not isinstance(b64, str):
+                        return b64
+                    mod = len(b64) % 4
+                    if mod:
+                        b64 += "=" * (4 - mod)
+                    return b64
+
                 # 嘗試解析多個 JSON 區塊
                 # 先粗略抓出可能的 JSON 區塊，避免把整段當成單一 JSON
                 for match in re.finditer(r'\{[\s\S]*?\}', blob_text):
@@ -972,6 +1069,7 @@ async def gpt_message(
                         data = json.loads(seg)
                     except Exception:
                         continue
+
                     items = data if isinstance(data, list) else [data]
                     for it in items:
                         if not isinstance(it, dict):
@@ -979,22 +1077,89 @@ async def gpt_message(
                         out = it.get("output")
                         if not out:
                             continue
+
                         payload = out if isinstance(out, dict) else {}
                         attach_list = payload.get("attachments") if isinstance(payload, dict) else None
                         if not isinstance(attach_list, list):
                             continue
+
                         for att in attach_list:
                             try:
-                                if isinstance(att, dict) and att.get("type") == "image" and "data_base64" in att:
-                                    raw = att["data_base64"]
-                                    data_bytes = base64.b64decode(raw)
-                                    fname = att.get("filename", "image.png")
-                                    files_to_send.append(discord.File(io.BytesIO(data_bytes), filename=fname))
-                                    attachments_found += 1
-                            except Exception as fe:
-                                logging.warning(f"附件轉檔失敗: {fe}")
+                                if not isinstance(att, dict):
+                                    continue
+                                # 支援不同欄位命名：data_base64 / base64 / b64 / image_base64
+                                b64_val = (
+                                    att.get("data_base64")
+                                    or att.get("base64")
+                                    or att.get("b64")
+                                    or att.get("image_base64")
+                                )
+                                if att.get("type") != "image" or not b64_val:
+                                    continue
 
-            # 嘗試從 responsesall 與 responses 中解析 function 報告（若保留於文字中）
+                                b64_clean = _fix_padding(_strip_data_url_prefix(b64_val))
+                                try:
+                                    data_bytes = base64.b64decode(b64_clean, validate=False)
+                                except Exception as dec_err:
+                                    # 若 validate 失敗，再嘗試不嚴格模式
+                                    logging.warning(f"附件 base64 解碼失敗，嘗試不嚴格模式: {dec_err}")
+                                    data_bytes = base64.b64decode(b64_clean + "===")
+
+                                if not data_bytes:
+                                    logging.warning("附件解碼後為空位元組，跳過此附件")
+                                    continue
+
+                                # 決定檔名，若未提供則預設為 png
+                                fname = att.get("filename")
+                                if not fname or not isinstance(fname, str):
+                                    # 嘗試從 mime 推斷副檔名
+                                    mime = att.get("mime") or att.get("content_type")
+                                    ext = "png"
+                                    if isinstance(mime, str):
+                                        if "jpeg" in mime:
+                                            ext = "jpg"
+                                        elif "gif" in mime:
+                                            ext = "gif"
+                                        elif "webp" in mime:
+                                            ext = "webp"
+                                        elif "png" in mime:
+                                            ext = "png"
+                                    fname = f"image.{ext}"
+
+                                file_obj = discord.File(io.BytesIO(data_bytes), filename=fname)
+                                files_to_send.append(file_obj)
+                                attachments_found += 1
+                                logging.info(f"已解析附件: filename={fname}, size={len(data_bytes)} bytes")
+                            except Exception as fe:
+                                # 記錄更完整的錯誤資訊以利診斷
+                                sample = ""
+                                try:
+                                    s = str(att.get('data_base64', ''))[:48]
+                                    sample = s + ("..." if len(s) == 48 else "")
+                                except Exception:
+                                    pass
+                                logging.warning(f"附件轉檔失敗: {fe} | filename={att.get('filename')} | sample_b64={sample}")
+
+            # 先從對話歷史中的工具摘要提取附件（正確來源）
+            try:
+                if isinstance(enhanced_history, list):
+                    tool_blob_count = 0
+                    for m in enhanced_history:
+                        try:
+                            if isinstance(m, dict) and m.get("role") == "function" and m.get("name") == "tool_execution_summary":
+                                content = m.get("content")
+                                if isinstance(content, (str, bytes)):
+                                    _extract_attachments_from_function_blob(content if isinstance(content, str) else content.decode("utf-8", errors="ignore"))
+                                    tool_blob_count += 1
+                        except Exception as _ih_err:
+                            logging.debug(f"解析單一工具摘要時發生例外（忽略並繼續）: {_ih_err}")
+                    logging.info(f"從 enhanced_history 掃描工具摘要完成，數量={tool_blob_count}，解析到附件數={attachments_found}")
+                else:
+                    logging.debug("enhanced_history 不是 list，略過工具摘要掃描")
+            except Exception as hist_parse_err:
+                logging.debug(f"從歷史解析工具附件時發生例外（可忽略）: {hist_parse_err}")
+
+            # 兼容：再嘗試從 responsesall 與 responses 中解析（若模型把摘要回吐到輸出文字中）
             try:
                 _extract_attachments_from_function_blob(responsesall)
                 _extract_attachments_from_function_blob(responses)
