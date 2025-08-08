@@ -98,7 +98,16 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                 if image_buffer:
                     # 不回傳 discord.File，改回傳 base64 附件描述，讓上游統一合併發送
                     image_buffer.seek(0)
-                    b64 = base64.b64encode(image_buffer.read()).decode("utf-8")
+                    try:
+                        raw = image_buffer.read()
+                        if not raw:
+                            print("[GenImg][WARN] image_buffer 為空（Gemini 分支），將視為失敗")
+                            raise ValueError("empty_image_buffer")
+                        b64 = base64.b64encode(raw).decode("utf-8")
+                    except Exception as enc_err:
+                        print(f"[GenImg][ERROR] 影像編碼失敗（Gemini 分支）: {enc_err}")
+                        raise
+
                     success_message = self.lang_manager.translate(
                         guild_id, "commands", "generate_image", "responses", "image_generated"
                     )
@@ -117,10 +126,16 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                             }
                         ]
                     }
+                    print("[GenImg][INFO] 生成成功（Gemini 分支），已含附件，準備返回")
                     return payload
                 elif response_text.strip():
-                    self._update_conversation_history(channel_id, "assistant", response_text, None)
-                    return {"content": response_text}
+                    # 僅有文字無圖片，判定為失敗，避免上游提前完成
+                    print("[GenImg][WARN] 僅有文字無圖片（Gemini 分支），返回錯誤以避免競態條件")
+                    print("[GenImg][ERROR] 所有生成方法皆無法取得圖片，返回錯誤避免上游提前完成")
+                    error_message = self.lang_manager.translate(
+                        guild_id, "commands", "generate_image", "responses", "all_methods_failed"
+                    )
+                    return {"error": error_message}
             except Exception as e:
                 error_message = self.lang_manager.translate(
                     guild_id, "commands", "generate_image", "responses", "gemini_error", error=str(e)
@@ -131,7 +146,16 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                 image_buffer = await self.generate_with_local_model(channel, prompt, guild_id=guild_id)
                 if image_buffer:
                     image_buffer.seek(0)
-                    b64 = base64.b64encode(image_buffer.read()).decode("utf-8")
+                    try:
+                        raw = image_buffer.read()
+                        if not raw:
+                            print("[GenImg][WARN] image_buffer 為空（Local 分支），將視為失敗")
+                            raise ValueError("empty_image_buffer")
+                        b64 = base64.b64encode(raw).decode("utf-8")
+                    except Exception as enc_err:
+                        print(f"[GenImg][ERROR] 影像編碼失敗（Local 分支）: {enc_err}")
+                        raise
+                    print("[GenImg][INFO] 生成成功（Local 分支），已含附件，準備返回")
                     return {
                         "attachments": [
                             {
@@ -143,6 +167,8 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                             }
                         ]
                     }
+                else:
+                    print("[GenImg][WARN] Local 分支未取得圖片，將嘗試回傳錯誤")
 
             error_message = self.lang_manager.translate(
                 guild_id, "commands", "generate_image", "responses", "all_methods_failed"

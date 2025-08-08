@@ -2233,6 +2233,156 @@ class VectorManager:
         
         return stats
     
+    def rebuild_all_indexes(self) -> dict:
+        """重建所有頻道/伺服器的向量索引（同步、供上層以執行緒池呼叫）
+        
+        掃描索引存放目錄的 *.index/.mapping，解析頻道 ID，從資料庫讀取原始訊息，
+        重新分段、重新嵌入並建立乾淨索引後，以原子方式覆蓋舊檔。
+        
+        Returns:
+            dict: {'rebuilt_count': int, 'failed_count': int, 'errors': List[str]}
+        """
+        summary = {'rebuilt_count': 0, 'failed_count': 0, 'errors': []}
+        try:
+            # 延伸：允許沒有現有檔案也重建（例如只有資料庫資料）
+            existing_files = list(self.storage_path.glob("*.index"))
+            channel_ids = set([p.stem for p in existing_files])
+            
+            # 若目錄存在但沒有檔案，仍嘗試從資料庫列出所有 channel
+            try:
+                from .database import DatabaseManager
+                db_path = Path("data/memory/memory.db")
+                db_manager = DatabaseManager(db_path) if db_path.exists() else None
+            except Exception as e:
+                db_manager = None
+                self.logger.warning(f"初始化 DatabaseManager 失敗，僅重建現有索引檔案: {e}")
+            
+            # 當能訪問資料庫時，補齊所有 channels
+            if db_manager:
+                try:
+                    # 讀出所有 channel_id
+                    with db_manager.get_connection() as conn:
+                        cursor = conn.execute("SELECT channel_id FROM channels")
+                        for row in cursor.fetchall():
+                            channel_ids.add(row[0])
+                except Exception as e:
+                    self.logger.warning(f"掃描資料庫頻道失敗，僅使用檔案清單: {e}")
+            
+            # 需要嵌入與分段服務，從上層 MemoryManager 初始化後掛載於此管理器
+            embedding_service = getattr(self, "_embedding_service", None)
+            segmentation_service = getattr(self, "_segmentation_service", None)
+            
+            if embedding_service is None or self.profile.embedding_dimension <= 0:
+                raise VectorOperationError("嵌入服務未初始化或維度配置無效，無法重建索引")
+            
+            # 逐一重建
+            for channel_id in sorted(channel_ids):
+                try:
+                    # 卸載記憶體中的舊索引，以避免佔用資源
+                    self.unload_channel_index(channel_id)
+                    
+                    # 重新建立空索引容器
+                    if not self.create_channel_index(channel_id):
+                        raise VectorOperationError("建立空索引容器失敗")
+                    
+                    index = self.get_channel_index(channel_id)
+                    if index is None:
+                        raise VectorOperationError("取得索引實例失敗")
+                    
+                    # 從資料庫讀取該頻道所有訊息
+                    messages = []
+                    if db_manager:
+                        try:
+                            with db_manager.get_connection() as conn:
+                                cursor = conn.execute(
+                                    "SELECT message_id, content, timestamp, user_id FROM messages WHERE channel_id = ? ORDER BY timestamp ASC",
+                                    (channel_id,)
+                                )
+                                messages = [dict(row) for row in cursor.fetchall()]
+                        except Exception as e:
+                            raise VectorOperationError(f"讀取資料庫訊息失敗: {e}")
+                    
+                    if not messages:
+                        # 沒有資料，則建立空索引並覆蓋舊檔（若有）
+                        index_file = self.storage_path / f"{channel_id}.index"
+                        faiss.write_index(index.get_index(), str(index_file))
+                        # 同步寫入空映射
+                        mapping_path = index_file.with_suffix(".mapping")
+                        with open(mapping_path, "wb") as f:
+                            pickle.dump({'id_map': {}, 'reverse_id_map': {}, 'next_id': 0}, f)
+                        summary['rebuilt_count'] += 1
+                        self.logger.info(f"頻道 {channel_id}: 無訊息資料，已重置為空索引")
+                        continue
+                    
+                    # 重新嵌入（簡化：直接使用訊息文本，若分段服務存在，可在此做分段）
+                    texts = [m.get("content", "") for m in messages]
+                    # 以批次方式產生嵌入以降低峰值記憶體
+                    batch = getattr(self.profile, 'batch_size', 50) or 50
+                    vectors: list = []
+                    for i in range(0, len(texts), batch):
+                        chunk = texts[i:i+batch]
+                        embeds = embedding_service.encode(chunk)
+                        # 支援 torch/np 兩種返回
+                        if hasattr(embeds, 'cpu'):
+                            embeds = embeds.cpu().numpy()
+                        vectors.append(embeds.astype('float32'))
+                    if vectors:
+                        vectors_np = np.vstack(vectors)
+                    else:
+                        vectors_np = np.zeros((0, self.profile.embedding_dimension), dtype='float32')
+                    
+                    # 建立對應 ID（以 message_id 綁定）
+                    ids = [str(m.get("message_id")) for m in messages]
+                    
+                    # 寫入全新索引（在記憶體，確保原子性保存時才覆蓋檔案）
+                    if vectors_np.shape[0] != len(ids):
+                        raise VectorOperationError("嵌入向量數與 ID 數量不一致")
+                    
+                    add_ok = index.add_vectors(vectors_np, ids, batch_size=batch)
+                    if not add_ok:
+                        raise VectorOperationError("新增向量至索引失敗")
+                    
+                    # 原子性覆寫檔案
+                    index_file = self.storage_path / f"{channel_id}.index"
+                    if not asyncio.get_event_loop().is_running():
+                        # 在同步環境下直接存
+                        faiss.write_index(index.get_index(), str(index_file))
+                        # 同步寫映射
+                        mapping_path = index_file.with_suffix(".mapping")
+                        with open(mapping_path, "wb") as f:
+                            pickle.dump({
+                                'id_map': index._id_map,
+                                'reverse_id_map': index._reverse_id_map,
+                                'next_id': index._next_id,
+                                'dimension': index.dimension,
+                                'index_type': index.index_type,
+                                'metric': index.metric,
+                                'timestamp': time.time(),
+                                'checksum': index._calculate_mapping_checksum(),
+                            }, f)
+                    else:
+                        # 若在事件迴圈中，使用既有的異步存檔方法
+                        save_ok = asyncio.get_event_loop().run_until_complete(index.save(index_file))  # type: ignore
+                        if not save_ok:
+                            raise VectorOperationError("索引保存失敗")
+                    
+                    summary['rebuilt_count'] += 1
+                    self.logger.info(f"頻道 {channel_id}: 重建完成（{len(ids)} 筆）")
+                
+                except Exception as ce:
+                    summary['failed_count'] += 1
+                    err = f"頻道 {channel_id} 重建失敗: {ce}"
+                    summary['errors'].append(err)
+                    self.logger.error(err, exc_info=True)
+            
+            return summary
+        
+        except Exception as e:
+            summary['failed_count'] += 1
+            summary['errors'].append(str(e))
+            self.logger.error(f"重建所有索引流程失敗: {e}", exc_info=True)
+            return summary
+    
     def optimize_memory_usage(self) -> bool:
         """優化記憶體使用
         
