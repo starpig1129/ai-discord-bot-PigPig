@@ -364,6 +364,14 @@ class PigPig(commands.Bot):
         try:
             # 關閉記憶系統（先於 super().close()）
             if self.memory_manager:
+                # 先嘗試優雅關閉 VectorManager（可重入，避免卡死）
+                try:
+                    vm = getattr(self.memory_manager, "vector_manager", None)
+                    if vm and hasattr(vm, "shutdown"):
+                        await vm.shutdown()
+                except Exception as e:
+                    print(f"關閉向量管理器時發生錯誤: {e}")
+
                 # 若提供 shutdown，優先使用以確保外部資源先被釋放
                 if hasattr(self.memory_manager, "shutdown"):
                     await self.memory_manager.shutdown()
@@ -376,8 +384,21 @@ class PigPig(commands.Bot):
                 await self.optimized_bot.shutdown()
                 print("優化系統已優雅關閉")
             
-            # 關閉父類
+            # 關閉父類（斷開 Discord 連線等）
             await super().close()
-            
+
+            # 優雅取消其餘所有仍在事件迴圈中的任務，避免 Task exception was never retrieved
+            pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task() and not t.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+
+            # 最後關閉 asyncio 預設執行緒池，避免 threading._shutdown 掛起
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.shutdown_default_executor()
+            except Exception as e:
+                print(f"關閉預設執行緒池時發生錯誤: {e}")
         except Exception as e:
             print(f"關閉機器人時發生錯誤: {e}")

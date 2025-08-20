@@ -7,7 +7,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
 from enum import Enum
@@ -591,9 +591,9 @@ class TextSegmentationService:
             float: 相似度分數 (0.0-1.0)
         """
         try:
-            # 使用 Qwen3 嵌入模型計算向量
-            embedding1 = self.embedding_service.encode_text(text1)
-            embedding2 = self.embedding_service.encode_text(text2)
+            # 使用 Qwen3 嵌入模型計算向量（非同步）
+            embedding1 = await self.embedding_service.encode_text_async(text1)
+            embedding2 = await self.embedding_service.encode_text_async(text2)
             
             if embedding1 is None or embedding2 is None:
                 return 0.0
@@ -797,8 +797,8 @@ class TextSegmentationService:
             if not representative_text:
                 return None
             
-            # 計算向量表示
-            vector = self.embedding_service.encode_text(representative_text)
+            # 計算向量表示（非同步）
+            vector = await self.embedding_service.encode_text_async(representative_text)
             return vector
             
         except Exception as e:

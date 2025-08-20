@@ -29,6 +29,8 @@ from sympy.parsing.sympy_parser import (
     implicit_multiplication_application,
 )
 from typing import Optional
+import re
+import unicodedata
 from .language_manager import LanguageManager
 from gpt.utils.discord_utils import safe_edit_message
 
@@ -52,11 +54,7 @@ class MathCalculatorCog(commands.Cog):
             await safe_edit_message(message_to_edit, processing_message)
         try:
             # 限制表達式長度，防止過長的輸入
-            if len(expression) > 200:
-                error_message = self.lang_manager.translate(
-                    guild_id, "commands", "calculate", "responses", "error_too_long"
-                ) if self.lang_manager else "錯誤：表達式過長，請縮短後再試。"
-                return error_message
+            # 長度檢查移至抽取後的表達式
 
             # 定義允許的數學函數和常數
             allowed_functions = {
@@ -111,6 +109,65 @@ class MathCalculatorCog(commands.Cog):
                 standard_transformations +
                 (implicit_multiplication_application,)
             )
+
+            # 抽取與正規化數學表達式
+            expr_norm = unicodedata.normalize('NFKC', expression)
+
+            # 標準化常見符號變體
+            for _src, _dst in {
+                '×': '*',
+                '∙': '*',
+                '·': '*',
+                '÷': '/',
+                '–': '-',
+                '—': '-',
+                '−': '-',
+                '^': '**',
+            }.items():
+                expr_norm = expr_norm.replace(_src, _dst)
+
+            # 建立允許的名稱清單（函數與常數）
+            allowed_names = list(allowed_functions.keys()) + list(basic_types.keys())
+            for _name in ['pi', 'E', 'e', 'I']:
+                if _name not in allowed_names:
+                    allowed_names.append(_name)
+            allowed_names_sorted = sorted(set(allowed_names), key=len, reverse=True)
+            tokens_pattern = r'(?:' + '|'.join(re.escape(n) for n in allowed_names_sorted) + r')'
+
+            # 從混合文字中擷取可能的數學表達式
+            pattern = re.compile(rf'(({tokens_pattern}|[0-9]+(?:\.[0-9]+)?|[()+\-*/,\s])+)', re.IGNORECASE)
+            candidates = [m.group(1) for m in pattern.finditer(expr_norm)]
+
+            # 過濾有效候選（需包含數字或允許名稱）
+            def _is_valid_candidate(s):
+                s_strip = re.sub(r'^[=\s]+|[=\s]+$', '', s)
+                if not s_strip:
+                    return False
+                if re.search(r'[0-9]', s_strip):
+                    return True
+                return re.search(tokens_pattern, s_strip, flags=re.IGNORECASE) is not None
+
+            valid_candidates = [re.sub(r'^[=\s]+|[=\s]+$', '', c) for c in candidates if _is_valid_candidate(c)]
+            extracted = max(valid_candidates, key=len) if valid_candidates else ''
+
+            if not extracted:
+                # 清楚錯誤：未找到可計算的表達式
+                if self.lang_manager:
+                    return self.lang_manager.translate(
+                        guild_id, "responses", "error", error="未找到可計算的表達式"
+                    )
+                else:
+                    return "錯誤：未找到可計算的表達式。"
+
+            # 長度限制（以抽取後的表達式為準）
+            if len(extracted) > 200:
+                error_message = self.lang_manager.translate(
+                    guild_id, "commands", "calculate", "responses", "error_too_long"
+                ) if self.lang_manager else "錯誤：表達式過長，請縮短後再試。"
+                return error_message
+
+            # 使用抽取後的表達式
+            expression = extracted
 
             # 安全地解析表達式
             sympy_expr = parse_expr(

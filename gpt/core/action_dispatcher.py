@@ -38,7 +38,7 @@ from gpt.core.message_sender import (
 from gpt.tools.registry import tool_registry
 from gpt.tools.tool_context import ToolExecutionContext
 from gpt.utils.media import process_attachment_data
-from gpt.core.tool_executor import ToolExecutor
+from gpt.core.tool_executor import AsyncToolScheduler
 
 # 新增：嚴格工具 JSON 解析與驗證的 feature flag（可由環境變數覆寫）
 ENABLE_STRICT_TOOL_JSON: bool = os.getenv("ENABLE_STRICT_TOOL_JSON", "true").lower() in {"1", "true", "yes", "on"}
@@ -109,7 +109,6 @@ class ActionDispatcher:
     def __init__(self, bot):
         self.bot = bot
         self.tool_registry = tool_registry
-        self.tool_executor = ToolExecutor(bot)
         self._tool_routing_rules = [
             (re.compile(r"(算一下|計算|算|\+)"), [{"tool_name": "math", "parameters": {"expression": None}}]),
             (re.compile(r"(天氣|氣溫|下雨)"), [{"tool_name": "internet_search", "parameters": {"query": None}}]),
@@ -215,8 +214,9 @@ class ActionDispatcher:
             logger=logger
         )
 
-        # 執行工具並獲取結果
-        tool_results = await self.tool_executor.execute_tools(action_list, context)
+        # 執行工具並獲取結果（並行）
+        scheduler = AsyncToolScheduler(self.bot)
+        tool_results = await scheduler.schedule_tools(action_list, context)
 
         # 統一處理工具執行結果，無論成功或失敗
         async def execute_action(message_to_edit: Any, original_prompt: str, message: Any):

@@ -377,6 +377,32 @@ class SearchEngine:
 
         segment_to_message_map = self.database_manager.get_segment_to_message_map(segment_ids)
         
+        # 檢測並清理「部分」孤兒 segments（那些在主資料庫中查無任何訊息關聯的片段）
+        orphan_segment_ids = [
+            seg_id for seg_id in segment_ids
+            if len(segment_to_message_map.get(seg_id, [])) == 0
+        ]
+        if orphan_segment_ids:
+            self.logger.warning(f"語義搜尋偵測到部分孤兒 Segment IDs: {orphan_segment_ids}")
+            try:
+                removed_count = self.vector_manager.remove_vectors(query.channel_id, orphan_segment_ids)
+                self.logger.info(
+                    f"孤兒 segments 清理完成 | 檢測={len(orphan_segment_ids)} 刪除={removed_count}"
+                )
+            except Exception as e:
+                self.logger.error(f"孤兒 segments 自動清理失敗: {e}")
+            
+            # 從候選集中剔除孤兒，避免後續流程誤用
+            segment_ids = [seg_id for seg_id in segment_ids if seg_id not in orphan_segment_ids]
+            segment_score_map = {seg_id: segment_score_map.get(seg_id, 0.0) for seg_id in segment_ids}
+            
+            # 若全部為孤兒，提前返回
+            if not segment_ids:
+                return SearchResult(
+                    messages=[], relevance_scores=[], total_found=0,
+                    search_time_ms=0.0, search_method="semantic_no_messages",
+                    query_vector=query_vector
+                )
         all_message_ids = [
             msg_id for seg_id in segment_ids
             for msg_id in segment_to_message_map.get(seg_id, [])

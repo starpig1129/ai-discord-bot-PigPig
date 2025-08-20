@@ -20,6 +20,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import discord
+import asyncio
+import logging
 import update
 import function as func
 from bot import PigPig
@@ -62,4 +64,14 @@ bot = PigPig(
 
 if __name__ == "__main__":
     update.check_version(with_msg=True)
-    bot.run(func.tokens.token, log_handler=None)
+    try:
+        bot.run(func.tokens.token, log_handler=None)
+    except KeyboardInterrupt:
+        print("收到 KeyboardInterrupt，使用者手動中斷，開始優雅關閉...")
+    finally:
+        # 最終保險清理，避免 Task exception was never retrieved
+        try:
+            # 使用新的事件迴圈執行關閉（若先前已關閉則此呼叫為冪等）
+            asyncio.run(bot.close())
+        except Exception as e:
+            print(f"最終清理階段發生錯誤: {e}")

@@ -5,8 +5,11 @@ import yaml
 from datetime import datetime
 import pytz
 import os
+import logging
 from typing import Optional
 from .language_manager import LanguageManager
+
+logger = logging.getLogger(__name__)
 
 class ScheduleManager(commands.Cog):
     def __init__(self, bot):
@@ -18,6 +21,23 @@ class ScheduleManager(commands.Cog):
     async def cog_load(self):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
+
+    def _sanitize_schedule_data(self, data, fallback_channel_id: int):
+        """Ensure schedule_data has required keys and types. Returns (data, repaired)."""
+        repaired = False
+        if not isinstance(data, dict):
+            logger.warning("schedule_data was not a dict. Resetting to empty dict.")
+            data = {}
+            repaired = True
+        if 'schedule' not in data or not isinstance(data.get('schedule'), dict):
+            logger.warning("Missing or invalid 'schedule' key. Initializing to empty dict.")
+            data['schedule'] = {}
+            repaired = True
+        if 'channel_id' not in data or not isinstance(data.get('channel_id'), int):
+            logger.warning("Missing or invalid 'channel_id'. Using fallback_channel_id=%s", fallback_channel_id)
+            data['channel_id'] = int(fallback_channel_id) if isinstance(fallback_channel_id, int) else 0
+            repaired = True
+        return data, repaired
 
     @app_commands.command(name="upload_schedule", description="上傳行程表YAML檔案")
     async def upload_schedule_command(self, interaction: discord.Interaction, file: discord.Attachment):
@@ -97,6 +117,12 @@ class ScheduleManager(commands.Cog):
         
         with open(filepath, "r", encoding='utf-8') as f:
             schedule_data = yaml.safe_load(f)
+        if schedule_data is None:
+            schedule_data = {}
+        schedule_data, repaired = self._sanitize_schedule_data(schedule_data, channel_id)
+        if repaired:
+            with open(filepath, "w", encoding='utf-8') as fw:
+                yaml.dump(schedule_data, fw, allow_unicode=True)
 
         guild = interaction_or_ctx.guild
         queried_user = await guild.fetch_member(target_user_id)
@@ -106,7 +132,7 @@ class ScheduleManager(commands.Cog):
             ) if self.lang_manager else "找不到該使用者。"
 
         query_channel = guild.get_channel(channel_id)
-        schedule_channel = guild.get_channel(schedule_data["channel_id"])
+        schedule_channel = guild.get_channel(schedule_data.get("channel_id", 0))
 
         if query_channel is None or schedule_channel is None:
             return self.lang_manager.translate(
@@ -121,7 +147,7 @@ class ScheduleManager(commands.Cog):
                 guild_id, "commands", "query_schedule", "responses", "permission_denied"
             ) if self.lang_manager else "您或被查詢者無權限查看此頻道。"
 
-        schedule = schedule_data["schedule"]
+        schedule = schedule_data.get("schedule", {})
         tz = pytz.timezone('Asia/Taipei')
         now = datetime.now(tz)
 
@@ -181,7 +207,13 @@ class ScheduleManager(commands.Cog):
                 output += f"| {time_column} | {description_column} |\n"
                 output += "|---|---| \n"
                 for event in events:
-                    output += f"| {event['time']} | {event['description']} |\n"
+                    time_str = event.get('time')
+                    desc = event.get('description')
+                    if time_str is None or desc is None:
+                        logger.warning("Event missing keys: %s", event)
+                        time_str = time_str if time_str is not None else "-"
+                        desc = desc if desc is not None else "-"
+                    output += f"| {time_str} | {desc} |\n"
             else:
                 output += no_events + "\n"
         return output
@@ -196,23 +228,33 @@ class ScheduleManager(commands.Cog):
         
         if day and day in schedule:
             for event in schedule[day]:
+                time_range = event.get('time')
+                description = event.get('description', '')
+                if not time_range:
+                    logger.warning("Event missing 'time': %s", event)
+                    continue
                 try:
-                    event_time = datetime.strptime(event['time'], "%H:%M-%H:%M").replace(year=specific_time.year, month=specific_time.month, day=specific_time.day)
+                    event_time = datetime.strptime(time_range, "%H:%M-%H:%M").replace(year=specific_time.year, month=specific_time.month, day=specific_time.day)
                     if event_time == specific_time:
-                        output += f"- {event['time']}: {event['description']}\n"
+                        output += f"- {time_range}: {description}\n"
                         found = True
-                except ValueError:
+                except (ValueError, TypeError):
                     pass
         elif not day:
             current_day = specific_time.strftime("%A")
             if current_day in schedule:
                 for event in schedule[current_day]:
+                    time_range = event.get('time')
+                    description = event.get('description', '')
+                    if not time_range:
+                        logger.warning("Event missing 'time': %s", event)
+                        continue
                     try:
-                        event_time = datetime.strptime(event['time'], "%H:%M-%H:%M").replace(year=specific_time.year, month=specific_time.month, day=specific_time.day)
+                        event_time = datetime.strptime(time_range, "%H:%M-%H:%M").replace(year=specific_time.year, month=specific_time.month, day=specific_time.day)
                         if event_time == specific_time:
-                            output += f"- {event['time']}: {event['description']}\n"
+                            output += f"- {time_range}: {description}\n"
                             found = True
-                    except ValueError:
+                    except (ValueError, TypeError):
                         pass
 
         if found:
@@ -227,15 +269,19 @@ class ScheduleManager(commands.Cog):
         next_event = None
         for day, events in schedule.items():
             for event in events:
+                event_time_str = event.get('time')
+                description = event.get('description', '')
+                if not event_time_str or '-' not in event_time_str:
+                    logger.warning("Invalid or missing event time: %s", event)
+                    continue
                 try:
-                    event_time_str = event['time']
-                    start_time, end_time = event_time_str.split('-')
-                    start_time = datetime.strptime(start_time, "%H:%M").replace(year=now.year, month=now.month, day=now.day)
-                    end_time = datetime.strptime(end_time, "%H:%M").replace(year=now.year, month=now.month, day=now.day)
+                    start_time_str, end_time_str = event_time_str.split('-', 1)
+                    start_time = datetime.strptime(start_time_str, "%H:%M").replace(year=now.year, month=now.month, day=now.day)
+                    end_time = datetime.strptime(end_time_str, "%H:%M").replace(year=now.year, month=now.month, day=now.day)
                     if start_time > now:
                         if next_event is None or start_time < next_event[0]:
-                            next_event = (start_time, event['description'])
-                except ValueError:
+                            next_event = (start_time, description)
+                except (ValueError, TypeError):
                     pass
         
         if next_event:
@@ -273,7 +319,13 @@ class ScheduleManager(commands.Cog):
 
         with open(filepath, "r", encoding='utf-8') as f:
             schedule_data = yaml.safe_load(f)
-        schedule = schedule_data["schedule"]
+        if schedule_data is None:
+            schedule_data = {}
+        schedule_data, repaired = self._sanitize_schedule_data(schedule_data, schedule_data.get('channel_id', 0) if isinstance(schedule_data, dict) else 0)
+        if repaired:
+            with open(filepath, "w", encoding='utf-8') as fw:
+                yaml.dump(schedule_data, fw, allow_unicode=True)
+        schedule = schedule_data.get("schedule", {})
 
         if day not in schedule:
             schedule[day] = []

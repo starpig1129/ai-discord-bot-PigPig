@@ -9,6 +9,7 @@ import gc
 import logging
 import threading
 import time
+import asyncio
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -450,6 +451,25 @@ class EmbeddingService:
         except Exception as e:
             self.logger.error(f"批次編碼失敗: {e}")
             raise VectorOperationError(f"文本編碼失敗: {e}")
+    
+    async def encode_text_async(self, text: str) -> np.ndarray:
+        """非同步編碼單一文本為向量
+        
+        將同步編碼工作移至背景執行緒，避免阻塞事件迴圈。
+        """
+        result = await asyncio.to_thread(self.encode_batch, [text])
+        return result[0]
+    
+    async def encode_batch_async(
+        self,
+        texts: List[str],
+        show_progress: bool = False
+    ) -> np.ndarray:
+        """非同步批次編碼文本為向量陣列
+        
+        將同步編碼工作移至背景執行緒，避免阻塞事件迴圈。
+        """
+        return await asyncio.to_thread(self.encode_batch, texts, show_progress)
     
     def last_token_pool(self, last_hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         """

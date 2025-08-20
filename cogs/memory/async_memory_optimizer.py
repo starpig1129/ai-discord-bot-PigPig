@@ -479,9 +479,13 @@ class AsyncMemoryOptimizer:
         for task in self.active_tasks.values():
             task.cancel()
         
-        # 關閉執行器
+        # 關閉執行器並取消未開始的 future，避免退出掛起
         if self.executor:
-            self.executor.shutdown(wait=True)
+            try:
+                self.executor.shutdown(wait=True, cancel_futures=True)
+            except TypeError:
+                # 舊版 Python 兼容處理（無 cancel_futures 參數）
+                self.executor.shutdown(wait=True)
         
         self.logger.info("異步記憶優化器已關閉")
 

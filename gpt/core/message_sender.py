@@ -586,7 +586,7 @@ async def build_intelligent_context(
             search_options={
                 'limit': 5,
                 'threshold': 0.3,
-                'search_type': SearchType.HYBRID
+                'search_type': SearchType.KEYWORD
             }
         )
         
@@ -660,7 +660,7 @@ async def search_relevant_memory(
         search_query = SearchQuery(
             text=query_text,
             channel_id=channel_id,
-            search_type=SearchType.HYBRID,
+            search_type=SearchType.KEYWORD,
             limit=limit,
             threshold=0.7
         )

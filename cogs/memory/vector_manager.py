@@ -13,6 +13,7 @@ import threading
 import time
 import tempfile
 import shutil
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Set
 
@@ -359,7 +360,18 @@ class VectorIndex:
             # 生成隨機訓練資料
             training_data = np.random.random((1000, self.dimension)).astype('float32')
             index.train(training_data)
-        
+
+        # 使用 ID 映射包裹，讓索引支援自訂 ID 與 remove_ids
+        try:
+            base_type = type(index)
+            if hasattr(faiss, 'IndexIDMap2'):
+                index = faiss.IndexIDMap2(index)
+            else:
+                index = faiss.IndexIDMap(index)
+            self.logger.debug(f"_create_index: 已包裹 IndexIDMap，base_type={base_type}, wrapped_type={type(index)}")
+        except Exception as e:
+            self.logger.warning(f"_create_index: 包裹 IndexIDMap 失敗，仍使用原索引: {e}; current_type={type(index)}")
+
         return index
     
     def get_index(self) -> faiss.Index:
@@ -549,16 +561,18 @@ class VectorIndex:
                 batch_vectors = vectors[i:end_idx]
 
                 # 嚴格依照寫入目標，避免動態切換導致的非原子性
+                batch_ids = np.asarray(faiss_ids[i:end_idx], dtype=np.int64)
+
                 if write_target == 'gpu':
                     if self._gpu_index is None:
                         self.logger.error("_add_vectors_batch: 預期 GPU 寫入但 _gpu_index 為 None")
                         return False
-                    index.add(batch_vectors)
+                    index.add_with_ids(batch_vectors, batch_ids)
                 elif write_target == 'cpu':
                     if self._index is None:
                         self.logger.error("_add_vectors_batch: 預期 CPU 寫入但 _index 為 None")
                         return False
-                    self._index.add(batch_vectors)
+                    self._index.add_with_ids(batch_vectors, batch_ids)
                 else:
                     self.logger.error(f"_add_vectors_batch: 非法 write_target={write_target}")
                     return False
@@ -588,6 +602,13 @@ class VectorIndex:
                 index = self.get_index()
                 ntotal_before = getattr(index, 'ntotal', -1)
 
+                # 紀錄目前索引型別（GPU/CPU）
+                self.logger.debug(
+                    f"remove_vectors: active_index_type={type(index)}, "
+                    f"cpu_index_type={type(self._index)}, "
+                    f"gpu_index_type={type(self._gpu_index) if self._gpu_index is not None else None}"
+                )
+
                 # 在鎖內先確定要移除的 FAISS ID 集合（精準且不可變）
                 faiss_ids_to_remove = [self._reverse_id_map[id_str] for id_str in ids if id_str in self._reverse_id_map]
                 if not faiss_ids_to_remove:
@@ -604,22 +625,49 @@ class VectorIndex:
                     self.logger.debug("remove_vectors: 轉換後無可移除 ID，返回 0")
                     return 0
 
-                # 執行移除操作（強制使用 IDSelectorArray，避免 dtype 與指標型別不匹配）
-                removed_count_before = getattr(index, 'ntotal', -1)
+                # 強制在 CPU IndexIDMap 上執行刪除，避免 GPU/非 IDMap 類型不支援 remove_ids
+                target_index = self._index if self._index is not None else index
+                try:
+                    is_idmap = isinstance(target_index, faiss.IndexIDMap) or (hasattr(faiss, 'IndexIDMap2') and isinstance(target_index, faiss.IndexIDMap2))
+                except Exception:
+                    is_idmap = False
+                if not is_idmap:
+                    try:
+                        base_type = type(target_index)
+                        target_index = faiss.IndexIDMap2(target_index) if hasattr(faiss, 'IndexIDMap2') else faiss.IndexIDMap(target_index)
+                        self._index = target_index
+                        self.logger.warning(f"remove_vectors: CPU 索引非 IDMap，已於刪除前包裹，base_type={base_type}, wrapped_type={type(target_index)}")
+                    except Exception as e:
+                        self.logger.error(f"remove_vectors: 嘗試將 CPU 索引包裹為 IDMap 失敗: {e}")
+                        return 0
+
+                removed_count_before = getattr(target_index, 'ntotal', -1)
                 try:
                     if hasattr(faiss, "IDSelectorArray"):
                         selector = faiss.IDSelectorArray(int(ids_to_remove_np.size), faiss.swig_ptr(ids_to_remove_np))
-                        index.remove_ids(selector)
+                        target_index.remove_ids(selector)
                     else:
                         # 後備路徑：直接用 int64 陣列
-                        index.remove_ids(ids_to_remove_np)
+                        target_index.remove_ids(ids_to_remove_np)
                 except Exception as e:
                     self.logger.error(f"remove_vectors: remove_ids 失敗: {e}")
                     return 0
 
-                removed_count_after = getattr(index, 'ntotal', -1)
+                removed_count_after = getattr(target_index, 'ntotal', -1)
                 actually_removed = max(0, removed_count_before - removed_count_after) if removed_count_before != -1 and removed_count_after != -1 else len(ids_to_remove_np)
-                self.logger.debug(f"remove_vectors: remove_ids 完成，實際移除數={actually_removed}")
+                self.logger.debug(f"remove_vectors: remove_ids 完成，實際移除數={actually_removed}，target_type={type(target_index)}")
+
+                # 如有 GPU 索引，移除後重新同步 GPU 索引
+                if self._gpu_index is not None:
+                    try:
+                        self.logger.debug("remove_vectors: 偵測到 GPU 索引，將重新同步 GPU 內容")
+                        self._gpu_index = None
+                        self._try_move_to_gpu()
+                        self.logger.debug("remove_vectors: GPU 索引已重新同步")
+                    except Exception as e:
+                        self.logger.warning(f"remove_vectors: 重新同步 GPU 索引失敗: {e}")
+
+                ntotal_after_local = getattr(self._index, 'ntotal', -1)
 
             # 移除操作已於鎖內完成；此處不再重複呼叫 remove_ids 以避免型別與狀態競爭問題
             removed_count = len(faiss_ids_to_remove)
@@ -636,7 +684,7 @@ class VectorIndex:
                 )
                 self._needs_mapping_rebuild = True
 
-            ntotal_after = getattr(index, 'ntotal', -1)
+            ntotal_after = ntotal_after_local
             self.logger.debug(f"remove_vectors: 完成，ntotal(after)={ntotal_after}，removed_count={removed_count}，映射剩餘={len(self._id_map)}")
             return len(faiss_ids_to_remove)
 
@@ -789,25 +837,35 @@ class VectorIndex:
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # 決定要儲存的索引
-            # 假設索引已經在 CPU 上
-            index_to_save = self.get_index()
-            
-            if self._gpu_index is not None:
-                self.logger.warning("儲存時發現 GPU 索引仍然存在，建議在儲存前統一轉移。")
+            # 以統一鎖快照目前索引狀態，並安全處理 GPU→CPU 儲存
+            with self._state_lock:
+                active_index = self.get_index()
+                was_gpu = (self._gpu_index is not None and id(active_index) == id(self._gpu_index))
 
-            if index_to_save is None:
-                self.logger.error("沒有可用的索引進行儲存")
-                return False
-            
-            # 使用原子性操作儲存檔案
-            return await self._atomic_save(file_path, index_to_save)
+                if was_gpu:
+                    self.logger.info("save: 偵測到活動索引位於 GPU，建立 CPU 快照以進行序列化")
+                    try:
+                        cpu_snapshot = faiss.index_gpu_to_cpu(self._gpu_index)
+                        self.logger.debug(f"save: GPU→CPU 轉移成功，snapshot_type={type(cpu_snapshot)}，ntotal={getattr(cpu_snapshot, 'ntotal', -1)}")
+                    except Exception as e:
+                        self.logger.error(f"save: GPU→CPU 轉移失敗，無法儲存: {e}")
+                        return False
+                    index_to_save = cpu_snapshot
+                else:
+                    index_to_save = active_index
+
+                if index_to_save is None:
+                    self.logger.error("沒有可用的索引進行儲存")
+                    return False
+
+            # 使用原子性操作儲存檔案（確保不改變活動索引狀態）
+            return await self._atomic_save(file_path, index_to_save, was_gpu=was_gpu)
             
         except Exception as e:
             self.logger.error(f"儲存索引失敗: {e}")
             return False
 
-    async def _atomic_save(self, file_path: Path, index: faiss.Index) -> bool:
+    async def _atomic_save(self, file_path: Path, index: faiss.Index, was_gpu: bool = False) -> bool:
         """原子性儲存索引和映射檔案
         
         Args:
@@ -826,9 +884,23 @@ class VectorIndex:
                 temp_index_path = temp_dir_path / f"{file_path.name}.tmp"
                 temp_mapping_path = temp_dir_path / f"{file_path.name}.mapping.tmp"
                 
+                # 準備要寫入之 CPU 索引（若為 GPU 索引則先轉為 CPU 快照）
+                cpu_index = index
+                gpu_detected = False
+                try:
+                    # 基於型別名稱進行輕量偵測，避免誤判；save() 已先嘗試處理 GPU→CPU
+                    if 'Gpu' in type(index).__name__:
+                        gpu_detected = True
+                        self.logger.info("atomic_save: 偵測到 GPU 索引，開始執行 GPU→CPU 轉移以便序列化")
+                        cpu_index = faiss.index_gpu_to_cpu(index)
+                        self.logger.debug(f"atomic_save: GPU→CPU 轉移成功，snapshot_type={type(cpu_index)}，ntotal={getattr(cpu_index, 'ntotal', -1)}")
+                except Exception as conv_e:
+                    self.logger.error(f"atomic_save: GPU→CPU 轉移失敗: {conv_e}")
+                    return False
+
                 # 儲存索引到臨時檔案
-                self.logger.debug(f"儲存索引到臨時檔案: {temp_index_path}")
-                faiss.write_index(index, str(temp_index_path))
+                self.logger.debug(f"儲存索引到臨時檔案: {temp_index_path} | source={'GPU' if (gpu_detected or was_gpu) else 'CPU'}")
+                faiss.write_index(cpu_index, str(temp_index_path))
                 
                 # 儲存映射到臨時檔案
                 mapping_data = {
@@ -847,7 +919,7 @@ class VectorIndex:
                     pickle.dump(mapping_data, f)
                 
                 # 驗證臨時檔案
-                if not self._validate_saved_files(temp_index_path, temp_mapping_path, index):
+                if not self._validate_saved_files(temp_index_path, temp_mapping_path, cpu_index):
                     self.logger.error("臨時檔案驗證失敗")
                     return False
                 
@@ -1038,6 +1110,64 @@ class VectorIndex:
             
             # 載入 FAISS 索引
             temp_index = faiss.read_index(str(file_path))
+            self.logger.debug(f"load: 讀取索引完成，loaded_type={type(temp_index)}")
+
+            # 確保索引使用 ID 映射包裹（避免某些索引不支援 remove_ids）
+            try:
+                is_idmap = isinstance(temp_index, faiss.IndexIDMap) or (hasattr(faiss, 'IndexIDMap2') and isinstance(temp_index, faiss.IndexIDMap2))
+            except Exception:
+                is_idmap = False
+
+            # 注意：FAISS 要求在包裹 IndexIDMap 前索引必須為空(ntotal==0)；否則需重建
+            try:
+                loaded_ntotal = getattr(temp_index, 'ntotal', 0)
+            except Exception:
+                loaded_ntotal = 0
+
+            if not is_idmap:
+                if loaded_ntotal == 0:
+                    # 空索引可安全直接包裹
+                    try:
+                        base_type = type(temp_index)
+                        temp_index = faiss.IndexIDMap2(temp_index) if hasattr(faiss, 'IndexIDMap2') else faiss.IndexIDMap(temp_index)
+                        self.logger.debug(f"load: 空索引直接包裹為 IndexIDMap，base_type={base_type}, wrapped_type={type(temp_index)}")
+                    except Exception as e:
+                        self.logger.warning(f"load: 空索引包裹 IndexIDMap 失敗: {e}; current_type={type(temp_index)}")
+                else:
+                    # 非空且非 IDMap，執行重建流程
+                    self.logger.info(f"load: 偵測到非 IDMap 且非空索引，開始重建以支援 remove_ids | type={type(temp_index)}, ntotal={loaded_ntotal}")
+                    try:
+                        # a) 從舊索引提取所有向量
+                        self.logger.debug("load: 重建-開始提取舊索引向量")
+                        vectors = np.empty((loaded_ntotal, self.dimension), dtype='float32')
+                        for i in range(loaded_ntotal):
+                            try:
+                                vec = temp_index.reconstruct(i)
+                                vectors[i] = np.asarray(vec, dtype='float32')
+                            except Exception as re_e:
+                                self.logger.error(f"load: reconstruct 失敗於 i={i}: {re_e}")
+                                raise
+                        self.logger.debug(f"load: 重建-向量提取完成，共 {loaded_ntotal} 條")
+
+                        # b) 建立全新的空索引並包裹為 IndexIDMap
+                        self.logger.debug("load: 重建-建立新的空索引(含 IDMap 包裹)")
+                        new_index = self._create_index()  # 內部已包裹 IndexIDMap/IndexIDMap2
+
+                        # c) 以舊索引的隱含 ID(0..ntotal-1) 回填向量
+                        self.logger.debug("load: 重建-回填向量至新索引")
+                        new_ids = np.arange(loaded_ntotal, dtype=np.int64)
+                        new_index.add_with_ids(vectors, new_ids)
+
+                        # d) 用重建後的新索引替換
+                        temp_index = new_index
+
+                        # e) 詳細日誌
+                        self.logger.info(f"load: 重建完成並替換索引，new_ntotal={getattr(temp_index, 'ntotal', -1)}, wrapped_type={type(temp_index)}")
+                    except Exception as rb_e:
+                        self.logger.error(f"load: 索引重建失敗，無法保證 remove_ids 功能: {rb_e}")
+                        raise
+            else:
+                self.logger.debug(f"load: 索引已為 IDMap，type={type(temp_index)}")
             
             # 載入 ID 映射
             mapping_path = file_path.with_suffix('.mapping')
@@ -1070,6 +1200,35 @@ class VectorIndex:
             else:
                 self.logger.warning(f"映射檔案不存在: {mapping_path}")
             
+            # 載入後先進行「ID 範圍」健全性檢查與預清理（避免映射含超出 ntotal 的 FAISS ID）
+            needs_writeback = False
+            try:
+                index_size_for_mapping = getattr(temp_index, 'ntotal', 0)
+                if temp_id_map:
+                    # 找出不合法或超出範圍的 FAISS ID
+                    out_of_range_ids = [
+                        k for k in temp_id_map.keys()
+                        if not isinstance(k, int) or k < 0 or k >= index_size_for_mapping
+                    ]
+                    max_faiss_id_local = max([k for k in temp_id_map.keys() if isinstance(k, int)], default=-1)
+                    if out_of_range_ids or (max_faiss_id_local >= index_size_for_mapping and index_size_for_mapping > 0):
+                        self.logger.warning(
+                            f"偵測到映射中存在超出索引範圍的 FAISS ID，index.ntotal={index_size_for_mapping}，"
+                            f"最大ID={max_faiss_id_local}，將執行清理程序"
+                        )
+                        cleaned_id_map, cleaned_reverse_map, invalid_ids = self._remove_out_of_range_mappings(
+                            index_size_for_mapping, temp_id_map, temp_reverse_id_map
+                        )
+                        if invalid_ids:
+                            preview = invalid_ids[:10]
+                            suffix = "..." if len(invalid_ids) > 10 else ""
+                            self.logger.warning(f"已移除 {len(invalid_ids)} 個無效映射（示例前10個）: {preview}{suffix}")
+                        temp_id_map = cleaned_id_map
+                        temp_reverse_id_map = cleaned_reverse_map
+                        temp_next_id = max(temp_id_map.keys()) + 1 if temp_id_map else 0
+                        needs_writeback = True
+            except Exception as e:
+                self.logger.warning(f"預載入映射清理時發生錯誤: {e}")
             # 執行載入前的完整性檢查
             load_validation_result = self._validate_loaded_data(
                 temp_index, temp_id_map, temp_reverse_id_map, temp_next_id, mapping_checksum
@@ -1088,6 +1247,7 @@ class VectorIndex:
                         temp_id_map = repaired_data['id_map']
                         temp_reverse_id_map = repaired_data['reverse_id_map']
                         temp_next_id = repaired_data['next_id']
+                        needs_writeback = True
                         self.logger.info("載入資料自動修復成功")
                     else:
                         self.logger.error("載入資料自動修復失敗")
@@ -1120,8 +1280,16 @@ class VectorIndex:
                 # 嘗試自動修復
                 if self._attempt_auto_repair():
                     self.logger.info("載入後完整性問題已自動修復")
+                    needs_writeback = True
                 else:
                     self.logger.warning("載入後完整性問題修復失敗，但繼續使用")
+            
+            # 若在載入過程中有對映射進行清理/修復，將清理後的映射原子性寫回磁碟
+            if needs_writeback:
+                if not self._atomic_write_mapping(mapping_path, self._id_map, self._reverse_id_map, self._next_id):
+                    self.logger.warning(f"寫回映射檔案失敗: {mapping_path}")
+                else:
+                    self.logger.debug(f"已將清理後的映射原子性寫回: {mapping_path}")
             
             # 記錄載入結果
             index_size = self._index.ntotal if self._index else 0
@@ -1364,6 +1532,66 @@ class VectorIndex:
             self.logger.error(f"修復載入資料失敗: {e}")
             return None
     
+    def _atomic_write_mapping(self, mapping_path: Path, id_map: Dict[int, str], reverse_id_map: Dict[str, int], next_id: int) -> bool:
+        """原子性寫入映射檔案（僅更新 .mapping）"""
+        try:
+            mapping_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = mapping_path.with_name(mapping_path.name + ".tmp")
+
+            mapping_data = {
+                'id_map': id_map,
+                'reverse_id_map': reverse_id_map,
+                'next_id': next_id,
+                'checksum': self._calculate_temp_checksum(id_map, reverse_id_map, next_id),
+                'dimension': self.dimension,
+            }
+
+            with open(tmp_path, 'wb') as f:
+                pickle.dump(mapping_data, f)
+
+            os.replace(str(tmp_path), str(mapping_path))
+            self.logger.debug(f"atomic_write_mapping: 已原子性覆寫映射至 {mapping_path}")
+            return True
+        except Exception as e:
+            self.logger.error(f"atomic_write_mapping: 寫入映射失敗: {e}")
+            try:
+                if 'tmp_path' in locals() and Path(tmp_path).exists():
+                    Path(tmp_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+            return False
+
+    def _remove_out_of_range_mappings(
+        self,
+        index_size: int,
+        id_map: Dict[int, str],
+        reverse_id_map: Dict[str, int]
+    ) -> Tuple[Dict[int, str], Dict[str, int], List[int]]:
+        """移除超出索引範圍的 FAISS ID 映射，回傳清理後映射與被移除 ID 列表"""
+        try:
+            invalid_ids: List[int] = [
+                fid for fid in id_map.keys()
+                if not isinstance(fid, int) or fid < 0 or fid >= index_size
+            ]
+            if not invalid_ids:
+                # 仍確保反向映射與正向一致
+                corrected_reverse: Dict[str, int] = {}
+                for faiss_id, real_id in id_map.items():
+                    corrected_reverse[real_id] = faiss_id
+                return id_map, corrected_reverse if corrected_reverse else reverse_id_map, []
+
+            new_id_map: Dict[int, str] = {}
+            new_reverse_map: Dict[str, int] = {}
+            for faiss_id, real_id in id_map.items():
+                if isinstance(faiss_id, int) and 0 <= faiss_id < index_size:
+                    new_id_map[faiss_id] = real_id
+                    new_reverse_map[real_id] = faiss_id
+
+            return new_id_map, new_reverse_map, sorted(invalid_ids)
+        except Exception as e:
+            self.logger.error(f"_remove_out_of_range_mappings: 清理過程失敗: {e}")
+            # 發生例外時回傳原資料，避免在載入流程中進一步破壞狀態
+            return id_map, reverse_id_map, []
     def clear_gpu_resources(self) -> None:
         """清除 GPU 資源"""
         try:
@@ -1788,7 +2016,9 @@ class VectorManager:
             f"維度: {profile.embedding_dimension}, "
             f"記憶體管理: {'啟用' if self.gpu_memory_manager else '停用'}"
         )
-    
+        # 標記是否已關閉，避免重複清理
+        self._shutdown = False
+        
     def create_channel_index(self, channel_id: str) -> bool:
         """為頻道建立向量索引
         
@@ -2104,6 +2334,27 @@ class VectorManager:
             self.logger.error(f"卸載頻道 {channel_id} 的索引時發生錯誤: {e}")
             return False
 
+    def _normalize_channel_id(self, channel_id: str) -> Optional[str]:
+        """將各種可能格式的 channel_id 正規化為純數字字串。
+        
+        安全策略：
+        - 若原本即為純數字，直接返回。
+        - 若為 'segments_12345'、'channel_12345' 或其他包含數字的字串，提取最後一段連續數字作為 ID。
+        - 若完全無法提取數字，回傳 None 以跳過儲存，避免寫出錯誤檔名。
+        """
+        try:
+            if channel_id is None:
+                return None
+            s = str(channel_id)
+            if s.isdigit():
+                return s
+            m = re.search(r'(\d+)$', s)
+            if m:
+                return m.group(1)
+            return None
+        except Exception:
+            return None
+
     async def save_index(self, channel_id: str) -> bool:
         """非同步儲存頻道索引
 
@@ -2116,7 +2367,13 @@ class VectorManager:
         try:
             with self._indices_lock:
                 if channel_id in self._indices:
-                    index_file = self.storage_path / f"{channel_id}.index"
+                    norm_cid = self._normalize_channel_id(channel_id)
+                    if not norm_cid:
+                        self.logger.critical(f"save_index: 無法正規化 channel_id='{channel_id}'，已跳過儲存以避免損壞檔名。")
+                        return False
+                    if norm_cid != channel_id:
+                        self.logger.warning(f"save_index: 偵測到非純數字 channel_id='{channel_id}'，已正規化為 '{norm_cid}' 後儲存。")
+                    index_file = self.storage_path / f"{norm_cid}.index"
                     return await self._indices[channel_id].save(index_file)
             return False
         except Exception as e:
@@ -2173,25 +2430,33 @@ class VectorManager:
         self.logger.debug(f"頻道 {channel_id} 索引優化完成")
         return True
     
-    def clear_cache(self) -> None:
-        """清除向量快取並釋放記憶體"""
+    async def clear_cache(self) -> None:
+        """清除向量快取並釋放記憶體（非同步；將阻塞操作移至背景執行緒）"""
+        # 快照索引並清空內部字典，避免在持有鎖時執行阻塞操作
         with self._indices_lock:
-            # 清除每個索引的 GPU 資源
-            for index in self._indices.values():
-                try:
-                    index.clear_gpu_resources()
-                except Exception as e:
-                    self.logger.warning(f"清除索引 GPU 資源失敗: {e}")
-            
+            indices_snapshot = list(self._indices.values())
             self._indices.clear()
-        
-        # 清理 GPU 記憶體管理器
+
+        # 並行清除每個索引的 GPU 資源（在執行緒中執行）
+        if indices_snapshot:
+            await asyncio.gather(
+                *(asyncio.to_thread(index.clear_gpu_resources) for index in indices_snapshot),
+                return_exceptions=True
+            )
+
+        # 清理 GPU 記憶體管理器（在執行緒中執行）
         if self.gpu_memory_manager is not None:
-            self.gpu_memory_manager.clear_gpu_memory()
-            
-        # 強制垃圾回收
-        gc.collect()
-        
+            try:
+                await asyncio.to_thread(self.gpu_memory_manager.clear_gpu_memory)
+            except Exception as e:
+                self.logger.warning(f"清理 GPU 記憶體管理器失敗: {e}")
+
+        # 強制垃圾回收（在執行緒中執行，避免阻塞事件迴圈）
+        try:
+            await asyncio.to_thread(gc.collect)
+        except Exception as e:
+            self.logger.debug(f"gc.collect 失敗: {e}")
+
         self.logger.info("向量管理器快取已清除")
     
     def get_memory_stats(self) -> Dict[str, Union[int, float, str]]:
@@ -3042,37 +3307,95 @@ class VectorManager:
 
         self.logger.info(f"所有索引載入完成。成功載入 {loaded_count} 個，失敗 {failed_count} 個。")
 
-    async def cleanup(self) -> None:
-        """清理向量管理器資源和快取
-        
-        執行完整的清理作業，儲存所有索引並釋放記憶體資源。
-        """
-        self.logger.info("開始向量管理器清理...")
-        
-        # 首先儲存所有索引
+    def _cleanup_sync(self) -> None:
+        """同步清理向量管理器（單執行緒、順序化，避免執行緒風暴）"""
         try:
-            await self.save_all_indices()
-        except Exception as e:
-            self.logger.error(f"儲存索引時發生錯誤: {e}")
-        
-        # 清理所有快取和 GPU 資源
-        self.clear_cache()
-        
-        # 額外的記憶體優化
-        try:
-            self.optimize_memory_usage()
-        except Exception as e:
-            self.logger.warning(f"記憶體優化失敗: {e}")
-        
-        # 清理 GPU 記憶體管理器
-        if self.gpu_memory_manager is not None:
+            self.logger.info("開始向量管理器同步清理...")
+            
+            # 1) 儲存所有索引（在本執行緒中建立事件迴圈，順序執行）
             try:
-                self.gpu_memory_manager.clear_gpu_memory()
-                self.gpu_memory_manager = None
+                channel_ids = []
+                with self._indices_lock:
+                    channel_ids = list(self._indices.keys())
+                if channel_ids:
+                    loop = asyncio.new_event_loop()
+                    try:
+                        asyncio.set_event_loop(loop)
+                        for channel_id in channel_ids:
+                            try:
+                                norm_cid = self._normalize_channel_id(channel_id)
+                                if not norm_cid:
+                                    self.logger.critical(f"_cleanup_sync: 無法正規化 channel_id='{channel_id}'，跳過此索引的儲存。")
+                                    continue
+                                if norm_cid != channel_id:
+                                    self.logger.warning(f"_cleanup_sync: 偵測到非純數字 channel_id='{channel_id}'，改以 '{norm_cid}' 儲存索引檔。")
+                                index_file = self.storage_path / f"{norm_cid}.index"
+                                coro = self._indices[channel_id].save(index_file)
+                                loop.run_until_complete(coro)
+                            except Exception as e:
+                                self.logger.error(f"同步儲存頻道 {channel_id} 索引失敗: {e}")
+                    finally:
+                        try:
+                            loop.run_until_complete(asyncio.sleep(0))
+                        except Exception:
+                            pass
+                        loop.close()
+                        asyncio.set_event_loop(None)
             except Exception as e:
-                self.logger.warning(f"清理 GPU 記憶體管理器失敗: {e}")
-        
-        self.logger.debug("向量管理器清理完成")
+                self.logger.error(f"同步儲存所有索引時發生錯誤: {e}")
+            
+            # 2) 釋放每個索引的 GPU 資源與快取（同步順序執行）
+            indices_snapshot = []
+            with self._indices_lock:
+                indices_snapshot = list(self._indices.values())
+                self._indices.clear()
+            for index in indices_snapshot:
+                try:
+                    index.clear_gpu_resources()
+                except Exception as e:
+                    self.logger.warning(f"清理索引 GPU 資源失敗: {e}")
+            
+            # 3) 記憶體最佳化（同步）
+            try:
+                self.optimize_memory_usage()
+            except Exception as e:
+                self.logger.warning(f"記憶體最佳化失敗: {e}")
+            
+            # 4) 清理 GPU 記憶體管理器（同步）
+            if self.gpu_memory_manager is not None:
+                try:
+                    self.gpu_memory_manager.clear_gpu_memory()
+                except Exception as e:
+                    self.logger.warning(f"清理 GPU 記憶體管理器失敗: {e}")
+                finally:
+                    self.gpu_memory_manager = None
+            
+            # 5) 垃圾回收
+            try:
+                gc.collect()
+            except Exception:
+                pass
+            
+            self.logger.debug("向量管理器同步清理完成")
+        except Exception as e:
+            self.logger.error(f"_cleanup_sync 執行失敗: {e}")
+    
+    async def cleanup(self) -> None:
+        """非同步介面：統一委派至單一 to_thread 的同步清理"""
+        try:
+            await asyncio.to_thread(self._cleanup_sync)
+        except Exception as e:
+            self.logger.error(f"向量管理器清理失敗: {e}")
+
+    async def shutdown(self) -> None:
+        """優雅關閉 VectorManager，確保同步清理只執行一次。"""
+        if getattr(self, "_shutdown", False):
+            return
+        try:
+            await self.cleanup()
+        finally:
+            # 標記已關閉，避免重入
+            self._shutdown = True
 
     def move_all_indices_to_cpu(self):
         """將所有 GPU 索引批量移至 CPU"""
@@ -3136,3 +3459,20 @@ def get_vector_manager(
                     raise ValueError("首次初始化 VectorManager 時必須提供 profile 和 storage_path。")
                 _vector_manager_instance = VectorManager(profile, storage_path)
     return _vector_manager_instance
+
+# 在解譯器退出時作為最後保障，嘗試同步清理 VectorManager 的資源，避免背景執行緒阻塞退出
+import atexit as _vx_atexit
+
+def _vector_manager_atexit_cleanup():
+    try:
+        # 僅在單例已建立時清理；避免在未初始化時誤觸
+        if _vector_manager_instance is not None:
+            try:
+                _vector_manager_instance._cleanup_sync()
+            except Exception:
+                # 退出流程中不可再拋出例外
+                pass
+    except Exception:
+        pass
+
+_vx_atexit.register(_vector_manager_atexit_cleanup)

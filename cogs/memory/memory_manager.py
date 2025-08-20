@@ -8,11 +8,13 @@ import asyncio
 import json
 import logging
 import time
+import gc
 import uuid
+import re
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass
 from enum import Enum
 
@@ -147,6 +149,9 @@ class MemoryManager:
         
         # 執行緒安全鎖 (使用自訂的 RLock 避免死鎖)
         self._lock = RLock()
+        
+        # 背景任務追蹤（用於優雅關閉時取消）
+        self._bg_tasks: Set[asyncio.Task] = set()
     
     async def find_and_remove_orphan_vectors(self) -> None:
         """
@@ -218,39 +223,75 @@ class MemoryManager:
             valid_message_ids = {f"msg_{mid}" for mid in all_db_message_ids}
             valid_legacy_message_ids = {str(mid) for mid in all_db_message_ids}
 
-            # 步驟 3: 遍歷每個頻道，找出孤兒
+            # 步驟 3: 遍歷每個頻道，採用強韌格式驗證與延後批次刪除
+            VALID_ID_RE = re.compile(r'^(?:msg_(\d+)|seg_(\d+)|dialogue_history_[A-Za-z0-9_\-]+|legacy_[A-Za-z0-9_\-]+|\d+)$')
+            DIALOG_TWO_NUM_RE = re.compile(r'^dialogue_history_(\d+)_(\d+)$')
+            candidate_deletions: Dict[str, List[str]] = {}
+
             for channel_id, vector_ids in all_vector_ids_by_channel.items():
-                orphan_ids = []
+                orphan_ids: List[str] = []
                 for vec_id in vector_ids:
                     is_orphan = False
-                    if vec_id.startswith('seg_'):
-                        if vec_id not in valid_segment_ids:
-                            is_orphan = True
-                    elif vec_id.startswith('msg_'):
-                        if vec_id not in valid_message_ids:
-                            is_orphan = True
-                    elif vec_id.isdigit(): # 處理歷史遺留的純數字 ID
-                        if vec_id not in valid_legacy_message_ids:
-                            is_orphan = True
+
+                    # 先用統一正則判斷是否為已知合法格式
+                    if not VALID_ID_RE.match(vec_id):
+                        # 未知格式一律視為潛在孤兒（安全起見）
+                        self.logger.warning(f"cleanup_orphan_segments: 頻道 {channel_id} 發現未知格式向量 ID，將標記刪除: {vec_id}")
+                        is_orphan = True
                     else:
-                        # 處理無法識別格式的 ID，可能也需要清理
-                        self.logger.warning(f"在頻道 {channel_id} 中發現無法識別格式的向量 ID: {vec_id}")
-                        is_orphan = True # 假設格式不符的都是孤兒
+                        # 已知格式再依型別執行嚴謹驗證
+                        if vec_id.startswith('seg_'):
+                            if vec_id not in valid_segment_ids:
+                                is_orphan = True
+                        elif vec_id.startswith('msg_'):
+                            if vec_id not in valid_message_ids:
+                                is_orphan = True
+                        elif vec_id.isdigit():
+                            if vec_id not in valid_legacy_message_ids:
+                                is_orphan = True
+                        elif vec_id.startswith('dialogue_history_'):
+                            # 嘗試解析兩段數字舊版格式：dialogue_history_{thread_id}_{message_id}
+                            m2 = DIALOG_TWO_NUM_RE.match(vec_id)
+                            if m2:
+                                legacy_msg_id = m2.group(2)
+                                if (f"msg_{legacy_msg_id}" in valid_message_ids) or (legacy_msg_id in valid_legacy_message_ids):
+                                    is_orphan = False
+                                else:
+                                    is_orphan = True
+                            else:
+                                # 其他 dialogue_history_* 視為合法格式但不強制解析，保留避免誤刪
+                                self.logger.debug(f"cleanup_orphan_segments: 保留兼容格式的對話歷史 ID（不嘗試解析）: {vec_id}")
+                                is_orphan = False
+                        elif vec_id.startswith('legacy_'):
+                            # 一律視為合法舊版格式，不做刪除（避免誤刪）
+                            is_orphan = False
 
                     if is_orphan:
                         orphan_ids.append(vec_id)
-                
+
                 if orphan_ids:
-                    self.logger.info(f"cleanup_orphan_segments: 頻道 {channel_id} 計算出 {len(orphan_ids)} 個待刪除的孤兒 ID: {orphan_ids[:10]}")
+                    self.logger.info(f"cleanup_orphan_segments: 頻道 {channel_id} 初步計算出 {len(orphan_ids)} 個待刪除孤兒 ID，示例: {orphan_ids[:10]}")
+                    candidate_deletions[channel_id] = orphan_ids
+
+            # 安全護欄：全域批次門檻
+            total_to_delete = sum(len(v) for v in candidate_deletions.values())
+            if total_to_delete > 0:
+                self.logger.info(f"cleanup_orphan_segments: 計畫刪除總計 {total_to_delete} 個孤兒向量，涉及 {len(candidate_deletions)} 個頻道。")
+            if total_to_delete > 1000:
+                self.logger.critical(f"cleanup_orphan_segments: 偵測到異常大量刪除（{total_to_delete} > 1000），為避免災難性資料遺失，本次清理將被跳過。")
+            else:
+                # 執行每頻道一次的批次刪除；同時加入每頻道的安全門檻
+                for channel_id, ids_to_remove in candidate_deletions.items():
+                    if len(ids_to_remove) > 1000:
+                        self.logger.critical(f"cleanup_orphan_segments: 頻道 {channel_id} 的刪除數量過大（{len(ids_to_remove)} > 1000），已跳過此頻道的刪除。")
+                        continue
                     try:
-                        removed_count = self.vector_manager.remove_vectors(channel_id, orphan_ids)
-                        self.logger.info(f"cleanup_orphan_segments: vector_manager.remove_vectors 呼叫結果: 移除了 {removed_count} 個向量。")
+                        removed_count = self.vector_manager.remove_vectors(channel_id, ids_to_remove)
+                        self.logger.info(f"cleanup_orphan_segments: 頻道 {channel_id} 已批次移除 {removed_count} 個向量。")
                         if removed_count > 0:
                             removed_stats[channel_id] = removed_stats.get(channel_id, 0) + removed_count
-                            self.logger.info(f"成功從頻道 {channel_id} 移除了 {removed_count} 個孤兒向量。")
                     except Exception as e:
-                        self.logger.error(f"從頻道 {channel_id} 移除孤兒向量時發生錯誤: {e}")
-                        self.logger.error(f"cleanup_orphan_segments: vector_manager.remove_vectors 呼叫失敗。錯誤: {e}")
+                        self.logger.error(f"cleanup_orphan_segments: 從頻道 {channel_id} 批次移除孤兒向量時發生錯誤: {e}")
 
             total_removed = sum(removed_stats.values())
             if total_removed > 0:
@@ -460,8 +501,13 @@ class MemoryManager:
             # 掃描現有的索引檔案
             await self._load_existing_indices()
 
-            # 在啟動時執行孤兒片段清理
-            asyncio.create_task(self.cleanup_orphan_segments())
+            # 在啟動時執行孤兒片段清理（追蹤背景任務以便關閉時取消）
+            _t = asyncio.create_task(self.cleanup_orphan_segments())
+            try:
+                self._bg_tasks.add(_t)
+                _t.add_done_callback(self._bg_tasks.discard)
+            except Exception:
+                pass
             
             self.logger.info("向量搜尋組件初始化完成")
             
@@ -823,7 +869,29 @@ class MemoryManager:
         content = ' '.join(content.split())
         
         return content.strip()
-    
+
+    def _parse_timestamp_to_utc(self, ts) -> datetime:
+        """將輸入的字串或 datetime 轉為有時區的 UTC datetime。"""
+        if isinstance(ts, str):
+            try:
+                dt = datetime.fromisoformat(ts)
+            except Exception:
+                # 後備解析：處理末尾帶 'Z' 的 ISO 字串
+                if ts.endswith('Z'):
+                    dt = datetime.fromisoformat(ts[:-1])
+                else:
+                    raise
+        elif isinstance(ts, datetime):
+            dt = ts
+        else:
+            raise TypeError(f"不支援的 timestamp 類型: {type(ts)}")
+
+        if dt.tzinfo is None:
+            # 無時區 -> 視為 UTC
+            return dt.replace(tzinfo=timezone.utc)
+        # 有時區 -> 轉為 UTC
+        return dt.astimezone(timezone.utc)
+
     def _store_message_sync(self, message_data: Dict[str, Any]) -> bool:
         """同步儲存訊息 (在執行緒池中執行)
         
@@ -945,7 +1013,7 @@ class MemoryManager:
                 return
             
             # 2. 按時間戳排序
-            messages.sort(key=lambda m: datetime.fromisoformat(m['timestamp']))
+            messages.sort(key=lambda m: self._parse_timestamp_to_utc(m['timestamp']))
             
             self.logger.info(f"找到 {len(messages)} 條訊息，開始處理...")
             
@@ -958,7 +1026,7 @@ class MemoryManager:
                         message_id=message_data['message_id'],
                         channel_id=message_data['channel_id'],
                         content=message_data['content'],
-                        timestamp=datetime.fromisoformat(message_data['timestamp']),
+                        timestamp=self._parse_timestamp_to_utc(message_data['timestamp']),
                         user_id=message_data['user_id']
                     )
                     
@@ -1241,94 +1309,113 @@ class MemoryManager:
             self.logger.error(f"記憶搜尋失敗: {e}")
             raise SearchError(f"記憶搜尋失敗: {e}")
     
+    def _cleanup_sync(self) -> None:
+        """同步清理所有阻塞型資源，集中於單一背景執行緒中執行。
+        
+        注意：
+        - 僅執行同步/阻塞操作（磁碟 I/O、GPU 釋放、gc.collect、關閉資料庫連線等）
+        - 非同步清理（協程）請於 async cleanup()/shutdown() 先行 await
+        """
+        try:
+            # 1) 向量管理器：儲存所有索引、釋放 GPU/快取、最佳化記憶體（完全同步）
+            if self.vector_manager and hasattr(self.vector_manager, "_cleanup_sync"):
+                try:
+                    # 若 VectorManager 已關閉則跳過重複清理
+                    if not getattr(self.vector_manager, "_shutdown", False):
+                        self.vector_manager._cleanup_sync()
+                except Exception as e:
+                    self.logger.error(f"VectorManager 同步清理失敗: {e}")
+            
+            # 2) 搜尋引擎：若有同步 cleanup，則在此執行
+            try:
+                if self.search_engine and hasattr(self.search_engine, "cleanup"):
+                    cleanup_func = getattr(self.search_engine, "cleanup")
+                    if cleanup_func and not asyncio.iscoroutinefunction(cleanup_func):
+                        cleanup_func()
+            except Exception as e:
+                self.logger.error(f"SearchEngine 同步清理失敗: {e}")
+            
+            # 3) Reranker 服務：同步清理（或退回 clear_cache）
+            try:
+                if self.reranker_service:
+                    cleanup_func = getattr(self.reranker_service, "cleanup", None)
+                    if cleanup_func and not asyncio.iscoroutinefunction(cleanup_func):
+                        cleanup_func()
+                    elif hasattr(self.reranker_service, "clear_cache"):
+                        self.reranker_service.clear_cache()
+            except Exception as e:
+                self.logger.error(f"RerankerService 同步清理失敗: {e}")
+            
+            # 4) Embedding 服務：同步清理（若提供）
+            try:
+                if self.embedding_service:
+                    cleanup_func = getattr(self.embedding_service, "cleanup", None)
+                    if cleanup_func and not asyncio.iscoroutinefunction(cleanup_func):
+                        cleanup_func()
+            except Exception as e:
+                self.logger.error(f"EmbeddingService 同步清理失敗: {e}")
+            
+            # 5) 資料庫連線：同步關閉
+            try:
+                if self.db_manager:
+                    self.db_manager.close_connections()
+            except Exception as e:
+                self.logger.error(f"DatabaseManager 關閉連線失敗: {e}")
+            
+            # 6) 最後執行一次垃圾回收與 GPU 快取清除（若 VectorManager 未處理）
+            try:
+                gc.collect()
+            except Exception:
+                pass
+        except Exception as e:
+            self.logger.error(f"_cleanup_sync 執行失敗: {e}")
+    
     async def cleanup(self) -> None:
-        """清理記憶體資源和快取（使用 tqdm 進度條）"""
+        """清理記憶體資源與快取：非同步協程僅保留一次 to_thread 呼叫。"""
         try:
             self.logger.info("開始記憶體系統清理...")
             
-            cleanup_tasks = []
-            
-            # 清理搜尋引擎
-            if self.search_engine:
-                cleanup_tasks.append(("搜尋引擎", self.search_engine.cleanup))
-            
-            # 清理向量管理器
-            if self.vector_manager:
-                cleanup_tasks.append(("向量管理器", self.vector_manager.cleanup))
-            
-            # 清理資料庫管理器
-            if self.db_manager:
-                cleanup_tasks.append(("資料庫管理器", self.db_manager.close_connections))
-            
-            # 使用 tqdm 顯示進度
-            with tqdm.tqdm(total=len(cleanup_tasks), desc="清理記憶體資源", unit="task") as pbar:
-                for name, cleanup_func in cleanup_tasks:
-                    try:
-                        if asyncio.iscoroutinefunction(cleanup_func):
-                            await cleanup_func()
-                        else:
-                            cleanup_func()
-                        self.logger.debug(f"{name} 清理完成")
-                    except Exception as e:
-                        self.logger.error(f"{name} 清理失敗: {e}")
-                    finally:
-                        pbar.update(1)
-            
-            # 清理 GPU 記憶體
-            if self.vector_manager and self.vector_manager.gpu_memory_manager:
-                try:
-                    self.vector_manager.gpu_memory_manager.clear_gpu_memory()
-                    self.logger.debug("GPU 記憶體清理完成")
-                except Exception as e:
-                    self.logger.error(f"GPU 記憶體清理失敗: {e}")
-            
-            # 清理由 RerankerService 佔用的資源
+            # 先處理協程型清理（不會造成執行緒風暴）
             try:
-                if self.reranker_service and hasattr(self.reranker_service, "cleanup"):
-                    self.reranker_service.cleanup()
-                    self.logger.debug("RerankerService 清理完成")
+                if self.search_engine and hasattr(self.search_engine, "cleanup") and asyncio.iscoroutinefunction(self.search_engine.cleanup):
+                    await self.search_engine.cleanup()
+            except Exception as e:
+                self.logger.error(f"SearchEngine 清理失敗: {e}")
+            
+            try:
+                if self.reranker_service and hasattr(self.reranker_service, "cleanup") and asyncio.iscoroutinefunction(self.reranker_service.cleanup):
+                    await self.reranker_service.cleanup()
             except Exception as e:
                 self.logger.error(f"RerankerService 清理失敗: {e}")
             
-            # 清理由 EmbeddingService 佔用的資源（若提供 cleanup）
             try:
-                if self.embedding_service and hasattr(self.embedding_service, "cleanup"):
-                    if asyncio.iscoroutinefunction(self.embedding_service.cleanup):
-                        await self.embedding_service.cleanup()
-                    else:
-                        self.embedding_service.cleanup()
-                    self.logger.debug("EmbeddingService 清理完成")
+                if self.embedding_service and hasattr(self.embedding_service, "cleanup") and asyncio.iscoroutinefunction(self.embedding_service.cleanup):
+                    await self.embedding_service.cleanup()
             except Exception as e:
                 self.logger.error(f"EmbeddingService 清理失敗: {e}")
             
+            # 將所有阻塞的同步清理整合成單一背景任務
+            await asyncio.to_thread(self._cleanup_sync)
+            
             self._initialized = False
             self.logger.info("記憶體系統清理完成")
-            
         except Exception as e:
             self.logger.error(f"記憶體清理時發生嚴重錯誤: {e}")
     
     async def shutdown(self) -> None:
         """優雅關閉 MemoryManager，集中釋放所有下游資源。"""
         try:
-            # 先處理 reranker/embedding 等持有外部模組與 GPU 記憶體的服務
+            # 先取消並等待所有背景任務，避免 CancelledError 外漏
             try:
-                if self.reranker_service and hasattr(self.reranker_service, "cleanup"):
-                    self.reranker_service.cleanup()
-                    self.logger.debug("RerankerService 在 shutdown 中清理完成")
+                bg_tasks = [t for t in getattr(self, "_bg_tasks", set()) if not t.done()]
+                for t in bg_tasks:
+                    t.cancel()
+                if bg_tasks:
+                    await asyncio.gather(*bg_tasks, return_exceptions=True)
             except Exception as e:
-                self.logger.error(f"RerankerService 在 shutdown 清理失敗: {e}")
+                self.logger.warning(f"取消背景任務時發生錯誤: {e}")
             
-            try:
-                if self.embedding_service and hasattr(self.embedding_service, "cleanup"):
-                    if asyncio.iscoroutinefunction(self.embedding_service.cleanup):
-                        await self.embedding_service.cleanup()
-                    else:
-                        self.embedding_service.cleanup()
-                    self.logger.debug("EmbeddingService 在 shutdown 中清理完成")
-            except Exception as e:
-                self.logger.error(f"EmbeddingService 在 shutdown 清理失敗: {e}")
-            
-            # 再呼叫既有的 cleanup 流程以釋放其餘資源
+            # 統一走 cleanup，內部只會進行一次 to_thread 同步清理
             await self.cleanup()
         except Exception as e:
             self.logger.error(f"MemoryManager.shutdown 發生錯誤: {e}")
