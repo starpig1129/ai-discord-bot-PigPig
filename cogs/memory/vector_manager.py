@@ -34,20 +34,103 @@ except ImportError:
 try:
     import pynvml
     PYNVML_AVAILABLE = True
-    pynvml.nvmlInit()
 except ImportError:
     PYNVML_AVAILABLE = False
+    pynvml = None
+
+# GPU 狀態管理
+class GPUManager:
+    """GPU 狀態管理器，提供延遲初始化和自動恢復機制"""
+
+    _instance = None
+    _initialized = False
+    _nvml_initialized = False
+    _gpu_available = False
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        if not self._initialized:
+            self.logger = logging.getLogger(__name__)
+            self._initialized = True
+            self._init_gpu_status()
+
+    def _init_gpu_status(self):
+        """初始化 GPU 狀態，延遲且安全的初始化"""
+        try:
+            # 檢查 PyTorch CUDA 可用性
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                self._gpu_available = True
+                self.logger.info(f"偵測到 PyTorch CUDA 可用: {torch.cuda.get_device_name(0)}")
+            else:
+                self.logger.info("PyTorch CUDA 不可用")
+
+            # 檢查 NVML 可用性（延遲初始化）
+            if PYNVML_AVAILABLE and pynvml is not None:
+                try:
+                    pynvml.nvmlInit()
+                    self._nvml_initialized = True
+                    self._gpu_available = True
+                    device_count = pynvml.nvmlDeviceGetCount()
+                    self.logger.info(f"NVML 初始化成功，偵測到 {device_count} 個 GPU 設備")
+                except Exception as e:
+                    self.logger.warning(f"NVML 初始化失敗: {e}")
+                    self._nvml_initialized = False
+                    self._gpu_available = False
+            else:
+                self.logger.debug("NVML 模組不可用")
+
+        except Exception as e:
+            self.logger.error(f"GPU 狀態初始化失敗: {e}")
+            self._gpu_available = False
+
+    def is_gpu_available(self) -> bool:
+        """檢查 GPU 是否可用"""
+        return self._gpu_available
+
+    def ensure_nvml_initialized(self) -> bool:
+        """確保 NVML 已初始化，如果失敗則嘗試恢復"""
+        if not PYNVML_AVAILABLE or pynvml is None:
+            return False
+
+        if not self._nvml_initialized:
+            try:
+                pynvml.nvmlInit()
+                self._nvml_initialized = True
+                self.logger.info("NVML 恢復初始化成功")
+                return True
+            except Exception as e:
+                self.logger.warning(f"NVML 恢復初始化失敗: {e}")
+                return False
+
+        return True
+
+    def shutdown(self):
+        """關閉 GPU 管理器"""
+        if self._nvml_initialized and PYNVML_AVAILABLE and pynvml is not None:
+            try:
+                pynvml.nvmlShutdown()
+                self._nvml_initialized = False
+                self.logger.debug("NVML 已關閉")
+            except Exception as e:
+                self.logger.warning(f"關閉 NVML 時發生錯誤: {e}")
+
+# 全域 GPU 管理器實例
+gpu_manager = GPUManager()
 
 
 class GPUMemoryManager:
     """GPU 記憶體管理器
-    
+
     負責監控和管理 GPU 記憶體使用，提供優雅降級機制。
     """
-    
+
     def __init__(self, max_memory_mb: int = 1024):
         """初始化 GPU 記憶體管理器
-        
+
         Args:
             max_memory_mb: FAISS GPU 最大記憶體使用量（MB）
         """
@@ -55,135 +138,258 @@ class GPUMemoryManager:
         self.max_memory_mb = max_memory_mb
         self._gpu_resource: Optional[faiss.StandardGpuResources] = None
         self._memory_lock = threading.Lock()
-        
+        self._last_memory_check = 0
+        self._memory_cache_timeout = 1.0  # 快取記憶體資訊1秒
+        self._cached_memory_info = (0, 0, 0.0)
+        self._fallback_mode = False  # 降級模式標記
+        self._recovery_attempts = 0   # 恢復嘗試次數
+        self._max_recovery_attempts = 3
+
     def get_gpu_memory_info(self) -> Tuple[int, int, float]:
-        """取得 GPU 記憶體資訊
-        
+        """取得 GPU 記憶體資訊（支援快取和多種後備方案）
+
         Returns:
             Tuple[int, int, float]: (總記憶體MB, 可用記憶體MB, 使用率%)
         """
+        # 檢查快取是否過期
+        current_time = time.time()
+        if current_time - self._last_memory_check < self._memory_cache_timeout:
+            return self._cached_memory_info
+
         try:
-            if PYNVML_AVAILABLE:
-                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-                memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                total_mb = memory_info.total // (1024 * 1024)
-                free_mb = memory_info.free // (1024 * 1024)
-                used_percent = ((memory_info.total - memory_info.free) / memory_info.total) * 100
-                return total_mb, free_mb, used_percent
-            elif TORCH_AVAILABLE and torch.cuda.is_available():
-                total_mb = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
-                allocated_mb = torch.cuda.memory_allocated(0) // (1024 * 1024)
-                free_mb = total_mb - allocated_mb
-                used_percent = (allocated_mb / total_mb) * 100
-                return total_mb, free_mb, used_percent
+            # 嘗試使用 NVML
+            if gpu_manager.ensure_nvml_initialized():
+                try:
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                    memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                    total_mb = memory_info.total // (1024 * 1024)
+                    free_mb = memory_info.free // (1024 * 1024)
+                    used_percent = ((memory_info.total - memory_info.free) / memory_info.total) * 100
+
+                    # 更新快取
+                    self._cached_memory_info = (total_mb, free_mb, used_percent)
+                    self._last_memory_check = current_time
+                    return self._cached_memory_info
+                except Exception as e:
+                    self.logger.debug(f"NVML 記憶體檢查失敗: {e}")
+
+            # 嘗試使用 PyTorch CUDA
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                try:
+                    total_mb = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
+                    allocated_mb = torch.cuda.memory_allocated(0) // (1024 * 1024)
+                    reserved_mb = torch.cuda.memory_reserved(0) // (1024 * 1024)
+                    free_mb = total_mb - reserved_mb
+                    used_percent = (reserved_mb / total_mb) * 100
+
+                    # 更新快取
+                    self._cached_memory_info = (total_mb, free_mb, used_percent)
+                    self._last_memory_check = current_time
+                    return self._cached_memory_info
+                except Exception as e:
+                    self.logger.debug(f"PyTorch CUDA 記憶體檢查失敗: {e}")
+
+            # CPU 模式備份方案
+            self.logger.debug("無法取得 GPU 記憶體資訊，使用 CPU 模式")
+            self._cached_memory_info = (0, 0, 0.0)
+            self._last_memory_check = current_time
+            return self._cached_memory_info
+
         except Exception as e:
             self.logger.warning(f"無法取得 GPU 記憶體資訊: {e}")
-        
-        return 0, 0, 0.0
+            self._cached_memory_info = (0, 0, 0.0)
+            self._last_memory_check = current_time
+            return self._cached_memory_info
     
     def is_memory_available(self, required_mb: int = 512) -> bool:
-        """檢查是否有足夠的 GPU 記憶體
-        
+        """檢查是否有足夠的 GPU 記憶體（支援自動恢復）
+
         Args:
             required_mb: 需要的記憶體量（MB）
-            
+
         Returns:
             bool: 是否有足夠記憶體
         """
         try:
-            _, free_mb, used_percent = self.get_gpu_memory_info()
-            
-            # 檢查可用記憶體和使用率 - 降低閾值至70-75%
+            total_mb, free_mb, used_percent = self.get_gpu_memory_info()
+
+            # 如果 GPU 完全不可用，嘗試自動恢復
+            if total_mb == 0 and not self._fallback_mode:
+                self.logger.info("GPU 記憶體資訊不可用，嘗試自動恢復")
+                if self._attempt_gpu_recovery():
+                    # 重新檢查記憶體
+                    total_mb, free_mb, used_percent = self.get_gpu_memory_info()
+
+            # 如果仍然無法取得 GPU 資訊，使用 CPU 模式
+            if total_mb == 0:
+                self.logger.debug("使用 CPU 模式，記憶體檢查通過")
+                return True
+
+            # 檢查可用記憶體
             if free_mb < required_mb:
                 self.logger.warning(f"GPU 記憶體不足: 需要 {required_mb}MB，可用 {free_mb}MB")
+                # 嘗試清理後重試
+                if self._attempt_memory_recovery(required_mb):
+                    _, free_mb_after, _ = self.get_gpu_memory_info()
+                    if free_mb_after >= required_mb:
+                        return True
                 return False
-            
-            # 降低使用率閾值至75%，更積極地觸發記憶體清理
+
+            # 檢查使用率
             if used_percent > 75.0:
                 self.logger.warning(f"GPU 記憶體使用率過高: {used_percent:.1f}%")
                 # 主動觸發記憶體清理
-                self._trigger_memory_cleanup()
-                
-                # 再次檢查記憶體狀態
-                _, free_mb_after, used_percent_after = self.get_gpu_memory_info()
-                if used_percent_after > 75.0:
-                    return False
-                
+                if self._trigger_memory_cleanup():
+                    # 再次檢查記憶體狀態
+                    _, free_mb_after, used_percent_after = self.get_gpu_memory_info()
+                    if used_percent_after > 75.0:
+                        return False
+
             return True
+
         except Exception as e:
             self.logger.error(f"檢查 GPU 記憶體失敗: {e}")
+            # 發生錯誤時嘗試恢復
+            if self._attempt_gpu_recovery():
+                return self.is_memory_available(required_mb)
+            return False
+
+    def _attempt_gpu_recovery(self) -> bool:
+        """嘗試 GPU 恢復機制
+
+        Returns:
+            bool: 是否恢復成功
+        """
+        try:
+            self.logger.info("開始 GPU 恢復程序")
+
+            # 清理 GPU 記憶體
+            self.clear_gpu_memory()
+
+            # 確保 NVML 初始化
+            if gpu_manager.ensure_nvml_initialized():
+                self.logger.info("GPU 恢復成功")
+                return True
+
+            return False
+
+        except Exception as e:
+            self.logger.error(f"GPU 恢復失敗: {e}")
+            return False
+
+    def _attempt_memory_recovery(self, required_mb: int) -> bool:
+        """嘗試記憶體恢復機制
+
+        Args:
+            required_mb: 需要的記憶體量
+
+        Returns:
+            bool: 是否恢復成功
+        """
+        try:
+            self.logger.info(f"嘗試記憶體恢復，需要 {required_mb}MB")
+
+            # 多次清理嘗試
+            for attempt in range(3):
+                self._trigger_memory_cleanup()
+
+                _, free_mb, used_percent = self.get_gpu_memory_info()
+
+                if free_mb >= required_mb:
+                    self.logger.info(f"記憶體恢復成功 (嘗試 {attempt + 1}/3): 可用 {free_mb}MB")
+                    return True
+
+                if attempt < 2:  # 最後一次嘗試前等待
+                    time.sleep(0.5 * (attempt + 1))
+
+            self.logger.warning("記憶體恢復嘗試失敗")
+            return False
+
+        except Exception as e:
+            self.logger.error(f"記憶體恢復失敗: {e}")
             return False
     
     def get_gpu_resource(self) -> 'Optional[faiss.StandardGpuResources]':
-        """取得 GPU 資源實例（單例模式）
-        
+        """取得 GPU 資源實例（單例模式，支援自動恢復）
+
         Returns:
             Optional[faiss.StandardGpuResources]: GPU 資源實例
         """
         with self._memory_lock:
-            if self._gpu_resource is None:
-                # 檢查 'faiss-gpu' 是否安裝
-                if not hasattr(faiss, 'StandardGpuResources'):
-                    self.logger.info("未偵測到 faiss-gpu，將停用 GPU 功能。")
-                    return None
-                
+            # 如果已經處於降級模式且恢復嘗試次數過多，直接返回 None
+            if (self._fallback_mode and
+                self._recovery_attempts >= self._max_recovery_attempts):
+                return None
+
+            # 如果資源已存在且正常，直接返回
+            if self._gpu_resource is not None:
                 try:
-                    # 檢查記憶體是否可用
-                    if not self.is_memory_available(self.max_memory_mb):
-                        self.logger.warning("GPU 記憶體不足，無法建立 GPU 資源")
-                        return None
-                    
-                    self.logger.debug(f"開始建立 GPU 資源，記憶體限制: {self.max_memory_mb}MB")
-                    
-                    # 添加超時保護的 GPU 資源建立
-                    import signal
-                    import threading
-                    
-                    def timeout_handler(signum, frame):
-                        raise TimeoutError("GPU 資源建立超時")
-                    
-                    def create_gpu_resource():
-                        return faiss.StandardGpuResources()
-                    
-                    # 使用執行緒方式避免信號干擾
-                    result = [None]
-                    exception = [None]
-                    
-                    def worker():
-                        try:
-                            result[0] = create_gpu_resource()
-                        except Exception as e:
-                            exception[0] = e
-                    
-                    thread = threading.Thread(target=worker)
-                    thread.daemon = True
-                    thread.start()
-                    thread.join(timeout=30.0)  # 30秒超時
-                    
-                    if thread.is_alive():
-                        self.logger.error("GPU 資源建立超時（30秒），放棄建立")
-                        return None
-                    
-                    if exception[0]:
-                        raise exception[0]
-                    
-                    if result[0] is None:
-                        self.logger.error("GPU 資源建立失敗，結果為空")
-                        return None
-                    
-                    self._gpu_resource = result[0]
-                    
-                    # 設定記憶體限制
-                    temp_memory_mb = min(self.max_memory_mb // 4, 512)  # 更保守的暫存記憶體
+                    # 簡單測試資源是否仍然有效
+                    temp_memory_mb = min(self.max_memory_mb // 4, 512)
                     self._gpu_resource.setTempMemory(temp_memory_mb * 1024 * 1024)
-                    
-                    self.logger.debug(f"GPU 資源建立成功，記憶體限制: {self.max_memory_mb}MB，暫存: {temp_memory_mb}MB")
-                    
+                    return self._gpu_resource
                 except Exception as e:
-                    self.logger.error(f"建立 GPU 資源失敗: {e}")
+                    self.logger.warning(f"現有 GPU 資源失效: {e}")
                     self._gpu_resource = None
-            
-            return self._gpu_resource
+
+            # 檢查基本條件
+            if not hasattr(faiss, 'StandardGpuResources'):
+                if not self._fallback_mode:
+                    self.logger.info("未偵測到 faiss-gpu，將使用 CPU 模式")
+                    self._fallback_mode = True
+                return None
+
+            # 檢查 GPU 可用性
+            if not gpu_manager.is_gpu_available():
+                if not self._fallback_mode:
+                    self.logger.info("GPU 不可用，自動降級到 CPU 模式")
+                    self._fallback_mode = True
+                return None
+
+            try:
+                # 檢查記憶體是否可用
+                if not self.is_memory_available(self.max_memory_mb):
+                    self.logger.warning("GPU 記憶體不足，無法建立 GPU 資源")
+                    self._fallback_mode = True
+                    self._recovery_attempts += 1
+                    return None
+
+                self.logger.debug(f"開始建立 GPU 資源，記憶體限制: {self.max_memory_mb}MB")
+
+                # 簡化的 GPU 資源建立
+                gpu_resource = faiss.StandardGpuResources()
+
+                # 設定記憶體限制
+                temp_memory_mb = min(self.max_memory_mb // 4, 512)
+                gpu_resource.setTempMemory(temp_memory_mb * 1024 * 1024)
+
+                # 設定定時記憶體清理
+                gpu_resource.setDefaultNullStreamAllDevices(True)
+
+                self._gpu_resource = gpu_resource
+                self._fallback_mode = False  # 重置降級模式
+                self._recovery_attempts = 0   # 重置恢復嘗試次數
+
+                self.logger.info(f"GPU 資源建立成功，記憶體限制: {self.max_memory_mb}MB，暫存: {temp_memory_mb}MB")
+                return self._gpu_resource
+
+            except Exception as e:
+                self.logger.error(f"建立 GPU 資源失敗: {e}")
+                self._gpu_resource = None
+                self._fallback_mode = True
+                self._recovery_attempts += 1
+
+                # 嘗試清理 GPU 記憶體後重試
+                if self._recovery_attempts <= self._max_recovery_attempts:
+                    self.logger.info(f"嘗試清理 GPU 記憶體後重新建立資源 (嘗試 {self._recovery_attempts}/{self._max_recovery_attempts})")
+                    try:
+                        self.clear_gpu_memory()
+                        time.sleep(0.5)  # 短暫等待
+                        return self.get_gpu_resource()  # 遞迴重試
+                    except Exception as retry_error:
+                        self.logger.warning(f"GPU 資源恢復嘗試失敗: {retry_error}")
+
+                return None
     
     def clear_gpu_memory(self) -> None:
         """清除 GPU 記憶體"""
@@ -322,14 +528,6 @@ class VectorIndex:
         self._state_lock = threading.RLock()
         # HNSW 延遲刪除標記集合
         self._deleted_marks: Set[str] = set()
-        # HNSW 延遲刪除標記集合
-        self._deleted_marks: Set[str] = set()
-        # HNSW 延遲刪除標記集合
-        self._deleted_marks: Set[str] = set()
-        # HNSW 延遲刪除標記集合
-        self._deleted_marks: Set[str] = set()
-        # HNSW 延遲刪除標記集合
-        self._deleted_marks: Set[str] = set()
     
     def _create_index(self) -> faiss.Index:
         """建立 FAISS 索引
@@ -390,70 +588,80 @@ class VectorIndex:
         return self._gpu_index if self._gpu_index is not None else self._index
     
     def _try_move_to_gpu(self) -> bool:
-        """嘗試將索引移至 GPU
-        
+        """嘗試將索引移至 GPU（支援自動恢復）
+
         Returns:
             bool: 是否成功移至 GPU
         """
         try:
-            # 檢查 GPU 記憶體管理器
-            if self.gpu_memory_manager is None:
+            # 檢查基本條件
+            if not gpu_manager.is_gpu_available():
                 if not self._gpu_fallback_warned:
-                    self.logger.warning("沒有 GPU 記憶體管理器，使用預設 GPU 資源")
-                    self._gpu_fallback_warned = True
-                
-                # 使用預設 GPU 資源（有風險）
-                gpu_resource = faiss.StandardGpuResources()
-            else:
-                # 使用管理的 GPU 資源
-                gpu_resource = self.gpu_memory_manager.get_gpu_resource()
-                if gpu_resource is None:
-                    if not self._gpu_fallback_warned:
-                        self.logger.warning("GPU 記憶體不足，降級使用 CPU")
-                        self._gpu_fallback_warned = True
-                    return False
-            
-            # 估算索引記憶體需求
-            estimated_memory_mb = self._estimate_index_memory()
-            
-            # 檢查記憶體是否足夠
-            if (self.gpu_memory_manager is not None and
-                not self.gpu_memory_manager.is_memory_available(estimated_memory_mb)):
-                if not self._gpu_fallback_warned:
-                    self.logger.warning(
-                        f"GPU 記憶體不足（需要 {estimated_memory_mb}MB），使用 CPU"
-                    )
+                    self.logger.info("GPU 不可用，自動降級到 CPU 模式")
                     self._gpu_fallback_warned = True
                 return False
-            
+
+            if not hasattr(faiss, 'StandardGpuResources'):
+                if not self._gpu_fallback_warned:
+                    self.logger.info("faiss-gpu 不可用，使用 CPU 模式")
+                    self._gpu_fallback_warned = True
+                return False
+
+            # 取得 GPU 資源
+            gpu_resource = self.gpu_memory_manager.get_gpu_resource() if self.gpu_memory_manager else None
+
+            if gpu_resource is None:
+                if not self._gpu_fallback_warned:
+                    self.logger.warning("無法取得 GPU 資源，降級使用 CPU")
+                    self._gpu_fallback_warned = True
+                return False
+
+            # 估算索引記憶體需求
+            estimated_memory_mb = self._estimate_index_memory()
+
+            # 檢查記憶體是否足夠
+            if (self.gpu_memory_manager and
+                not self.gpu_memory_manager.is_memory_available(estimated_memory_mb)):
+                if not self._gpu_fallback_warned:
+                    self.logger.warning(f"GPU 記憶體不足（需要 {estimated_memory_mb}MB），使用 CPU")
+                    self._gpu_fallback_warned = True
+                return False
+
             # 移至 GPU
             self._gpu_index = faiss.index_cpu_to_gpu(gpu_resource, 0, self._index)
-            
-            # 使用啟動日誌管理器記錄 GPU 遷移
+
+            # 記錄成功遷移
             startup_logger = get_startup_logger()
             if startup_logger and startup_logger.is_startup_mode:
                 startup_logger.log_gpu_index_migration("unknown", estimated_memory_mb)
             else:
                 self.logger.info(f"索引已移至 GPU（預估記憶體: {estimated_memory_mb}MB）")
-            
+
             # 記錄記憶體狀態
-            if self.gpu_memory_manager is not None:
+            if self.gpu_memory_manager:
                 self.gpu_memory_manager.log_memory_stats()
-            
+
             return True
-            
+
         except Exception as e:
+            error_msg = f"無法將索引移至 GPU，降級使用 CPU: {e}"
             if not self._gpu_fallback_warned:
-                self.logger.warning(f"無法將索引移至 GPU，降級使用 CPU: {e}")
+                self.logger.warning(error_msg)
                 self._gpu_fallback_warned = True
-            
+
             # 清除可能部分建立的 GPU 索引
             self._gpu_index = None
-            
-            # 清理 GPU 記憶體
-            if self.gpu_memory_manager is not None:
-                self.gpu_memory_manager.clear_gpu_memory()
-            
+
+            # 清理 GPU 記憶體並嘗試恢復
+            if self.gpu_memory_manager:
+                try:
+                    self.gpu_memory_manager.clear_gpu_memory()
+                    # 嘗試恢復 GPU 功能
+                    if self.gpu_memory_manager._attempt_gpu_recovery():
+                        self.logger.info("GPU 資源已恢復，稍後可重試 GPU 模式")
+                except Exception as recovery_error:
+                    self.logger.debug(f"GPU 恢復失敗: {recovery_error}")
+
             return False
     
     def _estimate_index_memory(self) -> int:
@@ -1838,21 +2046,6 @@ class VectorIndex:
                 
         except Exception as e:
             self.logger.error(f"記錄映射診斷資訊失敗: {e}")
-        try:
-            # 如果映射為空，清空整個索引
-            if target_size == 0:
-                self.logger.info("映射為空，重建空索引")
-                self._index = self._create_index()
-                self._gpu_index = None
-                return True
-            
-            # 對於非空映射，重建索引（這需要原始向量資料）
-            self.logger.warning("無法直接修復過大索引，建議重新載入資料")
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"修復過大索引失敗: {e}")
-            return False
     
     def _repair_oversized_mapping(self, target_size: int) -> bool:
         """修復映射過大的問題

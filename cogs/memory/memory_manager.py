@@ -25,6 +25,7 @@ import tqdm
 from .database import DatabaseManager
 from .config import MemoryConfig, MemoryProfile
 from .embedding_service import EmbeddingService, embedding_service_manager
+from .fallback_memory_manager import FallbackMemoryManager
 from .vector_manager import get_vector_manager, VectorManager
 from .search_engine import SearchEngine, SearchQuery, SearchResult, SearchType, TimeRange, SearchCache
 from .segmentation_service import (
@@ -133,6 +134,8 @@ class MemoryManager:
         self.vector_manager: Optional[VectorManager] = None
         self.search_engine: Optional[SearchEngine] = None
         
+        # 備用記憶體管理器
+        self.fallback_memory_manager: Optional[FallbackMemoryManager] = None
         # 文本分割組件
         self.segmentation_service: Optional[TextSegmentationService] = None
         self.segmentation_config: Optional[SegmentationConfig] = None
@@ -307,20 +310,22 @@ class MemoryManager:
 
     async def initialize(self) -> bool:
         """初始化記憶系統
-        
+
         Returns:
             bool: 是否成功初始化
         """
         if self._initialized:
+            self.logger.info("記憶系統已經初始化，跳過重複初始化")
             return True
-        
+
         try:
             # 初始化啟動日誌管理器
             startup_logger = StartupLoggerManager.get_instance(self.logger)
             if startup_logger:
                 startup_logger.start_startup_phase()
-            
+
             self.logger.info("開始初始化記憶系統...")
+            self.logger.info("檢查初始化狀態: _initialized=%s, _enabled=%s", self._initialized, self._enabled)
             
             # 載入配置
             await self._load_configuration()
@@ -342,7 +347,17 @@ class MemoryManager:
             self.current_profile = self.config.get_current_profile()
             
             # 初始化向量組件
-            await self._initialize_vector_components()
+            self.logger.info("開始初始化向量組件...")
+            try:
+                await self._initialize_vector_components()
+                self.logger.info("向量組件初始化成功")
+            except AttributeError as e:
+                self.logger.error(f"向量組件初始化失敗: 方法 '_initialize_vector_components' 不存在 - {e}")
+                self.logger.error("這表示記憶系統程式碼不完整，缺少關鍵的初始化方法")
+                # 繼續執行，不拋出異常以允許系統在降級模式下運行
+            except Exception as e:
+                self.logger.error(f"向量組件初始化時發生其他錯誤: {e}")
+                raise
             
             # 初始化分割服務
             await self._initialize_segmentation_service()
@@ -417,109 +432,13 @@ class MemoryManager:
         except Exception as e:
             raise DatabaseError(f"初始化資料庫失敗: {e}")
     
-    async def _initialize_vector_components(self) -> None:
-        """初始化向量搜尋組件"""
-        try:
-            if not self.current_profile.vector_enabled:
-                self.logger.info("向量搜尋功能已停用")
-                return
-            
-            # 在執行緒池中初始化向量組件
-            loop = asyncio.get_event_loop()
-            
-            # 初始化嵌入服務
-            self.embedding_service = await loop.run_in_executor(
-                None,
-                embedding_service_manager.get_service,
-                self.current_profile
-            )
-            
-            # 初始化向量管理器
-            memory_config = self.config.get_memory_config()
-            storage_path = memory_config.get("database_path", "data/memory/memory.db")
-            indices_path = Path(storage_path).parent / "indices"
-            
-            self.vector_manager = await loop.run_in_executor(
-                None,
-                get_vector_manager,
-                self.current_profile,
-                indices_path
-            )
-            
-            self.logger.info("MemoryManager: 持有的 VectorManager 實例已初始化。")
-            
-            # 初始化搜尋快取
-            if memory_config.get("cache", {}).get("enabled", True):
-                cache_config = memory_config.get("cache", {})
-                self.search_cache = SearchCache(
-                    max_size=cache_config.get("max_size", 1000),
-                    ttl_seconds=cache_config.get("ttl_seconds", 3600)
-                )
-                self.logger.info("搜尋快取已啟用")
-            else:
-                self.search_cache = None
-                self.logger.info("搜尋快取已停用")
-
-            # 初始化重排序服務
-            self.reranker_service = None
-            if memory_config.get("reranker", {}).get("enabled", True):
-                try:
-                    # 直接實例化 RerankerService
-                    self.reranker_service = await loop.run_in_executor(
-                        None,
-                        RerankerService,
-                        self.current_profile
-                    )
-                    if self.reranker_service:
-                        self.logger.info("重排序服務初始化成功")
-                except Exception as e:
-                    self.logger.warning(f"重排序服務初始化失敗: {e}")
-                    get_startup_logger().log_warning(f"重排序服務初始化失敗: {e}")
-                    self.reranker_service = None # 確保失敗時為 None
-
-            # 初始化搜尋引擎
-            self.search_engine = await loop.run_in_executor(
-                None,
-                SearchEngine,
-                self.current_profile,
-                self.embedding_service,
-                self.vector_manager,
-                self.db_manager,
-                self.bot,
-                self.reranker_service,
-                self.search_cache,
-                memory_config.get("reranker", {}).get("enabled", True)
-            )
-            
-            # 預熱嵌入模型
-            await loop.run_in_executor(None, self.embedding_service.warmup)
-            
-            # 預熱重排序模型
-            if hasattr(self.search_engine, 'warmup_reranker'):
-                await loop.run_in_executor(None, self.search_engine.warmup_reranker)
-            
-            # 掃描現有的索引檔案
-            await self._load_existing_indices()
-
-            # 在啟動時執行孤兒片段清理（追蹤背景任務以便關閉時取消）
-            _t = asyncio.create_task(self.cleanup_orphan_segments())
-            try:
-                self._bg_tasks.add(_t)
-                _t.add_done_callback(self._bg_tasks.discard)
-            except Exception:
-                pass
-            
-            self.logger.info("向量搜尋組件初始化完成")
-            
-        except Exception as e:
-            self.logger.error(f"初始化向量組件失敗: {e}")
-            # 不拋出例外，允許系統在無向量功能的情況下運行
-            self.current_profile.vector_enabled = False
+    
+    
     
     async def _load_existing_indices(self) -> None:
         """掃描現有的索引檔案並記錄其狀態，但不立即載入。"""
         try:
-            if not self.vector_manager or not self.current_profile.vector_enabled:
+            if not self.vector_manager or not self.current_profile.vector_enabled or self.current_profile.disable_vector_database:
                 return
 
             indices_path = self.vector_manager.storage_path
@@ -547,7 +466,7 @@ class MemoryManager:
     
     async def _ensure_index_loaded(self, channel_id: str) -> None:
         """確保指定頻道的索引已載入記憶體，並管理 LRU 快取。"""
-        if not self.vector_manager or not self.current_profile.vector_enabled:
+        if not self.vector_manager or not self.current_profile.vector_enabled or self.current_profile.disable_vector_database:
             return
 
         async with self._lock:
@@ -648,7 +567,84 @@ class MemoryManager:
             # 不拋出例外，允許系統在無分割功能的情況下運行
             if self.segmentation_config:
                 self.segmentation_config.enabled = False
-    
+
+    async def _initialize_vector_components(self) -> None:
+        """初始化向量相關組件"""
+        try:
+            self.logger.info("開始初始化向量組件...")
+
+            # 檢查是否啟用向量功能
+            if not self.current_profile or not self.current_profile.vector_enabled:
+                self.logger.info("向量功能已停用，跳過向量組件初始化")
+                return
+
+            # 檢查向量資料庫是否被禁用
+            if self.current_profile.disable_vector_database:
+                self.logger.info("向量資料庫已被禁用，使用備用記憶體管理器")
+                await self._initialize_fallback_memory_manager()
+                return
+
+            # 初始化嵌入服務
+            self.logger.info("初始化嵌入服務...")
+            try:
+                from .embedding_service import embedding_service_manager
+                self.embedding_service = embedding_service_manager.get_service(self.current_profile)
+                self.logger.info(f"嵌入服務初始化成功 (模型: {self.current_profile.embedding_model})")
+            except Exception as e:
+                self.logger.error(f"嵌入服務初始化失敗: {e}")
+                # 降級到備用記憶體管理器
+                await self._initialize_fallback_memory_manager()
+                return
+
+            # 初始化重新排序服務
+            self.logger.info("初始化重新排序服務...")
+            try:
+                self.reranker_service = RerankerService(self.current_profile)
+                self.logger.info("重新排序服務初始化成功")
+            except Exception as e:
+                self.logger.warning(f"重新排序服務初始化失敗: {e}")
+                # 這不是致命錯誤，可以繼續
+
+            # 初始化向量管理器
+            self.logger.info("初始化向量管理器...")
+            try:
+                self.vector_manager = get_vector_manager(
+                    profile=self.current_profile,
+                    storage_path=Path("data/memory/vectors")
+                )
+                self.logger.info("向量管理器初始化成功")
+            except Exception as e:
+                self.logger.error(f"向量管理器初始化失敗: {e}")
+                # 降級到備用記憶體管理器
+                await self._initialize_fallback_memory_manager()
+                return
+
+            # 初始化搜尋引擎
+            self.logger.info("初始化搜尋引擎...")
+            try:
+                self.search_engine = SearchEngine(
+                    profile=self.current_profile,
+                    embedding_service=self.embedding_service,
+                    vector_manager=self.vector_manager,
+                    database_manager=self.db_manager,
+                    bot=self.bot
+                )
+                self.logger.info("搜尋引擎初始化成功")
+            except Exception as e:
+                self.logger.error(f"搜尋引擎初始化失敗: {e}")
+                # 這不是致命錯誤，可以繼續
+
+            self.logger.info("向量組件初始化完成")
+
+        except Exception as e:
+            self.logger.error(f"向量組件初始化過程中發生錯誤: {e}")
+            # 嘗試降級到備用記憶體管理器
+            try:
+                await self._initialize_fallback_memory_manager()
+            except Exception as fallback_error:
+                self.logger.error(f"備用記憶體管理器初始化也失敗: {fallback_error}")
+                raise MemorySystemError(f"無法初始化任何記憶體系統: {e}")
+
     async def get_stats(self) -> MemoryStats:
         """取得記憶系統統計資料
         
@@ -1418,4 +1414,30 @@ class MemoryManager:
             # 統一走 cleanup，內部只會進行一次 to_thread 同步清理
             await self.cleanup()
         except Exception as e:
-            self.logger.error(f"MemoryManager.shutdown 發生錯誤: {e}")
+            self.logger.error(f"關閉 MemoryManager發生嚴重錯誤: {e}")
+            
+    async def _initialize_fallback_memory_manager(self) -> None:
+        """初始化備用記憶體管理器"""
+        try:
+            if not self.db_manager:
+                self.logger.warning("資料庫管理器未初始化，無法初始化備用記憶體管理器")
+                return
+
+            # 從配置中取得快取設定
+            memory_config = self.config.get_memory_config()
+            cache_config = memory_config.get("cache", {})
+            cache_size = cache_config.get("max_size_mb", 512)
+            cache_ttl = cache_config.get("ttl_seconds", 3600)
+
+            # 初始化備用記憶體管理器
+            self.fallback_memory_manager = FallbackMemoryManager(
+                db_manager=self.db_manager,
+                cache_size=cache_size,
+                cache_ttl=cache_ttl
+            )
+
+            self.logger.info("備用記憶體管理器初始化完成")
+
+        except Exception as e:
+            self.logger.error(f"初始化備用記憶體管理器失敗: {e}")
+            self.fallback_memory_manager = None

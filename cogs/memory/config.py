@@ -88,6 +88,7 @@ class MemoryProfile:
     min_ram_gb: float = 4.0
     gpu_required: bool = False
     vector_enabled: bool = True
+    disable_vector_database: bool = False
     embedding_dimension: int = 384
     cache_size_mb: int = 512
     batch_size: int = 50
@@ -111,6 +112,7 @@ class MemoryProfile:
             min_ram_gb=data.get('min_ram_gb', defaults.min_ram_gb),
             gpu_required=data.get('gpu_required', defaults.gpu_required),
             vector_enabled=data.get('vector_enabled', defaults.vector_enabled),
+            disable_vector_database=data.get('disable_vector_database', defaults.disable_vector_database),
             embedding_dimension=data.get('embedding_dimension', defaults.embedding_dimension),
             cache_size_mb=data.get('cache_size_mb', defaults.cache_size_mb),
             batch_size=data.get('batch_size', defaults.batch_size),
@@ -261,6 +263,7 @@ class MemoryConfig:
                     "min_ram_gb": 12.0,
                     "gpu_required": True,
                     "vector_enabled": True,
+                    "disable_vector_database": False,
                     "embedding_dimension": 1024,
                     "cache_size_mb": 1024,
                     "batch_size": 32,
@@ -277,6 +280,7 @@ class MemoryConfig:
                     "min_ram_gb": 8.0,
                     "gpu_required": False,
                     "vector_enabled": True,
+                    "disable_vector_database": False,
                     "embedding_dimension": 1024,
                     "cache_size_mb": 1024,
                     "batch_size": 32,
@@ -293,6 +297,7 @@ class MemoryConfig:
                     "min_ram_gb": 8.0,
                     "gpu_required": True,
                     "vector_enabled": True,
+                    "disable_vector_database": False,
                     "embedding_dimension": 768,
                     "cache_size_mb": 1024,
                     "batch_size": 100,
@@ -309,6 +314,7 @@ class MemoryConfig:
                     "min_ram_gb": 4.0,
                     "gpu_required": False,
                     "vector_enabled": True,
+                    "disable_vector_database": False,
                     "embedding_dimension": 384,
                     "cache_size_mb": 512,
                     "batch_size": 50,
@@ -325,6 +331,7 @@ class MemoryConfig:
                     "min_ram_gb": 2.0,
                     "gpu_required": False,
                     "vector_enabled": False,
+                    "disable_vector_database": True,
                     "embedding_dimension": 0,
                     "cache_size_mb": 256,
                     "batch_size": 25,
@@ -399,6 +406,18 @@ class MemoryConfig:
             performance_config['max_concurrent_index_loads'] = default_concurrency
             
         return memory_config_data
+
+    def is_vector_database_disabled(self) -> bool:
+        """檢查向量資料庫是否被禁用
+
+        Returns:
+            bool: 向量資料庫是否被禁用
+        """
+        if self._config is None:
+            self._config = self.load_config()
+
+        memory_config_data = self._config.get("memory_system", {})
+        return memory_config_data.get("disable_vector_database", False)
     
     def get_current_profile(self) -> MemoryProfile:
         """取得當前配置檔案
@@ -435,6 +454,7 @@ class MemoryConfig:
                 "enabled": True,
                 "auto_detection": True,
                 "vector_enabled": True,
+                "disable_vector_database": False,
                 "cpu_only_mode": False,
                 "memory_threshold_mb": 2048,
                 "embedding_model": "Qwen/Qwen3-Embedding-0.6B",

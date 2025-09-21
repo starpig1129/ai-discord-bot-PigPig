@@ -21,6 +21,7 @@ from .database import DatabaseManager
 from .config import MemoryConfig, MemoryProfile, HardwareDetector
 from .embedding_service import EmbeddingService, embedding_service_manager
 from .reranker_service import RerankerService
+from .fallback_memory_manager import FallbackMemoryManager
 from .vector_manager import VectorManager
 from .search_engine import SearchEngine, SearchQuery, SearchResult, SearchType, TimeRange
 from .startup_logger import StartupLogger, StartupLoggerManager, get_startup_logger
@@ -48,6 +49,8 @@ __all__ = [
     "embedding_service_manager",
     "RerankerService",
     
+    # 備用記憶體管理
+    "FallbackMemoryManager",
     # 向量管理
     "VectorManager",
     
