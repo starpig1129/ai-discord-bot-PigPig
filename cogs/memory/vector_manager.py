@@ -363,8 +363,33 @@ class GPUMemoryManager:
                 temp_memory_mb = min(self.max_memory_mb // 4, 512)
                 gpu_resource.setTempMemory(temp_memory_mb * 1024 * 1024)
 
+                # 診斷日誌：記錄方法調用前的狀態
+                self.logger.info(f"GPU 資源類型: {type(gpu_resource)}")
+                self.logger.info(f"GPU 資源方法清單: {[method for method in dir(gpu_resource) if 'Stream' in method or 'Null' in method]}")
+
                 # 設定定時記憶體清理
-                gpu_resource.setDefaultNullStreamAllDevices(True)
+                self.logger.info("嘗試調用 setDefaultNullStreamAllDevices()")
+                try:
+                    # 檢查方法簽名
+                    import inspect
+                    method_signature = inspect.signature(gpu_resource.setDefaultNullStreamAllDevices)
+                    self.logger.info(f"setDefaultNullStreamAllDevices 簽名: {method_signature}")
+
+                    # 嘗試不傳參數調用
+                    gpu_resource.setDefaultNullStreamAllDevices()
+                    self.logger.info("setDefaultNullStreamAllDevices() 調用成功（無參數）")
+                except TypeError as e:
+                    self.logger.error(f"setDefaultNullStreamAllDevices() 調用失敗: {e}")
+                    try:
+                        # 嘗試傳遞 True 參數
+                        gpu_resource.setDefaultNullStreamAllDevices(True)
+                        self.logger.info("setDefaultNullStreamAllDevices(True) 調用成功")
+                    except TypeError as e2:
+                        self.logger.error(f"setDefaultNullStreamAllDevices(True) 也失敗: {e2}")
+                        raise e2
+                except Exception as e:
+                    self.logger.error(f"其他錯誤: {e}")
+                    raise e
 
                 self._gpu_resource = gpu_resource
                 self._fallback_mode = False  # 重置降級模式
