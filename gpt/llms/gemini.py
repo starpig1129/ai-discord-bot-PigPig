@@ -28,11 +28,6 @@ logger = logging.getLogger(__name__)
 try:
     client = genai.Client(api_key=tokens.gemini_api_key)
     model_id = "gemini-2.5-flash"
-    
-    google_search_tool = Tool(
-        google_search = GoogleSearch()
-    )
-    
     logger.info("Gemini API 客戶端初始化成功")
 except Exception as e:
     logger.error(f"Gemini API 客戶端初始化失敗: {e}")
@@ -605,7 +600,11 @@ async def generate_response(inst: str,
         generation_config_args["response_schema"] = response_schema
     else:
         generation_config_args["response_modalities"] = ["TEXT"]
-        tool_list = [google_search_tool]
+        tool_list = [
+            types.Tool(url_context=types.UrlContext()),
+            types.Tool(code_execution=types.ToolCodeExecution()),
+            types.Tool(googleSearch=types.GoogleSearch()),
+        ]
             
     # 步驟 1: 如果啟用快取，為當前請求生成唯一的內容哈希
     if use_cache and cache_mgr:
