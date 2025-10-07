@@ -91,7 +91,7 @@
   },
   "gpu_memory_management": {
     "enabled": true,
-    "memory_threshold": 75.0,
+    "memory_threshold": 25.0,
     "cleanup_threshold": 70.0,
     "force_cleanup_threshold": 85.0,
     "auto_cleanup_interval": 300,
