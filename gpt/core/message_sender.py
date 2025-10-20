@@ -806,7 +806,7 @@ async def gpt_message(
         logging.info("使用智慧背景知識系統建構的結構化上下文")
 
     # 在條件判斷區塊結束後設定 combined_prompt（避免重複）
-    combined_prompt = f"[{message.author.display_name}<@{message.author.id}>]: {prompt}"
+    combined_prompt = f"<@{message.author.id}>: {prompt}"
     
     # 將結構化歷史合併到 history_dict 中，並確保保留 tool_execution_summary
     def _extract_tool_summary(msgs):
