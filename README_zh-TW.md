@@ -14,6 +14,14 @@ PigPig 是一款由大型語言模型 (LLM) 驅動的強大、多模態 Discord 
 
 [**邀請 PigPig 到您的伺服器！**](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot)
 
+## 📄 法律文件
+為了確保使用者權益與服務透明度，請參閱以下文件：
+
+* **服務條款 (Terms of Service)**：[TERMS\_OF\_SERVICE\_zh-TW.md](docs/TERMS_OF_SERVICE_zh-TW.md)
+* **隱私權政策 (Privacy Policy)**：[PRIVACY\_POLICY\_zh-TW.md](docs/PRIVACY_POLICY_zh-TW.md)
+* **支援信箱**：james911129@gmail.com
+* **支援伺服器**：[https://discord.gg/BvP64mqKzR](https://discord.gg/BvP64mqKzR)
+
 ## 🌟 主要功能
 
 *   🧠 **AI 驅動的對話**：利用先進的大型語言模型進行自然語言理解與生成。

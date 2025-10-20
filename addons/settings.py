@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from dotenv import load_dotenv
 
 class Settings:
@@ -167,9 +168,63 @@ class TOKENS:
         self.openai_api_key = os.getenv("OPENAI_API_KEY",None)
         self.gemini_api_key = os.getenv("GEMINI_API_KEY",None)
         self.tenor_api_key = os.getenv("TENOR_API_KEY",None)
-        
-        # 新增：Bot 擁有者配置
+
         self.bot_owner_id = int(os.getenv("BOT_OWNER_ID", 0))
+
+                # 驗證環境變數
+        self._validate_environment_variables()
+
+    def _validate_environment_variables(self) -> None:
+        """驗證所有必要的環境變數是否存在且有效"""
+        missing_vars = []
+        invalid_vars = []
+
+        # 檢查必要環境變數
+        required_vars = {
+            "TOKEN": self.token,
+            "CLIENT_ID": self.client_id,
+            "CLIENT_SECRET_ID": self.client_secret_id,
+            "SERCET_KEY": self.sercet_key,
+            "BUG_REPORT_CHANNEL_ID": os.getenv("BUG_REPORT_CHANNEL_ID"),
+            "BOT_OWNER_ID": os.getenv("BOT_OWNER_ID")
+        }
+
+        for var_name, var_value in required_vars.items():
+            if not var_value:
+                missing_vars.append(var_name)
+            elif var_name == "BUG_REPORT_CHANNEL_ID":
+                try:
+                    int(var_value)
+                except (ValueError, TypeError):
+                    invalid_vars.append(f"{var_name} (必須為有效的整數)")
+
+        # 檢查 API 金鑰（可選但建議設定）
+        optional_api_keys = {
+            "ANTHROPIC_API_KEY": self.anthropic_api_key,
+            "OPENAI_API_KEY": self.openai_api_key,
+            "GEMINI_API_KEY": self.gemini_api_key
+        }
+
+        for api_name, api_value in optional_api_keys.items():
+            if not api_value:
+                print(f"警告：{api_name} 未設定，可能影響相關功能")
+
+        # 如果有缺失或無效的環境變數，終止程式
+        if missing_vars or invalid_vars:
+            error_msg = "環境變數驗證失敗：\n"
+
+            if missing_vars:
+                error_msg += f"缺失的環境變數：{', '.join(missing_vars)}\n"
+
+            if invalid_vars:
+                error_msg += f"無效的環境變數：{', '.join(invalid_vars)}\n"
+
+            error_msg += "\n請檢查 .env 檔案並設定所有必要的環境變數。"
+
+            print(error_msg)
+            sys.exit(1)
+
+        print("環境變數驗證成功")
 
 class UpdateSettings:
     """更新系統配置管理器"""

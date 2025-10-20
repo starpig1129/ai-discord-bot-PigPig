@@ -14,6 +14,14 @@ PigPig is a powerful, multi-modal Discord bot powered by Large Language Models (
 
 [**Invite PigPig to your server!**](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot)
 
+## 📄 Legal Documents
+To ensure user rights and service transparency, please refer to the following documents:
+
+* **Terms of Service**: [TERMS\_OF\_SERVICE.md](docs/TERMS_OF_SERVICE.md)
+* **Privacy Policy**: [PRIVACY\_POLICY.md](docs/PRIVACY_POLICY.md)
+* **Support Email**: james911129@gmail.com
+* **Support Server**: [https://discord.gg/BvP64mqKzR](https://discord.gg/BvP64mqKzR)
+
 ## 🌟 Key Features
 
 *   🧠 **AI-Powered Conversations**: Utilizes advanced LLMs for natural language understanding and generation.
