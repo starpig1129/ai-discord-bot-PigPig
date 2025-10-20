@@ -12,7 +12,7 @@ English | [繁體中文](README_zh-TW.md)
 
 PigPig is a powerful, multi-modal Discord bot powered by Large Language Models (LLMs). It's designed to interact with users through natural language, combining advanced AI capabilities with practical, fun features to enrich any Discord community.
 
-[**Invite PigPig to your server!**](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=8&scope=bot)
+[**Invite PigPig to your server!**](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=4292493394706417&integration_type=0&scope=bot+applications.commands)
 
 ## 📄 Legal Documents
 To ensure user rights and service transparency, please refer to the following documents:
