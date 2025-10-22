@@ -224,7 +224,6 @@ class TOKENS:
             print(error_msg)
             sys.exit(1)
 
-        print("環境變數驗證成功")
 
 class UpdateSettings:
     """更新系統配置管理器"""
