@@ -9,6 +9,9 @@ from gpt.utils.sanitizer import mask_text
 
 logger = logging.getLogger(__name__)
 
+# 安全策略：限制提及權限以防止濫用
+ALLOWED_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False, replied_user=True)
+
 # Deprecated shim: keep backward compatibility for callers still importing safe_edit_message
 # Deprecated: use safe_edit instead. This thin wrapper will be kept for at least two releases.
 # Behavior: no extra retry/backoff or error swallowing; it simply delegates to safe_edit.
@@ -84,6 +87,7 @@ async def safe_send(
     content: str,
     trace_id: Optional[str] = None,
     retry: Optional[RetryController] = None,
+    allowed_mentions: Optional[discord.AllowedMentions] = None,
 ) -> discord.Message:
     """安全發送訊息：統一處理速率限制與網路錯誤的退避重試。"""
     if content is None or (isinstance(content, str) and content.strip() == ""):
@@ -93,7 +97,10 @@ async def safe_send(
     logger.debug(f"[safe_send] trace_id={trace_id} {summary}")
 
     async def _call() -> discord.Message:
-        return await channel.send(content=content)
+        if allowed_mentions is not None:
+            return await channel.send(content=content, allowed_mentions=allowed_mentions)
+        else:
+            return await channel.send(content=content)
 
     try:
         return await _run_with_retry(_call, retry, trace_id, "send")
@@ -110,6 +117,7 @@ async def safe_edit(
     content: str,
     trace_id: Optional[str] = None,
     retry: Optional[RetryController] = None,
+    allowed_mentions: Optional[discord.AllowedMentions] = None,
 ) -> discord.Message:
     """安全編輯訊息：統一處理 429/網路重試，Forbidden/NotFound 視為不可重試並拋出。"""
     if content is None or (isinstance(content, str) and content.strip() == ""):
@@ -119,7 +127,10 @@ async def safe_edit(
     logger.debug(f"[safe_edit] trace_id={trace_id} msg_id={getattr(message, 'id', None)} {summary}")
 
     async def _call() -> discord.Message:
-        return await message.edit(content=content)
+        if allowed_mentions is not None:
+            return await message.edit(content=content, allowed_mentions=allowed_mentions)
+        else:
+            return await message.edit(content=content)
 
     try:
         return await _run_with_retry(_call, retry, trace_id, "edit")
@@ -137,6 +148,7 @@ async def safe_create_next_block(
     reference_message_id: Optional[int] = None,
     trace_id: Optional[str] = None,
     retry: Optional[RetryController] = None,
+    allowed_mentions: Optional[discord.AllowedMentions] = None,
 ) -> discord.Message:
     """建立下一段訊息區塊（rollover），維持統一的退避/錯誤行為。"""
     if content is None or (isinstance(content, str) and content.strip() == ""):
@@ -147,7 +159,10 @@ async def safe_create_next_block(
 
     async def _call() -> discord.Message:
         # 在同一 channel 中建立新訊息；可視需求補上 reference 或 thread 參數
-        return await channel.send(content=content)
+        if allowed_mentions is not None:
+            return await channel.send(content=content, allowed_mentions=allowed_mentions)
+        else:
+            return await channel.send(content=content)
 
     try:
         return await _run_with_retry(_call, retry, trace_id, "create_next_block")

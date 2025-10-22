@@ -37,6 +37,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from cogs.memory.memory_manager import  SearchQuery, SearchType
 from cogs.memory.exceptions import MemorySystemError, SearchError
 
+# 定義嚴格的提及權限策略，只允許使用者提及，禁止 @everyone、@here 和角色提及
+ALLOWED_MENTIONS = discord.AllowedMentions(users=True, roles=False, everyone=False, replied_user=True)
+
 settings = Settings()
 tokens = TOKENS()
 
@@ -404,6 +407,30 @@ async def process_tenor_tags(text: str, channel: discord.TextChannel) -> list:
     return gif_tasks
 
 
+def _sanitize_response(text: str) -> str:
+    """清理回應文字中的 Discord 提及，避免意外觸發群體通知。
+
+    將 @everyone 和 @here 等群體提及替換為安全的版本，
+    防止機器人意外觸發 Discord 的群體通知功能。
+
+    Args:
+        text: 要清理的文字內容
+
+    Returns:
+        str: 清理後的安全文字
+    """
+    if not text:
+        return text
+
+    # 替換 @everyone 為安全的版本
+    sanitized = text.replace("@everyone", "＠everyone")
+
+    # 替換 @here 為安全的版本
+    sanitized = sanitized.replace("@here", "＠here")
+
+    return sanitized
+
+
 def extract_participant_ids(message, conversation_history: List[Dict] = None) -> set:
     """提取對話參與者 ID
     
@@ -755,14 +782,18 @@ async def gpt_message(
         try:
             # 如果 prompt 為空，提供一個預設訊息
             content = prompt if prompt and prompt.strip() else ""
-            new_message = await channel.send(content=content, files=files)
+            # 應用安全處理，防止意外觸發群體通知
+            sanitized_content = _sanitize_response(content)
+            new_message = await channel.send(content=sanitized_content, files=files, allowed_mentions=ALLOWED_MENTIONS)
             # 刪除原始的 "正在生成..." 訊息
             if message_to_edit and message_to_edit.author == message.guild.me:
                 await message_to_edit.delete()
             message_to_edit = new_message
         except Exception as e:
             logging.error(f"發送帶有檔案的訊息時發生錯誤: {e}")
-            await channel.send(content=f"抱歉，發送圖片時發生錯誤: {e}")
+            # 應用安全處理，防止意外觸發群體通知
+            sanitized_error_message = _sanitize_response(f"抱歉，發送圖片時發生錯誤: {e}")
+            await channel.send(content=sanitized_error_message, allowed_mentions=ALLOWED_MENTIONS)
             return ""
     
     print(prompt)
@@ -946,12 +977,15 @@ async def gpt_message(
                                 guild_id, "system", "chat_bot", "responses", "processing"
                             )
                     retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
+                    # 應用安全處理，防止意外觸發群體通知
+                    sanitized_processing_message = _sanitize_response(processing_message)
                     new_chunk_message = await safe_create_next_block(
                         channel=channel,
-                        content=processing_message,
+                        content=sanitized_processing_message,
                         reference_message_id=getattr(current_message, "id", None),
                         trace_id="segment_rollover",
                         retry=retry,
+                        allowed_mentions=ALLOWED_MENTIONS,
                     )
                     current_message = new_chunk_message
                     # 針對新訊息重新開始累積，避免多重新訊息
@@ -1000,11 +1034,15 @@ async def gpt_message(
                 from gpt.core.retry_controller import RetryController
                 retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
                 try:
-                    await safe_edit(current_message, converted_response, trace_id="message_edit_retry", retry=retry)
+                    # 應用安全處理，防止意外觸發群體通知
+                    sanitized_response = _sanitize_response(converted_response)
+                    await safe_edit(current_message, sanitized_response, trace_id="message_edit_retry", retry=retry, allowed_mentions=ALLOWED_MENTIONS)
                 except discord.errors.NotFound:
                     logging.warning(f"訊息 {getattr(current_message,'id',None)} 在編輯時找不到，改以新段承接。")
                     from gpt.utils.discord_utils import safe_send
-                    current_message = await safe_send(channel, converted_response, trace_id="message_edit_fallback", retry=retry)
+                    # 應用安全處理，防止意外觸發群體通知
+                    sanitized_response = _sanitize_response(converted_response)
+                    current_message = await safe_send(channel, sanitized_response, trace_id="message_edit_fallback", retry=retry, allowed_mentions=ALLOWED_MENTIONS)
                 
                 # 檢查是否需要發送GIF
                 gif_tasks = await process_tenor_tags(converted_response, channel)
@@ -1173,15 +1211,21 @@ async def gpt_message(
             retry = RetryController(max_retries=3, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
             if files_to_send:
                 logging.info(f"合併發送文字與圖片附件 | files={len(files_to_send)}")
-                await safe_send(channel, converted_response, files=files_to_send, trace_id="final_send_with_files", retry=retry)
+                # 應用安全處理，防止意外觸發群體通知
+                sanitized_response = _sanitize_response(converted_response)
+                await safe_send(channel, sanitized_response, files=files_to_send, trace_id="final_send_with_files", retry=retry)
             else:
                 # 如果沒有附件，沿用原本最後編輯邏輯，盡可能不打擾歷史訊息的外觀
                 from gpt.utils.discord_utils import safe_edit, safe_send
                 try:
-                    await safe_edit(current_message, converted_response, trace_id="final_edit", retry=retry)
+                    # 應用安全處理，防止意外觸發群體通知
+                    sanitized_response = _sanitize_response(converted_response)
+                    await safe_edit(current_message, sanitized_response, trace_id="final_edit", retry=retry, allowed_mentions=ALLOWED_MENTIONS)
                 except discord.errors.NotFound:
                     logging.warning(f"最終訊息 {getattr(current_message,'id',None)} 在編輯時找不到，將作為新訊息發送。")
-                    await safe_send(channel, converted_response, trace_id="final_send_fallback", retry=retry)
+                    # 應用安全處理，防止意外觸發群體通知
+                    sanitized_response = _sanitize_response(converted_response)
+                    await safe_send(channel, sanitized_response, trace_id="final_send_fallback", retry=retry)
 
             # 檢查是否需要發送GIF（保持行為）
             gif_tasks = await process_tenor_tags(converted_response, channel)
@@ -1206,12 +1250,18 @@ async def gpt_message(
                 from gpt.core.retry_controller import RetryController
                 retry = RetryController(max_retries=2, base_delay=0.5, jitter=0.2, retryable_codes={"429", "network"})
                 try:
-                    await safe_edit(message_to_edit, error_message, trace_id="error_edit", retry=retry)
+                    # 應用安全處理，防止意外觸發群體通知
+                    sanitized_error_message = _sanitize_response(error_message)
+                    await safe_edit(message_to_edit, sanitized_error_message, trace_id="error_edit", retry=retry, allowed_mentions=ALLOWED_MENTIONS)
                 except discord.errors.NotFound:
-                    await safe_send(message.channel, error_message, trace_id="error_send_fallback", retry=retry)
+                    # 應用安全處理，防止意外觸發群體通知
+                    sanitized_error_message = _sanitize_response(error_message)
+                    await safe_send(message.channel, sanitized_error_message, trace_id="error_send_fallback", retry=retry, allowed_mentions=ALLOWED_MENTIONS)
             else:
                 from gpt.utils.discord_utils import safe_send
-                await safe_send(message.channel, error_message, trace_id="error_send_noedit", retry=None)
+                # 應用安全處理，防止意外觸發群體通知
+                sanitized_error_message = _sanitize_response(error_message)
+                await safe_send(message.channel, sanitized_error_message, trace_id="error_send_noedit", retry=None, allowed_mentions=ALLOWED_MENTIONS)
         finally:
             # 維持介面語意最小入侵：仍回傳累積訊息，但不回傳空字串
             # 若需要更嚴格，可 raise；此處保留 message_result 內容。
