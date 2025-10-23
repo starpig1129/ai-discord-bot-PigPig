@@ -9,7 +9,7 @@ import logging
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -967,6 +967,16 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
+
+                # 檢查 segment_id 是否已經存在
+                cursor.execute("""
+                    SELECT segment_id FROM conversation_segments WHERE segment_id = ?
+                """, (sanitized_segment_id,))
+
+                existing_segment = cursor.fetchone()
+                if existing_segment:
+                    self.logger.warning(f"片段 {sanitized_segment_id} 已存在，跳過建立操作")
+                    return sanitized_segment_id
 
                 # 1. 建立對話片段主記錄
                 cursor.execute("""
