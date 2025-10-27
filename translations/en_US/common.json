@@ -2,23 +2,23 @@
     "commands": {
         "help": {
             "name": "help",
-            "description": "Display all commands"
+            "description": "Show all commands"
         },
         "set_language": {
             "name": "set_language",
-            "description": "Set server display language",
+            "description": "Set the server's language",
             "options": {
-                "language": "Choose language"
+                "language": "Choose the language to use"
             },
             "responses": {
-                "success": "Server language has been set to: {language}",
-                "error": "Error occurred while setting language. Please try again later.",
+                "success": "Server language set to: {language}",
+                "error": "Error setting language, please try again later.",
                 "unsupported": "Unsupported language option."
             }
         },
         "current_language": {
             "name": "current_language",
-            "description": "Show current server language",
+            "description": "Show the current server language",
             "responses": {
                 "current": "Current server language: {language}"
             }
@@ -47,9 +47,9 @@
             },
             "responses": {
                 "processing": "Calculating...",
-                "result": "Result: {expression} = {result}",
-                "error_too_long": "Error: Expression is too long. Please shorten it and try again.",
-                "error_undefined_function": "Error: Expression contains undefined functions.",
+                "result": "Calculation result: {expression} = {result}",
+                "error_too_long": "Error: Expression too long, please shorten and try again.",
+                "error_undefined_function": "Error: Expression contains undefined function.",
                 "error_unsupported_elements": "Error: Expression contains unsupported elements.",
                 "error_general": "Calculation error: Unable to parse or calculate the expression."
             }
@@ -66,8 +66,8 @@
                 "received": "Reminder received",
                 "invalid_format": "Invalid time format. Please use '10 minutes later' or '2023-12-31 20:00:00' format.",
                 "future_time_required": "Reminder time must be in the future.",
-                "confirm_setup": "Reminder set: Will remind {user} in {duration} about: {message}",
-                "reminder_message": "{user} Reminder: {message}",
+                "confirm_setup": "Reminder set: Will remind {user} {message} in {duration}",
+                "reminder_message": "{user} reminder: {message}",
                 "reminder_sent": "Reminder sent to {user}",
                 "error_setting": "Error setting reminder: {error}"
             },
@@ -89,16 +89,16 @@
         },
         "generate_image": {
             "name": "generate_image",
-            "description": "Generate or edit images",
+            "description": "Generate or edit image",
             "options": {
-                "prompt": "Text prompt for generating or editing images"
+                "prompt": "Prompt for generating or editing image"
             },
             "responses": {
-                "image_generated": "Image generated successfully",
+                "image_generated": "Image generated",
                 "gemini_error": "Gemini API error: {error}",
-                "all_methods_failed": "All image generation methods failed. Please try again later.",
+                "all_methods_failed": "All image generation methods failed, please try again later.",
                 "general_error": "Error generating image: {error}",
-                "local_model_processing": "Processing with local model...",
+                "local_model_processing": "Generating with local model...",
                 "local_model_complete": "Local model generation complete!"
             },
             "errors": {
@@ -114,7 +114,7 @@
             "description": "Perform internet search",
             "options": {
                 "query": "Search query",
-                "search_type": "Type of search"
+                "search_type": "Search type"
             },
             "choices": {
                 "general": "General search",
@@ -128,22 +128,22 @@
                 "processing": "Processing search results...",
                 "completed": "Search completed",
                 "unknown_type": "Unknown search type: {type}",
-                "no_videos_found": "No videos found. Please try different keywords.",
-                "youtube_result": "YouTube Search Result:\nTitle: {title}\nChannel: {channel}\nViews: {views}\nLink: {url}",
-                "search_failed": "Search failed. Please try different keywords. Error: {error}"
+                "no_videos_found": "No related videos found, please try other keywords.",
+                "youtube_result": "YouTube search result:\nTitle: {title}\nChannel: {channel}\nViews: {views}\nLink: {url}",
+                "search_failed": "Search failed, please try other keywords. Error: {error}"
             },
             "errors": {
                 "search_failed": "Search failed: {error}",
                 "no_valid_url": "No valid URL found",
-                "no_valid_content": "Failed to fetch any valid content",
-                "processing_error": "Error occurred while processing search results: {error}",
+                "no_valid_content": "No valid content retrieved",
+                "processing_error": "Error processing search results: {error}",
                 "network_error": "Network connection error: {error}",
-                "timeout_error": "Search request timed out",
+                "timeout_error": "Search request timeout",
                 "invalid_query": "Invalid search query",
                 "image_download_failed": "Image download failed",
-                "image_element_not_found": "Unable to find image elements or redirect URL elements",
-                "eat_no_food": "No such food available",
-                "eat_system_error": "I wanted to recommend {keyword}, but sorry the system encountered an error: {error}"
+                "image_element_not_found": "Image element or redirect URL not found",
+                "eat_no_food": "No such food",
+                "eat_system_error": "Originally wanted to recommend {keyword}, but sorry system error QQ: {error}"
             }
         },
         "userdata": {
@@ -161,9 +161,9 @@
             "responses": {
                 "searching": "Searching user data...",
                 "updating": "Updating data...",
-                "data_found": "Data for user <@{user_id}>: {data}",
-                "data_not_found": "No data found for user <@{user_id}>.",
-                "data_updated": "Updated data for user <@{user_id}>: {data}",
+                "data_found": "User <@{user_id}> data: {data}",
+                "data_not_found": "User <@{user_id}> data not found.",
+                "data_updated": "Updated user <@{user_id}> data: {data}",
                 "data_created": "Created data for user <@{user_id}>: {data}",
                 "invalid_action": "Invalid action. Please use 'read' or 'save'."
             }
@@ -172,9 +172,9 @@
             "name": "mode",
             "description": "Set playback mode",
             "choices": {
-                "no_loop": "No Loop",
-                "loop_queue": "Loop Queue",
-                "loop_single": "Loop Single"
+                "no_loop": "No loop",
+                "loop_queue": "Loop queue",
+                "loop_single": "Loop single"
             },
             "responses": {
                 "success": "Playback mode set to: {mode}"
@@ -182,39 +182,40 @@
         },
         "shuffle": {
             "name": "shuffle",
-            "description": "Toggle shuffle playback",
+            "description": "Toggle shuffle",
             "responses": {
-                "enabled": "enabled",
-                "disabled": "disabled",
-                "success": "Shuffle playback {status}"
+                "enabled": "Enabled",
+                "disabled": "Disabled",
+                "success": "Shuffle {status}"
             }
         },
         "play": {
             "name": "play",
-            "description": "Play a video (URL or keywords) or refresh the UI",
+            "description": "Play video (URL or keyword) or refresh UI",
             "options": {
-                "query": "Video URL, search keywords, or leave blank to refresh UI"
+                "query": "Video URL, search keyword, or leave blank to refresh UI"
             },
             "errors": {
                 "no_voice_channel": "Please join a voice channel first!",
                 "playlist_download_failed": "Error downloading playlist: {error}",
-                "queue_full_title": "Queue is full",
-                "queue_full_desc": "Please wait for the current songs to finish before adding more.",
+                "queue_full_title": "Playlist full",
+                "queue_full_desc": "Please wait for current song to finish before adding new songs",
                 "video_info_failed": "Error getting video info: {error}",
-                "no_results": "No related videos found.",
-                "playback_error": "Error during playback",
-                "attempting_next": "Attempting to play the next song...",
+                "no_results": "No related videos found",
+                "playback_error": "Error playing music",
+                "attempting_next": "Attempting to play next song...",
                 "playback_failed_title": "Playback failed",
-                "playback_failed_desc": "Please use /play to try again.",
-                "nothing_playing": "Nothing is currently playing."
+                "playback_failed_desc": "Please use /play to replay",
+                "nothing_playing": "Currently not playing any song."
             },
             "responses": {
-                "playlist_added": "Added {count} songs to the queue (Total: {total})",
-                "song_added": "Added to queue: {title}",
-                "select_song": "Please select a song to play:",
-                "search_results_title": "YouTube Search Results",
+                "playlist_added": "Added {count} songs to playlist (total {total})",
+                "song_added": "Added to playlist: {title}",
+                "select_song": "Please select song to play:",
+                "search_results_title": "YouTube search results",
                 "queue_finished": "Playlist finished!",
-                "refreshed_ui": "Refreshed the player interface."
+                "refreshed_ui": "Refreshed playback UI.",
+                "recovering_state": "Detected abnormal playback state, attempting recovery..."
             }
         },
         "set_channel_mode": {
@@ -262,16 +263,16 @@
         },
         "system_prompt": {
             "name": "system_prompt",
-            "description": "System Prompt Management - Unified Management Interface",
+            "description": "System prompt management - unified interface",
             "ui": {
                 "main_menu": {
                     "title": "🤖 System Prompt Management",
-                    "description": "Welcome to the unified system prompt management interface! Please select a function to execute:",
+                    "description": "Welcome to the unified system prompt management interface! Please select the function to execute:",
                     "main_functions_title": "🔧 Main Functions",
-                    "main_functions_description": "• **Set Prompt** - Set channel or server system prompts\n• **View Config** - View current system prompt configuration\n• **Module Edit** - Edit specific YAML modules\n• **Copy Prompt** - Copy system prompts to other channels\n• **Remove Prompt** - Remove configured system prompts\n• **Reset Config** - Reset system prompt configuration",
+                    "main_functions_description": "• **Set Prompt** - Set channel or server system prompt\n• **View Config** - View current system prompt configuration\n• **Module Edit** - Edit specific YAML module\n• **Copy Prompt** - Copy system prompt to other channels\n• **Remove Prompt** - Remove set system prompt\n• **Reset Config** - Reset system prompt configuration",
                     "usage_title": "📋 Usage Instructions",
-                    "usage_description": "Click the buttons below to execute corresponding functions.\nThe system supports three-tier inheritance: YAML Base → Server Default → Channel Specific",
-                    "footer": "Tip: All operations undergo permission checks to ensure security"
+                    "usage_description": "Click the buttons below to execute the corresponding function.\nSystem supports three-layer inheritance: YAML base → Server default → Channel specific",
+                    "footer": "Note: All operations will perform permission checks for security"
                 },
                 "buttons": {
                     "set_prompt": "Set Prompt",
@@ -280,7 +281,7 @@
                     "copy_prompt": "Copy Prompt",
                     "remove_prompt": "Remove Prompt",
                     "reset_config": "Reset Config",
-                    "back_to_main": "Back to Main Menu",
+                    "back_to_main": "Back to Main",
                     "channel_specific": "Channel Specific",
                     "server_default": "Server Default",
                     "channel_module": "Channel Module",
@@ -303,24 +304,24 @@
                 },
                 "menus": {
                     "set_prompt_title": "⚙️ Set System Prompt",
-                    "set_prompt_description": "Please select the scope to configure",
+                    "set_prompt_description": "Please select the scope to set",
                     "view_options_title": "👁️ View System Prompt Configuration",
-                    "view_options_description": "Please select viewing options",
-                    "module_edit_title": "📦 Modular Editing",
-                    "module_edit_description": "Please select the module and scope to edit",
+                    "view_options_description": "Please select view options",
+                    "module_edit_title": "📦 Module Editing",
+                    "module_edit_description": "Please select module and scope to edit",
                     "module_scope_title": "📦 Edit {scope} Module",
-                    "module_scope_description": "Please select the module to edit",
+                    "module_scope_description": "Please select module to edit",
                     "copy_prompt_title": "📋 Copy System Prompt",
                     "copy_prompt_description": "Please select source and target channels",
                     "remove_prompt_title": "🗑️ Remove System Prompt",
-                    "remove_prompt_description": "Please select the scope to remove",
+                    "remove_prompt_description": "Please select scope to remove",
                     "reset_config_title": "🔄 Reset System Prompt",
-                    "reset_config_description": "Please select the scope to reset"
+                    "reset_config_description": "Please select scope to reset"
                 },
                 "modals": {
                     "system_prompt": {
                         "title": "Set System Prompt",
-                        "title_channel": "Set #{channel} System Prompt",
+                        "title_channel": "Set Channel #{channel} System Prompt",
                         "title_server": "Set Server Default System Prompt",
                         "title_edit": "Edit System Prompt",
                         "prompt_label": "System Prompt Content",
@@ -336,8 +337,8 @@
                     "channel_placeholder": "Select Channel",
                     "from_channel_placeholder": "Select Source Channel",
                     "to_channel_placeholder": "Select Target Channel",
-                    "module_placeholder": "Select module to edit",
-                    "module_description": "Edit {module} module"
+                    "module_placeholder": "Select Module to Edit",
+                    "module_description": "Edit {module} Module"
                 },
                 "embeds": {
                     "system_prompt_title": "🤖 System Prompt Settings",
@@ -347,51 +348,51 @@
             },
             "messages": {
                 "success": {
-                    "set": "✅ System Prompt Set Successfully",
-                    "set_description": "Successfully set system prompt for {scope}",
-                    "remove": "✅ Removal Successful",
-                    "remove_description": "Successfully removed system prompt for {scope}",
-                    "copy": "✅ Copy Successful",
+                    "set": "✅ System prompt set successfully",
+                    "set_description": "Successfully set {scope} system prompt",
+                    "remove": "✅ Removal successful",
+                    "remove_description": "Successfully removed {scope} system prompt",
+                    "copy": "✅ Copy successful",
                     "copy_description": "Successfully copied system prompt from #{from_channel} to #{to_channel}",
-                    "reset": "✅ Reset Successful",
+                    "reset": "✅ Reset successful",
                     "reset_description": "Successfully reset {scope} system prompt settings",
-                    "operation_confirmed": "✅ Operation Confirmed",
-                    "operation_cancelled": "❌ Operation Cancelled"
+                    "operation_confirmed": "✅ Operation confirmed",
+                    "operation_cancelled": "❌ Operation cancelled"
                 },
                 "info": {
-                    "scope_channel": "channel #{channel}",
-                    "scope_server": "server default",
-                    "scope_all": "all",
-                    "content_length": "Content Length",
-                    "created_by": "Set by",
+                    "scope_channel": "Channel #{channel}",
+                    "scope_server": "Server default",
+                    "scope_all": "All",
+                    "content_length": "Content length",
+                    "created_by": "Created by",
                     "source": "Source",
-                    "source_yaml": "YAML Base Prompt",
-                    "source_server": "Server Default + YAML",
-                    "source_channel": "Channel Specific + Server Default + YAML",
+                    "source_yaml": "YAML base prompt",
+                    "source_server": "Server default + YAML",
+                    "source_channel": "Channel specific + Server default + YAML",
                     "source_cache": "Cache",
                     "prompt_length": "{length} characters",
                     "language": "Language",
                     "channel": "Channel",
-                    "inheritance_title": "Inheritance Levels",
+                    "inheritance_title": "Inheritance Hierarchy",
                     "inheritance_yaml": "🔹 YAML Base Prompt",
                     "inheritance_server": "🔸 Server Default Prompt",
                     "inheritance_channel": "🔸 Channel Specific Prompt",
                     "inheritance_none": "YAML Base Only",
                     "modules_description": "The following are YAML system prompt modules that can be overridden:",
-                    "modules_usage": "When setting system prompts, you can use module override functionality to customize specific module content",
-                    "modules_none": "No modules available",
+                    "modules_usage": "When setting system prompts, you can use module override functionality to customize specific modules",
+                    "modules_none": "No available modules",
                     "preview_content": "Content",
                     "preview_source": "Source",
                     "preview_length": "Length"
                 },
                 "confirm": {
-                    "remove_channel": "Are you sure you want to remove the system prompt for channel #{channel}?",
-                    "remove_server": "Are you sure you want to remove the server default system prompt?",
-                    "reset_channel": "Are you sure you want to reset the system prompt for channel #{channel}?",
-                    "reset_server": "Are you sure you want to reset the server default system prompt?",
-                    "reset_all": "Are you sure you want to reset all system prompt settings?\n⚠️ This action cannot be undone!",
+                    "remove_channel": "Are you sure to remove system prompt for channel #{channel}?",
+                    "remove_server": "Are you sure to remove server default system prompt?",
+                    "reset_channel": "Are you sure to reset system prompt for channel #{channel}?",
+                    "reset_server": "Are you sure to reset server default system prompt?",
+                    "reset_all": "Are you sure to reset all system prompt settings?\n⚠️ This operation cannot be undone!",
                     "copy_simple": "Copy system prompt from #{from_channel} to #{to_channel}",
-                    "copy_overwrite": "Copy system prompt from #{from_channel} to #{to_channel}\n⚠️ Target channel already has a system prompt, it will be overwritten",
+                    "copy_overwrite": "Copy system prompt from #{from_channel} to #{to_channel}\n⚠️ Target channel already has system prompt, will be overwritten",
                     "title_remove": "⚠️ Confirm Removal",
                     "title_reset": "⚠️ Confirm Reset",
                     "title_copy": "🔄 Confirm Copy"
@@ -404,71 +405,71 @@
                 }
             },
             "errors": {
-                "permission_denied": "You don't have permission to perform this action",
-                "channel_permission_denied": "You don't have permission to manage this channel's system prompt",
-                "server_permission_denied": "You don't have permission to manage server-level system prompts",
+                "permission_denied": "You do not have permission to perform this operation",
+                "channel_permission_denied": "You do not have permission to manage this channel's system prompt",
+                "server_permission_denied": "You do not have permission to manage server-level system prompt",
                 "prompt_not_found": "System prompt not found",
                 "channel_not_found": "Specified channel not found",
                 "validation_failed": "Validation failed: {error}",
                 "operation_failed": "Operation failed: {error}",
                 "system_error": "System error, please try again later",
-                "timeout": "Operation timed out, please retry",
-                "modal_error": "Error occurred while processing request: {error}",
+                "timeout": "Operation timeout, please retry",
+                "modal_error": "Error processing request: {error}",
                 "unknown_error": "Unknown error occurred, please try again later",
-                "modules_unavailable": "Unable to get module list: {error}"
+                "modules_unavailable": "Unable to retrieve module list: {error}"
             },
             "modules": {
                 "descriptions": {
-                    "base": "Define AI's basic identity and core instructions, including bot name, creator info, and basic settings",
+                    "base": "Define AI's basic identity and core instructions, including bot name, creator info, etc.",
                     "personality": "Set AI's personality traits and expression style, including humor, politeness, language style, etc.",
-                    "answering_principles": "Define basic principles for AI responses, such as priority handling, source attribution, etc.",
-                    "language": "Set AI's language preferences and expression methods, including primary language, style elements, response length, etc.",
-                    "professionalism": "Define AI's performance standards on professional topics, balancing humor and professionalism",
-                    "interaction": "Set AI's interaction modes, including conversation style, focus management, etc.",
-                    "formatting": "Define formatting rules for Discord environment, including Markdown syntax, mention formats, etc.",
-                    "professional_personality": "Integrate professionalism with personality settings to create AI behavior that is both professional and personable"
+                    "answering_principles": "Regulate AI's basic principles for answering questions, such as priority handling, source citation, etc.",
+                    "language": "Set AI's language preference and expression, including main language, style elements, response length, etc.",
+                    "professionalism": "Define AI's performance standards in professional topics, balancing humor and professionalism",
+                    "interaction": "Set AI's interaction mode, including conversation style, focus management, etc.",
+                    "formatting": "Regulate formatting rules in Discord environment, including Markdown syntax, mention formats, etc.",
+                    "professional_personality": "Integrate professionalism and personalization settings to create a professional yet personalized AI performance"
                 },
                 "select_descriptions": {
                     "base": "Basic identity and core instructions",
                     "personality": "Personality traits and expression style",
-                    "answering_principles": "Basic principles for AI responses",
-                    "language": "Language preferences and expression methods",
-                    "professionalism": "Performance standards on professional topics",
-                    "interaction": "Interaction modes and conversation style",
+                    "answering_principles": "Basic principles for answering questions",
+                    "language": "Language preference and expression",
+                    "professionalism": "Performance standards in professional topics",
+                    "interaction": "Interaction mode and conversation style",
                     "formatting": "Discord formatting rules",
-                    "professional_personality": "Professional personality configuration"
+                    "professional_personality": "Professional personalization settings"
                 },
                 "modules_select_descriptions": {
                     "base": "Basic identity and core instructions",
                     "personality": "Personality traits and expression style",
-                    "answering_principles": "Basic principles for AI responses",
-                    "language": "Language preferences and expression methods",
-                    "professionalism": "Performance standards on professional topics",
-                    "interaction": "Interaction modes and conversation style",
+                    "answering_principles": "Basic principles for answering questions",
+                    "language": "Language preference and expression",
+                    "professionalism": "Performance standards in professional topics",
+                    "interaction": "Interaction mode and conversation style",
                     "formatting": "Discord formatting rules",
-                    "professional_personality": "Professional personality configuration"
+                    "professional_personality": "Professional personalization settings"
                 },
                 "help": {
                     "title": "📦 Module Descriptions",
-                    "description": "The following modules can be individually edited to customize AI behavior:",
-                    "usage_tip": "💡 Tip: Default content will be displayed as reference when editing modules",
-                    "inheritance_note": "⚠️ Note: Module editing will override corresponding YAML module content"
+                    "description": "The following modules can be edited individually to customize AI behavior:",
+                    "usage_tip": "💡 Tip: When editing modules, default content will be shown as reference",
+                    "inheritance_note": "⚠️ Note: Module editing will override the corresponding YAML module content"
                 }
             },
             "user_experience": {
                 "default_content": {
-                    "loaded": "✅ Default content loaded as editing base",
+                    "loaded": "✅ Loaded default content as editing base",
                     "loading_failed": "⚠️ Failed to load default content, starting from blank",
-                    "effective_prompt_loaded": "📝 Current effective full system prompt loaded",
-                    "module_default_loaded": "📦 Default content for {module} module loaded"
+                    "effective_prompt_loaded": "📝 Loaded current effective full system prompt",
+                    "module_default_loaded": "📦 Loaded default content for {module} module"
                 },
                 "editing": {
-                    "based_on_current": "Edit based on current effective system prompt...",
-                    "based_on_default": "Edit based on default content for {module} module...",
+                    "based_on_current": "Editing based on current effective system prompt...",
+                    "based_on_default": "Editing based on default content for {module} module...",
                     "from_scratch": "Please enter new content..."
                 },
                 "guidance": {
-                    "first_time_edit": "🎯 First time editing: You can modify based on default content",
+                    "first_time_edit": "🎯 First time editing tip: You can modify based on default content",
                     "module_explanation": "💭 This module is responsible for: {description}",
                     "inheritance_info": "🔗 This setting will affect: {scope}"
                 }
@@ -476,13 +477,13 @@
         },
         "search_gif": {
             "name": "search_gif",
-            "description": "Search for GIF",
+            "description": "Search GIF",
             "options": {
                 "query": "Search query"
             },
             "responses": {
-                "not_found": "No relevant GIF found.",
-                "searching": "Searching for GIF..."
+                "not_found": "No related GIF found.",
+                "searching": "Searching GIF..."
             }
         },
         "upload_schedule": {
@@ -524,10 +525,10 @@
             "responses": {
                 "success": "Query completed",
                 "error": "Error querying schedule: {error}",
-                "no_schedule": "Your schedule not found. Please use `/upload_schedule` command to upload your schedule.",
+                "no_schedule": "No schedule found for you. Please use `/upload_schedule` to upload a schedule.",
                 "user_not_found": "User not found.",
                 "channel_not_found": "Channel not found.",
-                "permission_denied": "You or the queried user don't have permission to view this channel.",
+                "permission_denied": "You or the queried user does not have permission to view this channel.",
                 "invalid_time_format": "Invalid time format. Please use YYYY-MM-DD HH:MM:SS format.",
                 "invalid_query_type": "Invalid query type."
             }
@@ -546,38 +547,71 @@
         },
         "model_management": {
             "name": "model_management",
-            "description": "Manage AI models (Developer only)",
+            "description": "Manage AI models (developer only)",
             "choices": {
                 "action": {
-                    "unload": "Unload Model",
-                    "load": "Load Model"
+                    "unload": "Unload model",
+                    "load": "Load model"
                 }
             },
             "responses": {
-                "model_unloaded": "Model has been unloaded.",
-                "model_loaded": "Model has been loaded.",
+                "model_unloaded": "Model unloaded.",
+                "model_loaded": "Model loaded.",
                 "operation_completed": "Operation completed.",
-                "error": "An error occurred while executing the operation: {error}",
-                "model_already_unloaded": "Model is already unloaded or not yet loaded."
+                "error": "Error executing operation: {error}",
+                "model_already_unloaded": "Model already unloaded or not loaded."
+            }
+        },
+        "botinfo": {
+            "name": "botinfo",
+            "description": "Show bot detailed information",
+            "title": "🤖 Bot Information Overview",
+            "fields": {
+                "basic_stats": {
+                    "name": "📊 Basic Statistics",
+                    "servers": "Server Count",
+                    "users": "User Count",
+                    "text_channels": "Text Channels",
+                    "voice_channels": "Voice Channels",
+                    "loaded_cogs": "Loaded Cogs"
+                },
+                "performance": {
+                    "name": "⚡ Performance Monitoring",
+                    "latency": "Network Latency",
+                    "memory_usage": "Memory Usage",
+                    "uptime": "Uptime"
+                },
+                "cogs": {
+                    "name": "🔧 Feature Modules",
+                    "commands": "commands",
+                    "no_cogs": "No loaded modules"
+                }
+            },
+            "status": {
+                "online": "🟢 Online",
+                "idle": "🟡 Idle",
+                "dnd": "🔴 Do Not Disturb",
+                "offline": "⚫ Offline",
+                "unknown": "❓ Unknown"
             }
         }
     },
     "general": {
         "no_description": "No description",
         "help_title": "Command Help",
-        "help_description": "Display detailed information about all available commands"
+        "help_description": "Show detailed information for all available commands"
     },
     "errors": {
-        "permission_denied": "You don't have permission to perform this action. This command is restricted to administrators only.",
+        "permission_denied": "You do not have permission to execute this operation, admin only.",
         "command_failed": "Command execution failed: {error}",
         "invalid_input": "Invalid input.",
-        "unknown_error": "An unknown error occurred. Please try again later."
+        "unknown_error": "Unknown error occurred, please try again later."
     },
     "system": {
         "chat_bot": {
             "language": {
                 "answer_in": "Always answer in English",
-                "style": "Use casual English expressions and common idioms",
+                "style": "Appropriately use English idioms or playful expressions",
                 "references": "Use [Title](<URL>) format for references"
             },
             "responses": {
@@ -585,15 +619,15 @@
             }
         },
         "cot_ai": {
-            "description": "Chain of Thought Reasoning AI System",
+            "description": "Chain of Thought AI System",
             "prompts": {
-                "system_prompt": "You are an expert AI assistant with advanced reasoning capabilities. Your task is to provide detailed, step-by-step explanations of your thought process. For each step:\n\n1. Provide a clear, concise title describing the current reasoning phase.\n2. Elaborate on your thought process in the content section.\n3. Decide whether to continue reasoning or provide a final answer.\n4. Decide whether to use the basic model or the advanced model for the next reasoning step.\n\nResponse Format:\nUse JSON with keys: 'title', 'content', 'next_action' (values: 'continue' or 'final_answer'), 'model_selection' (values:'advanced')\n\nKey Instructions:\n- Employ at least 5 distinct reasoning steps.\n- Acknowledge your limitations as an AI and explicitly state what you can and cannot do.\n- Actively explore and evaluate alternative answers or approaches.\n- Critically assess your own reasoning; identify potential flaws or biases.\n- When re-examining, employ a fundamentally different approach or perspective.\n- Utilize at least 3 diverse methods to derive or verify your answer.\n- Incorporate relevant domain knowledge and best practices in your reasoning.\n- Quantify certainty levels for each step and the final conclusion when applicable.\n- Consider potential edge cases or exceptions to your reasoning.\n- Provide clear justifications for eliminating alternative hypotheses.",
-                "user_prompt_template": "Please analyze this question using step-by-step reasoning: {question}"
+                "system_prompt": "You are a professional AI assistant with advanced reasoning capabilities. Your task is to provide detailed step-by-step thinking process explanations. For each step:\n\n1. Provide a clear, concise title describing the current reasoning stage.\n2. Elaborate your thinking process in detail in the content section.\n3. Decide whether to continue reasoning or provide final answer.\n4. Decide whether to use base model or advanced model for next reasoning step.\n\nResponse format:\nUse JSON format with keys: 'title', 'content', 'next_action' (value: 'continue' or 'final_answer'), 'model_selection' (value: 'advanced')\n\nKey instructions:\n- Use at least 5 different reasoning steps.\n- Acknowledge your limitations as an AI, clearly stating what you can and cannot do.\n- Actively explore and evaluate alternative answers or methods.\n- Critically evaluate your own reasoning; identify potential flaws or biases.\n- When re-evaluating, adopt a fundamentally different approach or perspective.\n- Use at least 3 different methods to derive or verify your answer.\n- Incorporate relevant domain knowledge and best practices in reasoning.\n- Quantify certainty levels for each step and final conclusion where applicable.\n- Consider potential edge cases or exceptions in reasoning.\n- Provide clear reasons for excluding alternative hypotheses.",
+                "user_prompt_template": "Please use step-by-step reasoning to analyze this question: {question}"
             },
             "errors": {
                 "api_error": "API request error: {error}",
                 "parsing_error": "Response parsing error: {error}",
-                "general_error": "Error occurred while processing request: {error}",
+                "general_error": "Error processing request: {error}",
                 "model_not_available": "Model not available: {error}",
                 "json_decode_error": "JSON decode error: {error}"
             }
@@ -611,25 +645,25 @@
                 "translation_load_error": "Error loading translation file {file_path}: {error}",
                 "config_read_error": "Error reading language config: {error}",
                 "config_save_error": "Error saving language config: {error}",
-                "path_traversal_error": "Unable to continue traversing path {path}, current result is not a dictionary: {result}",
-                "format_error": "Error formatting translation, missing parameters: {error}",
+                "path_traversal_error": "Cannot continue path traversal {path}, current result is not dict: {result}",
+                "format_error": "Error formatting translation, missing parameter: {error}",
                 "translation_not_found": "Translation not found: {path}",
                 "translation_error": "Error translating text: {error}"
             }
         },
         "gif_tools": {
-            "description": "GIF search and management tool",
+            "description": "GIF Search and Management Tool",
             "logs": {
                 "searching_gif": "Searching GIF: {query}",
                 "found_gif": "Found GIF: {url}",
                 "api_error": "Tenor API response error: {status_code}",
                 "search_error": "GIF search error: {error}",
-                "get_url_error": "Error occurred while getting GIF URL: {error}",
+                "get_url_error": "Error getting GIF URL: {error}",
                 "empty_query_warning": "Empty search query"
             }
         },
         "schedule": {
-            "description": "Schedule management system",
+            "description": "Schedule Management System",
             "format": {
                 "full_schedule_title": "**Full Schedule:**",
                 "empty_schedule": "Schedule is empty.",
@@ -637,13 +671,13 @@
                 "no_events": "No events.",
                 "time_column": "Time",
                 "description_column": "Description",
-                "specific_time_title": "**Events at {time}:**",
-                "no_events_found": "No events found at that time.",
+                "specific_time_title": "**{time} Schedule:**",
+                "no_events_found": "No events found for that time.",
                 "next_event": "Next event: {time} - {description}",
                 "no_next_event": "No next event found."
             },
             "errors": {
-                "yaml_parse_error": "YAML file parsing error: {error}"
+                "yaml_parse_error": "YAML parse error: {error}"
             }
         },
         "model_management": {
@@ -655,8 +689,8 @@
                 "completed": "Model operation completed"
             },
             "errors": {
-                "permission_denied": "You don't have permission to perform this action. Developer access only.",
-                "model_not_found": "The specified model could not be found.",
+                "permission_denied": "You do not have permission to execute this operation, developer only.",
+                "model_not_found": "Specified model not found.",
                 "operation_failed": "Model operation failed: {error}"
             },
             "userdata": {
@@ -670,16 +704,16 @@
                 "errors": {
                     "no_data": "No user data found",
                     "analysis_failed": "Data analysis failed: {error}",
-                    "update_failed": "Failed to update user data: {error}",
-                    "ai_processing_failed": "AI processing error occurred while handling user data: {error}",
+                    "update_failed": "Update user data failed: {error}",
+                    "ai_processing_failed": "AI processing user data error: {error}",
                     "database_error": "Database operation error: {error}",
                     "invalid_user": "Invalid user ID",
-                    "permission_denied": "You don't have permission to access this user's data"
+                    "permission_denied": "You do not have permission to access this user's data"
                 },
                 "logs": {
                     "data_retrieved": "Retrieved data for user {user_id}",
                     "data_updated": "Updated data for user {user_id}",
-                    "data_created": "Created new data for user {user_id}",
+                    "data_created": "Created data for user {user_id}",
                     "ai_processing": "Using AI to process user data update",
                     "operation_completed": "User data operation completed"
                 }
@@ -709,60 +743,60 @@
                 "second_format": "{value} seconds"
             },
             "errors": {
-                "parse_error": "Time parsing error: {error}",
-                "reminder_failed": "Failed to set reminder: {error}",
+                "parse_error": "Time parse error: {error}",
+                "reminder_failed": "Reminder setup failed: {error}",
                 "invalid_time_unit": "Invalid time unit: {unit}",
-                "time_out_of_range": "Time is out of valid range"
+                "time_out_of_range": "Time out of range"
             },
             "logs": {
-                "reminder_set": "Set reminder for user {user_id}: in {duration}",
+                "reminder_set": "Reminder set for user {user_id}: {duration} later",
                 "reminder_triggered": "Reminder triggered: user {user_id}",
-                "parse_success": "Successfully parsed time: {time_str} -> {parsed_time}",
-                "parse_failed": "Time parsing failed: {time_str}"
+                "parse_success": "Time parsed successfully: {time_str} -> {parsed_time}",
+                "parse_failed": "Time parse failed: {time_str}"
             }
         },
         "music": {
             "player": {
                 "now_playing": "🎵 Now Playing",
-                "uploader": "👤 Channel",
+                "uploader": "👤 Uploader",
                 "duration": "⏱️ Duration",
                 "views": "👀 Views",
                 "progress": "🎵 Progress",
                 "queue": "📜 Queue",
-                "queue_empty": "Queue is empty",
+                "queue_empty": "Queue empty",
                 "added_by": "Added by {user}",
                 "live": "Live"
             },
             "controls": {
-                "no_music": "❌ No music is currently playing!",
-                "no_songs": "❌ No songs available to play!",
-                "previous": "⏮️ {user} went back to previous song",
+                "no_music": "❌ No music playing!",
+                "no_songs": "❌ No songs available!",
+                "previous": "⏮️ {user} went to previous",
                 "paused": "⏸️ {user} paused the music",
                 "resumed": "▶️ {user} resumed the music",
                 "skipped": "⏭️ {user} skipped the music",
                 "stopped": "⏹️ {user} stopped playback",
-                "mode_changed": "🔄 {user} set play mode to {mode}",
+                "mode_changed": "🔄 {user} set mode to {mode}",
                 "shuffle_toggled": "🔀 {user} {status} shuffle",
-                "now_playing_prefix": "▶️ Now Playing:",
-                "queue_songs": "Queued Songs:",
+                "now_playing_prefix": "▶️ Now playing:",
+                "queue_songs": "Queued songs:",
                 "update_failed": "Failed to update playlist"
             },
             "select": {
                 "timeout": "⌛ | Song selection timed out",
                 "duration_label": "Duration: {duration}",
-                "placeholder": "Select a song to play",
-                "queue_full": "❌ | Queue is full",
-                "wait_message": "Please wait for the current song to finish before adding new songs",
+                "placeholder": "Select song to play",
+                "queue_full": "❌ | Playlist full",
+                "wait_message": "Please wait for current song to finish before adding new songs",
                 "processing": "⏳ | Processing",
                 "processing_desc": "Processing your selection, please wait...",
-                "added": "✅ | Added to queue: {title}",
-                "error": "❌ | Error occurred while selecting song"
+                "added": "✅ | Added to playlist: {title}",
+                "error": "❌ | Error selecting song"
             },
             "autoplay": {
-                "enabled": "enabled",
-                "disabled": "disabled",
+                "enabled": "Enabled",
+                "disabled": "Disabled",
                 "toggled": "Autoplay {status}",
-                "playing": "Autoplay: Added {song_title} to the queue"
+                "playing": "Autoplay: Added {song_title} to queue"
             }
         }
     }
