@@ -125,7 +125,7 @@ class SQLiteUserManager:
                 self.logger.info("使用者資料表初始化完成")
                 
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "使用者資料表建立失敗"))
+            asyncio.create_task(func.report_error(e, "使用者資料表建立失敗"))
             raise DatabaseError(f"建立使用者資料表失敗: {e}")
     
     async def get_user_info(self, user_id: str, use_cache: bool = True) -> Optional[UserInfo]:
@@ -203,7 +203,7 @@ class SQLiteUserManager:
                 return None
                 
         except Exception as e:
-            await func.func.report_error(e, f"使用者資訊檢索失敗 (使用者: {user_id})")
+            await func.report_error(e, f"使用者資訊檢索失敗 (使用者: {user_id})")
             return None
     
     async def get_multiple_users(self, user_ids: List[str], use_cache: bool = True) -> Dict[str, UserInfo]:
@@ -289,7 +289,7 @@ class SQLiteUserManager:
                             self._update_cache(row[0], user_info)
                             
             except Exception as e:
-                await func.func.report_error(e, "多使用者資訊檢索失敗")
+                await func.report_error(e, "多使用者資訊檢索失敗")
         
         return result
     
@@ -342,7 +342,7 @@ class SQLiteUserManager:
                 return True
                 
         except Exception as e:
-            await func.func.report_error(e, f"使用者資料更新失敗 (使用者: {user_id})")
+            await func.report_error(e, f"使用者資料更新失敗 (使用者: {user_id})")
             return False
     
     async def update_user_activity(self, user_id: str, display_name: str = None) -> bool:
@@ -385,7 +385,7 @@ class SQLiteUserManager:
                 return True
                 
         except Exception as e:
-            await func.func.report_error(e, f"使用者活動更新失敗 (使用者: {user_id})")
+            await func.report_error(e, f"使用者活動更新失敗 (使用者: {user_id})")
             return False
     
     async def search_users_by_display_name(self, name_pattern: str, limit: int = 10) -> List[UserInfo]:
@@ -455,7 +455,7 @@ class SQLiteUserManager:
                 return results
                 
         except Exception as e:
-            await func.func.report_error(e, f"使用者搜尋失敗 (模式: {name_pattern})")
+            await func.report_error(e, f"使用者搜尋失敗 (模式: {name_pattern})")
             return []
     
     async def get_user_statistics(self) -> Dict[str, Any]:
@@ -485,7 +485,7 @@ class SQLiteUserManager:
                 }
                 
         except Exception as e:
-            await func.func.report_error(e, "使用者統計資訊檢索失敗")
+            await func.report_error(e, "使用者統計資訊檢索失敗")
             return {}
     
     async def migrate_from_mongodb(self, mongodb_collection) -> int:
@@ -527,14 +527,14 @@ class SQLiteUserManager:
                         failed_count += 1
                         
                 except Exception as e:
-                    await func.func.report_error(e, f"MongoDB 使用者遷移失敗 (ID: {user_doc.get('_id')})")
+                    await func.report_error(e, f"MongoDB 使用者遷移失敗 (ID: {user_doc.get('_id')})")
                     failed_count += 1
             
             self.logger.info(f"MongoDB 遷移完成: {migrated_count} 成功, {failed_count} 失敗, 總計 {total_users}")
             return migrated_count
             
         except Exception as e:
-            await func.func.report_error(e, "MongoDB 使用者遷移失敗")
+            await func.report_error(e, "MongoDB 使用者遷移失敗")
             return 0
     
     def _update_cache(self, user_id: str, user_info: UserInfo):
@@ -554,7 +554,7 @@ class SQLiteUserManager:
             self._user_cache[user_id] = user_info
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "使用者快取更新失敗"))
+            asyncio.create_task(func.report_error(e, "使用者快取更新失敗"))
     
     def clear_cache(self):
         """清除記憶體快取"""
@@ -598,7 +598,7 @@ class SQLiteUserManager:
                 return count
                 
         except Exception as e:
-            await func.func.report_error(e, "非活躍使用者清理失敗")
+            await func.report_error(e, "非活躍使用者清理失敗")
             return 0
 
 

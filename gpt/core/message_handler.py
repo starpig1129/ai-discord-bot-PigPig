@@ -84,7 +84,7 @@ class MessageHandler:
                     if final_result:
                         processing_cache.cache_result(prompt, user_id, channel_id, final_result)
                 except Exception as e:
-                    await func.func.report_error(e, "Message handling failed")
+                    await func.report_error(e, "Message handling failed")
                     await message_to_edit.edit(content=f"糟糕，處理你的訊息時發生了錯誤：{e}")
         finally:
             self.performance_monitor.stop_timer("total_response_time")

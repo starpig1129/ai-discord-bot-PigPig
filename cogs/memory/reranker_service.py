@@ -13,7 +13,7 @@ import asyncio
 import functools
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
-import function as func
+from function import func
 
 # 在模組載入時就設定環境變數，避免 NoneType 錯誤
 if "HF_HOME" not in os.environ:
@@ -234,7 +234,7 @@ class RerankerService:
             return model, tokenizer
             
         except Exception as e:
-            await func.func.report_error(e, f"Failed to load reranker model {self.reranker_model}")
+            await func.report_error(e, f"Failed to load reranker model {self.reranker_model}")
             self.logger.error(f"無法載入重排序模型 {self.reranker_model}: {e}")
             error_message = str(e) if e is not None else "未知錯誤"
             raise VectorOperationError(f"無法載入重排序模型 {model_name}: {error_message}")
@@ -453,7 +453,7 @@ class RerankerService:
             return reranked_results
             
         except Exception as e:
-            await func.func.report_error(e, f"Failed to rerank results for query '{query}'")
+            await func.report_error(e, f"Failed to rerank results for query '{query}'")
             self.logger.error(f"重排序查詢 '{query}' 失敗: {e}")
             # 降級處理：返回原始結果
             return candidates
@@ -520,7 +520,7 @@ class RerankerService:
             return final_scores
             
         except Exception as e:
-            await func.func.report_error(e, f"Failed to compute rerank scores for query '{query}'")
+            await func.report_error(e, f"Failed to compute rerank scores for query '{query}'")
             self.logger.error(f"計算重排序分數失敗 (查詢: '{query}'): {e}")
             # 返回預設分數
             return [0.0] * len(candidate_texts)
@@ -605,7 +605,7 @@ class RerankerService:
             self.logger.info(f"重排序模型預熱完成，耗時: {warmup_time_str}秒")
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Reranker model warmup failed"))
+            asyncio.create_task(func.report_error(e, "Reranker model warmup failed"))
             self.logger.error(f"重排序模型預熱失敗: {e}")
             # 即使預熱失敗，也應繼續運行
             pass
@@ -656,7 +656,7 @@ class RerankerService:
             except Exception:
                 pass
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "RerankerService cleanup failed"))
+            asyncio.create_task(func.report_error(e, "RerankerService cleanup failed"))
             self.logger.error(f"清理重排序服務時發生錯誤: {e}")
             # 清理階段任何例外都不應向外擴散
             pass

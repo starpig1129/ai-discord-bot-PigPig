@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import discord
 import numpy as np
-import function as func
+from function import func
 
 from .config import MemoryProfile
 from .embedding_service import EmbeddingService
@@ -306,7 +306,7 @@ class SearchEngine:
             return result
             
         except Exception as e:
-            await func.func.report_error(e, "Search execution failed")
+            await func.report_error(e, "Search execution failed")
             raise SearchError(f"搜尋執行失敗: {e}")
     
     async def _semantic_search(self, query: SearchQuery) -> SearchResult:
@@ -353,7 +353,7 @@ class SearchEngine:
         except Exception as chk_e:
             # 健康檢查失敗不阻斷語義搜尋
             self.logger.warning("vector_index_health_check_runtime_error | reason=%s", str(chk_e))
-            await func.func.report_error(chk_e, "Vector index health check failed during semantic search")
+            await func.report_error(chk_e, "Vector index health check failed during semantic search")
 
         query_vector = self.embedding_service.encode_text(query.text)
         
@@ -393,7 +393,7 @@ class SearchEngine:
                 )
             except Exception as e:
                 self.logger.error(f"孤兒 segments 自動清理失敗: {e}")
-                await func.func.report_error(e, "Orphan segment auto-cleanup failed in semantic search")
+                await func.report_error(e, "Orphan segment auto-cleanup failed in semantic search")
             
             # 從候選集中剔除孤兒，避免後續流程誤用
             segment_ids = [seg_id for seg_id in segment_ids if seg_id not in orphan_segment_ids]
@@ -421,7 +421,7 @@ class SearchEngine:
                 self.logger.info(f"已自動清理 {removed_count} 個孤兒 segments。")
             except Exception as e:
                 self.logger.error(f"自動清理孤兒 segments 失敗: {e}")
-                await func.func.report_error(e, "Orphan segment auto-cleanup failed in semantic search (no messages)")
+                await func.report_error(e, "Orphan segment auto-cleanup failed in semantic search (no messages)")
 
             return SearchResult(
                 messages=[], relevance_scores=[], total_found=0,
@@ -507,7 +507,7 @@ class SearchEngine:
                         filtered_messages.append(msg)
                         filtered_scores.append(score)
                 except Exception as e:
-                    await func.func.report_error(e, "Error processing time filter in semantic search")
+                    await func.report_error(e, "Error processing time filter in semantic search")
                     filtered_messages.append(msg)
                     filtered_scores.append(score)
             messages, scores = filtered_messages, filtered_scores
@@ -531,7 +531,7 @@ class SearchEngine:
                 search_method = "semantic_with_rerank"
                 self.logger.debug(f"重排序完成，處理了 {rerank_count} 個候選，返回 {len(messages)} 個結果")
             except Exception as e:
-                await func.func.report_error(e, "Reranking failed in semantic search")
+                await func.report_error(e, "Reranking failed in semantic search")
 
         if len(messages) > query.limit:
             messages = messages[:query.limit]
@@ -658,7 +658,7 @@ class SearchEngine:
             )
             
         except Exception as e:
-            await func.func.report_error(e, "Keyword search failed")
+            await func.report_error(e, "Keyword search failed")
             return SearchResult(
                 messages=[],
                 relevance_scores=[],
@@ -708,7 +708,7 @@ class SearchEngine:
             self.logger.error(f"jieba 模組未安裝，關鍵字搜尋功能受限: {e}")
             return text.split()
         except Exception as e:
-            await func.func.report_error(e, "Keyword extraction failed")
+            await func.report_error(e, "Keyword extraction failed")
             return text.split()
 
     def _calculate_enhanced_keyword_score(
@@ -886,7 +886,7 @@ class SearchEngine:
             )
             
         except Exception as e:
-            await func.func.report_error(e, "Hybrid search failed")
+            await func.report_error(e, "Hybrid search failed")
             return SearchResult(
                 messages=[],
                 relevance_scores=[],
@@ -917,7 +917,7 @@ class SearchEngine:
             return float(similarity)
             
         except Exception as e:
-            await func.func.report_error(e, "Similarity calculation failed")
+            await func.report_error(e, "Similarity calculation failed")
             return 0.0
 
     def get_statistics(self) -> Dict[str, Union[int, float]]:
@@ -981,7 +981,7 @@ class SearchEngine:
             self.logger.info("搜尋引擎效能優化完成")
             
         except Exception as e:
-            await func.func.report_error(e, "Search engine performance optimization failed")
+            await func.report_error(e, "Search engine performance optimization failed")
             optimization_report["error"] = str(e)
         
         return optimization_report
@@ -993,7 +993,7 @@ class SearchEngine:
                 self.reranker_service.warmup()
                 self.logger.info("重排序模型預熱完成")
             except Exception as e:
-                await func.func.report_error(e, "Reranker model warmup failed")
+                await func.report_error(e, "Reranker model warmup failed")
         else:
             self.logger.debug("重排序服務未啟用，跳過預熱")
     
@@ -1009,7 +1009,7 @@ class SearchEngine:
                 self.enable_reranker = True
                 self.logger.info("重排序服務已啟用")
             except Exception as e:
-                await func.func.report_error(e, "Enabling reranker service failed")
+                await func.report_error(e, "Enabling reranker service failed")
         elif not enabled and self.enable_reranker:
             self.enable_reranker = False
             if self.reranker_service:
@@ -1074,10 +1074,10 @@ class SearchEngine:
             self.logger.warning(f"在 Discord 上找不到訊息 ID: {message_id} 或 ID 格式錯誤")
             return None
         except discord.Forbidden as e:
-            await func.func.report_error(e, f"Fetching message {message_id} from Discord failed due to permissions")
+            await func.report_error(e, f"Fetching message {message_id} from Discord failed due to permissions")
             return None
         except Exception as e:
-            await func.func.report_error(e, f"Fetching message {message_id} from Discord failed")
+            await func.report_error(e, f"Fetching message {message_id} from Discord failed")
             return None
 
     def cleanup(self) -> None:
@@ -1101,7 +1101,7 @@ class SearchEngine:
                     self.logger.info("重排序服務已清理")
                 except Exception as e:
                     self.logger.warning(f"清理重排序服務失敗: {e}")
-                    await func.func.report_error(e, "Reranker service cleanup failed")
+                    await func.report_error(e, "Reranker service cleanup failed")
             
             # 重置統計資料
             self._search_count = 0
@@ -1116,4 +1116,4 @@ class SearchEngine:
             self.logger.info("搜尋引擎清理完成")
             
         except Exception as e:
-            await func.func.report_error(e, "Search engine cleanup failed")
+            await func.report_error(e, "Search engine cleanup failed")

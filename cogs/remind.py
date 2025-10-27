@@ -29,7 +29,7 @@ import dateparser
 
 from typing import Optional
 from .language_manager import LanguageManager
-import function as func
+from function import func
 import logging
 
 class ReminderCog(commands.Cog):
@@ -99,7 +99,7 @@ class ReminderCog(commands.Cog):
             return confirm_message
 
         except Exception as e:
-            await func.func.report_error(e, f"An error occurred in setting reminder: {e}")
+            await func.report_error(e, f"An error occurred in setting reminder: {e}")
             error_msg = self.lang_manager.translate(
                 guild_id,
                 "commands",

@@ -27,7 +27,7 @@ from .exceptions import (
     ValidationError,
     PromptNotFoundError
 )
-import function as func
+from function import func
 import asyncio
 
 
@@ -66,7 +66,7 @@ def handle_system_prompt_error(func):
                     f"❌ 操作失敗：{str(e)}", ephemeral=True
                 )
         except Exception as e:
-            await func.func.report_error(e, "System prompt operation error")
+            await func.report_error(e, "System prompt operation error")
             logging.error(f"系統提示操作錯誤: {str(e)}")
             if not interaction.response.is_done():
                 await interaction.response.send_message(
@@ -102,7 +102,7 @@ class SystemPromptCommands(commands.Cog):
             else:
                 self.logger.warning("⚠️ 語言管理器未找到")
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Error setting language manager"))
+            asyncio.create_task(func.report_error(e, "Error setting language manager"))
             self.logger.warning(f"設定語言管理器時發生錯誤: {e}")
         
         self.permission_validator = PermissionValidator(bot)

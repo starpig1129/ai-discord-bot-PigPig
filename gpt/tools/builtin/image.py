@@ -30,7 +30,7 @@ from PIL import Image
 from gpt.tools.registry import tool
 from gpt.tools.tool_context import ToolExecutionContext
 from gpt.core.message_sender import gpt_message
-import function as func
+from function import func
 
 if TYPE_CHECKING:
     from cogs.gen_img import ImageGenerationCog
@@ -79,7 +79,7 @@ async def generate_image(
                )
                return f"Error: Failed to download the provided image URL. Status: {e.status}"
        except Exception as e:
-           await func.func.report_error(e, f"processing image from URL '{image_url}'")
+           await func.report_error(e, f"processing image from URL '{image_url}'")
            return f"Error: Failed to process the provided image URL. {e}"
 
     guild_id = getattr(context, "guild_id", "0")

@@ -18,7 +18,7 @@ from enum import Enum
 from .database import DatabaseManager
 from .memory_manager import MemoryManager
 from .exceptions import MemorySystemError
-import function as func
+from function import func
 
 
 class DataSourceType(Enum):

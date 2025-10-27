@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from .database import DatabaseManager
 from .exceptions import MemorySystemError
 from .search_engine import SearchQuery, SearchResult, SearchType, TimeRange
-import function as func
+from function import func
 
 
 @dataclass
@@ -110,7 +110,7 @@ class FallbackMemoryManager:
             return result
 
         except Exception as e:
-            await func.func.report_error(e, "Fallback search")
+            await func.report_error(e, "Fallback search")
             self.logger.error(f"備用搜尋失敗: {e}")
             raise MemorySystemError(f"備用記憶體搜尋失敗: {e}")
 
@@ -184,7 +184,7 @@ class FallbackMemoryManager:
             return messages[:limit]
 
         except Exception as e:
-            await func.func.report_error(e, "Database search in fallback")
+            await func.report_error(e, "Database search in fallback")
             self.logger.error(f"資料庫搜尋失敗: {e}")
             return []
 
@@ -338,7 +338,7 @@ class FallbackMemoryManager:
             return messages
 
         except Exception as e:
-            await func.func.report_error(e, f"Channel message retrieval for {channel_id}")
+            await func.report_error(e, f"Channel message retrieval for {channel_id}")
             self.logger.error(f"取得頻道訊息失敗: {e}")
             return []
 
@@ -364,7 +364,7 @@ class FallbackMemoryManager:
             return True
 
         except Exception as e:
-            await func.func.report_error(e, "Message addition in fallback")
+            await func.report_error(e, "Message addition in fallback")
             self.logger.error(f"添加訊息到備用記憶系統失敗: {e}")
             return False
 

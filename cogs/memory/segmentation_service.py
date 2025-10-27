@@ -195,7 +195,7 @@ class TextSegmentationService:
                     return None
                     
         except Exception as e:
-            await func.func.report_error(e, f"message segmentation for {channel_id}")
+            await func.report_error(e, f"message segmentation for {channel_id}")
             raise MemorySystemError(f"分割處理失敗: {e}")
     
     async def _should_create_new_segment(
@@ -285,7 +285,7 @@ class TextSegmentationService:
             return similarity < self.config.similarity_threshold
             
         except Exception as e:
-            await func.func.report_error(e, "semantic threshold check")
+            await func.report_error(e, "semantic threshold check")
             return False
     
     async def _check_hybrid_threshold(
@@ -461,7 +461,7 @@ class TextSegmentationService:
             return [] # 返回空列表以符合原始函式簽章
 
         except Exception as e:
-            await func.func.report_error(e, "batch segment saving")
+            await func.report_error(e, "batch segment saving")
             raise MemorySystemError(f"批次儲存失敗: {e}")
     
     async def _calculate_dynamic_interval(self, channel_id: str) -> timedelta:
@@ -497,7 +497,7 @@ class TextSegmentationService:
             return timedelta(minutes=interval_minutes)
             
         except Exception as e:
-            await func.func.report_error(e, f"dynamic interval calculation for {channel_id}")
+            await func.report_error(e, f"dynamic interval calculation for {channel_id}")
             return timedelta(minutes=self.config.base_interval_minutes)
     
     async def _calculate_activity_metrics(
@@ -575,7 +575,7 @@ class TextSegmentationService:
             )
             
         except Exception as e:
-            await func.func.report_error(e, f"activity metrics calculation for {channel_id}")
+            await func.report_error(e, f"activity metrics calculation for {channel_id}")
             return ActivityMetrics()
     
     async def _calculate_semantic_similarity(
@@ -608,7 +608,7 @@ class TextSegmentationService:
             return float(similarity)
             
         except Exception as e:
-            await func.func.report_error(e, "semantic similarity calculation")
+            await func.report_error(e, "semantic similarity calculation")
             return 0.0
     
     async def _get_segment_representative_text(
@@ -644,7 +644,7 @@ class TextSegmentationService:
             return combined_text[:500]  # 限制長度
             
         except Exception as e:
-            await func.func.report_error(e, f"representative text retrieval for segment {segment.segment_id}")
+            await func.report_error(e, f"representative text retrieval for segment {segment.segment_id}")
             return None
     
     async def _finalize_current_segment(self, channel_id: str) -> Optional[ConversationSegment]:
@@ -690,7 +690,7 @@ class TextSegmentationService:
             return current_segment
             
         except Exception as e:
-            await func.func.report_error(e, f"segment finalization for channel {channel_id}")
+            await func.report_error(e, f"segment finalization for channel {channel_id}")
             return None
     
     async def _start_new_segment(
@@ -777,7 +777,7 @@ class TextSegmentationService:
             return sum(similarities) / len(similarities) if similarities else 0.0
             
         except Exception as e:
-            await func.func.report_error(e, f"segment coherence calculation for {segment.segment_id}")
+            await func.report_error(e, f"segment coherence calculation for {segment.segment_id}")
             return 0.0
     
     async def _calculate_segment_vector(
@@ -804,7 +804,7 @@ class TextSegmentationService:
             return vector
             
         except Exception as e:
-            await func.func.report_error(e, f"segment vector calculation for {segment.segment_id}")
+            await func.report_error(e, f"segment vector calculation for {segment.segment_id}")
             return None
     
     async def _generate_segment_summary(self, segment: ConversationSegment) -> Optional[str]:
@@ -832,7 +832,7 @@ class TextSegmentationService:
             return summary
             
         except Exception as e:
-            await func.func.report_error(e, f"segment summary generation for {segment.segment_id}")
+            await func.report_error(e, f"segment summary generation for {segment.segment_id}")
             return None
     
     async def _save_segment_to_database(self, segment: ConversationSegment) -> None:
@@ -875,7 +875,7 @@ class TextSegmentationService:
             self.logger.info(f"片段 {segment.segment_id} 已成功透過原子性操作儲存。")
 
         except Exception as e:
-            await func.func.report_error(e, f"database save for segment {segment.segment_id}")
+            await func.report_error(e, f"database save for segment {segment.segment_id}")
             # 即使失敗，也不再需要手動清理，因為交易會自動回滾
             raise MemorySystemError(f"儲存片段失敗: {e}")
     
@@ -913,7 +913,7 @@ class TextSegmentationService:
                             dtype=np.float32
                         )
                     except Exception as e:
-                        await func.func.report_error(e, f"vector deserialization for segment {data['segment_id']}")
+                        await func.report_error(e, f"vector deserialization for segment {data['segment_id']}")
                         pass
                 
                 # 取得片段中的訊息 ID
@@ -937,7 +937,7 @@ class TextSegmentationService:
             return segments
             
         except Exception as e:
-            await func.func.report_error(e, f"timerange segment retrieval for {channel_id}")
+            await func.report_error(e, f"timerange segment retrieval for {channel_id}")
             return []
     
     async def cleanup_old_segments(self, retention_days: int = 90) -> int:
@@ -958,7 +958,7 @@ class TextSegmentationService:
             return 0
             
         except Exception as e:
-            await func.func.report_error(e, "old segment cleanup")
+            await func.report_error(e, "old segment cleanup")
             return 0
 
 

@@ -67,7 +67,7 @@ class CacheHelper:
             return cache
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "System cache creation failed"))
+            asyncio.create_task(func.report_error(e, "System cache creation failed"))
             return None
     
     @staticmethod
@@ -125,7 +125,7 @@ class CacheHelper:
             return cache
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Conversation cache creation failed"))
+            asyncio.create_task(func.report_error(e, "Conversation cache creation failed"))
             return None
     
     @staticmethod
@@ -143,7 +143,7 @@ class CacheHelper:
             return cache_mgr.force_cleanup_all_caches()
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Old cache cleanup failed"))
+            asyncio.create_task(func.report_error(e, "Old cache cleanup failed"))
             return 0
     
     @staticmethod
@@ -167,7 +167,7 @@ class CacheHelper:
             return stats
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Cache statistics retrieval failed"))
+            asyncio.create_task(func.report_error(e, "Cache statistics retrieval failed"))
             return {"error": str(e)}
 
 # 全域快取助手實例

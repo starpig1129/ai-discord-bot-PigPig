@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from cogs.memory.memory_manager import MemoryManager, SearchQuery, SearchType
 from cogs.memory.exceptions import MemorySystemError, SearchError
 from gpt.caching.processing_cache import memory_search_cache
-import function as func
+from function import func
 
 logger = logging.getLogger(__name__)
 

@@ -12,7 +12,7 @@ import discord
 from datetime import datetime
 from typing import List, Optional
 from dotenv import load_dotenv
-import function as func
+from function import func
 import asyncio
 
 
@@ -157,7 +157,7 @@ class BackupManager:
             
         except Exception as e:
             self.logger.error(f"創建備份時發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/security.py/create_backup"))
+            asyncio.create_task(func.report_error(e, "addons/update/security.py/create_backup"))
             # 清理失敗的備份
             if os.path.exists(backup_path):
                 shutil.rmtree(backup_path, ignore_errors=True)
@@ -228,14 +228,14 @@ class BackupManager:
                             shutil.copy2(source_file, target_file)
                         except Exception as e:
                             self.logger.warning(f"複製檔案失敗 {source_file}: {e}")
-                            asyncio.create_task(func.func.report_error(e, f"addons/update/security.py/_backup_directory_safely/copy/{source_file}"))
+                            asyncio.create_task(func.report_error(e, f"addons/update/security.py/_backup_directory_safely/copy/{source_file}"))
                 
                 # 過濾要遞歸的目錄
                 dirs[:] = [d for d in dirs if not should_skip_item(os.path.join(root, d))]
                 
         except Exception as e:
             self.logger.error(f"備份目錄時發生錯誤 {source_dir}: {e}")
-            asyncio.create_task(func.func.report_error(e, f"addons/update/security.py/_backup_directory_safely/{source_dir}"))
+            asyncio.create_task(func.report_error(e, f"addons/update/security.py/_backup_directory_safely/{source_dir}"))
             raise
     
     def rollback_to_backup(self, backup_id: str) -> bool:
@@ -289,7 +289,7 @@ class BackupManager:
                         
                 except ValueError as e:
                     self.logger.error(f"解析備份項目時發生錯誤，跳過: {item} - {e}")
-                    asyncio.create_task(func.func.report_error(e, f"addons/update/security.py/rollback_to_backup/parse/{item}"))
+                    asyncio.create_task(func.report_error(e, f"addons/update/security.py/rollback_to_backup/parse/{item}"))
                     continue
                 
                 # 驗證目標路徑的安全性
@@ -308,7 +308,7 @@ class BackupManager:
                         self.logger.debug(f"已刪除現有項目: {item_path}")
                     except Exception as e:
                         self.logger.error(f"刪除現有項目失敗 {item_path}: {e}")
-                        asyncio.create_task(func.func.report_error(e, f"addons/update/security.py/rollback_to_backup/delete/{item_path}"))
+                        asyncio.create_task(func.report_error(e, f"addons/update/security.py/rollback_to_backup/delete/{item_path}"))
                         continue
                 
                 # 恢復備份項目
@@ -325,7 +325,7 @@ class BackupManager:
                         self.logger.debug(f"已恢復檔案: {item_path}")
                 except Exception as e:
                     self.logger.error(f"恢復備份項目失敗 {item_path}: {e}")
-                    asyncio.create_task(func.func.report_error(e, f"addons/update/security.py/rollback_to_backup/restore/{item_path}"))
+                    asyncio.create_task(func.report_error(e, f"addons/update/security.py/rollback_to_backup/restore/{item_path}"))
                     continue
             
             self.logger.info(f"回滾到備份成功: {backup_id}")
@@ -333,7 +333,7 @@ class BackupManager:
             
         except Exception as e:
             self.logger.error(f"回滾過程中發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, f"addons/update/security.py/rollback_to_backup/{backup_id}"))
+            asyncio.create_task(func.report_error(e, f"addons/update/security.py/rollback_to_backup/{backup_id}"))
             return False
     
     def list_backups(self) -> List[dict]:
@@ -360,14 +360,14 @@ class BackupManager:
                         backups.append(backup_info)
                     except Exception as e:
                         self.logger.warning(f"讀取備份資訊失敗 {backup_name}: {e}")
-                        asyncio.create_task(func.func.report_error(e, f"addons/update/security.py/list_backups/read_info/{backup_name}"))
+                        asyncio.create_task(func.report_error(e, f"addons/update/security.py/list_backups/read_info/{backup_name}"))
             
             # 按時間排序，最新的在前面
             backups.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
             
         except Exception as e:
             self.logger.error(f"列出備份時發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/security.py/list_backups"))
+            asyncio.create_task(func.report_error(e, "addons/update/security.py/list_backups"))
         
         return backups
     
@@ -395,7 +395,7 @@ class BackupManager:
                         
         except Exception as e:
             self.logger.error(f"清理備份時發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/security.py/cleanup_old_backups"))
+            asyncio.create_task(func.report_error(e, "addons/update/security.py/cleanup_old_backups"))
     
     def get_backup_size(self, backup_id: str) -> int:
         """
@@ -421,7 +421,7 @@ class BackupManager:
                         total_size += os.path.getsize(filepath)
         except Exception as e:
             self.logger.error(f"計算備份大小時發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, f"addons/update/security.py/get_backup_size/{backup_id}"))
+            asyncio.create_task(func.report_error(e, f"addons/update/security.py/get_backup_size/{backup_id}"))
         
         return total_size
 
@@ -465,7 +465,7 @@ class ConfigProtector:
             
         except Exception as e:
             self.logger.error(f"備份配置檔案時發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/security.py/backup_configs"))
+            asyncio.create_task(func.report_error(e, "addons/update/security.py/backup_configs"))
             return False
     
     def restore_configs(self, backup_path: str) -> bool:
@@ -495,7 +495,7 @@ class ConfigProtector:
             
         except Exception as e:
             self.logger.error(f"恢復配置檔案時發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/security.py/restore_configs"))
+            asyncio.create_task(func.report_error(e, "addons/update/security.py/restore_configs"))
             return False
     
     def verify_configs(self) -> bool:
@@ -524,12 +524,12 @@ class ConfigProtector:
                             json.load(f)
                     except json.JSONDecodeError as e:
                         self.logger.error(f"JSON 檔案格式錯誤 {file_path}: {e}")
-                        asyncio.create_task(func.func.report_error(e, f"addons/update/security.py/verify_configs/json_decode/{file_path}"))
+                        asyncio.create_task(func.report_error(e, f"addons/update/security.py/verify_configs/json_decode/{file_path}"))
                         return False
             
             return True
             
         except Exception as e:
             self.logger.error(f"驗證配置檔案時發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/security.py/verify_configs"))
+            asyncio.create_task(func.report_error(e, "addons/update/security.py/verify_configs"))
             return False

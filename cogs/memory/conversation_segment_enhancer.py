@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 import asyncio
-import function as func
+from function import func
 import re
 
 from .memory_manager import MemoryManager, SearchQuery, SearchType
@@ -124,7 +124,7 @@ class ConversationSegmentEnhancer:
             return ranked_segments[:limit]
             
         except Exception as e:
-            await func.func.report_error(e, "Enhanced segment search")
+            await func.report_error(e, "Enhanced segment search")
             self.logger.error(f"搜尋增強對話片段失敗: {e}")
             return []
     
@@ -181,7 +181,7 @@ class ConversationSegmentEnhancer:
                 enhanced_segments.append(segment)
                 
             except Exception as e:
-                asyncio.create_task(func.func.report_error(e, "Search result item processing"))
+                asyncio.create_task(func.report_error(e, "Search result item processing"))
                 self.logger.warning(f"處理搜尋結果項目失敗: {e}")
                 continue
         
@@ -230,7 +230,7 @@ class ConversationSegmentEnhancer:
             return sorted_segments
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Segment ranking"))
+            asyncio.create_task(func.report_error(e, "Segment ranking"))
             self.logger.error(f"排序片段失敗: {e}")
             return segments
     
@@ -265,7 +265,7 @@ class ConversationSegmentEnhancer:
                 return 0.0
                 
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Recency boost calculation"))
+            asyncio.create_task(func.report_error(e, "Recency boost calculation"))
             self.logger.debug(f"計算時間相關性失敗: {e}")
             return 0.0
     
@@ -307,7 +307,7 @@ class ConversationSegmentEnhancer:
             return min(quality_score, 0.2)  # 限制最大加成
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Content quality boost calculation"))
+            asyncio.create_task(func.report_error(e, "Content quality boost calculation"))
             self.logger.debug(f"計算內容質量失敗: {e}")
             return 0.0
     
@@ -343,7 +343,7 @@ class ConversationSegmentEnhancer:
             return False
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Meaningful content check"))
+            asyncio.create_task(func.report_error(e, "Meaningful content check"))
             return False
     
     async def search_by_user(self, 
@@ -395,7 +395,7 @@ class ConversationSegmentEnhancer:
             return enhanced_segments[:limit]
             
         except Exception as e:
-            await func.func.report_error(e, f"Search by user for {user_id}")
+            await func.report_error(e, f"Search by user for {user_id}")
             self.logger.error(f"根據使用者搜尋失敗: {e}")
             return []
     
@@ -453,7 +453,7 @@ class ConversationSegmentEnhancer:
             return enhanced_segments
             
         except Exception as e:
-            await func.func.report_error(e, f"Search by time range for {channel_id}")
+            await func.report_error(e, f"Search by time range for {channel_id}")
             self.logger.error(f"根據時間範圍搜尋失敗: {e}")
             return []
     
@@ -505,7 +505,7 @@ class ConversationSegmentEnhancer:
             }
             
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Segment summary generation"))
+            asyncio.create_task(func.report_error(e, "Segment summary generation"))
             self.logger.error(f"產生片段摘要失敗: {e}")
             return {"total": 0, "error": str(e)}
 

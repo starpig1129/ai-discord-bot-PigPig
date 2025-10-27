@@ -50,7 +50,7 @@ import asyncio
 from typing import Optional
 from .language_manager import LanguageManager
 from gpt.utils.discord_utils import safe_edit_message
-import function as func
+from function import func
 
 def install_driver():
     return ChromeDriverManager().install()
@@ -148,7 +148,7 @@ class InternetSearchCog(commands.Cog):
                 service = Service(driver_path)
         except (concurrent.futures.TimeoutError, Exception) as e:
             print(f"ChromeDriverManager timed out or failed: {e}, falling back to local driver")
-            await func.func.report_error(e, f"google_search ChromeDriverManager: {e}")
+            await func.report_error(e, f"google_search ChromeDriverManager: {e}")
             chrome_driver_path = './chromedriverlinux64/chromedriver'
             service = Service(executable_path=chrome_driver_path)
         
@@ -200,7 +200,7 @@ class InternetSearchCog(commands.Cog):
                 service = Service(driver_path)
         except (concurrent.futures.TimeoutError, Exception) as e:
             print(f"ChromeDriverManager timed out or failed: {e}, falling back to local driver")
-            await func.func.report_error(e, f"send_img ChromeDriverManager: {e}")
+            await func.report_error(e, f"send_img ChromeDriverManager: {e}")
             chrome_driver_path = './chromedriverlinux64/chromedriver'
             service = Service(executable_path=chrome_driver_path)
 
@@ -252,7 +252,7 @@ class InternetSearchCog(commands.Cog):
         
         except Exception as e:
             print(f"Image download failed: {e}")
-            await func.func.report_error(e, f"send_img: {e}")
+            await func.report_error(e, f"send_img: {e}")
             error_message = self.lang_manager.translate(
                 guild_id,
                 "commands",
@@ -363,7 +363,7 @@ class InternetSearchCog(commands.Cog):
             )
             return video_description
         except Exception as e:
-            await func.func.report_error(e, f"youtube_search: {e}")
+            await func.report_error(e, f"youtube_search: {e}")
             return self.lang_manager.translate(
                 guild_id,
                 "commands",
@@ -411,7 +411,7 @@ class InternetSearchCog(commands.Cog):
                         else:
                             error_messages.append(f"Failed to fetch page content from {url}, status code: {response.status}")
                 except Exception as e:
-                    await func.func.report_error(e, f"fetch_page_content for {url}: {e}")
+                    await func.report_error(e, f"fetch_page_content for {url}: {e}")
                     error_messages.append(f"Error while fetching {url}: {str(e)}")
         
         combined_text = "\n\n".join(all_texts)
@@ -481,7 +481,7 @@ class InternetSearchCog(commands.Cog):
             self.train.genModel(str(ctx.guild.id))
             return None  
         except Exception as e:
-            await func.func.report_error(e, f"eat_search: {e}")
+            await func.report_error(e, f"eat_search: {e}")
             keyword_to_use = keyword if predict is None else predict
             return self.lang_manager.translate(
                 guild_id,

@@ -52,13 +52,13 @@ try:
     # 僅嘗試匯入嚴格模型，避免過度捕捉
     from gpt.core.schemas import ToolCall, ToolSelection, PydanticValidationError  # type: ignore
 except Exception as _schemas_exc:  # 精準記錄匯入失敗
-    asyncio.create_task(func.func.report_error(_schemas_exc, "Schema import failed"))
+    asyncio.create_task(func.report_error(_schemas_exc, "Schema import failed"))
     ToolCall = None  # type: ignore
     ToolSelection = None  # type: ignore
     try:
         from pydantic import ValidationError as PydanticValidationError  # type: ignore
     except Exception as e:
-        asyncio.create_task(func.func.report_error(e, "Pydantic import failed"))
+        asyncio.create_task(func.report_error(e, "Pydantic import failed"))
         # 極端情況：pydantic 也不可用，回退為通用 Exception
         class PydanticValidationError(Exception):  # type: ignore
             pass
@@ -366,7 +366,7 @@ Based on the user's request and the available tools, select the appropriate tool
                 return self._fallback_action_list(decision)
 
         except Exception as e:
-            await func.func.report_error(e, "Action list retrieval failed")
+            await func.report_error(e, "Action list retrieval failed")
             return self._get_default_action_list(prompt)
 
     @staticmethod
@@ -528,7 +528,7 @@ Based on the user's request and the available tools, select the appropriate tool
                               idx, raw_name, str(e), str(raw_content)[:200])
                 failure_reports.append(f"- `{raw_name or 'unknown_tool'}`: 解析結果時發生錯誤。")
             except Exception as e:
-                asyncio.create_task(func.func.report_error(e, f"Tool summary formatting for {raw_name} failed"))
+                asyncio.create_task(func.report_error(e, f"Tool summary formatting for {raw_name} failed"))
                 failure_reports.append(f"- `{raw_name or 'unknown_tool'}`: 解析結果處理時發生未知錯誤。")
 
         summary_parts: List[str] = ["### 工具執行摘要"]

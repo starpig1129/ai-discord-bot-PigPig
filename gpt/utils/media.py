@@ -6,7 +6,7 @@ from decord import VideoReader, cpu
 import aiohttp
 import base64
 import asyncio
-import function as func
+from function import func
 MAX_NUM_FRAMES = 16  # if cuda OOM set a smaller number
 TARGET_IMAGE_SIZE = (224, 224)  # 設置目標圖像大小
 
@@ -52,7 +52,7 @@ async def encode_video(video_data):
         logger.info(f'Extracted and standardized {len(frames)} frames from video')
         return frames
     except Exception as e:
-        await func.func.report_error(e, "Video encoding failed")
+        await func.report_error(e, "Video encoding failed")
         return []
 
 def safe_process_pdf(file_data):
@@ -60,7 +60,7 @@ def safe_process_pdf(file_data):
         pdf_images = convert_from_bytes(file_data)
         return [standardize_image(img) for img in pdf_images]
     except Exception as e:
-        asyncio.create_task(func.func.report_error(e, "PDF processing failed"))
+        asyncio.create_task(func.report_error(e, "PDF processing failed"))
         return []
 
 async def process_attachment_data(message):
@@ -106,7 +106,7 @@ async def process_attachment_data(message):
                         logger.warning(f"Unsupported file format: {attachment.filename}")
 
                 except Exception as e:
-                    await func.func.report_error(e, f"Processing attachment {attachment.filename} failed")
+                    await func.report_error(e, f"Processing attachment {attachment.filename} failed")
 
         if not all_image_data:
             return "沒有找到可處理的圖像、影片或PDF附件，或處理過程中出現錯誤。"
@@ -115,5 +115,5 @@ async def process_attachment_data(message):
             return all_image_data
 
     except Exception as e:
-        await func.func.report_error(e, "VQA processing failed")
+        await func.report_error(e, "VQA processing failed")
         return f"處理過程中出現錯誤: {str(e)}"

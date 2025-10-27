@@ -159,7 +159,7 @@ def set_model_and_tokenizer(model=None, tokenizer=None, model_path=None):
         global_tokenizer = tokenizer
         return model, tokenizer
     except Exception as e:
-        asyncio.create_task(func.func.report_error(e, "MiniCPM-o model initialization"))
+        asyncio.create_task(func.report_error(e, "MiniCPM-o model initialization"))
         raise ValueError(f"初始化 MiniCPM-o 模型時發生錯誤: {str(e)}")
 
 class LocalModelError(Exception):
@@ -254,7 +254,7 @@ async def local_generate(inst, system_prompt, dialogue_history=None, image_input
                     
                     logging.info(f"完整文本: {text}")
                 except Exception as e:
-                    await func.func.report_error(e, "streaming generation")
+                    await func.report_error(e, "streaming generation")
                     raise LocalModelError(f"流式生成過程錯誤: {str(e)}")
 
             return None, stream_generator()
@@ -305,7 +305,7 @@ async def local_generate(inst, system_prompt, dialogue_history=None, image_input
     except Exception as e:
         if isinstance(e, LocalModelError):
             raise
-        await func.func.report_error(e, "local model error")
+        await func.report_error(e, "local model error")
         raise LocalModelError(f"本地模型錯誤: {str(e)}")
 
 # 定義模型生成函數映射

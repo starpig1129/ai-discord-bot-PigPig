@@ -25,7 +25,7 @@ import os
 import re
 import traceback
 import update
-import function as func
+from function import func
 import json
 import logging
 import asyncio
@@ -286,7 +286,7 @@ class PigPig(commands.Bot):
                 execute_action = await self.action_dispatcher.choose_act(prompt, after, message_to_edit)
                 await execute_action(message_to_edit, prompt, after)
             except Exception as e:
-                await func.func.report_error(e, f"on_message_edit: {e}")
+                await func.report_error(e, f"on_message_edit: {e}")
         
     async def setup_hook(self) -> None:
         # Loading all the module in `cogs` folder
@@ -350,7 +350,7 @@ class PigPig(commands.Bot):
             # if model_management_cog:
             #     await model_management_cog.reload_model()
         except Exception as e:
-            await func.func.report_error(e, f"on_ready: {e}")
+            await func.report_error(e, f"on_ready: {e}")
         # 將資料寫入 JSON 文件
         with open('logs/guilds_and_channels.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
@@ -380,7 +380,7 @@ class PigPig(commands.Bot):
         print(f"事件 '{event_method}' 發生錯誤")
         print(traceback.format_exc())
 
-        await func.func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
+        await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         # 忽略某些錯誤
@@ -397,7 +397,7 @@ class PigPig(commands.Bot):
         print(f"指令 '{ctx.command}' 發生錯誤: {error}")
         print("".join(traceback.format_exception(type(error), error, error.__traceback__)))
 
-        await func.func.report_error(error, f"on_command_error: {ctx.command}")
+        await func.report_error(error, f"on_command_error: {ctx.command}")
 
         await ctx.send(f"發生錯誤：{error}")
     

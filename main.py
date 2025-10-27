@@ -23,7 +23,7 @@ import discord
 import asyncio
 import logging
 import update
-import function as func
+from function import func
 from bot import PigPig
 from addons import Settings
 from dotenv import load_dotenv
@@ -78,4 +78,4 @@ if __name__ == "__main__":
             asyncio.run(bot.close())
         except Exception as e:
             print(f"最終清理階段發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, "main.py/finally"))
+            asyncio.create_task(func.report_error(e, "main.py/finally"))

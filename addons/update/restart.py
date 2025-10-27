@@ -16,7 +16,7 @@ import time
 import platform
 from datetime import datetime
 from typing import Dict, Any, Optional
-import function as func
+from function import func
 
 
 class SimpleRestartManager:
@@ -74,7 +74,7 @@ class SimpleRestartManager:
             
         except Exception as e:
             self.logger.error(f"重啟流程失敗: {e}")
-            await func.func.report_error(e, "addons/update/restart.py/execute_restart")
+            await func.report_error(e, "addons/update/restart.py/execute_restart")
             await self._handle_restart_failure(e)
             raise e
     
@@ -110,7 +110,7 @@ class SimpleRestartManager:
             
         except Exception as e:
             self.logger.error(f"重啟後檢查失敗: {e}")
-            await func.func.report_error(e, "addons/update/restart.py/post_restart_check")
+            await func.report_error(e, "addons/update/restart.py/post_restart_check")
             await self._notify_restart_failure(e)
             return False
     
@@ -133,7 +133,7 @@ class SimpleRestartManager:
             
         except Exception as e:
             self.logger.error(f"保存重啟標記失敗: {e}")
-            await func.func.report_error(e, "addons/update/restart.py/_save_restart_flag")
+            await func.report_error(e, "addons/update/restart.py/_save_restart_flag")
             raise e
     
     async def _notify_restart(self) -> None:
@@ -147,7 +147,7 @@ class SimpleRestartManager:
             
         except Exception as e:
             self.logger.warning(f"發送重啟通知失敗: {e}")
-            await func.func.report_error(e, "addons/update/restart.py/_notify_restart")
+            await func.report_error(e, "addons/update/restart.py/_notify_restart")
             # 通知失敗不應阻止重啟流程
     
     async def _shutdown_bot(self) -> None:
@@ -171,7 +171,7 @@ class SimpleRestartManager:
             
         except Exception as e:
             self.logger.warning(f"關閉 Bot 時發生錯誤: {e}")
-            await func.func.report_error(e, "addons/update/restart.py/_shutdown_bot")
+            await func.report_error(e, "addons/update/restart.py/_shutdown_bot")
             # 關閉失敗不應阻止重啟流程
     
     def _execute_simple_restart(self) -> None:
@@ -206,7 +206,7 @@ class SimpleRestartManager:
                 
         except Exception as e:
             self.logger.error(f"執行重啟時發生錯誤: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/restart.py/_execute_simple_restart"))
+            asyncio.create_task(func.report_error(e, "addons/update/restart.py/_execute_simple_restart"))
             self._create_emergency_restart_file()
             raise e
     
@@ -275,7 +275,7 @@ exit
                 
         except Exception as e:
             self.logger.error(f"Windows 重啟方法失敗: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/restart.py/_windows_simple_restart"))
+            asyncio.create_task(func.report_error(e, "addons/update/restart.py/_windows_simple_restart"))
             return False
     
     def _unix_simple_restart(self, python_exe: str, current_dir: str) -> bool:
@@ -333,7 +333,7 @@ cd "{current_dir}"
             
         except Exception as e:
             self.logger.error(f"Unix/Linux 重啟方法失敗: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/restart.py/_unix_simple_restart"))
+            asyncio.create_task(func.report_error(e, "addons/update/restart.py/_unix_simple_restart"))
             return False
     
     async def _simple_health_check(self) -> bool:
@@ -352,7 +352,7 @@ cd "{current_dir}"
                     return False
             except Exception as e:
                 self.logger.error("無法獲取網路延遲")
-                await func.func.report_error(e, "addons/update/restart.py/_simple_health_check/latency")
+                await func.report_error(e, "addons/update/restart.py/_simple_health_check/latency")
                 return False
             
             self.logger.info("健康檢查通過")
@@ -360,7 +360,7 @@ cd "{current_dir}"
             
         except Exception as e:
             self.logger.error(f"健康檢查失敗: {e}")
-            await func.func.report_error(e, "addons/update/restart.py/_simple_health_check")
+            await func.report_error(e, "addons/update/restart.py/_simple_health_check")
             return False
     
     async def _notify_restart_success(self, restart_info: Dict[str, Any]) -> None:
@@ -375,11 +375,11 @@ cd "{current_dir}"
                     await notifier_cog.notifier.notify_restart_success(restart_info)
             except Exception as e:
                 self.logger.warning(f"發送重啟成功通知失敗: {e}")
-                await func.func.report_error(e, "addons/update/restart.py/_notify_restart_success/notify")
+                await func.report_error(e, "addons/update/restart.py/_notify_restart_success/notify")
             
         except Exception as e:
             self.logger.warning(f"處理重啟成功通知時發生錯誤: {e}")
-            await func.func.report_error(e, "addons/update/restart.py/_notify_restart_success")
+            await func.report_error(e, "addons/update/restart.py/_notify_restart_success")
     
     async def _notify_restart_failure(self, error: Exception) -> None:
         """通知重啟失敗"""
@@ -393,11 +393,11 @@ cd "{current_dir}"
                     await notifier_cog.notifier.notify_update_error(error, "重啟失敗")
             except Exception as e:
                 self.logger.warning(f"發送重啟失敗通知失敗: {e}")
-                await func.func.report_error(e, "addons/update/restart.py/_notify_restart_failure/notify")
+                await func.report_error(e, "addons/update/restart.py/_notify_restart_failure/notify")
             
         except Exception as e:
             self.logger.warning(f"處理重啟失敗通知時發生錯誤: {e}")
-            await func.func.report_error(e, "addons/update/restart.py/_notify_restart_failure")
+            await func.report_error(e, "addons/update/restart.py/_notify_restart_failure")
     
     async def _handle_restart_failure(self, error: Exception) -> None:
         """處理重啟失敗"""
@@ -408,7 +408,7 @@ cd "{current_dir}"
             
         except Exception as e:
             self.logger.error(f"處理重啟失敗時發生錯誤: {e}")
-            await func.func.report_error(e, "addons/update/restart.py/_handle_restart_failure")
+            await func.report_error(e, "addons/update/restart.py/_handle_restart_failure")
     
     def _create_emergency_restart_file(self) -> None:
         """創建緊急重啟指示文件"""
@@ -446,7 +446,7 @@ Python 執行檔: {sys.executable}
             
         except Exception as e:
             self.logger.error(f"創建緊急重啟指示失敗: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/restart.py/_create_emergency_restart_file"))
+            asyncio.create_task(func.report_error(e, "addons/update/restart.py/_create_emergency_restart_file"))
     
     def is_restart_pending(self) -> bool:
         """檢查是否有待處理的重啟"""
@@ -462,7 +462,7 @@ Python 執行檔: {sys.executable}
                     return json.load(f)
         except Exception as e:
             self.logger.error(f"讀取重啟資訊失敗: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/restart.py/get_restart_info"))
+            asyncio.create_task(func.report_error(e, "addons/update/restart.py/get_restart_info"))
         
         return None
     
@@ -476,7 +476,7 @@ Python 執行檔: {sys.executable}
                 return True
         except Exception as e:
             self.logger.error(f"取消重啟失敗: {e}")
-            asyncio.create_task(func.func.report_error(e, "addons/update/restart.py/cancel_restart"))
+            asyncio.create_task(func.report_error(e, "addons/update/restart.py/cancel_restart"))
         
         return False
 

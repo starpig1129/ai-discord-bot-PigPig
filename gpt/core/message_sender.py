@@ -54,7 +54,7 @@ def _get_prompt_manager():
         try:
             _prompt_manager = get_prompt_manager()
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "PromptManager initialization failed"))
+            asyncio.create_task(func.report_error(e, "PromptManager initialization failed"))
             _prompt_manager = None
     return _prompt_manager
 
@@ -102,7 +102,7 @@ def get_system_prompt(bot_id: str, message=None) -> str:
             if channel_prompt and channel_prompt.strip():
                 return channel_prompt
         except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Channel system prompt retrieval failed"))
+            asyncio.create_task(func.report_error(e, "Channel system prompt retrieval failed"))
     
     # 降級到原有的 YAML 提示管理系統
     try:
@@ -110,7 +110,7 @@ def get_system_prompt(bot_id: str, message=None) -> str:
         if prompt_manager:
             return prompt_manager.get_system_prompt(bot_id, message)
     except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "YAML prompt manager system failed"))
+            asyncio.create_task(func.report_error(e, "YAML prompt manager system failed"))
     
     # 最終降級策略：使用硬編碼的基本提示（保持向後相容性）
     logging.warning("使用降級的硬編碼系統提示")
@@ -199,7 +199,7 @@ def get_channel_system_prompt(channel_id: str, guild_id: str, bot_id: str, messa
         return ""
         
     except Exception as e:
-            asyncio.create_task(func.func.report_error(e, f"Channel system prompt retrieval for channel {channel_id} failed"))
+            asyncio.create_task(func.report_error(e, f"Channel system prompt retrieval for channel {channel_id} failed"))
         return ""
 
 
@@ -260,7 +260,7 @@ def clear_system_prompt_cache(guild_id: str = None, channel_id: str = None):
         logging.info(f"✅ sendmessage 模組快取清除完成")
             
     except Exception as e:
-        asyncio.create_task(func.func.report_error(e, "Sendmessage cache clear failed"))
+        asyncio.create_task(func.report_error(e, "Sendmessage cache clear failed"))
 
 
 def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
@@ -357,7 +357,7 @@ def _get_fallback_system_prompt(bot_id: str, message=None) -> str:
                 except (KeyError, TypeError) as e:
                     logging.warning(f"無法獲取語言設定，使用預設值：{e}")
     except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Language settings retrieval failed"))
+            asyncio.create_task(func.report_error(e, "Language settings retrieval failed"))
 
     # 如果無法獲取語言設定，使用預設值
     return fallback_prompt.format(bot_id=bot_id, bot_owner_id=bot_owner_id)
@@ -450,7 +450,7 @@ def format_intelligent_context(context_data: Dict[str, Any]) -> Dict[str, Any]:
             "content": json.dumps(context_data, ensure_ascii=False, indent=2)
         }
     except Exception as e:
-            asyncio.create_task(func.func.report_error(e, "Intelligent context formatting failed"))
+            asyncio.create_task(func.report_error(e, "Intelligent context formatting failed"))
         return {
             "role": "function",
             "name": "memory_search",
@@ -504,7 +504,7 @@ def format_memory_context_structured(memories: List[Dict[str, Any]]) -> Dict[str
         }
         
     except Exception as e:
-        asyncio.create_task(func.func.report_error(e, "Formatting memory context failed"))
+        asyncio.create_task(func.report_error(e, "Formatting memory context failed"))
         logging.error(f"格式化記憶上下文失敗: {e}")
         return {
             "role": "function",
@@ -625,7 +625,7 @@ async def build_intelligent_context(
             return {}
             
     except Exception as e:
-        await func.func.report_error(e, "Building intelligent context failed")
+        await func.report_error(e, "Building intelligent context failed")
         logging.error(f"建構智慧背景知識上下文失敗: {e}")
         import traceback
         logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
@@ -690,7 +690,7 @@ async def search_relevant_memory(
         logging.warning(f"記憶搜尋失敗: {e}")
         return []
     except Exception as e:
-        await func.func.report_error(e, "Searching relevant memory failed")
+        await func.report_error(e, "Searching relevant memory failed")
         logging.error(f"搜尋相關記憶時發生未預期錯誤: {e}")
         return []
 
@@ -761,7 +761,7 @@ async def gpt_message(
                 await message_to_edit.delete()
             message_to_edit = new_message
         except Exception as e:
-            await func.func.report_error(e, "Error sending message with files")
+            await func.report_error(e, "Error sending message with files")
             logging.error(f"發送帶有檔案的訊息時發生錯誤: {e}")
             await channel.send(content=f"抱歉，發送圖片時發生錯誤: {e}")
             return ""
@@ -1196,7 +1196,7 @@ async def gpt_message(
         return message_result.replace("<|eot_id|>", "")
         
     except Exception as e:
-        await func.func.report_error(e, "Error generating GPT response")
+        await func.report_error(e, "Error generating GPT response")
         logging.error(f"生成 GPT 回應時發生錯誤: {e}")
         import traceback
         logging.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")

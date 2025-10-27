@@ -11,7 +11,7 @@ from typing import Union
 
 from gpt.tools.registry import tool
 from gpt.tools.tool_context import ToolExecutionContext
-import function as func
+from function import func
 
 @tool
 async def calculate_math(
@@ -53,5 +53,5 @@ async def calculate_math(
         return result
 
     except Exception as e:
-        await func.func.report_error(e, f"Delegating math calculation for '{expression}' failed")
+        await func.report_error(e, f"Delegating math calculation for '{expression}' failed")
         return f"An unexpected error occurred while processing the calculation: {e}"

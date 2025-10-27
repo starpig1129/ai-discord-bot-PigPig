@@ -30,7 +30,7 @@ import random
 from typing import Optional
 from addons.settings import TOKENS
 from .language_manager import LanguageManager
-import function as func
+from function import func
 
 class GifTools(commands.Cog):
     """GIF 搜尋與管理工具。"""
@@ -97,7 +97,7 @@ class GifTools(commands.Cog):
                 return []
             
         except Exception as e:
-            await func.func.report_error(e, f"search_gif: {e}")
+            await func.report_error(e, f"search_gif: {e}")
             search_error_log = self.lang_manager.translate(
                 "0", "system", "gif_tools", "logs", "search_error", error=str(e)
             ) if self.lang_manager else f"GIF 搜尋錯誤: {e}"
@@ -153,7 +153,7 @@ class GifTools(commands.Cog):
                 return chosen_gif
             return ""
         except Exception as e:
-            await func.func.report_error(e, f"get_gif_url: {e}")
+            await func.report_error(e, f"get_gif_url: {e}")
             error_log = self.lang_manager.translate(
                 "0", "system", "gif_tools", "logs", "get_url_error", error=str(e)
             ) if self.lang_manager else f"取得 GIF URL 時發生錯誤: {e}"

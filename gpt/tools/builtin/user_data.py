@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 from gpt.tools.registry import tool
 from gpt.tools.tool_context import ToolExecutionContext
 from gpt.core.response_generator import generate_response
-import function as func
+from function import func
 
 def get_user_manager(context: ToolExecutionContext):
     """Helper function to safely get the user manager."""
@@ -66,5 +66,5 @@ async def manage_user_data(
             return "Error: Invalid action. Please use 'read' or 'save'."
 
     except Exception as e:
-        await func.func.report_error(e, f"Managing user data for {user_id} failed")
+        await func.report_error(e, f"Managing user data for {user_id} failed")
         return f"An unexpected error occurred: {e}"
