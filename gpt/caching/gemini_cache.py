@@ -90,7 +90,7 @@ class GeminiCacheManager:
                 self.cache_access_times[cache_key] = time.time()
                 return cache
             except Exception as e:
-            func.report_error(e, f"Gemini cache retrieval for {cache.name}")
+                func.report_error(e, f"Gemini cache retrieval for {cache.name}")
                 self._cleanup_cache_record(cache_key)
         return None
 
@@ -117,7 +117,7 @@ class GeminiCacheManager:
                 self.logger.info(f"成功刪除遠端快取: {cache.name}")
             except Exception as e:
                 # 如果遠端快取已不存在（例如，已過期或手動刪除），也視為成功
-            func.report_error(e, f"Gemini cache deletion for {cache.name}")
+                await func.report_error(e, f"Gemini cache deletion for {cache.name}")
             finally:
                 # 無論遠端刪除是否成功，都清理本地記錄
                 self._cleanup_cache_record(cache_key)

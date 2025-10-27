@@ -802,7 +802,7 @@ async def generate_response(inst: str,
                                     else:
                                         raise GeminiError(f"Gemini API 流式和非流式回應都失敗: {error_message}")
                                 except Exception as fallback_error:
-                                     await func.func.report_error(fallback_error, "Gemini API fallback failed")
+                                    await func.func.report_error(fallback_error, "Gemini API fallback failed")
                                     raise GeminiError(f"Gemini API 降級處理失敗: {fallback_error}")
 
                         elif "RESOURCE_PROJECT_INVALID" in error_message:

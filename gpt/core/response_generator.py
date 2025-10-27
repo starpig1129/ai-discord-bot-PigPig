@@ -43,7 +43,7 @@ from typing import Any, Dict, Tuple
 from gpt.core.exceptions import LLMProviderError, is_retryable
 from gpt.core.retry_controller import RetryController
 from gpt.utils.sanitizer import mask_text
-import function as func
+from function import func
 import asyncio
 
 settings = Settings()
@@ -75,7 +75,7 @@ async def get_model_and_tokenizer():
                     global_tokenizer = tokenizer
                     logging.info("本地模型初始化成功。")
                 except Exception as e:
-                    await func.func.report_error(e, "local model initialization")
+                    await func.report_error(e, "local model initialization")
                     # 確保即使失敗也不會一直重試
                     global_model, global_tokenizer = None, None
                     raise
@@ -561,7 +561,7 @@ async def generate_response(
                                     )
                                     yield chunk
                             except Exception as e:
-                                 func.report_error(e, "TextIteratorStreamer iteration")
+                                await func.report_error(e, "TextIteratorStreamer iteration")
                                 raise LLMProviderError(
                                     code="malformed_response",
                                     retriable=False,
@@ -584,7 +584,7 @@ async def generate_response(
                 except LLMProviderError:
                     raise
                 except Exception as e:
-                     func.report_error(e, "generation process")
+                    await func.report_error(e, "generation process")
                     raise LLLMProviderError(
                         code="malformed_response",
                         retriable=False,
