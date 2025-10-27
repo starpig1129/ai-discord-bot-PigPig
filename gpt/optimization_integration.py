@@ -534,7 +534,7 @@ def initialize_optimization_from_file(config_path: str = None) -> OptimizedDisco
         return initialize_optimization(config)
         
     except Exception as e:
-            func.report_error(e, "optimization initialization from file")
+        asyncio.create_task(func.report_error(e, "optimization initialization from file"))
         # 降級到預設配置
         return initialize_optimization()
 

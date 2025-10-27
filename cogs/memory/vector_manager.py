@@ -2719,7 +2719,7 @@ class VectorManager:
                     total_vectors += index_stats.get("total_vectors", 0)
                     stats[f"channel_{channel_id}_vectors"] = index_stats.get("total_vectors", 0)
                 except Exception as e:
-            asyncio.create_task(func.report_error(e, f"index stats retrieval for channel {channel_id} in get_memory_stats"))
+                    asyncio.create_task(func.report_error(e, f"index stats retrieval for channel {channel_id} in get_memory_stats"))
                     stats[f"channel_{channel_id}_error"] = str(e)
         
         stats["total_vectors"] = total_vectors
@@ -3278,7 +3278,7 @@ class VectorManager:
                     if self.create_channel_index(channel_id):
                         all_ids[channel_id] = index.get_all_ids()
                 except Exception as e:
-            asyncio.create_task(func.report_error(e, f"all segment ID retrieval for channel {channel_id}"))
+                    asyncio.create_task(func.report_error(e, f"all segment ID retrieval for channel {channel_id}"))
         return all_ids
     
     def check_and_repair_all_indices(self) -> Dict[str, Dict[str, any]]:

@@ -23,7 +23,7 @@ import discord
 import asyncio
 import logging
 import update
-from function import func
+from function import func, tokens
 from bot import PigPig
 from addons import Settings
 from dotenv import load_dotenv
@@ -68,7 +68,7 @@ bot = PigPig(
 if __name__ == "__main__":
     update.check_version(with_msg=True)
     try:
-        bot.run(func.tokens.token, log_handler=None)
+        bot.run(tokens.token, log_handler=None)
     except KeyboardInterrupt:
         print("收到 KeyboardInterrupt，使用者手動中斷，開始優雅關閉...")
     finally:

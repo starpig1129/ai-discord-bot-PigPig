@@ -234,7 +234,7 @@ class RerankerService:
             return model, tokenizer
             
         except Exception as e:
-            await func.report_error(e, f"Failed to load reranker model {self.reranker_model}")
+            asyncio.create_task(func.report_error(e, f"Failed to load reranker model {self.reranker_model}"))
             self.logger.error(f"無法載入重排序模型 {self.reranker_model}: {e}")
             error_message = str(e) if e is not None else "未知錯誤"
             raise VectorOperationError(f"無法載入重排序模型 {model_name}: {error_message}")

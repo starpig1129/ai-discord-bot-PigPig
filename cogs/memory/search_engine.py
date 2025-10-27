@@ -658,7 +658,7 @@ class SearchEngine:
             )
             
         except Exception as e:
-            await func.report_error(e, "Keyword search failed")
+            asyncio.create_task(func.report_error(e, "Keyword search failed"))
             return SearchResult(
                 messages=[],
                 relevance_scores=[],
@@ -708,7 +708,7 @@ class SearchEngine:
             self.logger.error(f"jieba 模組未安裝，關鍵字搜尋功能受限: {e}")
             return text.split()
         except Exception as e:
-            await func.report_error(e, "Keyword extraction failed")
+            asyncio.create_task(func.report_error(e, "Keyword extraction failed"))
             return text.split()
 
     def _calculate_enhanced_keyword_score(
@@ -917,7 +917,7 @@ class SearchEngine:
             return float(similarity)
             
         except Exception as e:
-            await func.report_error(e, "Similarity calculation failed")
+            asyncio.create_task(func.report_error(e, "Similarity calculation failed"))
             return 0.0
 
     def get_statistics(self) -> Dict[str, Union[int, float]]:
@@ -981,7 +981,7 @@ class SearchEngine:
             self.logger.info("搜尋引擎效能優化完成")
             
         except Exception as e:
-            await func.report_error(e, "Search engine performance optimization failed")
+            asyncio.create_task(func.report_error(e, "Search engine performance optimization failed"))
             optimization_report["error"] = str(e)
         
         return optimization_report
@@ -993,7 +993,7 @@ class SearchEngine:
                 self.reranker_service.warmup()
                 self.logger.info("重排序模型預熱完成")
             except Exception as e:
-                await func.report_error(e, "Reranker model warmup failed")
+                asyncio.create_task(func.report_error(e, "Reranker model warmup failed"))
         else:
             self.logger.debug("重排序服務未啟用，跳過預熱")
     
@@ -1009,7 +1009,7 @@ class SearchEngine:
                 self.enable_reranker = True
                 self.logger.info("重排序服務已啟用")
             except Exception as e:
-                await func.report_error(e, "Enabling reranker service failed")
+                asyncio.create_task(func.report_error(e, "Enabling reranker service failed"))
         elif not enabled and self.enable_reranker:
             self.enable_reranker = False
             if self.reranker_service:
@@ -1101,7 +1101,7 @@ class SearchEngine:
                     self.logger.info("重排序服務已清理")
                 except Exception as e:
                     self.logger.warning(f"清理重排序服務失敗: {e}")
-                    await func.report_error(e, "Reranker service cleanup failed")
+                    asyncio.create_task(func.report_error(e, "Reranker service cleanup failed"))
             
             # 重置統計資料
             self._search_count = 0
@@ -1116,4 +1116,4 @@ class SearchEngine:
             self.logger.info("搜尋引擎清理完成")
             
         except Exception as e:
-            await func.report_error(e, "Search engine cleanup failed")
+            asyncio.create_task(func.report_error(e, "Search engine cleanup failed"))

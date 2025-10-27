@@ -25,7 +25,7 @@ import os
 import re
 import traceback
 import update
-from function import func
+from function import func, ROOT_DIR, tokens
 import json
 import logging
 import asyncio
@@ -81,7 +81,7 @@ def setup_logger(server_name):
 class PigPig(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        func.func.set_bot(self)
+        func.set_bot(self)
         self.loggers = {}
         # ActionDispatcher 將在 setup_hook 中被創建和注入
         self.action_dispatcher: Optional[ActionDispatcher] = None
@@ -290,7 +290,7 @@ class PigPig(commands.Bot):
         
     async def setup_hook(self) -> None:
         # Loading all the module in `cogs` folder
-        for module in os.listdir(func.ROOT_DIR + '/cogs'):
+        for module in os.listdir(ROOT_DIR + '/cogs'):
             # 過濾條件：
             # 1. 必須是 .py 文件
             # 2. 排除 __init__.py（包初始化文件）
@@ -355,7 +355,7 @@ class PigPig(commands.Bot):
         with open('logs/guilds_and_channels.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
         print('update succesfully guilds_and_channels.json')
-        func.tokens.client_id = self.user.id
+        tokens.client_id = self.user.id
         
         # 啟動狀態更新任務
         self.change_status_task.start()
