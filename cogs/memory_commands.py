@@ -168,7 +168,7 @@ class MemoryCommands(commands.Cog):
                 ephemeral=True
             )
         except Exception as e:
-            self.logger.error(f"記憶搜尋發生未預期錯誤: {e}")
+            func.report_error(e, "memory search")
             await interaction.followup.send(
                 "❌ 搜尋過程中發生錯誤，請稍後再試",
                 ephemeral=True
@@ -230,7 +230,7 @@ class MemoryCommands(commands.Cog):
             await interaction.followup.send(embed=embed)
             
         except Exception as e:
-            self.logger.error(f"取得記憶統計失敗: {e}")
+            func.report_error(e, "getting memory stats")
             await interaction.followup.send(
                 "❌ 無法取得統計資訊，請稍後再試",
                 ephemeral=True
@@ -287,7 +287,7 @@ class MemoryCommands(commands.Cog):
             await interaction.followup.send(embed=embed)
             
         except Exception as e:
-            self.logger.error(f"清除頻道記憶失敗: {e}")
+            func.report_error(e, "clearing channel memory")
             await interaction.followup.send(
                 "❌ 清除記憶時發生錯誤，請稍後再試",
                 ephemeral=True
@@ -350,7 +350,7 @@ class MemoryCommands(commands.Cog):
             await interaction.response.send_message(embed=embed)
             
         except Exception as e:
-            self.logger.error(f"取得記憶配置失敗: {e}")
+            func.report_error(e, "getting memory config")
             await interaction.response.send_message(
                 "❌ 無法取得配置資訊，請稍後再試",
                 ephemeral=True

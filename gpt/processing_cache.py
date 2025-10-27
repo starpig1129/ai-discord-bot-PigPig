@@ -14,6 +14,7 @@ from datetime import datetime
 
 from cogs.memory.config import MemoryProfile
 from cogs.memory.embedding_service import EmbeddingServiceManager
+from function import func
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ class ProcessingCache:
                     return best_match_result
 
             except Exception as e:
-                self.logger.error(f"語意快取搜尋失敗: {e}")
+                func.report_error(e, "semantic cache search")
 
         self.miss_count += 1
         self.logger.debug(f"快取未命中: {cache_key[:16]}...")
@@ -309,7 +310,7 @@ class ProcessingCache:
             self.logger.info(f"主動清理了 {cleaned_count} 個最少使用的處理快取，當前快取數量: {len(self.exact_cache)}")
             
         except Exception as e:
-            self.logger.error(f"清理最少使用的處理快取失敗: {str(e)}")
+            func.report_error(e, "least used cache cleanup")
         
         return cleaned_count
     

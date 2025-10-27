@@ -2,18 +2,18 @@
     "commands": {
         "help": {
             "name": "help",
-            "description": "全てのコマンドを表示"
+            "description": "すべてのコマンドを表示"
         },
         "set_language": {
             "name": "set_language",
-            "description": "サーバーの表示言語を設定",
+            "description": "サーバーの言語を設定",
             "options": {
                 "language": "使用する言語を選択"
             },
             "responses": {
                 "success": "サーバーの言語を{language}に設定しました",
-                "error": "言語の設定中にエラーが発生しました。後でもう一度お試しください。",
-                "unsupported": "サポートされていない言語オプションです。"
+                "error": "言語設定エラー、後で再試行してください。",
+                "unsupported": "サポートされていない言語オプション。"
             }
         },
         "current_language": {
@@ -25,14 +25,14 @@
         },
         "cot_ai": {
             "name": "cot_ai",
-            "description": "Chain of Thought推論を使用（時間がかかる場合があります）",
+            "description": "Chain of Thought推論を使用（時間がかかる場合あり）",
             "options": {
                 "prompt": "処理するプロンプト"
             },
             "responses": {
-                "processing": "リクエストを処理中です...",
+                "processing": "リクエストを処理中...",
                 "error": "エラー：{error}",
-                "thinking": "🤔 考え中...",
+                "thinking": "🤔 思考中...",
                 "step_header": "**ステップ {step}：**",
                 "final_answer": "**最終回答：**",
                 "thinking_time": "思考時間：{time}",
@@ -41,62 +41,40 @@
         },
         "calculate": {
             "name": "calculate",
-            "description": "数式を計算",
+            "description": "数学式を計算",
             "options": {
-                "expression": "計算する数式"
+                "expression": "計算する数学式"
             },
             "responses": {
                 "processing": "計算中...",
                 "result": "計算結果: {expression} = {result}",
-                "error_too_long": "エラー：式が長すぎます。短くしてから再試行してください。",
+                "error_too_long": "エラー：式が長すぎます、短くして再試行してください。",
                 "error_undefined_function": "エラー：式に未定義の関数が含まれています。",
                 "error_unsupported_elements": "エラー：式にサポートされていない要素が含まれています。",
-                "error_general": "計算エラー：式を解析または計算できませんでした。"
-            }
-        },
-        "userdata": {
-            "name": "userdata",
-            "description": "ユーザーデータを管理",
-            "options": {
-                "action": "アクション選択（読み取り/保存）",
-                "user": "対象ユーザー",
-                "user_data": "保存するユーザーデータ"
-            },
-            "choices": {
-                "read": "読み取り",
-                "save": "保存"
-            },
-            "responses": {
-                "searching": "ユーザーデータを検索中...",
-                "updating": "データを更新中...",
-                "data_found": "ユーザー <@{user_id}> のデータ：{data}",
-                "data_not_found": "ユーザー <@{user_id}> のデータが見つかりません。",
-                "data_updated": "ユーザー <@{user_id}> のデータを更新しました：{data}",
-                "data_created": "ユーザー <@{user_id}> のデータを作成しました：{data}",
-                "invalid_action": "無効なアクションです。'読み取り'または'保存'を使用してください。"
+                "error_general": "計算エラー：式を解析または計算できません。"
             }
         },
         "remind": {
             "name": "remind",
             "description": "リマインダーを設定",
             "options": {
-                "time": "リマインド時間（例：10分後、または2023年12月31日20:00:00）",
-                "message": "リマインドメッセージ",
-                "user": "リマインドするユーザー（オプション、デフォルトは自分）"
+                "time": "リマインダー時間（例：10分後、または2023年12月31日20:00:00）",
+                "message": "リマインダーメッセージ",
+                "user": "リマインダー対象ユーザー（オプション、デフォルトは自分）"
             },
             "responses": {
-                "received": "リマインダーを受け付けました",
-                "invalid_format": "無効な時間形式です。'10分後'または'2023年12月31日20:00:00'の形式を使用してください。",
-                "future_time_required": "リマインド時間は未来の時間である必要があります。",
-                "confirm_setup": "リマインダーを設定しました：{duration}後に{user}に{message}を通知します",
-                "reminder_message": "{user} リマインド：{message}",
-                "reminder_sent": "{user}にリマインドを送信しました",
-                "error_setting": "リマインダーの設定中にエラーが発生しました：{error}"
+                "received": "リマインダーを受信しました",
+                "invalid_format": "無効な時間フォーマット。'10分後'または'2023年12月31日20:00:00'形式を使用してください。",
+                "future_time_required": "リマインダー時間は未来でなければなりません。",
+                "confirm_setup": "リマインダー設定：{duration}後に{user}に{message}をリマインド",
+                "reminder_message": "{user}リマインダー：{message}",
+                "reminder_sent": "{user}にリマインダーを送信しました",
+                "error_setting": "リマインダー設定エラー：{error}"
             },
             "time_units": {
                 "years": "年",
                 "months": "月",
-                "weeks": "週間",
+                "weeks": "週",
                 "days": "日",
                 "hours": "時間",
                 "minutes": "分",
@@ -113,18 +91,18 @@
             "name": "generate_image",
             "description": "画像を生成または編集",
             "options": {
-                "prompt": "画像生成・編集用のプロンプト"
+                "prompt": "画像生成または編集のためのプロンプト"
             },
             "responses": {
                 "image_generated": "画像を生成しました",
                 "gemini_error": "Gemini APIエラー：{error}",
-                "all_methods_failed": "すべての画像生成方法が失敗しました。後でもう一度お試しください。",
-                "general_error": "画像生成中にエラーが発生しました：{error}",
-                "local_model_processing": "ローカルモデルで処理中...",
-                "local_model_complete": "ローカルモデルの生成が完了しました！"
+                "all_methods_failed": "すべての画像生成方法が失敗しました、後で再試行してください。",
+                "general_error": "画像生成エラー：{error}",
+                "local_model_processing": "ローカルモデルで生成中...",
+                "local_model_complete": "ローカルモデル生成完了！"
             },
             "errors": {
-                "generation_error": "画像生成プロセスでエラーが発生しました：{error}",
+                "generation_error": "画像生成プロセスエラー：{error}",
                 "local_model_error": "ローカルモデル生成エラー：{error}",
                 "image_processing_error": "画像処理エラー：{error}",
                 "api_error": "APIリクエストエラー：{error}",
@@ -135,7 +113,7 @@
             "name": "internet_search",
             "description": "インターネット検索を実行",
             "options": {
-                "query": "検索キーワード",
+                "query": "検索クエリ",
                 "search_type": "検索タイプ"
             },
             "choices": {
@@ -143,29 +121,51 @@
                 "image": "画像検索",
                 "youtube": "YouTube検索",
                 "url": "URLコンテンツ",
-                "eat": "食事の提案"
+                "eat": "何を食べるか"
             },
             "responses": {
                 "searching": "検索中...",
                 "processing": "検索結果を処理中...",
                 "completed": "検索完了",
-                "unknown_type": "不明な検索タイプ：{type}",
-                "no_videos_found": "関連動画が見つかりません。別のキーワードをお試しください。",
-                "youtube_result": "YouTube検索結果：\nタイトル：{title}\nチャンネル：{channel}\n再生回数：{views}\nリンク：{url}",
-                "search_failed": "検索に失敗しました。別のキーワードをお試しください。エラー：{error}"
+                "unknown_type": "未知の検索タイプ：{type}",
+                "no_videos_found": "関連動画が見つかりません、他のキーワードを試してください。",
+                "youtube_result": "YouTube検索結果：\nタイトル：{title}\nチャンネル：{channel}\n視聴回数：{views}\nリンク：{url}",
+                "search_failed": "検索失敗、他のキーワードを試してください。エラー：{error}"
             },
             "errors": {
-                "search_failed": "検索に失敗しました：{error}",
+                "search_failed": "検索失敗：{error}",
                 "no_valid_url": "有効なURLが見つかりません",
                 "no_valid_content": "有効なコンテンツを取得できませんでした",
-                "processing_error": "検索結果の処理中にエラーが発生しました：{error}",
+                "processing_error": "検索結果処理エラー：{error}",
                 "network_error": "ネットワーク接続エラー：{error}",
-                "timeout_error": "検索リクエストがタイムアウトしました",
+                "timeout_error": "検索リクエストタイムアウト",
                 "invalid_query": "無効な検索クエリ",
-                "image_download_failed": "画像のダウンロードに失敗しました",
-                "image_element_not_found": "画像要素またはリダイレクトURL要素が見つかりません",
+                "image_download_failed": "画像ダウンロード失敗",
+                "image_element_not_found": "画像要素またはリダイレクトURLが見つかりません",
                 "eat_no_food": "そのような食べ物はありません",
-                "eat_system_error": "{keyword}をおすすめしたかったのですが、申し訳ございませんシステムエラーが発生しました：{error}"
+                "eat_system_error": "元々{keyword}を推奨しようとしましたが、申し訳ありませんがシステムエラーですQQ: {error}"
+            }
+        },
+        "userdata": {
+            "name": "userdata",
+            "description": "ユーザーデータを管理",
+            "options": {
+                "action": "アクションを選択（読み取り/保存）",
+                "user": "対象ユーザー",
+                "user_data": "保存するユーザーデータ"
+            },
+            "choices": {
+                "read": "読み取り",
+                "save": "保存"
+            },
+            "responses": {
+                "searching": "ユーザーデータを検索中...",
+                "updating": "データを更新中...",
+                "data_found": "ユーザー <@{user_id}> のデータ：{data}",
+                "data_not_found": "ユーザー <@{user_id}> のデータが見つかりません。",
+                "data_updated": "ユーザー <@{user_id}> のデータを更新：{data}",
+                "data_created": "ユーザー <@{user_id}> のデータを作成：{data}",
+                "invalid_action": "無効なアクション。'読み取り'または'保存'を使用してください。"
             }
         },
         "mode": {
@@ -173,8 +173,8 @@
             "description": "再生モードを設定",
             "choices": {
                 "no_loop": "ループなし",
-                "loop_queue": "キューをループ",
-                "loop_single": "単曲ループ"
+                "loop_queue": "キューループ",
+                "loop_single": "シングルループ"
             },
             "responses": {
                 "success": "再生モードを{mode}に設定しました"
@@ -182,39 +182,40 @@
         },
         "shuffle": {
             "name": "shuffle",
-            "description": "シャッフル再生を切り替え",
+            "description": "シャッフルを切り替え",
             "responses": {
                 "enabled": "有効",
                 "disabled": "無効",
-                "success": "シャッフル再生を{status}にしました"
+                "success": "シャッフルを{status}にしました"
             }
         },
         "play": {
             "name": "play",
-            "description": "動画を再生（URLまたはキーワード）またはUIを更新",
+            "description": "動画を再生（URLまたはキーワード）またはUIをリフレッシュ",
             "options": {
-                "query": "動画URL、検索キーワード、またはUIを更新するには空のままにします"
+                "query": "動画URL、検索キーワード、またはUIリフレッシュのため空白"
             },
             "errors": {
                 "no_voice_channel": "まずボイスチャンネルに参加してください！",
-                "playlist_download_failed": "プレイリストのダウンロード中にエラーが発生しました：{error}",
-                "queue_full_title": "キューがいっぱいです",
-                "queue_full_desc": "現在の曲が終了するまでお待ちください。",
-                "video_info_failed": "動画情報の取得中にエラーが発生しました：{error}",
-                "no_results": "関連動画が見つかりませんでした。",
-                "playback_error": "再生中にエラーが発生しました",
+                "playlist_download_failed": "プレイリストダウンロードエラー：{error}",
+                "queue_full_title": "プレイリスト満杯",
+                "queue_full_desc": "新しい曲を追加する前に現在の曲が終了するのを待ってください",
+                "video_info_failed": "動画情報取得エラー：{error}",
+                "no_results": "関連動画が見つかりません",
+                "playback_error": "音楽再生エラー",
                 "attempting_next": "次の曲を再生しようとしています...",
-                "playback_failed_title": "再生に失敗しました",
-                "playback_failed_desc": "/play を使用して再試行してください。",
-                "nothing_playing": "現在再生中の曲はありません。"
+                "playback_failed_title": "再生失敗",
+                "playback_failed_desc": "/playを使用して再再生してください",
+                "nothing_playing": "現在曲を再生していません。"
             },
             "responses": {
-                "playlist_added": "キューに{count}曲を追加しました（合計：{total}曲）",
-                "song_added": "キューに追加しました：{title}",
+                "playlist_added": "プレイリストに{count}曲を追加（合計{total}曲）",
+                "song_added": "プレイリストに追加：{title}",
                 "select_song": "再生する曲を選択してください：",
                 "search_results_title": "YouTube検索結果",
-                "queue_finished": "プレイリストの再生が完了しました！",
-                "refreshed_ui": "プレーヤーインターフェースを更新しました。"
+                "queue_finished": "プレイリスト終了！",
+                "refreshed_ui": "再生UIをリフレッシュしました。",
+                "recovering_state": "異常な再生状態を検知、回復を試行中..."
             }
         },
         "set_channel_mode": {
@@ -237,8 +238,8 @@
                 "blacklist": "ブラックリスト"
             },
             "responses": {
-                "success": "チャンネル {channel} を {list_type} に追加しました",
-                "already_exists": "チャンネル {channel} は既に {list_type} に存在します"
+                "success": "チャンネル{channel}を{list_type}に追加しました",
+                "already_exists": "チャンネル{channel}は既に{list_type}に存在します"
             }
         },
         "remove_channel": {
@@ -249,171 +250,158 @@
                 "blacklist": "ブラックリスト"
             },
             "responses": {
-                "success": "チャンネル {channel} を {list_type} から削除しました",
-                "not_found": "チャンネル {channel} は {list_type} に見つかりません"
+                "success": "チャンネル{channel}を{list_type}から削除しました",
+                "not_found": "チャンネル{channel}は{list_type}に存在しません"
             }
         },
         "auto_response": {
             "name": "auto_response",
             "description": "チャンネル自動応答を設定",
             "responses": {
-                "success": "チャンネル {channel} の自動応答を {enabled} に設定しました"
+                "success": "チャンネル{channel}の自動応答を{enabled}に設定しました"
             }
         },
         "system_prompt": {
             "name": "system_prompt",
-            "description": "システムプロンプト設定を管理",
-            "subcommands": {
-                "set": {
-                    "name": "set",
-                    "description": "システムプロンプトを設定",
-                    "options": {
-                        "type": "設定タイプ（チャンネル固有またはサーバーデフォルト）",
-                        "channel": "対象チャンネル（チャンネル固有設定時に使用）",
-                        "content": "システムプロンプト内容（任意、空の場合はエディターが開きます）"
-                    },
-                    "choices": {
-                        "channel": "チャンネル固有",
-                        "server": "サーバーデフォルト"
-                    }
-                },
-                "view": {
-                    "name": "view",
-                    "description": "システムプロンプト設定を表示",
-                    "options": {
-                        "channel": "対象チャンネル（任意）",
-                        "show_inherited": "継承されたプロンプトを表示"
-                    }
-                },
-                "remove": {
-                    "name": "remove",
-                    "description": "システムプロンプトを削除",
-                    "options": {
-                        "type": "削除タイプ",
-                        "channel": "対象チャンネル（チャンネル固有削除時に使用）"
-                    },
-                    "choices": {
-                        "channel": "チャンネル固有",
-                        "server": "サーバーデフォルト"
-                    }
-                },
-                "copy": {
-                    "name": "copy",
-                    "description": "システムプロンプトを他のチャンネルにコピー",
-                    "options": {
-                        "from_channel": "コピー元チャンネル",
-                        "to_channel": "コピー先チャンネル"
-                    }
-                },
-                "reset": {
-                    "name": "reset",
-                    "description": "システムプロンプトをリセット",
-                    "options": {
-                        "type": "リセットタイプ"
-                    },
-                    "choices": {
-                        "channel": "現在のチャンネル",
-                        "server": "サーバーデフォルト",
-                        "all": "すべてリセット"
-                    }
-                },
-                "modules": {
-                    "name": "modules",
-                    "description": "利用可能なモジュールリストを表示"
-                }
-            },
+            "description": "システムプロンプト管理 - 統一インターフェース",
             "ui": {
-                "modals": {
-                    "system_prompt": {
-                        "title": "システムプロンプトを設定",
-                        "title_channel": "チャンネル #{channel} のシステムプロンプトを設定",
-                        "title_server": "サーバーデフォルトのシステムプロンプトを設定",
-                        "title_edit": "システムプロンプトを編集",
-                        "prompt_label": "システムプロンプト内容",
-                        "prompt_placeholder": "システムプロンプト内容を入力してください..."
-                    },
-                    "module_prompt": {
-                        "title": "モジュールを設定: {module}",
-                        "prompt_label": "{module} モジュール内容",
-                        "prompt_placeholder": "{module} モジュールの内容を入力してください..."
-                    }
+                "main_menu": {
+                    "title": "🤖 システムプロンプト管理",
+                    "description": "統一システムプロンプト管理インターフェースへようこそ！実行する機能を選択してください：",
+                    "main_functions_title": "🔧 主要機能",
+                    "main_functions_description": "• **プロンプト設定** - チャンネルまたはサーバーシステムプロンプトを設定\n• **設定表示** - 現在のシステムプロンプト設定を表示\n• **モジュール編集** - 特定のYAMLモジュールを編集\n• **プロンプトコピー** - システムプロンプトを他のチャンネルにコピー\n• **プロンプト削除** - 設定されたシステムプロンプトを削除\n• **設定リセット** - システムプロンプト設定をリセット",
+                    "usage_title": "📋 使用説明",
+                    "usage_description": "下記のボタンをクリックして対応する機能を実行してください。\nシステムは3層継承をサポート：YAMLベース → サーバーデフォルト → チャンネル特定",
+                    "footer": "注意：すべての操作はセキュリティのため権限チェックを行います"
                 },
                 "buttons": {
+                    "set_prompt": "プロンプト設定",
+                    "view_config": "設定表示",
+                    "module_edit": "モジュール編集",
+                    "copy_prompt": "プロンプトコピー",
+                    "remove_prompt": "プロンプト削除",
+                    "reset_config": "設定リセット",
+                    "back_to_main": "メインメニューに戻る",
+                    "channel_specific": "チャンネル特定",
+                    "server_default": "サーバーデフォルト",
+                    "channel_module": "チャンネルモジュール",
+                    "server_module": "サーバーモジュール",
+                    "current_channel": "現在のチャンネル",
+                    "show_inheritance": "継承表示",
+                    "remove_channel_prompt": "チャンネルプロンプト削除",
+                    "remove_server_prompt": "サーバープロンプト削除",
+                    "reset_current_channel": "現在のチャンネルリセット",
+                    "reset_server_default": "サーバーデフォルトリセット",
+                    "reset_all_settings": "すべての設定リセット",
+                    "execute_copy": "コピー実行",
                     "confirm": "確認",
-                    "confirm_remove": "削除を確認",
-                    "confirm_reset": "リセットを確認",
-                    "confirm_copy": "コピーを確認",
+                    "confirm_remove": "削除確認",
+                    "confirm_reset": "リセット確認",
+                    "confirm_copy": "コピー確認",
                     "cancel": "キャンセル",
                     "edit": "編集",
                     "preview": "プレビュー"
                 },
+                "menus": {
+                    "set_prompt_title": "⚙️ システムプロンプト設定",
+                    "set_prompt_description": "設定する範囲を選択してください",
+                    "view_options_title": "👁️ システムプロンプト設定表示",
+                    "view_options_description": "表示オプションを選択してください",
+                    "module_edit_title": "📦 モジュール編集",
+                    "module_edit_description": "編集するモジュールと範囲を選択してください",
+                    "module_scope_title": "📦 {scope}モジュール編集",
+                    "module_scope_description": "編集するモジュールを選択してください",
+                    "copy_prompt_title": "📋 システムプロンプトコピー",
+                    "copy_prompt_description": "ソースとターゲットチャンネルを選択してください",
+                    "remove_prompt_title": "🗑️ システムプロンプト削除",
+                    "remove_prompt_description": "削除する範囲を選択してください",
+                    "reset_config_title": "🔄 システムプロンプトリセット",
+                    "reset_config_description": "リセットする範囲を選択してください"
+                },
+                "modals": {
+                    "system_prompt": {
+                        "title": "システムプロンプト設定",
+                        "title_channel": "チャンネル #{channel} システムプロンプト設定",
+                        "title_server": "サーバーデフォルトシステムプロンプト設定",
+                        "title_edit": "システムプロンプト編集",
+                        "prompt_label": "システムプロンプト内容",
+                        "prompt_placeholder": "システムプロンプト内容を入力してください..."
+                    },
+                    "module_prompt": {
+                        "title": "モジュール設定: {module}",
+                        "prompt_label": "{module}モジュール内容",
+                        "prompt_placeholder": "{module}モジュールの内容を入力してください..."
+                    }
+                },
                 "selectors": {
                     "channel_placeholder": "チャンネルを選択",
-                    "module_placeholder": "上書きするモジュールを選択",
-                    "module_description": "{module} モジュールを上書き"
+                    "from_channel_placeholder": "ソースチャンネルを選択",
+                    "to_channel_placeholder": "ターゲットチャンネルを選択",
+                    "module_placeholder": "編集するモジュールを選択",
+                    "module_description": "{module}モジュールを編集"
                 },
                 "embeds": {
                     "system_prompt_title": "🤖 システムプロンプト設定",
                     "preview_title": "🔍 システムプロンプトプレビュー",
-                    "modules_title": "📦 利用可能なモジュール"
+                    "modules_title": "📦 利用可能なモジュールリスト"
                 }
             },
             "messages": {
                 "success": {
                     "set": "✅ システムプロンプト設定成功",
-                    "set_description": "{scope}のシステムプロンプトが正常に設定されました",
+                    "set_description": "{scope}のシステムプロンプトを正常に設定しました",
                     "remove": "✅ 削除成功",
-                    "remove_description": "{scope}のシステムプロンプトが正常に削除されました",
+                    "remove_description": "{scope}のシステムプロンプトを正常に削除しました",
                     "copy": "✅ コピー成功",
-                    "copy_description": "#{from_channel} のシステムプロンプトを #{to_channel} に正常にコピーしました",
+                    "copy_description": "#{from_channel}から#{to_channel}にシステムプロンプトを正常にコピーしました",
                     "reset": "✅ リセット成功",
-                    "reset_description": "{scope}システムプロンプト設定が正常にリセットされました",
-                    "operation_confirmed": "✅ 操作が確認されました",
-                    "operation_cancelled": "❌ 操作がキャンセルされました"
+                    "reset_description": "{scope}システムプロンプト設定を正常にリセットしました",
+                    "operation_confirmed": "✅ 操作確認済み",
+                    "operation_cancelled": "❌ 操作キャンセル"
                 },
                 "info": {
                     "scope_channel": "チャンネル #{channel}",
                     "scope_server": "サーバーデフォルト",
                     "scope_all": "すべて",
-                    "content_length": "内容の長さ",
-                    "created_by": "設定者",
+                    "content_length": "内容長",
+                    "created_by": "作成者",
                     "source": "ソース",
-                    "source_yaml": "YAML基本プロンプト",
+                    "source_yaml": "YAMLベースプロンプト",
                     "source_server": "サーバーデフォルト + YAML",
-                    "source_channel": "チャンネル固有 + サーバーデフォルト + YAML",
+                    "source_channel": "チャンネル特定 + サーバーデフォルト + YAML",
                     "source_cache": "キャッシュ",
-                    "prompt_length": "{length} 文字",
+                    "prompt_length": "{length}文字",
                     "language": "言語",
                     "channel": "チャンネル",
-                    "inheritance_title": "継承レベル",
-                    "inheritance_yaml": "🔹 YAML基本プロンプト",
+                    "inheritance_title": "継承階層",
+                    "inheritance_yaml": "🔹 YAMLベースプロンプト",
                     "inheritance_server": "🔸 サーバーデフォルトプロンプト",
-                    "inheritance_channel": "🔸 チャンネル固有プロンプト",
-                    "inheritance_none": "YAML基本のみ",
-                    "modules_description": "以下は上書き可能な YAML システムプロンプトモジュールです：",
-                    "modules_usage": "システムプロンプト設定時に、モジュール上書き機能を使用して特定のモジュール内容をカスタマイズできます",
-                    "modules_none": "利用可能なモジュールはありません",
+                    "inheritance_channel": "🔸 チャンネル特定プロンプト",
+                    "inheritance_none": "YAMLベースのみ",
+                    "modules_description": "以下はオーバーライド可能なYAMLシステムプロンプトモジュール：",
+                    "modules_usage": "システムプロンプト設定時にモジュールオーバーライド機能を使用して特定モジュールをカスタマイズできます",
+                    "modules_none": "利用可能なモジュールなし",
                     "preview_content": "内容",
                     "preview_source": "ソース",
                     "preview_length": "長さ"
                 },
                 "confirm": {
                     "remove_channel": "チャンネル #{channel} のシステムプロンプトを削除しますか？",
-                    "remove_server": "サーバーデフォルトのシステムプロンプトを削除しますか？",
+                    "remove_server": "サーバーデフォルトシステムプロンプトを削除しますか？",
                     "reset_channel": "チャンネル #{channel} のシステムプロンプトをリセットしますか？",
-                    "reset_server": "サーバーデフォルトのシステムプロンプトをリセットしますか？",
+                    "reset_server": "サーバーデフォルトシステムプロンプトをリセットしますか？",
                     "reset_all": "すべてのシステムプロンプト設定をリセットしますか？\n⚠️ この操作は元に戻せません！",
-                    "copy_simple": "#{from_channel} のシステムプロンプトを #{to_channel} にコピー",
-                    "copy_overwrite": "#{from_channel} のシステムプロンプトを #{to_channel} にコピー\n⚠️ 対象チャンネルには既にシステムプロンプトがあり、上書きされます",
-                    "title_remove": "⚠️ 削除の確認",
-                    "title_reset": "⚠️ リセットの確認",
-                    "title_copy": "🔄 コピーの確認"
+                    "copy_simple": "#{from_channel}から#{to_channel}にシステムプロンプトをコピー",
+                    "copy_overwrite": "#{from_channel}から#{to_channel}にシステムプロンプトをコピー\n⚠️ ターゲットチャンネルに既にシステムプロンプトがあり、上書きされます",
+                    "title_remove": "⚠️ 削除確認",
+                    "title_reset": "⚠️ リセット確認",
+                    "title_copy": "🔄 コピー確認"
                 },
                 "validation": {
-                    "prompt_empty": "❌ システムプロンプト内容は空にできません",
-                    "prompt_too_long": "❌ システムプロンプトが長すぎます（最大 4000 文字）、現在 {length} 文字",
-                    "same_channel": "❌ コピー元とコピー先のチャンネルは同じにできません",
-                    "module_empty": "❌ {module} モジュール内容は空にできません"
+                    "prompt_empty": "❌ システムプロンプト内容を空にできません",
+                    "prompt_too_long": "❌ システムプロンプトが長すぎます（最大4000文字）、現在{length}文字",
+                    "same_channel": "❌ ソースチャンネルとターゲットチャンネルは同じにできません",
+                    "module_empty": "❌ {module}モジュール内容を空にできません"
                 }
             },
             "errors": {
@@ -422,80 +410,80 @@
                 "server_permission_denied": "サーバーレベルのシステムプロンプトを管理する権限がありません",
                 "prompt_not_found": "システムプロンプトが見つかりません",
                 "channel_not_found": "指定されたチャンネルが見つかりません",
-                "validation_failed": "検証に失敗しました：{error}",
-                "operation_failed": "操作に失敗しました：{error}",
-                "system_error": "システムエラーです。後でもう一度お試しください",
-                "timeout": "操作がタイムアウトしました。再試行してください",
-                "modal_error": "リクエスト処理中にエラーが発生しました: {error}",
-                "unknown_error": "不明なエラーが発生しました。後でもう一度お試しください",
+                "validation_failed": "検証失敗：{error}",
+                "operation_failed": "操作失敗：{error}",
+                "system_error": "システムエラー、後で再試行してください",
+                "timeout": "操作タイムアウト、再試行してください",
+                "modal_error": "リクエスト処理エラー: {error}",
+                "unknown_error": "未知のエラーが発生しました、後で再試行してください",
                 "modules_unavailable": "モジュールリストを取得できません: {error}"
             },
             "modules": {
                 "descriptions": {
-                    "base": "AIの基本的なアイデンティティとコア指示を定義し、ボット名、作成者情報などの基本設定を含む",
-                    "personality": "AIの個性特性と表現スタイルを設定し、ユーモア、礼儀、言語スタイルなどを含む",
-                    "answering_principles": "AI応答の基本原則を規定し、優先度処理、情報源表示などを含む",
-                    "language": "AIの言語設定と表現方法を設定し、主要言語、スタイル要素、応答長などを含む",
-                    "professionalism": "専門的なトピックでのAIのパフォーマンス基準を定義し、ユーモアと専門性のバランスを取る",
-                    "interaction": "AIのインタラクションモードを設定し、会話スタイル、集中管理などを含む",
-                    "formatting": "Discord環境でのフォーマットルールを規定し、Markdown構文、言及フォーマットなどを含む",
-                    "professional_personality": "専門性と個性設定を統合し、プロフェッショナルでありながら親しみやすいAIの動作を作成する"
+                    "base": "AIの基本アイデンティティとコア指示を定義、ボット名、作成者情報などの基礎設定を含む",
+                    "personality": "AIの個性特徴と表現スタイルを設定、ユーモア、礼儀、言語スタイルなどを含む",
+                    "answering_principles": "AIの質問回答基本原則を規定、優先処理、情報ソース注記などを含む",
+                    "language": "AIの言語嗜好と表現を設定、主言語、スタイル要素、応答長などを含む",
+                    "professionalism": "AIの専門トピックでのパフォーマンス基準を定義、ユーモアと専門性のバランス",
+                    "interaction": "AIのインタラクションモードを設定、会話スタイル、集中度管理などを含む",
+                    "formatting": "Discord環境でのフォーマット規則を規定、Markdown構文、言及フォーマットなどを含む",
+                    "professional_personality": "専門性と個性化設定を統合、専門的で個性的なAIパフォーマンスを作成"
                 },
                 "select_descriptions": {
-                    "base": "基本的なアイデンティティとコア指示",
-                    "personality": "個性特性と表現スタイル",
-                    "answering_principles": "AI応答の基本原則",
-                    "language": "言語設定と表現方法",
-                    "professionalism": "専門的トピックのパフォーマンス基準",
+                    "base": "基本アイデンティティとコア指示",
+                    "personality": "個性特徴と表現スタイル",
+                    "answering_principles": "質問回答の基本原則",
+                    "language": "言語嗜好と表現",
+                    "professionalism": "専門トピックのパフォーマンス基準",
                     "interaction": "インタラクションモードと会話スタイル",
-                    "formatting": "Discordフォーマットルール",
-                    "professional_personality": "プロフェッショナル個性設定"
+                    "formatting": "Discordフォーマット規則",
+                    "professional_personality": "専門個性化設定"
                 },
                 "modules_select_descriptions": {
-                    "base": "基本的なアイデンティティとコア指示",
-                    "personality": "個性特性と表現スタイル",
-                    "answering_principles": "AI応答の基本原則",
-                    "language": "言語設定と表現方法",
-                    "professionalism": "専門的トピックのパフォーマンス基準",
+                    "base": "基本アイデンティティとコア指示",
+                    "personality": "個性特徴と表現スタイル",
+                    "answering_principles": "質問回答の基本原則",
+                    "language": "言語嗜好と表現",
+                    "professionalism": "専門トピックのパフォーマンス基準",
                     "interaction": "インタラクションモードと会話スタイル",
-                    "formatting": "Discordフォーマットルール",
-                    "professional_personality": "プロフェッショナル個性設定"
+                    "formatting": "Discordフォーマット規則",
+                    "professional_personality": "専門個性化設定"
                 },
                 "help": {
                     "title": "📦 モジュール説明",
-                    "description": "以下のモジュールを個別に編集してAIの動作をカスタマイズできます：",
-                    "usage_tip": "💡 ヒント：モジュール編集時にデフォルトコンテンツが参考として表示されます",
-                    "inheritance_note": "⚠️ 注意：モジュール編集は対応するYAMLモジュールコンテンツを上書きします"
+                    "description": "以下のモジュールは個別に編集してAIの動作をカスタマイズできます：",
+                    "usage_tip": "💡 ヒント：モジュール編集時はデフォルト内容が参考として表示されます",
+                    "inheritance_note": "⚠️ 注意：モジュール編集は対応するYAMLモジュール内容をオーバーライドします"
                 }
             },
             "user_experience": {
                 "default_content": {
-                    "loaded": "✅ デフォルトコンテンツを編集ベースとして読み込みました",
-                    "loading_failed": "⚠️ デフォルトコンテンツの読み込みに失敗しました。空白から開始します",
-                    "effective_prompt_loaded": "📝 現在有効な完全なシステムプロンプトを読み込みました",
-                    "module_default_loaded": "📦 {module} モジュールのデフォルトコンテンツを読み込みました"
+                    "loaded": "✅ 編集ベースとしてデフォルト内容をロードしました",
+                    "loading_failed": "⚠️ デフォルト内容のロードに失敗、空白から開始します",
+                    "effective_prompt_loaded": "📝 現在の有効な完全システムプロンプトをロードしました",
+                    "module_default_loaded": "📦 {module}モジュールのデフォルト内容をロードしました"
                 },
                 "editing": {
-                    "based_on_current": "現在有効なシステムプロンプトに基づいて編集...",
-                    "based_on_default": "{module} モジュールのデフォルトコンテンツに基づいて編集...",
-                    "from_scratch": "新しいコンテンツを入力してください..."
+                    "based_on_current": "現在の有効なシステムプロンプトに基づいて編集中...",
+                    "based_on_default": "{module}モジュールのデフォルト内容に基づいて編集中...",
+                    "from_scratch": "新しい内容を入力してください..."
                 },
                 "guidance": {
-                    "first_time_edit": "🎯 初回編集ヒント：デフォルトコンテンツを基に修正できます",
-                    "module_explanation": "💭 このモジュールの役割：{description}",
-                    "inheritance_info": "🔗 この設定が影響する範囲：{scope}"
+                    "first_time_edit": "🎯 初回編集ヒント：デフォルト内容に基づいて修正できます",
+                    "module_explanation": "💭 このモジュールは{description}を担当します",
+                    "inheritance_info": "🔗 この設定は{scope}に影響します"
                 }
             }
         },
         "search_gif": {
             "name": "search_gif",
-            "description": "GIF を検索",
+            "description": "GIFを検索",
             "options": {
-                "query": "検索キーワード"
+                "query": "検索クエリ"
             },
             "responses": {
-                "not_found": "関連する GIF が見つかりませんでした。",
-                "searching": "GIF を検索中..."
+                "not_found": "関連GIFが見つかりません。",
+                "searching": "GIFを検索中..."
             }
         },
         "upload_schedule": {
@@ -503,17 +491,17 @@
             "description": "スケジュールYAMLファイルをアップロード",
             "responses": {
                 "success": "スケジュールが正常にアップロードされました！",
-                "error": "スケジュールのアップロード中にエラーが発生しました：{error}"
+                "error": "スケジュールアップロードエラー：{error}"
             }
         },
         "query_schedule": {
             "name": "query_schedule",
-            "description": "スケジュールを照会",
+            "description": "スケジュールをクエリ",
             "choices": {
                 "query_type": {
-                    "full": "完全なスケジュール",
-                    "specific_time": "特定の時間",
-                    "next": "次の予定"
+                    "full": "完全スケジュール",
+                    "specific_time": "特定時間",
+                    "next": "次のイベント"
                 },
                 "day": {
                     "Monday": "月曜日",
@@ -535,14 +523,14 @@
                 }
             },
             "responses": {
-                "success": "照会完了",
-                "error": "スケジュール照会中にエラーが発生しました：{error}",
-                "no_schedule": "あなたのスケジュールが見つかりません。`/upload_schedule` コマンドを使用してスケジュールをアップロードしてください。",
+                "success": "クエリ完了",
+                "error": "スケジュールクエリエラー：{error}",
+                "no_schedule": "あなたのスケジュールが見つかりません。/upload_scheduleコマンドを使用してスケジュールをアップロードしてください。",
                 "user_not_found": "ユーザーが見つかりません。",
                 "channel_not_found": "チャンネルが見つかりません。",
-                "permission_denied": "あなたまたは照会されたユーザーはこのチャンネルを表示する権限がありません。",
-                "invalid_time_format": "無効な時間形式です。YYYY-MM-DD HH:MM:SS 形式を使用してください。",
-                "invalid_query_type": "無効な照会タイプです。"
+                "permission_denied": "あなたまたはクエリされたユーザーはこのチャンネルを表示する権限がありません。",
+                "invalid_time_format": "無効な時間フォーマット。YYYY-MM-DD HH:MM:SS形式を使用してください。",
+                "invalid_query_type": "無効なクエリタイプ。"
             }
         },
         "update_schedule": {
@@ -550,7 +538,7 @@
             "description": "スケジュールを更新または作成",
             "responses": {
                 "success": "スケジュールが正常に更新または作成されました！",
-                "error": "スケジュールの更新または作成中にエラーが発生しました：{error}"
+                "error": "スケジュール更新または作成エラー：{error}"
             }
         },
         "show_template": {
@@ -562,16 +550,49 @@
             "description": "AIモデルを管理（開発者専用）",
             "choices": {
                 "action": {
-                    "unload": "モデルのアンロード",
-                    "load": "モデルのロード"
+                    "unload": "モデルをアンロード",
+                    "load": "モデルをロード"
                 }
             },
             "responses": {
-                "model_unloaded": "モデルがアンロードされました。",
-                "model_loaded": "モデルがロードされました。",
-                "operation_completed": "操作が完了しました。",
-                "error": "操作の実行中にエラーが発生しました：{error}",
-                "model_already_unloaded": "モデルは既にアンロードされているか、まだロードされていません。"
+                "model_unloaded": "モデルをアンロードしました。",
+                "model_loaded": "モデルをロードしました。",
+                "operation_completed": "操作完了。",
+                "error": "操作実行エラー：{error}",
+                "model_already_unloaded": "モデルは既にアンロードされているかロードされていません。"
+            }
+        },
+        "botinfo": {
+            "name": "botinfo",
+            "description": "ボットの詳細情報を表示",
+            "title": "🤖 ボット情報概要",
+            "fields": {
+                "basic_stats": {
+                    "name": "📊 基本統計",
+                    "servers": "サーバー数",
+                    "users": "ユーザー数",
+                    "text_channels": "テキストチャンネル",
+                    "voice_channels": "ボイスチャンネル",
+                    "loaded_cogs": "ロードされたCogs"
+                },
+                "performance": {
+                    "name": "⚡ パフォーマンス監視",
+                    "latency": "ネットワーク遅延",
+                    "memory_usage": "メモリ使用量",
+                    "uptime": "稼働時間"
+                },
+                "cogs": {
+                    "name": "🔧 機能モジュール",
+                    "commands": "コマンド",
+                    "no_cogs": "ロードされたモジュールなし"
+                }
+            },
+            "status": {
+                "online": "🟢 オンライン",
+                "idle": "🟡 アイドル",
+                "dnd": "🔴 邪魔しないで",
+                "offline": "⚫ オフライン",
+                "unknown": "❓ 不明"
             }
         }
     },
@@ -581,120 +602,120 @@
         "help_description": "利用可能なすべてのコマンドの詳細情報を表示"
     },
     "errors": {
-        "permission_denied": "この操作を実行する権限がありません。このコマンドは管理者のみ使用できます。",
-        "command_failed": "コマンド実行に失敗しました：{error}",
-        "invalid_input": "無効な入力です。",
-        "unknown_error": "不明なエラーが発生しました。後でもう一度お試しください。"
+        "permission_denied": "この操作を実行する権限がありません、管理者のみ。",
+        "command_failed": "コマンド実行失敗：{error}",
+        "invalid_input": "無効な入力。",
+        "unknown_error": "未知のエラーが発生しました、後で再試行してください。"
     },
     "system": {
         "chat_bot": {
             "language": {
                 "answer_in": "Always answer in Japanese",
-                "style": "Use appropriate Japanese expressions and honorifics",
-                "references": "参照には [タイトル](<URL>) 形式を使用"
+                "style": "Appropriately use Japanese idioms or playful expressions",
+                "references": "引用には[タイトル](<URL>)形式を使用"
             },
             "responses": {
-                "processing": "出力を続けています..."
+                "processing": "出力継続中..."
             }
         },
         "cot_ai": {
-            "description": "思考連鎖推論AIシステム",
+            "description": "Chain of Thought AIシステム",
             "prompts": {
-                "system_prompt": "あなたは高度な推論能力を持つ専門のAIアシスタントです。あなたのタスクは、思考プロセスの詳細なステップバイステップの説明を提供することです。各ステップにおいて：\n\n1. 現在の推論段階を説明する明確で簡潔なタイトルを提供してください。\n2. 内容セクションであなたの思考プロセスを詳しく説明してください。\n3. 推論を続けるか、最終回答を提供するかを決定してください。\n4. 次の推論ステップで基本モデルまたは高度モデルのどちらを使用するかを決定してください。\n\n回答形式：\nJSON形式を使用し、以下のキーを含めてください：'title'、'content'、'next_action'（値：'continue' または 'final_answer'）、'model_selection'（値：'advanced'）\n\n重要な指示：\n- 少なくとも5つの異なる推論ステップを使用してください。\n- AIとしての制限を認識し、何ができて何ができないかを明確に述べてください。\n- 代替的な答えやアプローチを積極的に探索し評価してください。\n- あなた自身の推論を批判的に評価し、潜在的な欠陥やバイアスを特定してください。\n- 再検討時には、根本的に異なるアプローチや視点を採用してください。\n- 答えを導出または検証するために少なくとも3つの多様な方法を利用してください。\n- 推論に関連する領域知識とベストプラクティスを組み込んでください。\n- 適用可能な場合は、各ステップと最終結論の確実性レベルを定量化してください。\n- 推論の潜在的なエッジケースや例外を考慮してください。\n- 代替仮説を排除するための明確な根拠を提供してください。",
-                "user_prompt_template": "この問題をステップバイステップの推論を使用して分析してください：{question}"
+                "system_prompt": "あなたは高度な推論能力を持つプロフェッショナルAIアシスタントです。あなたのタスクは詳細なステップバイステップの思考プロセス説明を提供することです。各ステップについて：\n\n1. 現在の推論段階を記述する明確で簡潔なタイトルを提供。\n2. 内容セクションで思考プロセスを詳細に説明。\n3. 推論を継続するか最終回答を提供するかを決定。\n4. 次の推論ステップでベースモデルまたは高度モデルを使用するかを決定。\n\n応答フォーマット：\nJSONフォーマットを使用、キー：'title'、'content'、'next_action'（値：'continue'または'final_answer'）、'model_selection'（値：'advanced'）\n\nキー指示：\n- 少なくとも5つの異なる推論ステップを使用。\n- AIとしての制限を認識し、何ができるかできないかを明確に述べる。\n- 代替回答や方法を積極的に探求し評価。\n- 自身の推論を批判的に評価；潜在的な欠陥やバイアスを識別。\n- 再評価時は根本的に異なるアプローチや視点を使用。\n- 回答を導出または検証するために少なくとも3つの異なる方法を使用。\n- 推論に関連ドメイン知識とベストプラクティスを統合。\n- 適用可能な場合、各ステップと最終結論の確実性レベルを定量化。\n- 推論の潜在的なエッジケースや例外を考慮。\n- 代替仮説を排除するための明確な理由を提供。",
+                "user_prompt_template": "この質問をステップバイステップの推論で分析してください：{question}"
             },
             "errors": {
                 "api_error": "APIリクエストエラー：{error}",
-                "parsing_error": "レスポンス解析エラー：{error}",
-                "general_error": "リクエスト処理中にエラーが発生しました：{error}",
-                "model_not_available": "モデルが利用できません：{error}",
+                "parsing_error": "応答解析エラー：{error}",
+                "general_error": "リクエスト処理エラー：{error}",
+                "model_not_available": "モデル利用不可：{error}",
                 "json_decode_error": "JSONデコードエラー：{error}"
             }
         },
         "language_manager": {
             "description": "言語管理システム",
             "supported_languages": {
-                "zh_TW": "繁体字中国語",
-                "zh_CN": "簡体字中国語",
-                "en_US": "英語",
+                "zh_TW": "繁体中文",
+                "zh_CN": "简体中文",
+                "en_US": "English",
                 "ja_JP": "日本語"
             },
             "logs": {
                 "directory_not_found": "言語ディレクトリが見つかりません：{directory}",
-                "translation_load_error": "翻訳ファイル {file_path} の読み込みエラー：{error}",
-                "config_read_error": "言語設定の読み取りエラー：{error}",
-                "config_save_error": "言語設定の保存エラー：{error}",
-                "path_traversal_error": "パス {path} の走査を続行できません、現在の結果は辞書ではありません：{result}",
-                "format_error": "翻訳のフォーマットエラー、パラメータが不足しています：{error}",
-                "translation_not_found": "翻訳が見つかりません：{path}",
-                "translation_error": "テキストの翻訳エラー：{error}"
+                "translation_load_error": "翻訳ファイルロードエラー {file_path}: {error}",
+                "config_read_error": "言語設定読み取りエラー: {error}",
+                "config_save_error": "言語設定保存エラー: {error}",
+                "path_traversal_error": "パストラバーサルを継続できません {path}, 現在の結果は辞書ではありません: {result}",
+                "format_error": "翻訳フォーマットエラー、欠落パラメータ: {error}",
+                "translation_not_found": "翻訳が見つかりません: {path}",
+                "translation_error": "テキスト翻訳エラー: {error}"
             }
         },
         "gif_tools": {
-            "description": "GIF 検索・管理ツール",
+            "description": "GIF検索と管理ツール",
             "logs": {
-                "searching_gif": "GIF を検索中：{query}",
-                "found_gif": "GIF が見つかりました：{url}",
-                "api_error": "Tenor API レスポンスエラー：{status_code}",
-                "search_error": "GIF 検索エラー：{error}",
-                "get_url_error": "GIF URL の取得中にエラーが発生しました：{error}",
-                "empty_query_warning": "空の検索キーワード"
+                "searching_gif": "GIF検索: {query}",
+                "found_gif": "GIF発見: {url}",
+                "api_error": "Tenor API応答エラー: {status_code}",
+                "search_error": "GIF検索エラー: {error}",
+                "get_url_error": "GIF URL取得エラー: {error}",
+                "empty_query_warning": "空の検索クエリ"
             }
         },
         "schedule": {
             "description": "スケジュール管理システム",
             "format": {
-                "full_schedule_title": "**完全なスケジュール:**",
+                "full_schedule_title": "**完全スケジュール:**",
                 "empty_schedule": "スケジュールは空です。",
                 "day_header": "**{day}:**",
-                "no_events": "予定がありません。",
+                "no_events": "イベントなし。",
                 "time_column": "時間",
                 "description_column": "説明",
-                "specific_time_title": "**{time} の予定:**",
-                "no_events_found": "その時間に予定が見つかりませんでした。",
-                "next_event": "次の予定：{time} - {description}",
-                "no_next_event": "次の予定が見つかりませんでした。"
+                "specific_time_title": "**{time}のスケジュール:**",
+                "no_events_found": "その時間のイベントが見つかりません。",
+                "next_event": "次のイベント：{time} - {description}",
+                "no_next_event": "次のイベントが見つかりません。"
             },
             "errors": {
-                "yaml_parse_error": "YAMLファイル解析エラー：{error}"
+                "yaml_parse_error": "YAML解析エラー：{error}"
             }
         },
         "model_management": {
-            "description": "AI モデル管理システム",
+            "description": "AIモデル管理システム",
             "status": {
                 "processing": "モデル操作を処理中...",
                 "loading": "モデルをロード中...",
                 "unloading": "モデルをアンロード中...",
-                "completed": "モデル操作が完了しました"
+                "completed": "モデル操作完了"
             },
             "errors": {
-                "permission_denied": "この操作を実行する権限がありません。開発者のみアクセス可能です。",
-                "model_not_found": "指定されたモデルが見つかりませんでした。",
-                "operation_failed": "モデル操作に失敗しました：{error}"
+                "permission_denied": "この操作を実行する権限がありません、開発者のみ。",
+                "model_not_found": "指定されたモデルが見つかりません。",
+                "operation_failed": "モデル操作失敗：{error}"
             },
             "userdata": {
                 "description": "ユーザーデータ管理システム",
                 "status": {
                     "processing": "ユーザーデータを分析中...",
-                    "completed": "ユーザーデータ分析が完了しました",
+                    "completed": "ユーザーデータ分析完了",
                     "updating": "ユーザーデータを更新中...",
                     "searching": "ユーザーデータを検索中..."
                 },
                 "errors": {
                     "no_data": "ユーザーデータが見つかりません",
-                    "analysis_failed": "データ分析に失敗しました：{error}",
-                    "update_failed": "ユーザーデータの更新に失敗しました：{error}",
-                    "ai_processing_failed": "ユーザーデータの AI 処理中にエラーが発生しました：{error}",
+                    "analysis_failed": "データ分析失敗：{error}",
+                    "update_failed": "ユーザーデータ更新失敗：{error}",
+                    "ai_processing_failed": "AIユーザーデータ処理エラー：{error}",
                     "database_error": "データベース操作エラー：{error}",
-                    "invalid_user": "無効なユーザー ID です",
+                    "invalid_user": "無効なユーザーID",
                     "permission_denied": "このユーザーのデータにアクセスする権限がありません"
                 },
                 "logs": {
-                    "data_retrieved": "ユーザー {user_id} のデータを取得しました",
-                    "data_updated": "ユーザー {user_id} のデータを更新しました",
-                    "data_created": "ユーザー {user_id} の新しいデータを作成しました",
-                    "ai_processing": "AI を使用してユーザーデータの更新を処理中です",
-                    "operation_completed": "ユーザーデータ操作が完了しました"
+                    "data_retrieved": "ユーザー{user_id}のデータを取得しました",
+                    "data_updated": "ユーザー{user_id}のデータを更新しました",
+                    "data_created": "ユーザー{user_id}のデータを作成しました",
+                    "ai_processing": "AIを使用してユーザーデータ更新を処理中",
+                    "operation_completed": "ユーザーデータ操作完了"
                 }
             }
         },
@@ -702,11 +723,11 @@
             "description": "インターネット検索システム",
             "logs": {
                 "search_started": "検索開始：{query}",
-                "results_found": "{count} 件の検索結果が見つかりました",
-                "processing_url": "URL を処理中：{url}",
-                "content_extracted": "コンテンツを抽出しました、長さ：{length} 文字",
+                "results_found": "{count}件の検索結果が見つかりました",
+                "processing_url": "URLを処理中：{url}",
+                "content_extracted": "内容を抽出、{length}文字",
                 "image_search_started": "画像検索開始：{query}",
-                "eat_search_started": "グルメ推薦検索開始：{keyword}"
+                "eat_search_started": "食事推奨検索開始：{keyword}"
             }
         },
         "remind": {
@@ -715,7 +736,7 @@
                 "full_format": "{years}{months}{weeks}{days}{hours}{minutes}{seconds}",
                 "year_format": "{value}年",
                 "month_format": "{value}月",
-                "week_format": "{value}週間",
+                "week_format": "{value}週",
                 "day_format": "{value}日",
                 "hour_format": "{value}時間",
                 "minute_format": "{value}分",
@@ -723,59 +744,59 @@
             },
             "errors": {
                 "parse_error": "時間解析エラー：{error}",
-                "reminder_failed": "リマインダー設定に失敗しました：{error}",
+                "reminder_failed": "リマインダー設定失敗：{error}",
                 "invalid_time_unit": "無効な時間単位：{unit}",
-                "time_out_of_range": "時間が有効範囲外です"
+                "time_out_of_range": "時間範囲外"
             },
             "logs": {
-                "reminder_set": "ユーザー {user_id} にリマインダーを設定しました：{duration} 後",
-                "reminder_triggered": "リマインダーが発動されました：ユーザー {user_id}",
-                "parse_success": "時間の解析に成功しました：{time_str} -> {parsed_time}",
-                "parse_failed": "時間の解析に失敗しました：{time_str}"
+                "reminder_set": "ユーザー{user_id}のリマインダー設定：{duration}後",
+                "reminder_triggered": "リマインダートリガー：ユーザー{user_id}",
+                "parse_success": "時間解析成功：{time_str} -> {parsed_time}",
+                "parse_failed": "時間解析失敗：{time_str}"
             }
         },
         "music": {
             "player": {
                 "now_playing": "🎵 再生中",
-                "uploader": "👤 チャンネル",
+                "uploader": "👤 アップローダー",
                 "duration": "⏱️ 再生時間",
                 "views": "👀 視聴回数",
-                "progress": "🎵 進行状況",
-                "queue": "📜 再生リスト",
-                "queue_empty": "リストが空です",
-                "added_by": "{user} によって追加",
-                "live": "ライブ"
+                "progress": "🎵 進捗",
+                "queue": "📜 キュー",
+                "queue_empty": "キュー空",
+                "added_by": "{user}により追加",
+                "live": "ライブ中"
             },
             "controls": {
-                "no_music": "❌ 現在再生中の音楽がありません！",
-                "no_songs": "❌ 再生可能な楽曲がありません！",
-                "previous": "⏮️ {user} が前の曲に戻りました",
-                "paused": "⏸️ {user} が音楽を一時停止しました",
-                "resumed": "▶️ {user} が音楽を再開しました",
-                "skipped": "⏭️ {user} が音楽をスキップしました",
-                "stopped": "⏹️ {user} が再生を停止しました",
-                "mode_changed": "🔄 {user} が再生モードを {mode} に設定しました",
-                "shuffle_toggled": "🔀 {user} がシャッフル再生を{status}しました",
+                "no_music": "❌ 音楽を再生していません！",
+                "no_songs": "❌ 利用可能な曲がありません！",
+                "previous": "⏮️ {user}が前へ",
+                "paused": "⏸️ {user}が音楽を一時停止",
+                "resumed": "▶️ {user}が音楽を再開",
+                "skipped": "⏭️ {user}が音楽をスキップ",
+                "stopped": "⏹️ {user}が再生を停止",
+                "mode_changed": "🔄 {user}がモードを{mode}に設定",
+                "shuffle_toggled": "🔀 {user}がシャッフルを{status}",
                 "now_playing_prefix": "▶️ 再生中:",
-                "queue_songs": "再生待ちの楽曲:",
-                "update_failed": "再生リストの更新に失敗しました"
+                "queue_songs": "キューされた曲:",
+                "update_failed": "プレイリスト更新失敗"
             },
             "select": {
-                "timeout": "⌛ | 楽曲選択の時間が切れました",
-                "duration_label": "再生時間: {duration}",
-                "placeholder": "再生する楽曲を選択してください",
-                "queue_full": "❌ | 再生リストが満杯です",
-                "wait_message": "現在の楽曲の再生が終了してから新しい楽曲を追加してください",
+                "timeout": "⌛ | 曲選択タイムアウト",
+                "duration_label": "時間: {duration}",
+                "placeholder": "再生する曲を選択",
+                "queue_full": "❌ | プレイリスト満杯",
+                "wait_message": "新しい曲を追加する前に現在の曲が終了するのを待ってください",
                 "processing": "⏳ | 処理中",
-                "processing_desc": "選択を処理しています。しばらくお待ちください...",
-                "added": "✅ | 再生リストに追加されました: {title}",
-                "error": "❌ | 楽曲選択中にエラーが発生しました"
+                "processing_desc": "選択を処理中、しばらくお待ちください...",
+                "added": "✅ | プレイリストに追加：{title}",
+                "error": "❌ | 曲選択エラー"
             },
             "autoplay": {
                 "enabled": "有効",
                 "disabled": "無効",
-                "toggled": "自動再生を{status}にしました",
-                "playing": "自動再生：{song_title} をキューに追加しました"
+                "toggled": "自動再生を{status}",
+                "playing": "自動再生：{song_title}をキューに追加"
             }
         }
     }

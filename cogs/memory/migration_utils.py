@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
+import asyncio
+from function import func
 
 from .config import MemoryProfile
 from .database import DatabaseManager
@@ -203,7 +205,8 @@ class ModelMigrationManager:
                 )
                 return cursor.fetchone()[0]
         except Exception as e:
-            self.logger.error(f"統計向量數量失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Counting vectors to migrate failed"))
+            self.logger.error(f"統計向量數量失敗: {e}", exc_info=True)
             return 0
     
     def migrate_vectors(
@@ -263,7 +266,8 @@ class ModelMigrationManager:
             
         except Exception as e:
             migration_info.end_time = datetime.now()
-            self.logger.error(f"向量遷移失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Vector migration failed"))
+            self.logger.error(f"向量遷移失敗: {e}", exc_info=True)
             raise VectorOperationError(f"向量遷移失敗: {e}")
     
     def _regenerate_vectors(
@@ -331,7 +335,8 @@ class ModelMigrationManager:
                     self.logger.info(f"遷移進度: {progress:.1%}")
                 
             except Exception as e:
-                self.logger.error(f"批次遷移失敗 (offset={offset}): {e}")
+                asyncio.create_task(func.report_error(e, f"Batch migration failed at offset {offset}"))
+                self.logger.error(f"批次遷移失敗 (offset={offset}): {e}", exc_info=True)
                 migration_info.failed_vectors += batch_size
                 offset += batch_size
         
@@ -396,7 +401,8 @@ class ModelMigrationManager:
                 offset += batch_size
                 
             except Exception as e:
-                self.logger.error(f"向量轉換失敗 (offset={offset}): {e}")
+                asyncio.create_task(func.report_error(e, f"Vector transformation failed at offset {offset}"))
+                self.logger.error(f"向量轉換失敗 (offset={offset}): {e}", exc_info=True)
                 migration_info.failed_vectors += batch_size
                 offset += batch_size
         
@@ -477,7 +483,8 @@ class ModelMigrationManager:
                 offset += batch_size
                 
             except Exception as e:
-                self.logger.error(f"維度變更失敗 (offset={offset}): {e}")
+                asyncio.create_task(func.report_error(e, f"Dimension change failed at offset {offset}"))
+                self.logger.error(f"維度變更失敗 (offset={offset}): {e}", exc_info=True)
                 migration_info.failed_vectors += batch_size
                 offset += batch_size
         
@@ -498,7 +505,8 @@ class ModelMigrationManager:
                 columns = [desc[0] for desc in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
         except Exception as e:
-            self.logger.error(f"取得訊息批次失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Getting message batch failed"))
+            self.logger.error(f"取得訊息批次失敗: {e}", exc_info=True)
             return []
     
     def _get_vectors_batch(self, source_model: str, offset: int, batch_size: int) -> List[Dict]:
@@ -515,7 +523,8 @@ class ModelMigrationManager:
                 columns = [desc[0] for desc in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
         except Exception as e:
-            self.logger.error(f"取得向量批次失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Getting vectors batch failed"))
+            self.logger.error(f"取得向量批次失敗: {e}", exc_info=True)
             return []
     
     def _update_embeddings_batch(
@@ -549,7 +558,8 @@ class ModelMigrationManager:
                 conn.commit()
                 
         except Exception as e:
-            self.logger.error(f"批次更新嵌入失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Batch updating embeddings failed"))
+            self.logger.error(f"批次更新嵌入失敗: {e}", exc_info=True)
             raise DatabaseError(f"批次更新嵌入失敗: {e}")
     
     def _update_vectors_batch(
@@ -574,7 +584,8 @@ class ModelMigrationManager:
                 conn.commit()
                 
         except Exception as e:
-            self.logger.error(f"批次更新向量失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Batch updating vectors failed"))
+            self.logger.error(f"批次更新向量失敗: {e}", exc_info=True)
             raise DatabaseError(f"批次更新向量失敗: {e}")
     
     def cleanup_old_vectors(self, old_model: str) -> int:
@@ -599,5 +610,6 @@ class ModelMigrationManager:
                 return deleted_count
                 
         except Exception as e:
-            self.logger.error(f"清理舊向量失敗: {e}")
+            asyncio.create_task(func.report_error(e, f"Cleaning up old vectors for model {old_model} failed"))
+            self.logger.error(f"清理舊向量失敗: {e}", exc_info=True)
             raise DatabaseError(f"清理舊向量失敗: {e}")

@@ -52,6 +52,7 @@ class ScheduleManager(commands.Cog):
             ) if self.lang_manager else "行程表已成功上傳！"
             await interaction.followup.send(success_msg)
         except Exception as e:
+            await func.report_error(e, "uploading schedule")
             error_msg = self.lang_manager.translate(
                 guild_id, "commands", "upload_schedule", "responses", "error", error=str(e)
             ) if self.lang_manager else f"上傳行程表時發生錯誤：{str(e)}"
@@ -95,6 +96,7 @@ class ScheduleManager(commands.Cog):
             result = await self._core_query_schedule(interaction, query_type.value, target_user_id, time, day.value if day else None)
             await interaction.followup.send(result)
         except Exception as e:
+            await func.report_error(e, "querying schedule")
             error_msg = self.lang_manager.translate(
                 guild_id, "commands", "query_schedule", "responses", "error", error=str(e)
             ) if self.lang_manager else f"查詢行程表時發生錯誤：{str(e)}"
@@ -306,6 +308,7 @@ class ScheduleManager(commands.Cog):
             ) if self.lang_manager else "行程表已成功更新或創建！"
             await interaction.followup.send(success_msg)
         except Exception as e:
+            await func.report_error(e, "updating schedule")
             error_msg = self.lang_manager.translate(
                 guild_id, "commands", "update_schedule", "responses", "error", error=str(e)
             ) if self.lang_manager else f"更新或創建行程表時發生錯誤：{str(e)}"

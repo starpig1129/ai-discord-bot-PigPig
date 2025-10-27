@@ -14,6 +14,7 @@ from addons.settings import TOKENS
 from gpt.utils.media import image_to_base64
 from gpt.caching.gemini_cache import GeminiCacheManager
 from gpt.core.exceptions import LLMProviderError  # PR#2: 統一錯誤類導入
+from function import func
 
 # Sentinel for safely terminating async iteration from executor threads
 _SENTINEL = object()
@@ -30,7 +31,7 @@ try:
     model_id = "gemini-2.5-flash"
     logger.info("Gemini API 客戶端初始化成功")
 except Exception as e:
-    logger.error(f"Gemini API 客戶端初始化失敗: {e}")
+    asyncio.create_task(func.report_error(e, "Gemini API client initialization"))
     raise
 
 class GeminiError(Exception):
@@ -172,6 +173,7 @@ def _download_and_process_pdf(pdf_url_or_path: str) -> pathlib.Path:
     except httpx.HTTPStatusError as e:
         raise Exception(f"HTTP 錯誤 {e.response.status_code}: 無法下載 PDF 檔案")
     except Exception as e:
+        asyncio.create_task(func.report_error(e, "PDF processing"))
         raise Exception(f"處理 PDF 檔案失敗: {str(e)}")
 
 async def _upload_pdf_files(pdf_inputs) -> List[Any]:
@@ -208,7 +210,7 @@ async def _upload_pdf_files(pdf_inputs) -> List[Any]:
                 logger.info(f"PDF {index+1} 已成功上傳到 Gemini Files API")
                 return uploaded_file
             except Exception as e:
-                logger.error(f"PDF {index+1} 上傳失敗: {str(e)}")
+                await func.report_error(e, f"PDF upload failed for index {index+1}")
                 raise
         
         # 並行上傳所有 PDF 檔案
@@ -222,7 +224,7 @@ async def _upload_pdf_files(pdf_inputs) -> List[Any]:
         logger.info(f"所有 PDF 檔案已並行上傳完成，共 {len(uploaded_files)} 個")
             
     except Exception as e:
-        logger.error(f"PDF 上傳失敗: {str(e)}")
+        await func.report_error(e, "PDF upload failed")
         raise
     finally:
         # 清理暫存檔案（如果是下載的）
@@ -234,7 +236,7 @@ async def _upload_pdf_files(pdf_inputs) -> List[Any]:
                     os.unlink(temp_path)
                     logger.debug(f"已清理暫存 PDF 檔案: {temp_path}")
             except Exception as cleanup_error:
-                logger.warning(f"清理暫存 PDF 檔案失敗: {cleanup_error}")
+                asyncio.create_task(func.report_error(cleanup_error, "Failed to clean up temporary PDF file"))
     
     return uploaded_files
 
@@ -335,7 +337,7 @@ async def _upload_media_files(media_inputs, media_type):
                 logger.info(f"已上傳{media_type} {index+1} 到 Gemini Files API")
                 return uploaded_file
             except Exception as e:
-                logger.error(f"{media_type} {index+1} 上傳失敗: {str(e)}")
+                await func.report_error(e, f"{media_type} upload failed for index {index+1}")
                 raise
         
         # 並行上傳所有檔案
@@ -349,7 +351,7 @@ async def _upload_media_files(media_inputs, media_type):
         logger.info(f"所有 {media_type} 檔案已並行上傳完成，共 {len(uploaded_files)} 個")
         
     except Exception as e:
-        logger.error(f"{media_type}上傳失敗: {str(e)}")
+        await func.report_error(e, f"{media_type} upload failed")
         raise
     finally:
         # 清理臨時檔案
@@ -358,7 +360,7 @@ async def _upload_media_files(media_inputs, media_type):
             try:
                 os.unlink(temp_path)
             except Exception as cleanup_error:
-                logger.warning(f"清理臨時檔案失敗: {cleanup_error}")
+                asyncio.create_task(func.report_error(cleanup_error, "Failed to clean up temporary media file"))
     
     return uploaded_files
 
@@ -433,7 +435,7 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
                 current_parts.append({'file_data': {'file_uri': f.uri, 'mime_type': f.mime_type}})
             logger.info("PDF 檔案已添加到對話內容中")
         except Exception as e:
-            logger.error(f"PDF 處理失敗，使用降級方案: {str(e)}")
+            await func.report_error(e, "PDF processing in conversation build")
             # 降級：修改文字提示
             current_parts[0] = {"text": f"{inst}\n\n注意: PDF 處理發生錯誤，無法直接分析 PDF 內容"}
             
@@ -446,7 +448,7 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
                 current_parts.append({'file_data': {'file_uri': f.uri, 'mime_type': f.mime_type}})
             logger.info("影片已添加到對話內容中")
         except Exception as e:
-            logger.error(f"影片處理失敗，使用降級方案: {str(e)}")
+            await func.report_error(e, "video processing in conversation build")
             # 降級：修改文字提示
             current_parts[0] = {"text": f"{inst}\n\n注意: 影片處理發生錯誤，無法直接分析影片內容"}
             
@@ -459,7 +461,7 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
                 current_parts.append({'file_data': {'file_uri': f.uri, 'mime_type': f.mime_type}})
             logger.info("音訊已添加到對話內容中")
         except Exception as e:
-            logger.error(f"音訊處理失敗: {str(e)}")
+            await func.report_error(e, "audio processing in conversation build")
             current_parts[0] = {"text": f"{inst}\n\n注意: 音訊處理發生錯誤，無法分析音訊內容"}
         
     elif image_input:
@@ -471,7 +473,7 @@ async def _build_conversation_contents(inst, dialogue_history=None, image_input=
                 current_parts.append({'file_data': {'file_uri': f.uri, 'mime_type': f.mime_type}})
             logger.info("圖片已添加到對話內容中")
         except Exception as e:
-            logger.error(f"圖片處理失敗，使用降級方案: {str(e)}")
+            await func.report_error(e, "image processing in conversation build")
             # 降級：使用 inlineData 格式
             if isinstance(image_input, list):
                 for img in image_input:
@@ -565,7 +567,7 @@ async def _create_context_hash(
                 if content:
                     hasher.update(content)
             except Exception as e:
-                logger.warning(f"無法為 {media_type} 輸入生成哈希值，可能導致快取不準確: {e}")
+                asyncio.create_task(func.report_error(e, f"hashing media content for {media_type}"))
 
     # 順序執行哈希操作以保證 hasher 的狀態一致性
     await asyncio.to_thread(hash_media_content, image_input, 'image')
@@ -667,7 +669,7 @@ async def generate_response(inst: str,
                     cache = None # 確保在 token 不足時，後續流程不會使用快取
 
             except Exception as e:
-                logger.error(f"在動態創建快取時發生錯誤，將降級為非快取模式: {e}")
+                await func.report_error(e, "dynamic cache creation")
                 cache = None # 確保出錯時 cache 為 None
 
     # <<< 步驟 4: 根據是否有可用的快取，準備 API 請求
@@ -698,7 +700,7 @@ async def generate_response(inst: str,
                 response_object = await asyncio.to_thread(client.models.generate_content_stream, **api_kwargs)
         
         except Exception as e:
-            logger.warning(f"快取模式生成失敗，將自動降級為非快取模式。錯誤: {e}")
+            await func.report_error(e, "cached content generation")
             # 清理 response_object，確保進入非快取模式
             response_object = None
 
@@ -800,6 +802,7 @@ async def generate_response(inst: str,
                                     else:
                                         raise GeminiError(f"Gemini API 流式和非流式回應都失敗: {error_message}")
                                 except Exception as fallback_error:
+                                    await func.report_error(fallback_error, "Gemini API fallback failed")
                                     raise GeminiError(f"Gemini API 降級處理失敗: {fallback_error}")
 
                         elif "RESOURCE_PROJECT_INVALID" in error_message:
@@ -819,7 +822,7 @@ async def generate_response(inst: str,
                         raise GeminiError("Gemini API 沒有生成任何回應內容")
 
                 except Exception as e:
-                    logger.error(f"在流式生成過程中發生錯誤: {e}")
+                    await func.report_error(e, "streaming generation")
                     raise GeminiError(f"流式生成失敗: {e}") from e
             return None, async_generator()
         else:
@@ -831,5 +834,5 @@ async def generate_response(inst: str,
             except (AttributeError, IndexError) as e:
                 raise GeminiError(f"無法從 API 回應中提取 JSON 物件: {e}\n原始回應: {response_object.text}")
     except Exception as e:
-        logger.error(f"處理 Gemini 回應時發生未知錯誤: {e}")
+        await func.report_error(e, "processing Gemini response")
         raise GeminiError(f"處理 Gemini 回應失敗: {e}") from e

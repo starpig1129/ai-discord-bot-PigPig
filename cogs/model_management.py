@@ -91,6 +91,7 @@ class ModelManagement(commands.Cog):
             result = await self.execute_model_operation(action.value, guild_id)
             await interaction.edit_original_response(content=result)
         except Exception as e:
+            func.report_error(e, f"executing model operation: {action.value}")
             error_msg = self.lang_manager.translate(
                 guild_id, "commands", "model_management", "responses", "error", error=str(e)
             ) if self.lang_manager else f"執行操作時發生錯誤：{e}"
@@ -152,6 +153,7 @@ class ModelManagement(commands.Cog):
                 return completed_msg
                 
         except Exception as e:
+            func.report_error(e, f"executing model operation: {action}")
             error_msg = self.lang_manager.translate(
                 guild_id, "system", "model_management", "errors", "operation_failed", error=str(e)
             ) if self.lang_manager else f"模型操作失敗：{e}"

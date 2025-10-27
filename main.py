@@ -23,9 +23,12 @@ import discord
 import asyncio
 import logging
 import update
-import function as func
+from function import func, tokens,get_settings,settings
 from bot import PigPig
 from addons import Settings
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class CommandCheck(discord.app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
@@ -36,15 +39,15 @@ class CommandCheck(discord.app_commands.CommandTree):
         return await super().interaction_check(interaction)
     
 async def get_prefix(bot, message: discord.Message):
-    settings = await func.get_settings(message.guild.id)
-    return settings.get("prefix", func.settings.bot_prefix)
+    guild_settings = await get_settings(message.guild.id)
+    return guild_settings.get("prefix", settings.bot_prefix)
 
 # Loading settings
-func.settings = Settings("settings.json")
+settings = Settings("settings.json")
 
 # Setup the bot object
 intents = discord.Intents.default()
-intents.message_content = True if func.settings.bot_prefix else False
+intents.message_content = True if settings.bot_prefix else False
 intents.members = True
 member_cache = discord.MemberCacheFlags(
     voice=True,
@@ -65,7 +68,7 @@ bot = PigPig(
 if __name__ == "__main__":
     update.check_version(with_msg=True)
     try:
-        bot.run(func.tokens.token, log_handler=None)
+        bot.run(tokens.token, log_handler=None)
     except KeyboardInterrupt:
         print("收到 KeyboardInterrupt，使用者手動中斷，開始優雅關閉...")
     finally:
@@ -75,3 +78,4 @@ if __name__ == "__main__":
             asyncio.run(bot.close())
         except Exception as e:
             print(f"最終清理階段發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "main.py/finally"))

@@ -10,6 +10,7 @@ import logging
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
+from function import func
 
 logger = logging.getLogger(__name__)
 
@@ -114,10 +115,10 @@ class OptimizationConfigManager:
             self._parse_settings()
             
         except json.JSONDecodeError as e:
-            self.logger.error(f"配置檔案 JSON 格式錯誤: {e}")
+            func.report_error(e, "optimization config JSON decode error")
             self._create_default_config()
         except Exception as e:
-            self.logger.error(f"載入配置檔案失敗: {e}")
+            func.report_error(e, "optimization config load error")
             self._create_default_config()
     
     def _create_default_config(self) -> None:
@@ -198,7 +199,7 @@ class OptimizationConfigManager:
             self.logger.info(f"配置解析完成，環境: {self._environment}")
             
         except Exception as e:
-            self.logger.error(f"配置解析失敗: {e}")
+            func.report_error(e, "optimization config parse error")
             self._create_default_config()
     
     def get_settings(self) -> OptimizationSettings:
@@ -214,7 +215,7 @@ class OptimizationConfigManager:
             self.logger.info("配置重新載入成功")
             return True
         except Exception as e:
-            self.logger.error(f"配置重新載入失敗: {e}")
+            func.report_error(e, "optimization config reload error")
             return False
     
     def get_environment(self) -> str:

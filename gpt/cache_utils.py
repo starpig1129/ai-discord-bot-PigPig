@@ -8,6 +8,8 @@ import logging
 import hashlib
 from typing import Optional, Dict, Any, List
 from gpt.llms.gemini import get_cache_manager
+from function import func
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,7 @@ class CacheHelper:
             return cache
             
         except Exception as e:
-            logger.error(f"創建系統指令快取失敗: {str(e)}")
+            asyncio.create_task(func.report_error(e, "System cache creation failed"))
             return None
     
     @staticmethod
@@ -123,7 +125,7 @@ class CacheHelper:
             return cache
             
         except Exception as e:
-            logger.error(f"創建對話快取失敗: {str(e)}")
+            asyncio.create_task(func.report_error(e, "Conversation cache creation failed"))
             return None
     
     @staticmethod
@@ -141,7 +143,7 @@ class CacheHelper:
             return cache_mgr.force_cleanup_all_caches()
             
         except Exception as e:
-            logger.error(f"清理快取失敗: {str(e)}")
+            asyncio.create_task(func.report_error(e, "Old cache cleanup failed"))
             return 0
     
     @staticmethod
@@ -165,7 +167,7 @@ class CacheHelper:
             return stats
             
         except Exception as e:
-            logger.error(f"獲取快取統計失敗: {str(e)}")
+            asyncio.create_task(func.report_error(e, "Cache statistics retrieval failed"))
             return {"error": str(e)}
 
 # 全域快取助手實例

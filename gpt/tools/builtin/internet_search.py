@@ -4,6 +4,7 @@
 from typing import Literal
 from gpt.tools.registry import tool
 from gpt.tools.tool_context import ToolExecutionContext
+from function import func
 
 @tool
 async def internet_search(
@@ -59,5 +60,5 @@ async def internet_search(
         return f"Search for '{query}' of type '{search_type}' completed successfully."
 
     except Exception as e:
-        logger.error(f"An error occurred while executing internet_search via cog: {e}", exc_info=True)
+        await func.report_error(e, f"Internet search for '{query}' of type '{search_type}' failed")
         return f"An unexpected error occurred during the search: {e}"

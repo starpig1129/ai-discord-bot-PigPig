@@ -78,7 +78,7 @@ class EatWhatView(discord.ui.View):
             print(f"Debug: Search record id: {id}")
             await interaction.edit_original_response(content="更新推荐：", embed=embed, view=EatWhatView(result = self.result,predict=self.predict,keyword=self.keyword,db=self.db, record_id=id, discord_id=str(self.discord_id)))
         except Exception as e:
-            print('EatWatchView regenerate:',e)
+            await func.report_error(e, "cogs/eat/views.py/regenerate")
     @discord.ui.button(label="查看評論", emoji="📰")
     async def review(self, interaction: discord.Interaction, button: discord.ui.Button):
         """美食評論功能按鈕 - 已升級至 Google Gemini API 官方標準
@@ -157,4 +157,4 @@ class EatWhatView(discord.ui.View):
             if thread:
                 thread.join()
         except Exception as e:
-            print(e)
+            await func.report_error(e, "cogs/eat/views.py/review")

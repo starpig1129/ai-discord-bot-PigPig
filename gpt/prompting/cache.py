@@ -125,7 +125,7 @@ class PromptCache:
                 self.logger.info(f"Precompiled {len(self.precompiled_cache)} template combinations")
                 
             except Exception as e:
-                self.logger.error(f"Failed to precompile templates: {e}")
+                func.report_error(e, "precompiling templates")
     
     def get_precompiled(self, key: str) -> Optional[str]:
         """

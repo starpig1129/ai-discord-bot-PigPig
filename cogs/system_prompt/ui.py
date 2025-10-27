@@ -7,6 +7,8 @@
 import discord
 from typing import Optional, Dict, Any, Callable, List
 import logging
+from function import func
+import asyncio
 
 from .exceptions import ValidationError, ContentTooLongError
 
@@ -81,6 +83,7 @@ class SystemPromptModal(discord.ui.Modal):
                         self.logger.info(f"已載入有效提示並還原變數格式，長度: {len(initial_value)}")
                         
             except Exception as e:
+                asyncio.create_task(func.report_error(e, "Error loading default content"))
                 self.logger.warning(f"載入預設內容時發生錯誤: {e}")
         
         # 系統提示輸入框
@@ -129,6 +132,7 @@ class SystemPromptModal(discord.ui.Modal):
             return restored_prompt
             
         except Exception as e:
+            asyncio.create_task(func.report_error(e, "Error restoring variable placeholders in UI"))
             self.logger.warning(f"UI 模組還原變數占位符時發生錯誤: {e}")
             return prompt
     
@@ -153,6 +157,7 @@ class SystemPromptModal(discord.ui.Modal):
                 )
                 
         except Exception as e:
+            await func.report_error(e, "Error processing Modal submission")
             self.logger.error(f"處理 Modal 提交時發生錯誤: {e}")
             if not interaction.response.is_done():
                 await interaction.response.send_message(
@@ -224,6 +229,7 @@ class SystemPromptModuleModal(discord.ui.Modal):
                     placeholder_text = f"基於 {module_name} 模組的預設內容進行編輯..."
                     self.logger.info(f"已載入模組 '{module_name}' 的預設內容，長度: {len(default_content)}")
             except Exception as e:
+                asyncio.create_task(func.report_error(e, f"Error loading default content for module '{module_name}'"))
                 self.logger.warning(f"載入模組 '{module_name}' 預設內容時發生錯誤: {e}")
         
         # 構建標籤，包含模組說明
@@ -278,6 +284,7 @@ class SystemPromptModuleModal(discord.ui.Modal):
                 )
                 
         except Exception as e:
+            await func.report_error(e, "Error processing module Modal submission")
             self.logger.error(f"處理模組 Modal 提交時發生錯誤: {e}")
             if not interaction.response.is_done():
                 await interaction.response.send_message(
@@ -417,6 +424,7 @@ class ChannelSelectView(discord.ui.View):
             self.stop()
             
         except Exception as e:
+            await func.report_error(e, "Error processing channel selection")
             self.logger.error(f"處理頻道選擇時發生錯誤: {e}")
             await interaction.response.send_message(
                 f"❌ 選擇頻道時發生錯誤: {str(e)}",
@@ -486,6 +494,7 @@ class ModuleSelectView(discord.ui.View):
             self.stop()
             
         except Exception as e:
+            await func.report_error(e, "Error processing module selection")
             self.logger.error(f"處理模組選擇時發生錯誤: {e}")
             await interaction.response.send_message(
                 f"❌ 選擇模組時發生錯誤: {str(e)}",
@@ -548,6 +557,7 @@ class SystemPromptView(discord.ui.View):
             await interaction.response.send_modal(modal)
             
         except Exception as e:
+            await func.report_error(e, "Error opening edit Modal")
             self.logger.error(f"開啟編輯 Modal 時發生錯誤: {e}")
             await interaction.response.send_message(
                 f"❌ 開啟編輯器時發生錯誤: {str(e)}",
@@ -564,6 +574,7 @@ class SystemPromptView(discord.ui.View):
             )
             
         except Exception as e:
+            await func.report_error(e, "Error handling edit callback")
             self.logger.error(f"處理編輯回調時發生錯誤: {e}")
             await interaction.response.send_message(
                 f"❌ 編輯時發生錯誤: {str(e)}",
@@ -608,6 +619,7 @@ class SystemPromptView(discord.ui.View):
             )
             
         except Exception as e:
+            await func.report_error(e, "Error handling preview")
             self.logger.error(f"處理預覽時發生錯誤: {e}")
             await interaction.response.send_message(
                 f"❌ 預覽時發生錯誤: {str(e)}",
@@ -622,6 +634,7 @@ class SystemPromptView(discord.ui.View):
                 if isinstance(item, discord.ui.Button):
                     item.disabled = True
         except Exception as e:
+            await func.report_error(e, "Error handling View timeout")
             self.logger.error(f"處理 View 超時時發生錯誤: {e}")
 
 

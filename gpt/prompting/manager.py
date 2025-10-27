@@ -47,7 +47,7 @@ class PromptManager:
             self.logger.info("PromptManager initialized successfully")
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize PromptManager: {e}")
+            func.report_error(e, "PromptManager initialization")
             raise
     
     def _validate_config(self, config: dict) -> bool:
@@ -111,7 +111,7 @@ class PromptManager:
             return self._apply_dynamic_replacements(prompt, bot_id, message)
             
         except Exception as e:
-            self.logger.error(f"Failed to get system prompt: {e}")
+            func.report_error(e, "getting system prompt")
             # 降級到基本提示
             return self._get_fallback_prompt(bot_id)
     
@@ -188,7 +188,7 @@ class PromptManager:
                     lang = lang_manager.get_server_lang(guild_id)
                     prompt = self.builder.apply_language_replacements(prompt, lang, lang_manager)
             except Exception as e:
-                self.logger.warning(f"Language replacement failed: {e}")
+                func.report_error(e, "language replacement")
         
         return prompt
     
@@ -249,7 +249,7 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
                 return False
                 
         except Exception as e:
-            self.logger.error(f"Failed to reload prompts: {e}")
+            func.report_error(e, "reloading prompts")
             return False
     
     def _on_config_changed(self, path: str):
@@ -279,7 +279,7 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
             config = self.loader.load_yaml_config()
             return self.builder.compose_modules(config, [module_name])
         except Exception as e:
-            self.logger.error(f"Failed to get module prompt for '{module_name}': {e}")
+            func.report_error(e, f"getting module prompt for '{module_name}'")
             return ""
     
     def compose_prompt(self, modules: List[str] = None) -> str:
@@ -298,7 +298,7 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
                 modules = config['composition']['default_modules']
             return self.builder.build_system_prompt(config, modules)
         except Exception as e:
-            self.logger.error(f"Failed to compose prompt with modules {modules}: {e}")
+            func.report_error(e, f"composing prompt with modules {modules}")
             return ""
     
     def get_available_modules(self) -> List[str]:
@@ -315,7 +315,7 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
             modules = [key for key in config.keys() if key not in excluded_keys]
             return modules
         except Exception as e:
-            self.logger.error(f"Failed to get available modules: {e}")
+            func.report_error(e, "getting available modules")
             return []
     
     def validate_modules(self, modules: List[str]) -> Dict[str, bool]:
@@ -332,7 +332,7 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
             config = self.loader.load_yaml_config()
             return {module: module in config for module in modules}
         except Exception as e:
-            self.logger.error(f"Failed to validate modules: {e}")
+            func.report_error(e, "validating modules")
             return {module: False for module in modules}
     
     def get_cache_stats(self) -> Dict[str, Any]:
@@ -363,7 +363,7 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
                 'cache_stats': self.get_cache_stats()
             }
         except Exception as e:
-            self.logger.error(f"Failed to get manager info: {e}")
+            func.report_error(e, "getting manager info")
             return {'error': str(e)}
     
     def cleanup(self):
@@ -373,7 +373,7 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
             self.cache.clear_all()
             self.logger.info("PromptManager cleanup completed")
         except Exception as e:
-            self.logger.error(f"Error during cleanup: {e}")
+            func.report_error(e, "PromptManager cleanup")
     
     def __del__(self):
         """析構函式"""

@@ -19,6 +19,8 @@ from typing import Dict, List, Optional, Tuple, Union, Set
 
 import faiss
 import numpy as np
+from function import func
+import asyncio
 
 from .config import MemoryProfile
 from .exceptions import VectorOperationError, IndexIntegrityError
@@ -84,7 +86,8 @@ class GPUManager:
                 self.logger.debug("NVML 模組不可用")
 
         except Exception as e:
-            self.logger.error(f"GPU 狀態初始化失敗: {e}")
+            asyncio.create_task(func.report_error(e, "GPU status initialization"))
+            self.logger.error(f"GPU 狀態初始化失敗: {e}", exc_info=True)
             self._gpu_available = False
 
     def is_gpu_available(self) -> bool:
@@ -103,7 +106,8 @@ class GPUManager:
                 self.logger.info("NVML 恢復初始化成功")
                 return True
             except Exception as e:
-                self.logger.warning(f"NVML 恢復初始化失敗: {e}")
+                asyncio.create_task(func.report_error(e, "NVML re-initialization"))
+                self.logger.error(f"NVML 重新初始化失敗: {e}", exc_info=True)
                 return False
 
         return True
@@ -116,7 +120,8 @@ class GPUManager:
                 self._nvml_initialized = False
                 self.logger.debug("NVML 已關閉")
             except Exception as e:
-                self.logger.warning(f"關閉 NVML 時發生錯誤: {e}")
+                asyncio.create_task(func.report_error(e, "NVML shutdown"))
+                self.logger.error(f"NVML 關閉失敗: {e}", exc_info=True)
 
 # 全域 GPU 管理器實例
 gpu_manager = GPUManager()
@@ -171,6 +176,7 @@ class GPUMemoryManager:
                     self._last_memory_check = current_time
                     return self._cached_memory_info
                 except Exception as e:
+                    asyncio.create_task(func.report_error(e, "NVML memory check"))
                     self.logger.debug(f"NVML 記憶體檢查失敗: {e}")
 
             # 嘗試使用 PyTorch CUDA
@@ -187,6 +193,7 @@ class GPUMemoryManager:
                     self._last_memory_check = current_time
                     return self._cached_memory_info
                 except Exception as e:
+                    asyncio.create_task(func.report_error(e, "PyTorch CUDA memory check"))
                     self.logger.debug(f"PyTorch CUDA 記憶體檢查失敗: {e}")
 
             # CPU 模式備份方案
@@ -196,7 +203,8 @@ class GPUMemoryManager:
             return self._cached_memory_info
 
         except Exception as e:
-            self.logger.warning(f"無法取得 GPU 記憶體資訊: {e}")
+            asyncio.create_task(func.report_error(e, "GPU memory info retrieval"))
+            self.logger.error(f"獲取 GPU 記憶體資訊時發生錯誤: {e}", exc_info=True)
             self._cached_memory_info = (0, 0, 0.0)
             self._last_memory_check = current_time
             return self._cached_memory_info
@@ -248,7 +256,7 @@ class GPUMemoryManager:
             return True
 
         except Exception as e:
-            self.logger.error(f"檢查 GPU 記憶體失敗: {e}")
+            asyncio.create_task(func.report_error(e, "GPU memory availability check"))
             # 發生錯誤時嘗試恢復
             if self._attempt_gpu_recovery():
                 return self.is_memory_available(required_mb)
@@ -274,7 +282,7 @@ class GPUMemoryManager:
             return False
 
         except Exception as e:
-            self.logger.error(f"GPU 恢復失敗: {e}")
+            asyncio.create_task(func.report_error(e, "GPU recovery attempt"))
             return False
 
     def _attempt_memory_recovery(self, required_mb: int) -> bool:
@@ -306,7 +314,7 @@ class GPUMemoryManager:
             return False
 
         except Exception as e:
-            self.logger.error(f"記憶體恢復失敗: {e}")
+            asyncio.create_task(func.report_error(e, "GPU memory recovery attempt"))
             return False
     
     def get_gpu_resource(self) -> 'Optional[faiss.StandardGpuResources]':
@@ -388,7 +396,7 @@ class GPUMemoryManager:
                         self.logger.error(f"setDefaultNullStreamAllDevices(True) 也失敗: {e2}")
                         raise e2
                 except Exception as e:
-                    self.logger.error(f"其他錯誤: {e}")
+                    asyncio.create_task(func.report_error(e, "setDefaultNullStreamAllDevices call"))
                     raise e
 
                 self._gpu_resource = gpu_resource
@@ -399,6 +407,7 @@ class GPUMemoryManager:
                 return self._gpu_resource
 
             except Exception as e:
+                asyncio.create_task(func.report_error(e, "GPU resource creation"))
                 self.logger.error(f"建立 GPU 資源失敗: {e}")
                 self._gpu_resource = None
                 self._fallback_mode = True
@@ -436,7 +445,7 @@ class GPUMemoryManager:
             self.logger.debug("GPU 記憶體清理完成")
             
         except Exception as e:
-            self.logger.error(f"清除 GPU 記憶體失敗: {e}")
+            asyncio.create_task(func.report_error(e, "GPU memory cleanup"))
     
     def _trigger_memory_cleanup(self) -> None:
         """主動觸發記憶體清理機制"""
@@ -456,7 +465,7 @@ class GPUMemoryManager:
             self.logger.info(f"記憶體清理後狀態: 總計 {total_mb}MB, 可用 {free_mb}MB, 使用率 {used_percent:.1f}%")
             
         except Exception as e:
-            self.logger.error(f"主動記憶體清理失敗: {e}")
+            asyncio.create_task(func.report_error(e, "GPU memory cleanup trigger"))
     
     def force_cleanup_fallback(self) -> bool:
         """強制清理fallback機制"""
@@ -486,7 +495,7 @@ class GPUMemoryManager:
             return success
             
         except Exception as e:
-            self.logger.error(f"強制清理fallback失敗: {e}")
+            asyncio.create_task(func.report_error(e, "force cleanup fallback"))
             return False
     
     def log_memory_stats(self, force_log: bool = False) -> None:
@@ -507,7 +516,7 @@ class GPUMemoryManager:
                         f"可用 {free_mb}MB, 使用率 {used_percent:.1f}%"
                     )
         except Exception as e:
-            self.logger.error(f"記錄記憶體統計失敗: {e}")
+            asyncio.create_task(func.report_error(e, "GPU memory stats logging"))
 
 
 class VectorIndex:
@@ -593,7 +602,7 @@ class VectorIndex:
                 index = faiss.IndexIDMap(index)
             self.logger.debug(f"_create_index: 已包裹 IndexIDMap，base_type={base_type}, wrapped_type={type(index)}")
         except Exception as e:
-            self.logger.warning(f"_create_index: 包裹 IndexIDMap 失敗，仍使用原索引: {e}; current_type={type(index)}")
+            asyncio.create_task(func.report_error(e, "IndexIDMap wrapping"))
 
         return index
     
@@ -669,9 +678,8 @@ class VectorIndex:
             return True
 
         except Exception as e:
-            error_msg = f"無法將索引移至 GPU，降級使用 CPU: {e}"
+            asyncio.create_task(func.report_error(e, "index to GPU migration"))
             if not self._gpu_fallback_warned:
-                self.logger.warning(error_msg)
                 self._gpu_fallback_warned = True
 
             # 清除可能部分建立的 GPU 索引
@@ -685,7 +693,7 @@ class VectorIndex:
                     if self.gpu_memory_manager._attempt_gpu_recovery():
                         self.logger.info("GPU 資源已恢復，稍後可重試 GPU 模式")
                 except Exception as recovery_error:
-                    self.logger.debug(f"GPU 恢復失敗: {recovery_error}")
+                    asyncio.create_task(func.report_error(recovery_error, "GPU recovery after migration failure"))
 
             return False
     
@@ -713,7 +721,7 @@ class VectorIndex:
             return max(total_mb, 128)  # 最少 128MB
             
         except Exception as e:
-            self.logger.warning(f"估算索引記憶體失敗: {e}")
+            asyncio.create_task(func.report_error(e, "index memory estimation"))
             return 512  # 預設值
     
     def add_vectors(self, vectors: np.ndarray, ids: List[str], batch_size: int = 50) -> bool:
@@ -778,7 +786,7 @@ class VectorIndex:
                 return True
 
         except Exception as e:
-            self.logger.error(f"新增向量失敗: {e}")
+            asyncio.create_task(func.report_error(e, "vector addition"))
             return False
     
     def _add_vectors_batch(self, vectors: np.ndarray, faiss_ids: List[int], batch_size: int, write_target: str) -> bool:
@@ -822,7 +830,7 @@ class VectorIndex:
             return True
 
         except Exception as e:
-            self.logger.error(f"批次新增向量失敗: {e}")
+            asyncio.create_task(func.report_error(e, "batch vector addition"))
             return False
 
     def remove_vectors(self, ids: List[str]) -> int:
@@ -922,7 +930,7 @@ class VectorIndex:
             return len(faiss_ids_to_remove)
 
         except Exception as e:
-            self.logger.error(f"移除向量時發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "vector removal"))
             return 0
     
     def search(
@@ -1025,17 +1033,7 @@ class VectorIndex:
             return result_distances, result_ids
             
         except Exception as e:
-            # 提供詳細的錯誤資訊
-            error_details = {
-                "error": str(e),
-                "query_vector_shape": getattr(query_vector, 'shape', 'unknown'),
-                "index_ntotal": getattr(index, 'ntotal', 'unknown') if 'index' in locals() else 'not_created',
-                "index_dimension": getattr(index, 'd', 'unknown') if 'index' in locals() else 'not_created',
-                "expected_dimension": self.dimension,
-                "id_map_size": len(self._id_map),
-                "reverse_map_size": len(self._reverse_id_map)
-            }
-            self.logger.error(f"向量搜尋失敗: {error_details}")
+            asyncio.create_task(func.report_error(e, "vector search"))
             return [], []
     
     def get_stats(self) -> Dict[str, Union[int, str, bool]]:
@@ -1095,7 +1093,7 @@ class VectorIndex:
             return await self._atomic_save(file_path, index_to_save, was_gpu=was_gpu)
             
         except Exception as e:
-            self.logger.error(f"儲存索引失敗: {e}")
+            await func.report_error(e, f"index save to {file_path}")
             return False
 
     async def _atomic_save(self, file_path: Path, index: faiss.Index, was_gpu: bool = False) -> bool:
@@ -1212,7 +1210,7 @@ class VectorIndex:
                     raise
                     
         except Exception as e:
-            self.logger.error(f"原子性儲存失敗: {e}")
+            await func.report_error(e, f"atomic index save to {file_path}")
             return False
     
     def _calculate_mapping_checksum(self) -> str:
@@ -1236,7 +1234,7 @@ class VectorIndex:
             return hashlib.md5(data_str.encode()).hexdigest()
             
         except Exception as e:
-            self.logger.warning(f"計算校驗和失敗: {e}")
+            asyncio.create_task(func.report_error(e, "mapping checksum calculation"))
             return "unknown"
     
     def _validate_saved_files(self, index_path: Path, mapping_path: Path, original_index: faiss.Index) -> bool:
@@ -1295,7 +1293,7 @@ class VectorIndex:
             return True
             
         except Exception as e:
-            self.logger.error(f"檔案驗證過程中發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "saved file validation"))
             return False
     
     def _cleanup_old_backups(self, file_path: Path, max_backups: int = 3) -> None:
@@ -1322,7 +1320,7 @@ class VectorIndex:
                     self.logger.warning(f"刪除舊備份失敗: {old_backup}, {e}")
                     
         except Exception as e:
-            self.logger.warning(f"清理舊備份時發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "old backup cleanup"))
     
     def load(self, file_path: Path) -> bool:
         """從檔案載入索引（帶完整性檢查）
@@ -1348,13 +1346,15 @@ class VectorIndex:
             # 確保索引使用 ID 映射包裹（避免某些索引不支援 remove_ids）
             try:
                 is_idmap = isinstance(temp_index, faiss.IndexIDMap) or (hasattr(faiss, 'IndexIDMap2') and isinstance(temp_index, faiss.IndexIDMap2))
-            except Exception:
+            except Exception as e:
+                asyncio.create_task(func.report_error(e, "is_idmap check failure"))
                 is_idmap = False
 
             # 注意：FAISS 要求在包裹 IndexIDMap 前索引必須為空(ntotal==0)；否則需重建
             try:
                 loaded_ntotal = getattr(temp_index, 'ntotal', 0)
-            except Exception:
+            except Exception as e:
+                asyncio.create_task(func.report_error(e, "loaded_ntotal check failure"))
                 loaded_ntotal = 0
 
             if not is_idmap:
@@ -1365,6 +1365,7 @@ class VectorIndex:
                         temp_index = faiss.IndexIDMap2(temp_index) if hasattr(faiss, 'IndexIDMap2') else faiss.IndexIDMap(temp_index)
                         self.logger.debug(f"load: 空索引直接包裹為 IndexIDMap，base_type={base_type}, wrapped_type={type(temp_index)}")
                     except Exception as e:
+                        asyncio.create_task(func.report_error(e, "IndexIDMap wrapping for empty index"))
                         self.logger.warning(f"load: 空索引包裹 IndexIDMap 失敗: {e}; current_type={type(temp_index)}")
                 else:
                     # 非空且非 IDMap，執行重建流程
@@ -1397,6 +1398,7 @@ class VectorIndex:
                         # e) 詳細日誌
                         self.logger.info(f"load: 重建完成並替換索引，new_ntotal={getattr(temp_index, 'ntotal', -1)}, wrapped_type={type(temp_index)}")
                     except Exception as rb_e:
+                        asyncio.create_task(func.report_error(rb_e, "Index reconstruction failure"))
                         self.logger.error(f"load: 索引重建失敗，無法保證 remove_ids 功能: {rb_e}")
                         raise
             else:
@@ -1425,6 +1427,7 @@ class VectorIndex:
                                 f"映射檔案維度({data['dimension']})與當前配置({self.dimension})不匹配"
                             )
                 except Exception as e:
+                    asyncio.create_task(func.report_error(e, "Mapping file loading failure"))
                     self.logger.error(f"載入映射檔案失敗: {e}")
                     # 繼續載入但使用空映射
                     temp_id_map = {}
@@ -1461,6 +1464,7 @@ class VectorIndex:
                         temp_next_id = max(temp_id_map.keys()) + 1 if temp_id_map else 0
                         needs_writeback = True
             except Exception as e:
+                asyncio.create_task(func.report_error(e, "Pre-load mapping cleanup failure"))
                 self.logger.warning(f"預載入映射清理時發生錯誤: {e}")
             # 執行載入前的完整性檢查
             load_validation_result = self._validate_loaded_data(
@@ -1539,7 +1543,7 @@ class VectorIndex:
             return True
             
         except Exception as e:
-            self.logger.error(f"載入索引失敗: {e}")
+            asyncio.create_task(func.report_error(e, f"index load from {file_path}"))
             # 清理可能部分載入的資料
             self._index = None
             self._gpu_index = None
@@ -1633,6 +1637,7 @@ class VectorIndex:
                     result['valid'] = False
             
         except Exception as e:
+            asyncio.create_task(func.report_error(e, "loaded data validation"))
             result['issues'].append(f"驗證過程中發生錯誤: {e}")
             result['valid'] = False
             result['repairable'] = False
@@ -1662,7 +1667,8 @@ class VectorIndex:
             
             return hashlib.md5(data_str.encode()).hexdigest()
             
-        except Exception:
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "temporary checksum calculation"))
             return "unknown"
     
     def _repair_loaded_data(
@@ -1762,7 +1768,7 @@ class VectorIndex:
             }
             
         except Exception as e:
-            self.logger.error(f"修復載入資料失敗: {e}")
+            asyncio.create_task(func.report_error(e, "loaded data repair"))
             return None
     
     def _atomic_write_mapping(self, mapping_path: Path, id_map: Dict[int, str], reverse_id_map: Dict[str, int], next_id: int) -> bool:
@@ -1786,7 +1792,7 @@ class VectorIndex:
             self.logger.debug(f"atomic_write_mapping: 已原子性覆寫映射至 {mapping_path}")
             return True
         except Exception as e:
-            self.logger.error(f"atomic_write_mapping: 寫入映射失敗: {e}")
+            asyncio.create_task(func.report_error(e, "atomic mapping write"))
             try:
                 if 'tmp_path' in locals() and Path(tmp_path).exists():
                     Path(tmp_path).unlink(missing_ok=True)
@@ -1822,7 +1828,7 @@ class VectorIndex:
 
             return new_id_map, new_reverse_map, sorted(invalid_ids)
         except Exception as e:
-            self.logger.error(f"_remove_out_of_range_mappings: 清理過程失敗: {e}")
+            asyncio.create_task(func.report_error(e, "out of range mapping removal"))
             # 發生例外時回傳原資料，避免在載入流程中進一步破壞狀態
             return id_map, reverse_id_map, []
     def clear_gpu_resources(self) -> None:
@@ -1839,7 +1845,7 @@ class VectorIndex:
             self.logger.debug("GPU 資源已清除")
             
         except Exception as e:
-            self.logger.error(f"清除 GPU 資源失敗: {e}")
+            asyncio.create_task(func.report_error(e, "GPU resource cleanup"))
     
     def _check_index_integrity(self) -> List[str]:
         """檢查索引與映射的完整性
@@ -1890,6 +1896,7 @@ class VectorIndex:
                 issues.append(f"next_id({self._next_id})小於等於最大現有 ID({max(self._id_map.keys())})")
                 
         except Exception as e:
+            asyncio.create_task(func.report_error(e, "index integrity check"))
             issues.append(f"完整性檢查過程中發生錯誤: {e}")
         
         return issues
@@ -1928,7 +1935,7 @@ class VectorIndex:
                 return self._repair_id_range_mismatch()
                 
         except Exception as e:
-            self.logger.error(f"自動修復過程中發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "index auto-repair"))
             return False
     
     def _repair_oversized_index(self, index: faiss.Index, target_size: int) -> bool:
@@ -1954,7 +1961,7 @@ class VectorIndex:
             return False
             
         except Exception as e:
-            self.logger.error(f"修復過大索引失敗: {e}")
+            asyncio.create_task(func.report_error(e, "oversized index repair"))
             return False
     
     def _repair_oversized_mapping(self, target_size: int) -> bool:
@@ -1997,7 +2004,7 @@ class VectorIndex:
             return True
             
         except Exception as e:
-            self.logger.error(f"修復過大映射失敗: {e}")
+            asyncio.create_task(func.report_error(e, "oversized mapping repair"))
             return False
     
     def _repair_id_range_mismatch(self) -> bool:
@@ -2032,7 +2039,7 @@ class VectorIndex:
             return True
             
         except Exception as e:
-            self.logger.error(f"修復 ID 範圍不匹配失敗: {e}")
+            asyncio.create_task(func.report_error(e, "ID range mismatch repair"))
             return False
     
     def _log_mapping_diagnostics(self, missing_mappings: List[int], index: faiss.Index) -> None:
@@ -2070,7 +2077,7 @@ class VectorIndex:
                 )
                 
         except Exception as e:
-            self.logger.error(f"記錄映射診斷資訊失敗: {e}")
+            asyncio.create_task(func.report_error(e, "mapping diagnostics logging"))
     
     def _repair_oversized_mapping(self, target_size: int) -> bool:
         """修復映射過大的問題
@@ -2112,7 +2119,7 @@ class VectorIndex:
             return True
             
         except Exception as e:
-            self.logger.error(f"修復過大映射失敗: {e}")
+            asyncio.create_task(func.report_error(e, "oversized mapping repair"))
             return False
     
     def _repair_id_range_mismatch(self) -> bool:
@@ -2147,7 +2154,7 @@ class VectorIndex:
             return True
             
         except Exception as e:
-            self.logger.error(f"修復 ID 範圍不匹配失敗: {e}")
+            asyncio.create_task(func.report_error(e, "ID range mismatch repair"))
             return False
     
     def _log_mapping_diagnostics(self, missing_mappings: List[int], index: faiss.Index) -> None:
@@ -2185,7 +2192,7 @@ class VectorIndex:
                 )
                 
         except Exception as e:
-            self.logger.error(f"記錄映射診斷資訊失敗: {e}")
+            asyncio.create_task(func.report_error(e, "mapping diagnostics logging"))
 
 
 class VectorManager:
@@ -2226,7 +2233,7 @@ class VectorManager:
                 self.gpu_memory_manager = GPUMemoryManager(max_memory_mb)
                 self.gpu_memory_manager.log_memory_stats()
             except Exception as e:
-                self.logger.warning(f"GPU 記憶體管理器初始化失敗: {e}")
+                asyncio.create_task(func.report_error(e, "GPU memory manager initialization"))
                 self.gpu_memory_manager = None
         
         self.logger.info(
@@ -2327,7 +2334,7 @@ class VectorManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"建立頻道 {channel_id} 索引失敗: {e}")
+            asyncio.create_task(func.report_error(e, f"channel index creation for {channel_id}"))
             return False
     
     def get_channel_index(self, channel_id: str) -> Optional['VectorIndex']:
@@ -2378,7 +2385,7 @@ class VectorManager:
                 return success
                 
         except Exception as e:
-            self.logger.error(f"新增向量到頻道 {channel_id} 失敗: {e}")
+            asyncio.create_task(func.report_error(e, f"vector addition to channel {channel_id}"))
             return False
 
     def remove_vectors(self, channel_id: str, ids: List[str]) -> int:
@@ -2407,7 +2414,7 @@ class VectorManager:
                     self.logger.warning(f"嘗試從未載入的索引 {channel_id} 中移除向量。")
                     return 0
         except Exception as e:
-            self.logger.error(f"從頻道 {channel_id} 移除向量時發生錯誤: {e}", exc_info=True)
+            asyncio.create_task(func.report_error(e, f"vector removal from channel {channel_id}"))
             raise VectorOperationError(f"從頻道 {channel_id} 移除向量失敗: {e}")
     
     def search_similar(
@@ -2491,7 +2498,7 @@ class VectorManager:
                 return results
                 
         except Exception as e:
-            self.logger.error(f"搜尋頻道 {channel_id} 向量失敗: {e}")
+            asyncio.create_task(func.report_error(e, f"similar vector search in channel {channel_id}"))
             # 嘗試索引修復
             try:
                 self.logger.info(f"嘗試修復頻道 {channel_id} 的索引")
@@ -2500,7 +2507,7 @@ class VectorManager:
                 else:
                     self.logger.error(f"頻道 {channel_id} 索引修復失敗")
             except Exception as repair_error:
-                self.logger.error(f"索引修復過程出錯: {repair_error}")
+                asyncio.create_task(func.report_error(repair_error, f"index repair for channel {channel_id}"))
             
             return []
     
@@ -2521,7 +2528,7 @@ class VectorManager:
                     return {"total_vectors": 0, "error": "索引不存在"}
                     
         except Exception as e:
-            self.logger.error(f"取得頻道 {channel_id} 索引統計失敗: {e}")
+            asyncio.create_task(func.report_error(e, f"index stats retrieval for channel {channel_id}"))
             return {"error": str(e)}
     
     def unload_channel_index(self, channel_id: str) -> bool:
@@ -2549,7 +2556,7 @@ class VectorManager:
                     self.logger.debug(f"頻道 {channel_id} 的索引未載入，無需卸載。")
                     return True
         except Exception as e:
-            self.logger.error(f"卸載頻道 {channel_id} 的索引時發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, f"channel index unload for {channel_id}"))
             return False
 
     def _normalize_channel_id(self, channel_id: str) -> Optional[str]:
@@ -2570,7 +2577,8 @@ class VectorManager:
             if m:
                 return m.group(1)
             return None
-        except Exception:
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "channel ID normalization"))
             return None
 
     async def save_index(self, channel_id: str) -> bool:
@@ -2595,7 +2603,7 @@ class VectorManager:
                     return await self._indices[channel_id].save(index_file)
             return False
         except Exception as e:
-            self.logger.error(f"儲存頻道 {channel_id} 索引失敗: {e}")
+            await func.report_error(e, f"index save for channel {channel_id}")
             return False
     
     async def save_all_indices(self) -> Dict[str, bool]:
@@ -2667,7 +2675,7 @@ class VectorManager:
             try:
                 await asyncio.to_thread(self.gpu_memory_manager.clear_gpu_memory)
             except Exception as e:
-                self.logger.warning(f"清理 GPU 記憶體管理器失敗: {e}")
+                await func.report_error(e, "GPU memory manager cleanup")
 
         # 強制垃圾回收（在執行緒中執行，避免阻塞事件迴圈）
         try:
@@ -2699,6 +2707,7 @@ class VectorManager:
                     "gpu_memory_limit_mb": self.gpu_memory_manager.max_memory_mb
                 })
             except Exception as e:
+                asyncio.create_task(func.report_error(e, "GPU memory stats retrieval in get_memory_stats"))
                 stats["gpu_memory_error"] = str(e)
         
         # 統計向量資料
@@ -2710,6 +2719,7 @@ class VectorManager:
                     total_vectors += index_stats.get("total_vectors", 0)
                     stats[f"channel_{channel_id}_vectors"] = index_stats.get("total_vectors", 0)
                 except Exception as e:
+                    asyncio.create_task(func.report_error(e, f"index stats retrieval for channel {channel_id} in get_memory_stats"))
                     stats[f"channel_{channel_id}_error"] = str(e)
         
         stats["total_vectors"] = total_vectors
@@ -2737,6 +2747,7 @@ class VectorManager:
                 db_path = Path("data/memory/memory.db")
                 db_manager = DatabaseManager(db_path) if db_path.exists() else None
             except Exception as e:
+                asyncio.create_task(func.report_error(e, "DatabaseManager initialization failure"))
                 db_manager = None
                 self.logger.warning(f"初始化 DatabaseManager 失敗，僅重建現有索引檔案: {e}")
             
@@ -2749,6 +2760,7 @@ class VectorManager:
                         for row in cursor.fetchall():
                             channel_ids.add(row[0])
                 except Exception as e:
+                    asyncio.create_task(func.report_error(e, "Database channel scanning failure"))
                     self.logger.warning(f"掃描資料庫頻道失敗，僅使用檔案清單: {e}")
             
             # 需要嵌入與分段服務，從上層 MemoryManager 初始化後掛載於此管理器
@@ -2853,6 +2865,7 @@ class VectorManager:
                     self.logger.info(f"頻道 {channel_id}: 重建完成（{len(ids)} 筆）")
                 
                 except Exception as ce:
+                    asyncio.create_task(func.report_error(ce, f"Channel {channel_id} rebuild failure"))
                     summary['failed_count'] += 1
                     err = f"頻道 {channel_id} 重建失敗: {ce}"
                     summary['errors'].append(err)
@@ -2861,9 +2874,9 @@ class VectorManager:
             return summary
         
         except Exception as e:
+            asyncio.create_task(func.report_error(e, "rebuild all indexes"))
             summary['failed_count'] += 1
             summary['errors'].append(str(e))
-            self.logger.error(f"重建所有索引流程失敗: {e}", exc_info=True)
             return summary
     
     def optimize_memory_usage(self) -> bool:
@@ -2896,7 +2909,7 @@ class VectorManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"記憶體優化失敗: {e}")
+            asyncio.create_task(func.report_error(e, "memory usage optimization"))
             return False
     
     def _fallback_indices_to_cpu(self) -> None:
@@ -2923,7 +2936,7 @@ class VectorManager:
                             self.logger.warning(f"降級頻道 {channel_id} 索引失敗: {e}")
             
         except Exception as e:
-            self.logger.error(f"索引降級失敗: {e}")
+            asyncio.create_task(func.report_error(e, "index fallback to CPU"))
     
     def _try_rebuild_index(self, channel_id: str) -> bool:
         """嘗試重建頻道索引
@@ -2956,6 +2969,7 @@ class VectorManager:
                         if hasattr(temp_index, 'd') and temp_index.d != self.profile.embedding_dimension:
                             rebuild_reason = f"維度不匹配 (索引: {temp_index.d}, 期望: {self.profile.embedding_dimension})"
                     except Exception as e:
+                        asyncio.create_task(func.report_error(e, "faiss.read_index failure"))
                         rebuild_reason = f"索引檔案損壞: {e}"
                 
                 if rebuild_reason:
@@ -2973,6 +2987,7 @@ class VectorManager:
                             mapping_file.rename(backup_mapping)
                             
                     except Exception as e:
+                        asyncio.create_task(func.report_error(e, "backup failure"))
                         self.logger.warning(f"備份舊索引失敗: {e}")
                         # 即使備份失敗也繼續重建
                         try:
@@ -2989,6 +3004,7 @@ class VectorManager:
                     try:
                         self._indices[channel_id].clear_gpu_resources()
                     except Exception as e:
+                        asyncio.create_task(func.report_error(e, "GPU resource cleanup failure"))
                         self.logger.warning(f"清理 GPU 資源失敗: {e}")
                     del self._indices[channel_id]
             
@@ -3004,7 +3020,7 @@ class VectorManager:
                 return False
                 
         except Exception as e:
-            self.logger.error(f"重建頻道 {channel_id} 索引時發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, f"index rebuild for channel {channel_id}"))
             return False
     
     def _try_regenerate_vectors(self, channel_id: str) -> bool:
@@ -3105,11 +3121,12 @@ class VectorManager:
                     return False
                 
             except Exception as e:
+                asyncio.create_task(func.report_error(e, "Database operation failure"))
                 self.logger.error(f"重新生成頻道 {channel_id} 向量時資料庫操作失敗: {e}")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"重新生成頻道 {channel_id} 向量失敗: {e}")
+            asyncio.create_task(func.report_error(e, f"vector regeneration for channel {channel_id}"))
             return False
     
     def _try_rebuild_mapping_from_database(self, channel_id: str, index: 'VectorIndex') -> bool:
@@ -3202,11 +3219,12 @@ class VectorManager:
                 return True
                 
             except Exception as e:
+                asyncio.create_task(func.report_error(e, "Database operation failure"))
                 self.logger.error(f"從資料庫重建頻道 {channel_id} 映射時資料庫操作失敗: {e}")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"重建頻道 {channel_id} 映射失敗: {e}")
+            asyncio.create_task(func.report_error(e, f"mapping rebuild from database for channel {channel_id}"))
             return False
     
     def clear_channel_mapping(self, channel_id: str) -> bool:
@@ -3233,7 +3251,7 @@ class VectorManager:
                     return False
                     
         except Exception as e:
-            self.logger.error(f"清除頻道 {channel_id} 映射失敗: {e}")
+            asyncio.create_task(func.report_error(e, f"channel mapping clear for {channel_id}"))
             return False
     
     def get_all_stats(self) -> Dict[str, Dict[str, Union[int, str, bool]]]:
@@ -3260,7 +3278,7 @@ class VectorManager:
                     if self.create_channel_index(channel_id):
                         all_ids[channel_id] = index.get_all_ids()
                 except Exception as e:
-                    self.logger.error(f"從頻道 {channel_id} 獲取所有 ID 失敗: {e}")
+                    asyncio.create_task(func.report_error(e, f"all segment ID retrieval for channel {channel_id}"))
         return all_ids
     
     def check_and_repair_all_indices(self) -> Dict[str, Dict[str, any]]:
@@ -3318,6 +3336,7 @@ class VectorManager:
                         results[channel_id] = result
                         
                     except Exception as e:
+                        asyncio.create_task(func.report_error(e, f"Channel {channel_id} check failure"))
                         self.logger.error(f"檢查頻道 {channel_id} 時發生錯誤: {e}")
                         results[channel_id] = {
                             'channel_id': channel_id,
@@ -3342,7 +3361,7 @@ class VectorManager:
             )
             
         except Exception as e:
-            self.logger.error(f"完整性檢查過程中發生嚴重錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "check and repair all indices"))
             results['_error'] = str(e)
         
         return results
@@ -3397,6 +3416,7 @@ class VectorManager:
                             self.logger.error(f"頻道 {channel_id} 向量重新生成也失敗")
                     
                 except Exception as e:
+                    asyncio.create_task(func.report_error(e, f"Channel {channel_id} rebuild failure"))
                     self.logger.error(f"重建頻道 {channel_id} 索引時發生錯誤: {e}")
                     rebuild_results[channel_id] = False
             
@@ -3407,7 +3427,7 @@ class VectorManager:
             self.logger.info(f"強制重建完成: {successful_rebuilds}/{total_rebuilds} 個成功")
             
         except Exception as e:
-            self.logger.error(f"強制重建過程中發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "force rebuild problematic indices"))
             
         return rebuild_results
     
@@ -3467,7 +3487,7 @@ class VectorManager:
             return report
             
         except Exception as e:
-            self.logger.error(f"綜合完整性檢查和修復過程中發生嚴重錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "comprehensive integrity check and repair"))
             return {
                 'error': str(e),
                 'timestamp': time.time(),
@@ -3497,7 +3517,7 @@ class VectorManager:
                     if channel_id not in self._indices:
                         channels_to_load.append(channel_id)
         except Exception as e:
-            self.logger.error(f"掃描索引檔案時發生錯誤: {e}")
+            await func.report_error(e, "index file scan")
             return
         
         if not channels_to_load:
@@ -3520,6 +3540,7 @@ class VectorManager:
                     failed_count += 1
                     self.logger.error(f"載入索引 {channel_id} 失敗。")
             except Exception as e:
+                await func.report_error(e, f"Index loading failure for channel {channel_id}")
                 failed_count += 1
                 self.logger.error(f"載入索引 {channel_id} 時發生例外: {e}")
 
@@ -3551,6 +3572,7 @@ class VectorManager:
                                 coro = self._indices[channel_id].save(index_file)
                                 loop.run_until_complete(coro)
                             except Exception as e:
+                                asyncio.create_task(func.report_error(e, f"Synchronous index saving failure for channel {channel_id}"))
                                 self.logger.error(f"同步儲存頻道 {channel_id} 索引失敗: {e}")
                     finally:
                         try:
@@ -3560,6 +3582,7 @@ class VectorManager:
                         loop.close()
                         asyncio.set_event_loop(None)
             except Exception as e:
+                asyncio.create_task(func.report_error(e, "Overall synchronous index saving failure"))
                 self.logger.error(f"同步儲存所有索引時發生錯誤: {e}")
             
             # 2) 釋放每個索引的 GPU 資源與快取（同步順序執行）
@@ -3571,12 +3594,14 @@ class VectorManager:
                 try:
                     index.clear_gpu_resources()
                 except Exception as e:
+                    asyncio.create_task(func.report_error(e, "Index GPU resource cleanup failure"))
                     self.logger.warning(f"清理索引 GPU 資源失敗: {e}")
             
             # 3) 記憶體最佳化（同步）
             try:
                 self.optimize_memory_usage()
             except Exception as e:
+                asyncio.create_task(func.report_error(e, "Memory optimization failure"))
                 self.logger.warning(f"記憶體最佳化失敗: {e}")
             
             # 4) 清理 GPU 記憶體管理器（同步）
@@ -3584,6 +3609,7 @@ class VectorManager:
                 try:
                     self.gpu_memory_manager.clear_gpu_memory()
                 except Exception as e:
+                    asyncio.create_task(func.report_error(e, "GPU memory manager cleanup failure"))
                     self.logger.warning(f"清理 GPU 記憶體管理器失敗: {e}")
                 finally:
                     self.gpu_memory_manager = None
@@ -3596,14 +3622,14 @@ class VectorManager:
             
             self.logger.debug("向量管理器同步清理完成")
         except Exception as e:
-            self.logger.error(f"_cleanup_sync 執行失敗: {e}")
+            asyncio.create_task(func.report_error(e, "vector manager sync cleanup"))
     
     async def cleanup(self) -> None:
         """非同步介面：統一委派至單一 to_thread 的同步清理"""
         try:
             await asyncio.to_thread(self._cleanup_sync)
         except Exception as e:
-            self.logger.error(f"向量管理器清理失敗: {e}")
+            await func.report_error(e, "vector manager cleanup")
 
     async def shutdown(self) -> None:
         """優雅關閉 VectorManager，確保同步清理只執行一次。"""
@@ -3637,7 +3663,7 @@ class VectorManager:
                 index._gpu_index = None # 清除 GPU 索引參考
                 self.logger.debug(f"頻道 {channel_id} 的索引已移至 CPU。")
             except Exception as e:
-                self.logger.error(f"將頻道 {channel_id} 的索引移至 CPU 失敗: {e}")
+                asyncio.create_task(func.report_error(e, f"index move to CPU for channel {channel_id}"))
         
         # 進行一次手動的垃圾回收
         gc.collect()
@@ -3670,13 +3696,17 @@ def get_vector_manager(
         ValueError: 如果在未初始化時未提供 profile 或 storage_path。
     """
     global _vector_manager_instance
-    if _vector_manager_instance is None:
-        with _vector_manager_lock:
-            if _vector_manager_instance is None:
-                if profile is None or storage_path is None:
-                    raise ValueError("首次初始化 VectorManager 時必須提供 profile 和 storage_path。")
-                _vector_manager_instance = VectorManager(profile, storage_path)
-    return _vector_manager_instance
+    try:
+        if _vector_manager_instance is None:
+            with _vector_manager_lock:
+                if _vector_manager_instance is None:
+                    if profile is None or storage_path is None:
+                        raise ValueError("首次初始化 VectorManager 時必須提供 profile 和 storage_path。")
+                    _vector_manager_instance = VectorManager(profile, storage_path)
+        return _vector_manager_instance
+    except Exception as e:
+        asyncio.create_task(func.report_error(e, "vector manager singleton retrieval"))
+        raise
 
 # 在解譯器退出時作為最後保障，嘗試同步清理 VectorManager 的資源，避免背景執行緒阻塞退出
 import atexit as _vx_atexit
@@ -3687,10 +3717,17 @@ def _vector_manager_atexit_cleanup():
         if _vector_manager_instance is not None:
             try:
                 _vector_manager_instance._cleanup_sync()
-            except Exception:
+            except Exception as e:
                 # 退出流程中不可再拋出例外
-                pass
-    except Exception:
-        pass
+                # but we can still try to report it
+                try:
+                    asyncio.create_task(func.report_error(e, "_vector_manager_atexit_cleanup failure"))
+                except:
+                    pass
+    except Exception as e:
+        try:
+            asyncio.create_task(func.report_error(e, "_vector_manager_atexit_cleanup failure"))
+        except:
+            pass
 
 _vx_atexit.register(_vector_manager_atexit_cleanup)

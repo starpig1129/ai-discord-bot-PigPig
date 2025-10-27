@@ -12,6 +12,8 @@ import time
 import asyncio
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
+from function import func
+import asyncio
 
 import numpy as np
 import torch
@@ -79,7 +81,9 @@ class EmbeddingService:
         try:
             model_name_str = str(model_name)
             return "Qwen3-Embedding" in model_name_str or "Qwen/Qwen3-Embedding" in model_name_str
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError) as e:
+            self.logger.error(f"檢查 Qwen3 模型名稱時發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "cogs/memory/embedding_service.py: _is_qwen3_embedding"))
             return False
     
     def _detect_device(self) -> str:
@@ -125,14 +129,16 @@ class EmbeddingService:
         try:
             return self._load_primary_model()
         except Exception as e:
-            self.logger.warning(f"主要模型載入失敗: {e}")
+            self.logger.error(f"載入主要嵌入模型失敗: {e}")
+            asyncio.create_task(func.report_error(e, "cogs/memory/embedding_service.py: _load_model"))
             
             # 嘗試載入回退模型
             if not self._using_fallback:
                 try:
                     return self._load_fallback_model()
                 except Exception as fallback_error:
-                    self.logger.error(f"回退模型載入也失敗: {fallback_error}")
+                    self.logger.error(f"載入回退嵌入模型失敗: {fallback_error}")
+                    asyncio.create_task(func.report_error(fallback_error, "cogs/memory/embedding_service.py: _load_model fallback"))
                     raise VectorOperationError(
                         f"主要模型和回退模型都載入失敗。"
                         f"主要模型錯誤: {e}, 回退模型錯誤: {fallback_error}"
@@ -227,8 +233,9 @@ class EmbeddingService:
             return model
             
         except Exception as e:
-            self.logger.error(f"回退模型載入失敗: {e}")
-            raise
+            self.logger.error(f"載入回退模型失敗: {e}")
+            asyncio.create_task(func.report_error(e, "cogs/memory/embedding_service.py: _load_fallback_model"))
+            raise VectorOperationError(f"回退模型載入失敗: {e}")
     
     def _load_qwen3_model(self) -> Tuple[AutoModel, AutoTokenizer]:
         """載入 Qwen3 嵌入模型
@@ -311,7 +318,9 @@ class EmbeddingService:
                             raise e
                 
                 transformers.modeling_utils.PreTrainedModel.post_init = safe_post_init
-            except ImportError:
+            except ImportError as e:
+                self.logger.warning(f"無法修補 PreTrainedModel.post_init: {e}")
+                asyncio.create_task(func.report_error(e, "cogs/memory/embedding_service.py: _load_qwen3_model patch"))
                 pass
             
             # 設定載入參數（相容字串類型設備）
@@ -357,7 +366,8 @@ class EmbeddingService:
             return model, tokenizer
             
         except Exception as e:
-            self.logger.error(f"載入 Qwen3 模型失敗: {e}")
+            self.logger.error(f"無法載入 Qwen3 模型: {e}")
+            asyncio.create_task(func.report_error(e, "cogs/memory/embedding_service.py: _load_qwen3_model"))
             raise VectorOperationError(f"無法載入 Qwen3 模型: {e}")
     
     def _encode_test_text(self) -> np.ndarray:
@@ -449,7 +459,8 @@ class EmbeddingService:
             return result
             
         except Exception as e:
-            self.logger.error(f"批次編碼失敗: {e}")
+            self.logger.error(f"文本編碼失敗: {e}")
+            asyncio.create_task(func.report_error(e, "cogs/memory/embedding_service.py: encode_batch"))
             raise VectorOperationError(f"文本編碼失敗: {e}")
     
     async def encode_text_async(self, text: str) -> np.ndarray:
@@ -565,6 +576,7 @@ class EmbeddingService:
                         
             except Exception as e:
                 self.logger.error(f"Qwen3 批次編碼失敗: {e}")
+                asyncio.create_task(func.report_error(e, "cogs/memory/embedding_service.py: _encode_qwen3_batch"))
                 # 創建零向量作為回退
                 fallback_embedding = np.zeros((len(batch_texts), self.profile.embedding_dimension))
                 embeddings.append(fallback_embedding)
@@ -711,13 +723,14 @@ class EmbeddingService:
             self.logger.info(f"模型預熱完成，耗時: {warmup_time:.2f}秒")
             
         except Exception as e:
-            self.logger.warning(f"模型預熱失敗: {e}")
+            self.logger.error(f"模型預熱失敗: {e}")
     
     def __del__(self):
         """析構函數，清理資源"""
         try:
             self.clear_cache()
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"清理嵌入模型時發生錯誤: {e}")
             pass
     
     def get_model_version(self) -> str:
@@ -771,7 +784,7 @@ class EmbeddingService:
             self.logger.info("嵌入服務清理完成")
             
         except Exception as e:
-            self.logger.error(f"嵌入服務清理時發生錯誤: {e}")
+            self.logger.error(f"清理嵌入服務時發生錯誤: {e}")
 
 
 class EmbeddingServiceManager:

@@ -5,6 +5,7 @@ import json
 import os
 import logging
 from typing import Optional, Dict, Any
+from function import func
 
 class LanguageManager(commands.Cog):
     """Language Management System"""
@@ -50,8 +51,8 @@ class LanguageManager(commands.Cog):
                     self.translations[lang_code][category] = translations
                         
                 except Exception as e:
-                    # 在初始化階段使用備用訊息
-                    self.logger.error(f"載入翻譯文件時出錯 {file_path}: {str(e)}")
+                    import asyncio
+                    asyncio.create_task(func.report_error(e, f"loading translation file {file_path}"))
 
     def _get_supported_languages(self) -> Dict[str, str]:
         """獲取支援的語言列表，使用翻譯系統或備用硬編碼選項"""
@@ -81,9 +82,8 @@ class LanguageManager(commands.Cog):
                     return config.get('language', self.default_lang)
             return self.default_lang
         except Exception as e:
-            self.logger.error(
-                self.translate("0", "system", "language_manager", "logs", "config_read_error", error=str(e))
-            )
+            import asyncio
+            asyncio.create_task(func.report_error(e, "getting server language"))
             return self.default_lang
 
     def save_server_lang(self, guild_id: str, lang: str) -> bool:
@@ -101,9 +101,8 @@ class LanguageManager(commands.Cog):
                 json.dump(config, f, ensure_ascii=False, indent=4)
             return True
         except Exception as e:
-            self.logger.error(
-                self.translate("0", "system", "language_manager", "logs", "config_save_error", error=str(e))
-            )
+            import asyncio
+            asyncio.create_task(func.report_error(e, "saving server language"))
             return False
 
     def translate(self, guild_id: str, *args, **kwargs) -> str:
@@ -171,9 +170,8 @@ class LanguageManager(commands.Cog):
             return path[-1] if path else "TRANSLATION_NOT_FOUND"
             
         except Exception as e:
-            self.logger.error(
-                self.translate("0", "system", "language_manager", "logs", "translation_error", error=str(e))
-            )
+            import asyncio
+            asyncio.create_task(func.report_error(e, "translation"))
             return args[-1] if args else "TRANSLATION_ERROR"
 
     @app_commands.command(

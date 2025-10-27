@@ -5,6 +5,8 @@ import asyncio
 import logging
 import base64
 from typing import Any, Dict, List, Optional, Union
+from function import func
+import asyncio
 
 from gpt.tools.registry import tool_registry
 from gpt.tools.tool_context import ToolExecutionContext
@@ -46,7 +48,7 @@ class ToolExecutor:
                     if standardized_output is not None:
                         result = standardized_output
                 except Exception as std_err:
-                    logging.error(f"標準化圖片工具輸出失敗: {std_err}", exc_info=True)
+                    await func.report_error(std_err, "image tool output standardization")
 
             report = self._create_structured_report(tool_name, "success", result)
             try:
@@ -61,6 +63,7 @@ class ToolExecutor:
 
         except Exception as e:
             # 任何工具內部錯誤 → 轉為一致的 failure 報告
+            await func.report_error(e, f"tool execution: {tool_name}")
             error_message = f"執行工具 '{tool_name}' 時發生錯誤: {str(e)}"
             try:
                 context.logger.error(f"執行工具 '{tool_name}' 時發生錯誤: {e}", exc_info=True)
@@ -144,7 +147,7 @@ class ToolExecutor:
                                 "caption": None
                             })
                     except Exception as e:
-                        logging.warning(f"轉換 discord.File 失敗，將回退文字-only: {e}")
+                        asyncio.create_task(func.report_error(e, "discord.File conversion"))
 
                 # 原始 bytes
                 raw_bytes = result.get("image_bytes")
@@ -169,7 +172,7 @@ class ToolExecutor:
             # 其他型別：不動
             return None
         except Exception as e:
-            logging.error(f"標準化圖片工具輸出時發生錯誤: {e}", exc_info=True)
+            asyncio.create_task(func.report_error(e, "image tool output standardization"))
             return None
 
     def _format_report_for_llm(self, report_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -247,6 +250,7 @@ class AsyncToolScheduler:
                 return await self.executor.execute_tool(action, context)
             except Exception as e:
                 # 確保 gather 不會中止：返回例外以供後續統一處理
+                await func.report_error(e, f"tool execution in scheduler: {action.get('tool_name')}")
                 return e
 
         tasks = [asyncio.create_task(_run(a)) for a in runnable_actions]

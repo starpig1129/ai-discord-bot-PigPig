@@ -9,6 +9,8 @@ from datetime import datetime
 from typing import Optional, Dict, List, Any, Tuple
 from .language_manager import LanguageManager
 from addons.settings import TOKENS
+from function import func
+import asyncio
 
 class ChannelManager(commands.Cog):
     def __init__(self, bot):
@@ -64,7 +66,7 @@ class ChannelManager(commands.Cog):
             with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=4, ensure_ascii=False)
         except Exception as e:
-            logging.error(f"Failed to save config for guild {guild_id}: {e}")
+            asyncio.create_task(func.report_error(e, f"saving config for guild {guild_id}"))
 
     async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
         """檢查是否有管理員權限"""

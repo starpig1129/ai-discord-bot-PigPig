@@ -45,7 +45,7 @@ class SystemPromptManagerCog(commands.Cog):
             self.logger.info("系統提示命令模組已載入")
             
         except Exception as e:
-            self.logger.error(f"載入系統提示命令模組時發生錯誤: {e}")
+            func.report_error(e, "loading system prompt commands cog")
             raise
     
     async def cog_unload(self):
@@ -56,7 +56,7 @@ class SystemPromptManagerCog(commands.Cog):
             self.logger.info("系統提示命令模組已卸載")
             
         except Exception as e:
-            self.logger.error(f"卸載系統提示命令模組時發生錯誤: {e}")
+            func.report_error(e, "unloading system prompt commands cog")
     
     def get_system_prompt_manager(self) -> SystemPromptManager:
         """
@@ -97,7 +97,7 @@ class SystemPromptManagerCog(commands.Cog):
             prompt_data = self.manager.get_effective_prompt(channel_id, guild_id, message)
             return prompt_data.get('prompt', '')
         except Exception as e:
-            self.logger.error(f"取得有效系統提示時發生錯誤: {e}")
+            func.report_error(e, "getting effective system prompt")
             return ''
     
     async def validate_user_permission(self, 
@@ -125,7 +125,7 @@ class SystemPromptManagerCog(commands.Cog):
             else:
                 return False
         except Exception as e:
-            self.logger.error(f"驗證用戶權限時發生錯誤: {e}")
+            func.report_error(e, "validating user permission")
             return False
     
     @commands.Cog.listener()
@@ -139,7 +139,7 @@ class SystemPromptManagerCog(commands.Cog):
             self.logger.info(f"為新伺服器 {guild.name} ({guild.id}) 初始化系統提示配置")
             
         except Exception as e:
-            self.logger.error(f"為新伺服器初始化配置時發生錯誤: {e}")
+            func.report_error(e, "initializing config for new guild")
     
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild):
@@ -151,7 +151,7 @@ class SystemPromptManagerCog(commands.Cog):
             self.logger.info(f"已清除伺服器 {guild.name} ({guild.id}) 的系統提示快取")
             
         except Exception as e:
-            self.logger.error(f"清除伺服器快取時發生錯誤: {e}")
+            func.report_error(e, "clearing server cache on guild remove")
     
     @commands.command(name="system_prompt_status", hidden=True)
     @commands.is_owner()
@@ -194,7 +194,7 @@ class SystemPromptManagerCog(commands.Cog):
             await ctx.send(embed=embed)
             
         except Exception as e:
-            self.logger.error(f"查看系統提示狀態時發生錯誤: {e}")
+            func.report_error(e, "getting system prompt status")
             await ctx.send(f"❌ 查看狀態時發生錯誤: {str(e)}")
     
     @commands.command(name="system_prompt_clear_cache", hidden=True)
@@ -210,7 +210,7 @@ class SystemPromptManagerCog(commands.Cog):
                 await ctx.send("✅ 已清除所有系統提示快取")
             
         except Exception as e:
-            self.logger.error(f"清除系統提示快取時發生錯誤: {e}")
+            func.report_error(e, "clearing system prompt cache")
             await ctx.send(f"❌ 清除快取時發生錯誤: {str(e)}")
 
 

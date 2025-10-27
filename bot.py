@@ -25,7 +25,7 @@ import os
 import re
 import traceback
 import update
-import function as func
+from function import func, ROOT_DIR, tokens, settings, update_json
 import json
 import logging
 import asyncio
@@ -81,6 +81,7 @@ def setup_logger(server_name):
 class PigPig(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        func.set_bot(self)
         self.loggers = {}
         # ActionDispatcher 將在 setup_hook 中被創建和注入
         self.action_dispatcher: Optional[ActionDispatcher] = None
@@ -146,7 +147,7 @@ class PigPig(commands.Bot):
         """初始化記憶系統"""
         try:
             # 檢查設定是否啟用記憶系統
-            memory_config = func.settings.memory_system if hasattr(func.settings, 'memory_system') else {}
+            memory_config = settings.memory_system if hasattr(settings, 'memory_system') else {}
             if not memory_config.get("enabled", False):
                 print("記憶系統已在設定中停用")
                 return
@@ -285,11 +286,11 @@ class PigPig(commands.Bot):
                 execute_action = await self.action_dispatcher.choose_act(prompt, after, message_to_edit)
                 await execute_action(message_to_edit, prompt, after)
             except Exception as e:
-                print(e)
+                await func.report_error(e, f"on_message_edit: {e}")
         
     async def setup_hook(self) -> None:
         # Loading all the module in `cogs` folder
-        for module in os.listdir(func.ROOT_DIR + '/cogs'):
+        for module in os.listdir(ROOT_DIR + '/cogs'):
             # 過濾條件：
             # 1. 必須是 .py 文件
             # 2. 排除 __init__.py（包初始化文件）
@@ -316,11 +317,11 @@ class PigPig(commands.Bot):
         # 初始化優化系統
         await self.initialize_optimization_system()
 
-        if func.settings.ipc_server.get("enable", False):
+        if settings.ipc_server.get("enable", False):
             await self.ipc.start()
 
-        if not func.settings.version or func.settings.version != update.__version__:
-            func.update_json("settings.json", new_data={"version": update.__version__})
+        if not settings.version or settings.version != update.__version__:
+            update_json("settings.json", new_data={"version": update.__version__})
 
         await self.tree.sync()
 
@@ -349,15 +350,56 @@ class PigPig(commands.Bot):
             # if model_management_cog:
             #     await model_management_cog.reload_model()
         except Exception as e:
-            print(e)
+            await func.report_error(e, f"on_ready: {e}")
         # 將資料寫入 JSON 文件
         with open('logs/guilds_and_channels.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
         print('update succesfully guilds_and_channels.json')
-        func.tokens.client_id = self.user.id
+        tokens.client_id = self.user.id
         
         # 啟動狀態更新任務
         self.change_status_task.start()
+
+    async def _send_error_report(self, embed: discord.Embed):
+        bug_report_channel_id = os.getenv("BUG_REPORT_CHANNEL_ID")
+        if bug_report_channel_id:
+            channel = self.get_channel(int(bug_report_channel_id))
+            if channel:
+                await channel.send(embed=embed)
+            else:
+                logger = self.get_logger_for_guild("Bot")
+                logger.error(f"找不到指定的錯誤報告頻道: {bug_report_channel_id}")
+
+    async def on_error(self, event_method: str, *args, **kwargs):
+        # 取得 logger
+        logger = self.get_logger_for_guild("Bot")
+
+        # 記錄錯誤
+        logger.error(f"事件 '{event_method}' 發生錯誤")
+        logger.error(traceback.format_exc())
+        print(f"事件 '{event_method}' 發生錯誤")
+        print(traceback.format_exc())
+
+        await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
+
+    async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
+        # 忽略某些錯誤
+        ignored = (commands.CommandNotFound, commands.DisabledCommand)
+        if isinstance(error, ignored):
+            return
+
+        # 取得 logger
+        logger = self.get_logger_for_guild(ctx.guild.name if ctx.guild else "DirectMessage")
+
+        # 記錄錯誤
+        logger.error(f"指令 '{ctx.command}' 發生錯誤: {error}")
+        logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+        print(f"指令 '{ctx.command}' 發生錯誤: {error}")
+        print("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+
+        await func.report_error(error, f"on_command_error: {ctx.command}")
+
+        await ctx.send(f"發生錯誤：{error}")
     
     async def close(self):
         """優雅關閉機器人和所有系統"""

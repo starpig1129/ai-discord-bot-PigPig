@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Callable, Set
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
+from function import func
 
 logger = logging.getLogger(__name__)
 
@@ -205,10 +206,10 @@ class ParallelToolManager:
             self.logger.error(error_msg)
             
         except Exception as e:
+            func.report_error(e, f"tool execution for {tool_request.tool_name}")
             result.error = e
             result.status = ToolExecutionStatus.FAILED
             self.failed_executions += 1
-            self.logger.error(f"工具 {tool_request.tool_name} 執行失敗: {str(e)}")
         
         finally:
             end_time = time.time()

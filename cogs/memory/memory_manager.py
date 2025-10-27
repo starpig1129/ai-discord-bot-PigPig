@@ -21,6 +21,7 @@ from enum import Enum
 import discord
 import numpy as np
 import tqdm
+from function import func
 
 from .database import DatabaseManager
 from .config import MemoryConfig, MemoryProfile
@@ -184,7 +185,7 @@ class MemoryManager:
             self.logger.info("孤兒向量清理完成。")
 
         except Exception as e:
-            self.logger.error(f"孤兒向量清理期間發生錯誤: {e}", exc_info=True)
+            await func.report_error(e, "Orphan vector cleanup")
 
     async def cleanup_orphan_segments(self) -> Dict[str, int]:
         """
@@ -294,7 +295,7 @@ class MemoryManager:
                         if removed_count > 0:
                             removed_stats[channel_id] = removed_stats.get(channel_id, 0) + removed_count
                     except Exception as e:
-                        self.logger.error(f"cleanup_orphan_segments: 從頻道 {channel_id} 批次移除孤兒向量時發生錯誤: {e}")
+                        await func.report_error(e, f"Batch removal of orphan vectors from channel {channel_id}")
 
             total_removed = sum(removed_stats.values())
             if total_removed > 0:
@@ -305,7 +306,7 @@ class MemoryManager:
             return removed_stats
 
         except Exception as e:
-            self.logger.error(f"孤兒向量清理期間發生錯誤: {e}", exc_info=True)
+            await func.report_error(e, "Orphan segment cleanup")
             return removed_stats
 
     async def initialize(self) -> bool:
@@ -402,7 +403,7 @@ class MemoryManager:
                 startup_logger.log_error(f"記憶系統初始化失敗: {e}")
                 startup_logger.end_startup_phase()
             
-            self.logger.error(f"記憶系統初始化失敗: {e}")
+            await func.report_error(e, "Memory system initialization")
             raise MemorySystemError(f"記憶系統初始化失敗: {e}")
     
     async def _load_configuration(self) -> None:
@@ -413,6 +414,7 @@ class MemoryManager:
             await loop.run_in_executor(None, self.config.load_config)
             
         except Exception as e:
+            await func.report_error(e, "Configuration loading")
             raise ConfigurationError(f"載入配置失敗: {e}")
     
     async def _initialize_database(self) -> None:
@@ -424,12 +426,14 @@ class MemoryManager:
             # 在執行緒池中初始化資料庫
             loop = asyncio.get_event_loop()
             self.db_manager = await loop.run_in_executor(
-                None, 
-                DatabaseManager, 
-                db_path
+                None,
+                DatabaseManager,
+                db_path,
+                self.bot
             )
             
         except Exception as e:
+            await func.report_error(e, "Database initialization")
             raise DatabaseError(f"初始化資料庫失敗: {e}")
     
     
@@ -462,7 +466,7 @@ class MemoryManager:
             self.logger.info(f"索引狀態初始化完成，共 {len(self.indices_status)} 個索引待命。")
 
         except Exception as e:
-            self.logger.error(f"掃描現有索引時發生未預期的錯誤: {e}")
+            await func.report_error(e, "Scanning existing indices")
     
     async def _ensure_index_loaded(self, channel_id: str) -> None:
         """確保指定頻道的索引已載入記憶體，並管理 LRU 快取。"""
@@ -512,7 +516,7 @@ class MemoryManager:
                         self.logger.error(f"載入索引 {channel_id} 失敗")
                         self.indices_status.pop(channel_id, None)
                 except Exception as e:
-                    self.logger.error(f"載入索引 {channel_id} 時發生嚴重錯誤: {e}")
+                    await func.report_error(e, f"Index loading for channel {channel_id}")
                     self.indices_status.pop(channel_id, None)
                     raise MemorySystemError(f"無法載入頻道 {channel_id} 的索引: {e}")
 
@@ -563,7 +567,7 @@ class MemoryManager:
             self.logger.info(f"文本分割服務初始化完成 (策略: {self.segmentation_config.strategy.value})")
             
         except Exception as e:
-            self.logger.error(f"初始化文本分割服務失敗: {e}")
+            await func.report_error(e, "Text segmentation service initialization")
             # 不拋出例外，允許系統在無分割功能的情況下運行
             if self.segmentation_config:
                 self.segmentation_config.enabled = False
@@ -637,12 +641,12 @@ class MemoryManager:
             self.logger.info("向量組件初始化完成")
 
         except Exception as e:
-            self.logger.error(f"向量組件初始化過程中發生錯誤: {e}")
+            await func.report_error(e, "Vector components initialization")
             # 嘗試降級到備用記憶體管理器
             try:
                 await self._initialize_fallback_memory_manager()
             except Exception as fallback_error:
-                self.logger.error(f"備用記憶體管理器初始化也失敗: {fallback_error}")
+                await func.report_error(fallback_error, "Fallback memory manager initialization")
                 raise MemorySystemError(f"無法初始化任何記憶體系統: {e}")
 
     async def get_stats(self) -> MemoryStats:
@@ -708,7 +712,7 @@ class MemoryManager:
             )
             
         except Exception as e:
-            self.logger.error(f"取得記憶統計失敗: {e}")
+            await func.report_error(e, "Memory stats retrieval")
             return MemoryStats(
                 total_channels=0,
                 total_messages=0,
@@ -744,7 +748,7 @@ class MemoryManager:
             return total_size / (1024 * 1024)  # 轉換為 MB
             
         except Exception as e:
-            self.logger.warning(f"計算儲存大小失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Storage size calculation"))
             return 0.0
     
     def _check_initialized(self) -> bool:
@@ -796,7 +800,7 @@ class MemoryManager:
                 return success
                 
         except Exception as e:
-            self.logger.error(f"儲存訊息失敗: {e}")
+            await func.report_error(e, "Message storage")
             raise MemorySystemError(f"儲存訊息失敗: {e}")
     
     def _prepare_message_data(self, message: discord.Message) -> Dict[str, Any]:
@@ -900,7 +904,7 @@ class MemoryManager:
         try:
             return self.db_manager.store_message(**message_data)
         except Exception as e:
-            self.logger.error(f"同步儲存訊息失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Sync message storage"))
             return False
     
     async def _store_message_vector(self, message_data: Dict[str, Any]) -> None:
@@ -949,7 +953,7 @@ class MemoryManager:
                 self.logger.error(f"無法新增向量到索引 {channel_id} for message {message_id}")
 
         except Exception as e:
-            self.logger.error(f"儲存訊息向量失敗: {e}", exc_info=True)
+            await func.report_error(e, "Message vector storage")
             raise VectorOperationError(f"儲存訊息向量失敗: {e}")
     
     async def _process_message_segmentation(self, message_data: Dict[str, Any]) -> None:
@@ -974,7 +978,7 @@ class MemoryManager:
                     await self._post_process_completed_segment(completed_segment)
                     
         except Exception as e:
-            self.logger.error(f"處理訊息分割失敗: {e}")
+            await func.report_error(e, "Message segmentation processing")
     
     async def _process_segmentation_async(
         self, 
@@ -1037,7 +1041,7 @@ class MemoryManager:
             self.logger.info(f"頻道 {channel_id} 的批次分割完成，共處理 {processed_count} 條訊息。")
 
         except Exception as e:
-            self.logger.error(f"非同步處理頻道 {channel_id} 分割失敗: {e}")
+            await func.report_error(e, f"Async segmentation processing for channel {channel_id}")
     
     async def _post_process_completed_segment(self, segment) -> None:
         """後處理已完成的片段
@@ -1049,7 +1053,7 @@ class MemoryManager:
             if self.current_profile.vector_enabled:
                 await self._add_segment_to_vector_index(segment)
         except Exception as e:
-            self.logger.error(f"後處理片段 {segment.id} 失敗: {e}")
+            await func.report_error(e, f"Post-processing of segment {segment.id}")
     
     async def _add_segment_to_vector_index(self, segment) -> None:
         """將片段添加到向量索引
@@ -1082,7 +1086,7 @@ class MemoryManager:
             await loop.run_in_executor(None, embed_and_add_sync)
             
         except Exception as e:
-            self.logger.error(f"新增片段到向量索引失敗: {e}")
+            await func.report_error(e, "Adding segment to vector index")
     
     def _store_embedding_to_database(
         self, 
@@ -1123,7 +1127,7 @@ class MemoryManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"儲存嵌入向量到資料庫失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Storing embedding to database"))
             return False
     
     def _check_initialized(self) -> bool:
@@ -1178,7 +1182,7 @@ class MemoryManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"確保索引目錄失敗: {e}")
+            await func.report_error(e, "Ensuring indices directory")
             return False
     
     async def _diagnose_index_storage_issue(self, channel_id: str, error_msg: str = None) -> None:
@@ -1234,7 +1238,7 @@ class MemoryManager:
             self.logger.info(f"頻道 {channel_id} 索引儲存診斷完成")
             
         except Exception as e:
-            self.logger.error(f"診斷索引儲存問題時發生錯誤: {e}")
+            await func.report_error(e, "Diagnosing index storage issue")
     
     async def search_memory(self, search_query: SearchQuery) -> 'SearchResult':
         """搜尋相關記憶（包裝器方法）
@@ -1302,7 +1306,7 @@ class MemoryManager:
             return result
             
         except Exception as e:
-            self.logger.error(f"記憶搜尋失敗: {e}")
+            await func.report_error(e, "Memory search")
             raise SearchError(f"記憶搜尋失敗: {e}")
     
     def _cleanup_sync(self) -> None:
@@ -1321,6 +1325,7 @@ class MemoryManager:
                         self.vector_manager._cleanup_sync()
                 except Exception as e:
                     self.logger.error(f"VectorManager 同步清理失敗: {e}")
+                    asyncio.create_task(func.report_error(e, "VectorManager sync cleanup"))
             
             # 2) 搜尋引擎：若有同步 cleanup，則在此執行
             try:
@@ -1330,6 +1335,7 @@ class MemoryManager:
                         cleanup_func()
             except Exception as e:
                 self.logger.error(f"SearchEngine 同步清理失敗: {e}")
+                asyncio.create_task(func.report_error(e, "SearchEngine sync cleanup"))
             
             # 3) Reranker 服務：同步清理（或退回 clear_cache）
             try:
@@ -1341,6 +1347,7 @@ class MemoryManager:
                         self.reranker_service.clear_cache()
             except Exception as e:
                 self.logger.error(f"RerankerService 同步清理失敗: {e}")
+                asyncio.create_task(func.report_error(e, "RerankerService sync cleanup"))
             
             # 4) Embedding 服務：同步清理（若提供）
             try:
@@ -1350,6 +1357,7 @@ class MemoryManager:
                         cleanup_func()
             except Exception as e:
                 self.logger.error(f"EmbeddingService 同步清理失敗: {e}")
+                asyncio.create_task(func.report_error(e, "EmbeddingService sync cleanup"))
             
             # 5) 資料庫連線：同步關閉
             try:
@@ -1357,6 +1365,7 @@ class MemoryManager:
                     self.db_manager.close_connections()
             except Exception as e:
                 self.logger.error(f"DatabaseManager 關閉連線失敗: {e}")
+                asyncio.create_task(func.report_error(e, "DatabaseManager connection closing"))
             
             # 6) 最後執行一次垃圾回收與 GPU 快取清除（若 VectorManager 未處理）
             try:
@@ -1365,6 +1374,7 @@ class MemoryManager:
                 pass
         except Exception as e:
             self.logger.error(f"_cleanup_sync 執行失敗: {e}")
+            asyncio.create_task(func.report_error(e, "Sync cleanup"))
     
     async def cleanup(self) -> None:
         """清理記憶體資源與快取：非同步協程僅保留一次 to_thread 呼叫。"""
@@ -1377,18 +1387,21 @@ class MemoryManager:
                     await self.search_engine.cleanup()
             except Exception as e:
                 self.logger.error(f"SearchEngine 清理失敗: {e}")
+                await func.report_error(e, "SearchEngine cleanup")
             
             try:
                 if self.reranker_service and hasattr(self.reranker_service, "cleanup") and asyncio.iscoroutinefunction(self.reranker_service.cleanup):
                     await self.reranker_service.cleanup()
             except Exception as e:
                 self.logger.error(f"RerankerService 清理失敗: {e}")
+                await func.report_error(e, "RerankerService cleanup")
             
             try:
                 if self.embedding_service and hasattr(self.embedding_service, "cleanup") and asyncio.iscoroutinefunction(self.embedding_service.cleanup):
                     await self.embedding_service.cleanup()
             except Exception as e:
                 self.logger.error(f"EmbeddingService 清理失敗: {e}")
+                await func.report_error(e, "EmbeddingService cleanup")
             
             # 將所有阻塞的同步清理整合成單一背景任務
             await asyncio.to_thread(self._cleanup_sync)
@@ -1397,6 +1410,7 @@ class MemoryManager:
             self.logger.info("記憶體系統清理完成")
         except Exception as e:
             self.logger.error(f"記憶體清理時發生嚴重錯誤: {e}")
+            await func.report_error(e, "Memory system cleanup")
     
     async def shutdown(self) -> None:
         """優雅關閉 MemoryManager，集中釋放所有下游資源。"""
@@ -1410,11 +1424,13 @@ class MemoryManager:
                     await asyncio.gather(*bg_tasks, return_exceptions=True)
             except Exception as e:
                 self.logger.warning(f"取消背景任務時發生錯誤: {e}")
+                await func.report_error(e, "Background task cancellation during shutdown")
             
             # 統一走 cleanup，內部只會進行一次 to_thread 同步清理
             await self.cleanup()
         except Exception as e:
             self.logger.error(f"關閉 MemoryManager發生嚴重錯誤: {e}")
+            await func.report_error(e, "MemoryManager shutdown")
             
     async def _initialize_fallback_memory_manager(self) -> None:
         """初始化備用記憶體管理器"""
@@ -1439,5 +1455,5 @@ class MemoryManager:
             self.logger.info("備用記憶體管理器初始化完成")
 
         except Exception as e:
-            self.logger.error(f"初始化備用記憶體管理器失敗: {e}")
+            await func.report_error(e, "Fallback memory manager initialization")
             self.fallback_memory_manager = None

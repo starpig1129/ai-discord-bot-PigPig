@@ -13,6 +13,7 @@ import asyncio
 
 from addons.update.manager import UpdateManager
 from addons.update.security import UpdatePermissionChecker
+from function import func
 
 
 class UpdateManagerCog(commands.Cog):
@@ -47,6 +48,7 @@ class UpdateManagerCog(commands.Cog):
             self.logger.info("更新管理 Cog 載入完成")
         except Exception as e:
             self.logger.error(f"Cog 載入時發生錯誤: {e}")
+            await func.report_error(self.bot, e, f"UpdateManagerCog Cog 載入時發生錯誤")
     
     @app_commands.command(name="update_check", description="檢查是否有可用更新")
     async def check_update(self, interaction: discord.Interaction):
@@ -112,9 +114,10 @@ class UpdateManagerCog(commands.Cog):
                 
         except Exception as e:
             self.logger.error(f"檢查更新時發生錯誤: {e}")
+            await func.report_error(self.bot, e, f"檢查更新時發生錯誤")
             embed = discord.Embed(
                 title="❌ 檢查失敗",
-                description=f"檢查更新時發生錯誤：{e}",
+                description=f"檢查更新時發生錯誤，已回報給開發者。",
                 color=discord.Color.red()
             )
             await interaction.followup.send(embed=embed)
@@ -184,9 +187,10 @@ class UpdateManagerCog(commands.Cog):
             
         except Exception as e:
             self.logger.error(f"準備更新時發生錯誤: {e}")
+            await func.report_error(self.bot, e, f"準備更新時發生錯誤")
             embed = discord.Embed(
                 title="❌ 更新失敗",
-                description=f"準備更新時發生錯誤：{e}",
+                description=f"準備更新時發生錯誤，已回報給開發者。",
                 color=discord.Color.red()
             )
             await interaction.followup.send(embed=embed)
@@ -209,9 +213,10 @@ class UpdateManagerCog(commands.Cog):
             
         except Exception as e:
             self.logger.error(f"獲取更新狀態時發生錯誤: {e}")
+            await func.report_error(self.bot, e, f"獲取更新狀態時發生錯誤")
             embed = discord.Embed(
                 title="❌ 狀態查詢失敗",
-                description=f"獲取狀態時發生錯誤：{e}",
+                description=f"獲取狀態時發生錯誤，已回報給開發者。",
                 color=discord.Color.red()
             )
             await interaction.response.send_message(embed=embed)
@@ -402,9 +407,10 @@ class UpdateConfirmView(discord.ui.View):
                 
         except Exception as e:
             # 處理未預期的錯誤
+            await func.report_error(self.update_manager.bot, e, f"執行更新時發生嚴重錯誤")
             embed = discord.Embed(
                 title="❌ 更新錯誤",
-                description=f"執行更新時發生嚴重錯誤：{e}",
+                description=f"執行更新時發生嚴重錯誤，已回報給開發者。",
                 color=discord.Color.red()
             )
             

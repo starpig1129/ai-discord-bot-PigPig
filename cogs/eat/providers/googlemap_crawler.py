@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 import re
 import concurrent.futures
 import asyncio
+from function import func
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,8 @@ class GoogleMapCrawler:
         
             html = self.webdriver.page_source
             selected = BeautifulSoup(html, "lxml")
-        except:
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "cogs/eat/providers/googlemap_crawler.py/search/get_url"))
             print('只有一個結果')
             url=f"https://www.google.com/maps/search/{keyword}餐廳"
             selected = BeautifulSoup(html, "lxml")
@@ -64,7 +66,8 @@ class GoogleMapCrawler:
                 )
                 self.webdriver.execute_script("arguments[0].scrollIntoView(true);", element)
                 retries += 1   
-        except:
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "cogs/eat/providers/googlemap_crawler.py/search/get_reviews"))
             reviews='撰寫「找不到評論」的評論者相片'
         # 使用正則表達式提取評論
         pattern = re.compile(r'撰寫「"(.+?)"」的評論者相片')
@@ -84,7 +87,8 @@ class GoogleMapCrawler:
             menu = style_attribute[url_start:url_end]
             equal_index = menu.find('=')
             menu = menu[:equal_index]+'=s1536'
-        except:
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "cogs/eat/providers/googlemap_crawler.py/search/get_menu"))
             menu = '無法取得菜單'
         sleep(1)
         # 返回爬取到的所有數據

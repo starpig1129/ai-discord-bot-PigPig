@@ -43,6 +43,8 @@ from typing import Any, Dict, Tuple
 from gpt.core.exceptions import LLMProviderError, is_retryable
 from gpt.core.retry_controller import RetryController
 from gpt.utils.sanitizer import mask_text
+from function import func
+import asyncio
 
 settings = Settings()
 tokens = TOKENS()
@@ -73,7 +75,7 @@ async def get_model_and_tokenizer():
                     global_tokenizer = tokenizer
                     logging.info("本地模型初始化成功。")
                 except Exception as e:
-                    logging.error(f"初始化本地模型失敗: {e}")
+                    await func.report_error(e, "local model initialization")
                     # 確保即使失敗也不會一直重試
                     global_model, global_tokenizer = None, None
                     raise
@@ -157,6 +159,7 @@ def set_model_and_tokenizer(model=None, tokenizer=None, model_path=None):
         global_tokenizer = tokenizer
         return model, tokenizer
     except Exception as e:
+        asyncio.create_task(func.report_error(e, "MiniCPM-o model initialization"))
         raise ValueError(f"初始化 MiniCPM-o 模型時發生錯誤: {str(e)}")
 
 class LocalModelError(Exception):
@@ -251,6 +254,7 @@ async def local_generate(inst, system_prompt, dialogue_history=None, image_input
                     
                     logging.info(f"完整文本: {text}")
                 except Exception as e:
+                    await func.report_error(e, "streaming generation")
                     raise LocalModelError(f"流式生成過程錯誤: {str(e)}")
 
             return None, stream_generator()
@@ -301,6 +305,7 @@ async def local_generate(inst, system_prompt, dialogue_history=None, image_input
     except Exception as e:
         if isinstance(e, LocalModelError):
             raise
+        await func.report_error(e, "local model error")
         raise LocalModelError(f"本地模型錯誤: {str(e)}")
 
 # 定義模型生成函數映射
@@ -556,7 +561,7 @@ async def generate_response(
                                     )
                                     yield chunk
                             except Exception as e:
-                                logging.error(f"迭代 TextIteratorStreamer 時發生錯誤: {str(e)}")
+                                await func.report_error(e, "TextIteratorStreamer iteration")
                                 raise LLMProviderError(
                                     code="malformed_response",
                                     retriable=False,
@@ -579,7 +584,7 @@ async def generate_response(
                 except LLMProviderError:
                     raise
                 except Exception as e:
-                    logging.error(f"生成過程錯誤: {str(e)}")
+                    await func.report_error(e, "generation process")
                     raise LLLMProviderError(
                         code="malformed_response",
                         retriable=False,
@@ -654,7 +659,7 @@ async def generate_response(
         except Exception as e:
             # 初始化或參數準備等非 LLMProviderError 的未知錯誤
             last_generic_err = e
-            logging.error(f"初始化 {model_name} 模型時發生錯誤: {str(e)}")
+            func.report_error(e, f"initializing {model_name} model")
             continue
         finally:
             # 在此處理 failover 事件的 from->to 打點

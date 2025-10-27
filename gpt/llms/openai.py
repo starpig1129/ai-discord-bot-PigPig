@@ -2,6 +2,7 @@ from addons.settings import TOKENS
 from openai import OpenAI
 import asyncio
 import tiktoken
+from function import func
 import numpy as np
 from PIL import Image
 from moviepy.editor import VideoFileClip
@@ -98,6 +99,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
                     ]
                 }
     except Exception as e:
+        await func.report_error(e, "OpenAI API image processing failed")
         raise OpenAIError(f"OpenAI API 影像處理錯誤: {str(e)}")
 
     while num_tokens_from_messages(messages) > 127000:
@@ -128,6 +130,7 @@ async def generate_response(inst, system_prompt, dialogue_history=None, image_in
                     yield chunk.choices[0].delta.content
                     await asyncio.sleep(0)
         except Exception as e:
+            await func.report_error(e, "OpenAI API generation failed")
             error_message = str(e)
             if "invalid_api_key" in error_message.lower():
                 raise OpenAIError(f"OpenAI API 金鑰無效: {error_message}")

@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
+from function import func
 
 
 class DiscordNotifier:
@@ -50,6 +51,7 @@ class DiscordNotifier:
             return owner
         except Exception as e:
             self.logger.error(f"獲取 Bot 擁有者失敗: {e}")
+            await func.report_error(e, "addons/update/notifier.py/_get_bot_owner_safely")
             return None
     
     async def notify_update_available(self, version_info: Dict[str, Any]) -> bool:
@@ -95,7 +97,8 @@ class DiscordNotifier:
                         value=f"<t:{int(pub_time.timestamp())}:R>", 
                         inline=False
                     )
-                except:
+                except Exception as e:
+                    await func.report_error(e, "addons/update/notifier.py/notify_update_available/parse_time")
                     embed.add_field(
                         name="發布時間", 
                         value=version_info["published_at"], 
@@ -121,6 +124,7 @@ class DiscordNotifier:
             return False
         except Exception as e:
             self.logger.error(f"發送新版本通知時發生錯誤: {e}")
+            await func.report_error(e, "addons/update/notifier.py/notify_update_available")
             return False
     
     async def notify_update_progress(self, stage: str, progress: int, details: str = "") -> bool:
@@ -163,6 +167,7 @@ class DiscordNotifier:
             
         except Exception as e:
             self.logger.error(f"發送更新進度通知時發生錯誤: {e}")
+            await func.report_error(e, "addons/update/notifier.py/notify_update_progress")
             return False
     
     async def notify_update_complete(self, result: Dict[str, Any]) -> bool:
@@ -239,6 +244,7 @@ class DiscordNotifier:
             
         except Exception as e:
             self.logger.error(f"發送更新完成通知時發生錯誤: {e}")
+            await func.report_error(e, "addons/update/notifier.py/notify_update_complete")
             return False
     
     async def notify_update_error(self, error: Exception, context: str = "") -> bool:
@@ -289,6 +295,7 @@ class DiscordNotifier:
             
         except Exception as e:
             self.logger.error(f"發送錯誤通知時發生錯誤: {e}")
+            await func.report_error(e, "addons/update/notifier.py/notify_update_error")
             return False
     
     async def notify_restart_success(self, restart_info: Dict[str, Any]) -> bool:
@@ -322,7 +329,8 @@ class DiscordNotifier:
                         value=f"{elapsed:.1f}秒", 
                         inline=True
                     )
-                except:
+                except Exception as e:
+                    await func.report_error(e, "addons/update/notifier.py/notify_restart_success/parse_time")
                     pass
             
             embed.add_field(
@@ -336,6 +344,7 @@ class DiscordNotifier:
             
         except Exception as e:
             self.logger.error(f"發送重啟成功通知時發生錯誤: {e}")
+            await func.report_error(e, "addons/update/notifier.py/notify_restart_success")
             return False
     
     def _create_progress_bar(self, progress: int, length: int = 20) -> str:
@@ -374,6 +383,7 @@ class DiscordNotifier:
             
         except Exception as e:
             self.logger.error(f"發送頻道通知時發生錯誤: {e}")
+            await func.report_error(e, "addons/update/notifier.py/send_channel_notification")
             return False
 
 
@@ -432,6 +442,7 @@ class QuickUpdateView(discord.ui.View):
                     description=f"執行更新時發生錯誤：{e}",
                     color=discord.Color.red()
                 )
+                await func.report_error(e, "addons/update/notifier.py/quick_update")
                 await interaction.followup.edit_message(interaction.message.id, embed=embed, view=None)
         else:
             await interaction.response.send_message("❌ 更新系統未載入", ephemeral=True)

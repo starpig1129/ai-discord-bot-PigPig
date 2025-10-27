@@ -33,6 +33,8 @@ import re
 import unicodedata
 from .language_manager import LanguageManager
 from gpt.utils.discord_utils import safe_edit_message
+from function import func
+import asyncio
 
 class MathCalculatorCog(commands.Cog):
     def __init__(self, bot):
@@ -212,6 +214,7 @@ class MathCalculatorCog(commands.Cog):
             
             return result_message
         except Exception as e:
+            await func.report_error(e, f"An error occurred during calculation in cogs/math.py")
             print(f"計算錯誤: {str(e)}")
             error_message = self.lang_manager.translate(
                 guild_id, "commands", "calculate", "responses", "error_general"
