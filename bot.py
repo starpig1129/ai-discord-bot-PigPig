@@ -25,7 +25,7 @@ import os
 import re
 import traceback
 import update
-from function import func, ROOT_DIR, tokens
+from function import func, ROOT_DIR, tokens, settings, update_json
 import json
 import logging
 import asyncio
@@ -147,7 +147,7 @@ class PigPig(commands.Bot):
         """初始化記憶系統"""
         try:
             # 檢查設定是否啟用記憶系統
-            memory_config = func.settings.memory_system if hasattr(func.settings, 'memory_system') else {}
+            memory_config = settings.memory_system if hasattr(settings, 'memory_system') else {}
             if not memory_config.get("enabled", False):
                 print("記憶系統已在設定中停用")
                 return
@@ -317,11 +317,11 @@ class PigPig(commands.Bot):
         # 初始化優化系統
         await self.initialize_optimization_system()
 
-        if func.settings.ipc_server.get("enable", False):
+        if settings.ipc_server.get("enable", False):
             await self.ipc.start()
 
-        if not func.settings.version or func.settings.version != update.__version__:
-            func.update_json("settings.json", new_data={"version": update.__version__})
+        if not settings.version or settings.version != update.__version__:
+            update_json("settings.json", new_data={"version": update.__version__})
 
         await self.tree.sync()
 
