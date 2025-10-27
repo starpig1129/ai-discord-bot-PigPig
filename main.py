@@ -39,8 +39,8 @@ class CommandCheck(discord.app_commands.CommandTree):
         return await super().interaction_check(interaction)
     
 async def get_prefix(bot, message: discord.Message):
-    settings = await get_settings(message.guild.id)
-    return settings.get("prefix", settings.bot_prefix)
+    guild_settings = await get_settings(message.guild.id)
+    return guild_settings.get("prefix", settings.bot_prefix)
 
 # Loading settings
 settings = Settings("settings.json")
