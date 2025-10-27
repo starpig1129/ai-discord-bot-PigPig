@@ -15,6 +15,7 @@ from .music_lib.queue_manager import QueueManager, PlayMode
 from .music_lib.ui_manager import UIManager
 from .music_lib.ui.song_select import SongSelectView
 from cogs.language_manager import LanguageManager # Import LanguageManager
+import function as func
 
 class YTMusic(commands.Cog):
     def __init__(self, bot):
@@ -301,7 +302,7 @@ class YTMusic(commands.Cog):
             await self._play_song(interaction, next_song, voice_client)
             
         except Exception as e:
-            logger.error(f"[音樂] 伺服器 ID： {guild_id}, 播放音樂時出錯： {e}")
+            await func.func.report_error(e, f"playing next song in guild {guild_id}")
             title = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "playback_error")
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
             if hasattr(interaction, 'followup') and not interaction.response.is_done():
@@ -339,7 +340,7 @@ class YTMusic(commands.Cog):
             if not song.get('is_live') and self.queue_manager.get_play_mode(interaction.guild.id) != PlayMode.LOOP_SINGLE:
                 self.bot.loop.create_task(self._player_loop(interaction, song))
         except Exception as e:
-            logger.error(f"[音樂] 單曲循環播放時出錯： {e}")
+            await func.func.report_error(e, "handling single loop")
             await self.play_next(interaction, force_new=True)
 
     async def _get_next_song(self, interaction: discord.Interaction, guild_id: int, force_new: bool):
@@ -462,7 +463,7 @@ class YTMusic(commands.Cog):
                     # Try to play next song
                     await self.play_next(new_interaction)
                 except Exception as e:
-                    logger.error(f"[音樂] 播放下一首歌曲時出錯： {str(e)}")
+                    await func.func.report_error(e, "playing next song in _handle_after_play")
                     if channel:
                         try:
                             # Send error message using channel.send directly
@@ -485,7 +486,7 @@ class YTMusic(commands.Cog):
                             # Try one more time with force_new
                             await self.play_next(new_interaction, force_new=True)
                         except Exception as retry_error:
-                            logger.error(f"[音樂] 重試播放失敗： {str(retry_error)}")
+                            await func.func.report_error(retry_error, "retrying to play next song in _handle_after_play")
                             try:
                                 # Send final error message
                                 title = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "playback_failed_title")
@@ -499,10 +500,10 @@ class YTMusic(commands.Cog):
                                 state = self.state_manager.get_state(guild_id)
                                 state.ui_messages.append(message)
                             except Exception as final_error:
-                                logger.error(f"[音樂] 發送錯誤訊息失敗： {str(final_error)}")
+                                 await func.func.report_error(final_error, "sending final error message in _handle_after_play")
             
         except Exception as e:
-            logger.error(f"[音樂] 處理播放完成時出錯： {e}")
+             await func.func.report_error(e, "handling after play")
 
     async def _trigger_autoplay(self, interaction: discord.Interaction, guild_id: int):
         """根據最後播放的歌曲觸發自動播放，精確填充推薦歌曲至5首，並排除重複。"""

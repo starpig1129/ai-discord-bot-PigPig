@@ -18,6 +18,7 @@ try:
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
+from function import func
 
 # 導入所有優化模組
 from gpt.core.response_generator import generate_response
@@ -229,7 +230,7 @@ class OptimizedDiscordBot:
                 self.performance_monitor.increment_counter('error_count')
                 self.performance_monitor.stop_timer('process_user_input')
             
-            self.logger.error(f"優化處理失敗: {str(e)}")
+            func.report_error(e, "optimized user input processing")
             raise
     
     async def _start_memory_search(self, query: str, user_id: str) -> Optional[Dict]:
@@ -268,7 +269,7 @@ class OptimizedDiscordBot:
             return search_result
             
         except Exception as e:
-            self.logger.error(f"記憶搜索失敗: {str(e)}")
+            func.report_error(e, "memory search start")
             return None
     
     def _analyze_tool_requirements(self, 
@@ -374,7 +375,7 @@ class OptimizedDiscordBot:
             return usage_percent
             
         except Exception as e:
-            self.logger.warning(f"檢查GPU記憶體使用率失敗: {e}")
+            func.report_error(e, "GPU memory usage check")
             return 0.0
     
     async def _gpu_memory_cleanup(self) -> None:
@@ -394,7 +395,7 @@ class OptimizedDiscordBot:
                 self.logger.info("GPU記憶體清理完成")
             
         except Exception as e:
-            self.logger.error(f"GPU記憶體清理失敗: {e}")
+            func.report_error(e, "GPU memory cleanup")
     
     def get_optimization_status(self) -> Dict[str, Any]:
         """獲取優化狀態
@@ -423,6 +424,7 @@ class OptimizedDiscordBot:
                 "torch_available": TORCH_AVAILABLE
             }
         except Exception as e:
+            func.report_error(e, "optimization status retrieval")
             status["gpu_memory"] = {"error": str(e)}
         
         # 添加性能統計
@@ -460,6 +462,7 @@ class OptimizedDiscordBot:
                 gpu_info['free_mb'] = gpu_info['total_mb'] - gpu_info['allocated_mb']
                 gpu_info['usage_percent'] = (gpu_info['allocated_mb'] / gpu_info['total_mb']) * 100
         except Exception as e:
+            func.report_error(e, "GPU memory info retrieval")
             gpu_info['error'] = str(e)
         
         return gpu_info
@@ -500,6 +503,7 @@ def initialize_optimization(config: OptimizationConfig = None) -> OptimizedDisco
             config = OptimizationConfig.from_settings(settings)
             logger.info("使用配置檔案初始化優化系統")
         except Exception as e:
+            func.report_error(e, "optimization initialization from settings")
             logger.warning(f"載入配置檔案失敗，使用預設配置: {e}")
             config = OptimizationConfig()
     
@@ -530,7 +534,7 @@ def initialize_optimization_from_file(config_path: str = None) -> OptimizedDisco
         return initialize_optimization(config)
         
     except Exception as e:
-        logger.error(f"從配置檔案初始化失敗: {e}")
+            func.report_error(e, "optimization initialization from file")
         # 降級到預設配置
         return initialize_optimization()
 

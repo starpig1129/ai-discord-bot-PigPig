@@ -4,6 +4,7 @@ import asyncio
 from typing import TYPE_CHECKING, Optional
 from gpt.processing_cache import processing_cache
 from gpt.performance_monitor import PerformanceMonitor
+from function import func
 
 if TYPE_CHECKING:
     from bot import PigPig
@@ -83,7 +84,7 @@ class MessageHandler:
                     if final_result:
                         processing_cache.cache_result(prompt, user_id, channel_id, final_result)
                 except Exception as e:
-                    self.bot.get_logger_for_guild(message.guild.name).error(f"處理訊息時發生錯誤: {e}", exc_info=True)
+                    await func.func.report_error(e, "Message handling failed")
                     await message_to_edit.edit(content=f"糟糕，處理你的訊息時發生了錯誤：{e}")
         finally:
             self.performance_monitor.stop_timer("total_response_time")

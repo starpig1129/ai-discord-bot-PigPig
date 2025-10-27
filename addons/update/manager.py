@@ -20,6 +20,7 @@ from .security import UpdatePermissionChecker, BackupManager, ConfigProtector
 from .notifier import DiscordNotifier
 from .restart import GracefulRestartManager
 from ..settings import UpdateSettings
+import function as func
 
 
 class UpdateStatusTracker:
@@ -122,6 +123,7 @@ class UpdateLogger:
                 json.dump(logs, f, indent=2, ensure_ascii=False)
         except Exception as e:
             self.logger.error(f"寫入日誌時發生錯誤: {e}")
+            asyncio.create_task(func.func.report_error(e, "addons/update/manager.py/_write_log"))
 
 
 class UpdateManager:
@@ -176,6 +178,7 @@ class UpdateManager:
             self.status_tracker.update_status("idle")
             return result
         except Exception as e:
+            await func.func.report_error(e, "addons/update/manager.py/check_for_updates")
             self.status_tracker.set_error(str(e))
             raise e
     
@@ -288,7 +291,7 @@ class UpdateManager:
                         self.logger.error(f"🏷️ 錯誤類型: {type(restart_error).__name__}")
                         import traceback
                         self.logger.error(f"📋 重啟錯誤堆疊:\n{traceback.format_exc()}")
-                        
+                        await func.func.report_error(restart_error, "addons/update/manager.py/execute_update/restart")
                         # 重新拋出異常讓外層處理
                         raise restart_error
                     
@@ -297,6 +300,7 @@ class UpdateManager:
                     raise Exception("更新安裝失敗")
                     
             except Exception as e:
+                await func.func.report_error(e, "addons/update/manager.py/execute_update")
                 self.logger.error(f"更新過程中發生錯誤: {e}")
                 
                 # 嘗試回滾
@@ -308,6 +312,7 @@ class UpdateManager:
                         else:
                             self.logger.error("回滾失敗")
                     except Exception as rollback_error:
+                        await func.func.report_error(rollback_error, "addons/update/manager.py/execute_update/rollback")
                         self.logger.error(f"回滾時發生錯誤: {rollback_error}")
                 
                 # 記錄錯誤
@@ -414,6 +419,7 @@ class UpdateManager:
                         self.logger.info(f"🗑️ 已刪除舊檔案: {item}")
                 except Exception as e:
                     self.logger.warning(f"❌ 刪除項目失敗 {item}: {e}")
+                    await func.func.report_error(e, f"addons/update/manager.py/_install_update/delete/{item}")
             
             self.logger.info("✅ 舊檔案清理完成")
             
@@ -449,6 +455,7 @@ class UpdateManager:
                         self.logger.info(f"📄 已複製新檔案: {item}")
                 except Exception as e:
                     self.logger.warning(f"❌ 複製項目失敗 {item}: {e}")
+                    await func.func.report_error(e, f"addons/update/manager.py/_install_update/copy/{item}")
             
             self.logger.info("✅ 新檔案複製完成")
             
@@ -464,6 +471,7 @@ class UpdateManager:
                 
         except Exception as e:
             self.logger.error(f"安裝更新時發生錯誤: {e}")
+            await func.func.report_error(e, "addons/update/manager.py/_install_update")
             # 清理可能的臨時檔案
             if os.path.exists("temp/update"):
                 shutil.rmtree("temp/update", ignore_errors=True)
@@ -488,6 +496,7 @@ class UpdateManager:
             
         except Exception as e:
             self.logger.error(f"驗證安裝時發生錯誤: {e}")
+            asyncio.create_task(func.func.report_error(e, "addons/update/manager.py/_verify_installation"))
             return False
     
     def _start_auto_check(self):
@@ -504,6 +513,7 @@ class UpdateManager:
                     
             except Exception as e:
                 self.logger.error(f"自動檢查更新時發生錯誤: {e}")
+                await func.func.report_error(e, "addons/update/manager.py/_start_auto_check")
                 await self.notifier.notify_update_error(e, "自動檢查更新")
         
         auto_check.start()
@@ -528,3 +538,4 @@ class UpdateManager:
             await self.restart_manager.post_restart_check()
         except Exception as e:
             self.logger.error(f"重啟後初始化失敗: {e}")
+            await func.func.report_error(e, "addons/update/manager.py/post_restart_initialization")

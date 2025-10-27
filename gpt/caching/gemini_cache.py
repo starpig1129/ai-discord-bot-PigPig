@@ -11,6 +11,7 @@ from google.genai import types
 from google.genai.types import Tool
 from typing import Optional, Dict, Any, List
 from google import genai
+from function import func
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class GeminiCacheManager:
             return cache
             
         except Exception as e:
-            self.logger.error(f"創建快取失敗: {str(e)}")
+            func.report_error(e, "Gemini cache creation")
             return None
 
     async def get_cache_by_key(self, cache_key: str) -> Optional[Any]:
@@ -89,7 +90,7 @@ class GeminiCacheManager:
                 self.cache_access_times[cache_key] = time.time()
                 return cache
             except Exception as e:
-                self.logger.warning(f"遠端快取 {cache.name} 已失效，從本地清理: {str(e)}")
+            func.report_error(e, f"Gemini cache retrieval for {cache.name}")
                 self._cleanup_cache_record(cache_key)
         return None
 
@@ -116,7 +117,7 @@ class GeminiCacheManager:
                 self.logger.info(f"成功刪除遠端快取: {cache.name}")
             except Exception as e:
                 # 如果遠端快取已不存在（例如，已過期或手動刪除），也視為成功
-                self.logger.warning(f"刪除遠端快取 {cache.name} 時發生錯誤（可能已不存在）: {str(e)}")
+            func.report_error(e, f"Gemini cache deletion for {cache.name}")
             finally:
                 # 無論遠端刪除是否成功，都清理本地記錄
                 self._cleanup_cache_record(cache_key)
@@ -162,7 +163,7 @@ class GeminiCacheManager:
             self.logger.info(f"主動清理了 {cleaned_count} 個最少使用的快取，當前快取數量: {len(self.active_caches)}")
             
         except Exception as e:
-            self.logger.error(f"清理最少使用的快取失敗: {str(e)}")
+            func.report_error(e, "least used Gemini cache cleanup")
         
         return cleaned_count
     

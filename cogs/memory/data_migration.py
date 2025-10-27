@@ -18,6 +18,7 @@ from enum import Enum
 from .database import DatabaseManager
 from .memory_manager import MemoryManager
 from .exceptions import MemorySystemError
+import function as func
 
 
 class DataSourceType(Enum):
@@ -422,6 +423,7 @@ class DataMigrator:
         except Exception as e:
             error_msg = f"資料轉移過程發生錯誤: {e}"
             self.logger.error(error_msg)
+            await func.report_error(self.memory_manager.bot, e, "資料轉移過程發生錯誤")
             report.errors.append(error_msg)
             report.end_time = datetime.now()
         
@@ -515,6 +517,7 @@ class DataMigrator:
                         continue
             
         except Exception as e:
+            await func.report_error(self.memory_manager.bot, e, f"讀取 JSON 檔案失敗: {source.path}")
             raise MemorySystemError(f"讀取 JSON 檔案失敗: {e}")
         
         return migrated_count
@@ -560,6 +563,7 @@ class DataMigrator:
             conn.close()
             
         except Exception as e:
+            await func.report_error(self.memory_manager.bot, e, f"讀取 SQLite 資料庫失敗: {source.path}")
             raise MemorySystemError(f"讀取 SQLite 資料庫失敗: {e}")
         
         return migrated_count
@@ -599,6 +603,7 @@ class DataMigrator:
                         continue
             
         except Exception as e:
+            await func.report_error(self.memory_manager.bot, e, f"讀取 CSV 檔案失敗: {source.path}")
             raise MemorySystemError(f"讀取 CSV 檔案失敗: {e}")
         
         return migrated_count
@@ -799,6 +804,7 @@ class MigrationValidator:
                 validation_result["is_valid"] = False
             
         except Exception as e:
+            await func.report_error(self.memory_manager.bot, e, "驗證過程發生錯誤")
             validation_result["is_valid"] = False
             validation_result["errors"].append(f"驗證過程發生錯誤: {e}")
         
@@ -822,6 +828,7 @@ class MigrationValidator:
                     "integrity_check": integrity_result
                 }
         except Exception as e:
+            await func.report_error(self.memory_manager.bot, e, "驗證資料庫完整性失敗")
             return {
                 "passed": False,
                 "error": str(e)
@@ -844,6 +851,7 @@ class MigrationValidator:
                 "total_in_db": stats.total_messages
             }
         except Exception as e:
+            await func.report_error(self.memory_manager.bot, e, "驗證記錄數量失敗")
             return {
                 "passed": False,
                 "error": str(e)
@@ -874,6 +882,7 @@ class MigrationValidator:
                     "format_errors": format_errors
                 }
         except Exception as e:
+            await func.report_error(self.memory_manager.bot, e, "驗證資料格式失敗")
             return {
                 "passed": False,
                 "error": str(e)
@@ -906,6 +915,7 @@ class MigrationValidator:
                     "error": "向量管理器未初始化"
                 }
         except Exception as e:
+            await func.report_error(self.memory_manager.bot, e, "驗證向量索引失敗")
             return {
                 "passed": False,
                 "error": str(e)

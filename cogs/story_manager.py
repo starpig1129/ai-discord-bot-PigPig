@@ -47,6 +47,7 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
             
         except Exception as e:
             self.logger.error(f"故事選單錯誤: {e}", exc_info=True)
+            await func.report_error(self.bot, e)
             error_message = "❌ 載入故事選單時發生錯誤，請稍後再試。"
             
             if interaction.response.is_done():
@@ -83,6 +84,7 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
 
         except Exception as e:
             self.logger.error(f"Error in /story intervene command: {e}", exc_info=True)
+            await func.report_error(self.bot, e)
             await interaction.response.send_message(
                 "❌ 執行干預指令時發生錯誤。",
                 ephemeral=True
@@ -129,6 +131,7 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
                 f"處理故事訊息時發生錯誤 (頻道 {message.channel.id}): {e}", 
                 exc_info=True
             )
+            await func.report_error(self.bot, e)
             
             # 發送友善的錯誤訊息
             error_embed = discord.Embed(

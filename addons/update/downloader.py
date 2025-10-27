@@ -11,6 +11,8 @@ import hashlib
 import logging
 from datetime import datetime
 from typing import Callable, Optional, Awaitable
+import function as func
+import asyncio
 
 
 class UpdateDownloader:
@@ -91,6 +93,7 @@ class UpdateDownloader:
         
         except Exception as e:
             self.logger.error(f"下載過程中發生錯誤: {e}")
+            await func.func.report_error(e, "addons/update/downloader.py/download_update")
             if os.path.exists(filepath):
                 os.remove(filepath)
             raise e
@@ -156,6 +159,7 @@ class UpdateDownloader:
                 return False
             except Exception as e:
                 self.logger.error(f"ZIP 檔案驗證時發生錯誤: {e}")
+                await func.func.report_error(e, "addons/update/downloader.py/_verify_download/zip")
                 return False
             
             self.logger.info("檔案驗證通過")
@@ -163,6 +167,7 @@ class UpdateDownloader:
             
         except Exception as e:
             self.logger.error(f"檔案驗證時發生未預期錯誤: {e}")
+            await func.func.report_error(e, "addons/update/downloader.py/_verify_download")
             return False
     
     def calculate_file_hash(self, filepath: str, algorithm: str = 'sha256') -> str:
@@ -185,6 +190,7 @@ class UpdateDownloader:
             return hash_func.hexdigest()
         except Exception as e:
             self.logger.error(f"計算檔案雜湊值時發生錯誤: {e}")
+            asyncio.create_task(func.func.report_error(e, "addons/update/downloader.py/calculate_file_hash"))
             return ""
     
     def cleanup_downloads(self, keep_latest: int = 3) -> None:
@@ -215,9 +221,11 @@ class UpdateDownloader:
                     self.logger.info(f"已刪除舊的下載檔案: {filepath}")
                 except Exception as e:
                     self.logger.error(f"刪除檔案時發生錯誤 {filepath}: {e}")
+                    asyncio.create_task(func.func.report_error(e, f"addons/update/downloader.py/cleanup_downloads/delete/{filepath}"))
                     
         except Exception as e:
             self.logger.error(f"清理下載目錄時發生錯誤: {e}")
+            asyncio.create_task(func.func.report_error(e, "addons/update/downloader.py/cleanup_downloads"))
     
     def get_download_dir(self) -> str:
         """

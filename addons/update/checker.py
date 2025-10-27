@@ -8,6 +8,8 @@ import aiohttp
 import logging
 from typing import Dict, Optional
 import update
+import function as func
+import asyncio
 
 
 class VersionChecker:
@@ -81,6 +83,7 @@ class VersionChecker:
             return self._get_error_result(f"網路請求錯誤: {e}")
         except Exception as e:
             self.logger.error(f"版本檢查時發生未預期錯誤: {e}")
+            await func.func.report_error(e, "addons/update/checker.py")
             return self._get_error_result(f"版本檢查錯誤: {e}")
     
     def _compare_versions(self, current: str, latest: str) -> bool:

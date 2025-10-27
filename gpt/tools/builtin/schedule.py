@@ -6,6 +6,7 @@ from typing import Optional, Literal
 from gpt.tools.registry import tool
 from gpt.tools.tool_context import ToolExecutionContext
 from cogs.schedule import ScheduleManager
+import function as func
 
 @tool
 async def schedule_management(
@@ -86,5 +87,5 @@ async def schedule_management(
             return f"Error: Invalid action '{action}'. Please use 'query' or 'update'."
 
     except Exception as e:
-        logger.error(f"An error occurred during schedule management for user {target_user_id}: {e}")
+        await func.func.report_error(e, f"Schedule management for user {target_user_id} failed")
         return f"An error occurred: {e}"

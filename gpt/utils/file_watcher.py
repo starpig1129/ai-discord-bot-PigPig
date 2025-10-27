@@ -4,6 +4,8 @@ import time
 import logging
 from typing import Dict, Callable, Set, Any
 from datetime import datetime
+import asyncio
+import function as func
 
 class FileWatcher:
     """檔案監控和熱重載"""
@@ -77,7 +79,7 @@ class FileWatcher:
                                         self.callbacks[path](path)
                                         changes_detected = True
                                     except Exception as e:
-                                        self.logger.error(f"Error in file watcher callback for {path}: {e}")
+                                        asyncio.create_task(func.func.report_error(e, f"File watcher callback for {path} failed"))
                         else:
                             # 檔案被刪除
                             with self._lock:
@@ -87,7 +89,7 @@ class FileWatcher:
                             self.logger.warning(f"Watched file deleted: {path}")
                     
                     except Exception as e:
-                        self.logger.error(f"Error checking file {path}: {e}")
+                        asyncio.create_task(func.func.report_error(e, f"Checking file {path} failed"))
                 
                 if changes_detected:
                     self.logger.debug("File changes detected and processed")
@@ -95,7 +97,7 @@ class FileWatcher:
                 time.sleep(self.check_interval)
                 
             except Exception as e:
-                self.logger.error(f"Error in file watcher loop: {e}")
+                asyncio.create_task(func.func.report_error(e, "File watcher loop failed"))
                 time.sleep(self.check_interval)
     
     def stop_watching(self):
@@ -140,7 +142,7 @@ class FileWatcher:
                                 self.callbacks[path](path)
                                 changes_detected = True
                             except Exception as e:
-                                self.logger.error(f"Error in manual check callback for {path}: {e}")
+                                asyncio.create_task(func.func.report_error(e, f"Manual check callback for {path} failed"))
                 else:
                     # 檔案被刪除
                     with self._lock:
@@ -150,7 +152,7 @@ class FileWatcher:
                     self.logger.warning(f"Watched file deleted during manual check: {path}")
             
             except Exception as e:
-                self.logger.error(f"Error during manual check of {path}: {e}")
+                asyncio.create_task(func.func.report_error(e, f"Manual check of {path} failed"))
         
         return changes_detected
     
@@ -229,7 +231,7 @@ class FileWatcher:
                         'current_mtime': datetime.fromtimestamp(stat.st_mtime)
                     })
                 except Exception as e:
-                    self.logger.error(f"Error getting file stats for {path}: {e}")
+                    asyncio.create_task(func.func.report_error(e, f"Getting file stats for {path} failed"))
             
             return info
     

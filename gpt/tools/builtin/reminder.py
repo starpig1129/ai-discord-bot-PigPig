@@ -6,6 +6,7 @@ from typing import Optional
 from gpt.tools.registry import tool
 from gpt.tools.tool_context import ToolExecutionContext
 from cogs.remind import ReminderCog
+import function as func
 
 @tool
 async def set_reminder(
@@ -51,9 +52,8 @@ async def set_reminder(
     try:
         target_user = await bot.fetch_user(target_user_id)
     except Exception as e:
-        error_msg = f"Error: Could not find user with ID {target_user_id}. Details: {e}"
-        logger.error(error_msg)
-        return error_msg
+        await func.func.report_error(e, f"Fetching user {target_user_id} failed")
+        return f"Error: Could not find user with ID {target_user_id}. Details: {e}"
 
     # 獲取當前上下文的頻道和伺服器ID
     channel = context.message.channel

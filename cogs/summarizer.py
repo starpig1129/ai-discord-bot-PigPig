@@ -147,7 +147,7 @@ class SummarizerCog(commands.Cog):
             logging.error(f"模型 API 錯誤: {e}")
             await interaction.followup.send(f"❌ Gemini 模型服務出錯了：\n`{e}`", ephemeral=True)
         except Exception as e:
-            logging.error(f"執行 /summarize 命令時發生未知錯誤: {e}", exc_info=True)
+            func.report_error(e, "summarizing channel")
             await interaction.followup.send(f"❌ 糟糕，發生了一個未預期的錯誤，請聯繫管理員。\n`{e}`", ephemeral=True)
 
 async def setup(bot: commands.Bot):

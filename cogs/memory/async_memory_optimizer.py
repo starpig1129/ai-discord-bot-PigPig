@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from cogs.memory.memory_manager import MemoryManager, SearchQuery, SearchType
 from cogs.memory.exceptions import MemorySystemError, SearchError
 from gpt.caching.processing_cache import memory_search_cache
+import function as func
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,7 @@ class AsyncMemoryOptimizer:
             
         except Exception as e:
             self.logger.error(f"啟動記憶搜索失敗: {str(e)}")
+            await func.report_error(self.memory_manager.bot, e, "啟動記憶搜索失敗")
             error_result = MemorySearchResult(
                 task_id=search_task.task_id,
                 success=False,
@@ -202,6 +204,7 @@ class AsyncMemoryOptimizer:
         except Exception as e:
             execution_time = time.time() - start_time
             self.logger.error(f"記憶搜索失敗: {search_task.task_id}, 錯誤: {str(e)}")
+            await func.report_error(self.memory_manager.bot, e, f"記憶搜索失敗: {search_task.task_id}")
             
             return MemorySearchResult(
                 task_id=search_task.task_id,
@@ -258,6 +261,7 @@ class AsyncMemoryOptimizer:
             
         except Exception as e:
             self.logger.error(f"獲取搜索結果失敗: {task_id}, 錯誤: {str(e)}")
+            await func.report_error(self.memory_manager.bot, e, f"獲取搜索結果失敗: {task_id}")
             return None
     
     def _build_context_from_results(self, search_results: List[Any]) -> str:
@@ -286,6 +290,7 @@ class AsyncMemoryOptimizer:
                 
             except Exception as e:
                 self.logger.warning(f"構建上下文時出錯: {str(e)}")
+                await func.report_error(self.memory_manager.bot, e, "構建上下文時出錯")
                 continue
         
         return "\n".join(context_parts)
@@ -331,6 +336,7 @@ class AsyncMemoryOptimizer:
                     
             except Exception as e:
                 self.logger.warning(f"預載入記憶失敗: {query}, 錯誤: {str(e)}")
+                await func.report_error(self.memory_manager.bot, e, f"預載入記憶失敗: {query}")
                 continue
         
         self.logger.info(f"預載入了 {preloaded_count} 個常用記憶查詢")
@@ -442,6 +448,7 @@ class AsyncMemoryOptimizer:
             
         except Exception as e:
             self.logger.error(f"清理舊搜索結果失敗: {str(e)}")
+            await func.report_error(self.memory_manager.bot, e, "清理舊搜索結果失敗")
         
         return cleaned_count
     

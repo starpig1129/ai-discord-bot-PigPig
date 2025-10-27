@@ -26,6 +26,9 @@ import update
 import function as func
 from bot import PigPig
 from addons import Settings
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class CommandCheck(discord.app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
@@ -75,3 +78,4 @@ if __name__ == "__main__":
             asyncio.run(bot.close())
         except Exception as e:
             print(f"最終清理階段發生錯誤: {e}")
+            asyncio.create_task(func.func.report_error(e, "main.py/finally"))

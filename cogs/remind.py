@@ -29,6 +29,8 @@ import dateparser
 
 from typing import Optional
 from .language_manager import LanguageManager
+import function as func
+import logging
 
 class ReminderCog(commands.Cog):
     def __init__(self, bot):
@@ -97,6 +99,7 @@ class ReminderCog(commands.Cog):
             return confirm_message
 
         except Exception as e:
+            await func.func.report_error(e, f"An error occurred in setting reminder: {e}")
             error_msg = self.lang_manager.translate(
                 guild_id,
                 "commands",
@@ -174,8 +177,9 @@ class ReminderCog(commands.Cog):
             )
             if parsed_time:
                 return parsed_time
-        except Exception:
+        except Exception as e:
             # 如果 dateparser 失敗，繼續嘗試正規表示式
+            logging.warning(f"Dateparser failed to parse '{time_str}': {e}")
             pass
 
         # 如果 dateparser 失敗或沒有回傳結果，嘗試使用正規表示式備用方案

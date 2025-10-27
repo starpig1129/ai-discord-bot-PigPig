@@ -9,6 +9,9 @@ from typing import Optional, Literal, Dict, Any, Union
 import json
 import re
 import os
+import asyncio
+import function as func
+import asyncio
 
 from gpt.core.response_generator import generate_response, get_model_and_tokenizer
 from gpt.utils.discord_utils import safe_edit_message
@@ -72,6 +75,7 @@ class DiscordManagerAgent(commands.Cog):
             await safe_edit_message(processing_msg, f"✅ 操作完成: {result}")
 
         except Exception as e:
+            await func.func.report_error(e, "Error executing manage command")
             self.logger.error(f"執行管理指令時發生錯誤: {str(e)}")
             error_msg = f"❌ 執行指令時發生錯誤: {str(e)}"
             if processing_msg:
@@ -331,6 +335,7 @@ class SecurityManager:
                 json.dump(log_entry, f, ensure_ascii=False)
                 f.write("\n")
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error writing to audit log"))
             logging.error(f"寫入審計日誌時發生錯誤: {str(e)}")
 
 class InstructionParser:
@@ -345,6 +350,7 @@ class InstructionParser:
             with open("gpt/discord_agent_prompt.txt", "r", encoding="utf-8") as f:
                 return f.read()
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error loading system prompt"))
             logging.error(f"載入系統提示時發生錯誤: {str(e)}")
             return ""
 
@@ -379,6 +385,7 @@ class InstructionParser:
                 return None
 
         except Exception as e:
+            await func.func.report_error(e, "Error parsing instruction")
             logging.error(f"解析指令時發生錯誤: {str(e)}")
             return None
         finally:

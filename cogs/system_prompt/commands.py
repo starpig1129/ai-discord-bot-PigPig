@@ -27,6 +27,8 @@ from .exceptions import (
     ValidationError,
     PromptNotFoundError
 )
+import function as func
+import asyncio
 
 
 def handle_system_prompt_error(func):
@@ -64,6 +66,7 @@ def handle_system_prompt_error(func):
                     f"❌ 操作失敗：{str(e)}", ephemeral=True
                 )
         except Exception as e:
+            await func.func.report_error(e, "System prompt operation error")
             logging.error(f"系統提示操作錯誤: {str(e)}")
             if not interaction.response.is_done():
                 await interaction.response.send_message(
@@ -99,6 +102,7 @@ class SystemPromptCommands(commands.Cog):
             else:
                 self.logger.warning("⚠️ 語言管理器未找到")
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error setting language manager"))
             self.logger.warning(f"設定語言管理器時發生錯誤: {e}")
         
         self.permission_validator = PermissionValidator(bot)
@@ -115,57 +119,50 @@ class SystemPromptCommands(commands.Cog):
         # 導入統一 UI 元件
         from .views import SystemPromptMainView
         
-        try:
-            # 建立主選單 View
-            main_view = SystemPromptMainView(
-                manager=self.manager,
-                permission_validator=self.permission_validator
-            )
-            
-            # 建立主選單 Embed
-            embed = discord.Embed(
-                title="🤖 系統提示管理",
-                description="歡迎使用統一系統提示管理介面！請選擇要執行的功能：",
-                color=discord.Color.blue()
-            )
-            
-            # 添加功能說明
-            embed.add_field(
-                name="🔧 主要功能",
-                value=(
-                    "• **設定提示** - 設定頻道或伺服器系統提示\n"
-                    "• **查看配置** - 查看當前系統提示配置\n"
-                    "• **模組編輯** - 編輯特定 YAML 模組\n"
-                    "• **複製提示** - 複製系統提示到其他頻道\n"
-                    "• **移除提示** - 移除已設定的系統提示\n"
-                    "• **重置設定** - 重置系統提示配置"
-                ),
-                inline=False
-            )
-            
-            embed.add_field(
-                name="📋 使用說明",
-                value=(
-                    "點擊下方按鈕來執行對應功能。\n"
-                    "系統支援三層繼承機制：YAML 基礎 → 伺服器預設 → 頻道特定"
-                ),
-                inline=False
-            )
-            
-            embed.set_footer(text="提示：所有操作都會進行權限檢查，確保安全性")
-            
-            # 發送主選單
-            await interaction.response.send_message(
-                embed=embed,
-                view=main_view,
-                ephemeral=True
-            )
-            
-        except Exception as e:
-            self.logger.error(f"啟動系統提示管理介面時發生錯誤: {e}")
-            await interaction.response.send_message(
-                "❌ 啟動管理介面失敗，請稍後再試", ephemeral=True
-            )
+        # 建立主選單 View
+        main_view = SystemPromptMainView(
+            manager=self.manager,
+            permission_validator=self.permission_validator
+        )
+
+        # 建立主選單 Embed
+        embed = discord.Embed(
+            title="🤖 系統提示管理",
+            description="歡迎使用統一系統提示管理介面！請選擇要執行的功能：",
+            color=discord.Color.blue()
+        )
+
+        # 添加功能說明
+        embed.add_field(
+            name="🔧 主要功能",
+            value=(
+                "• **設定提示** - 設定頻道或伺服器系統提示\n"
+                "• **查看配置** - 查看當前系統提示配置\n"
+                "• **模組編輯** - 編輯特定 YAML 模組\n"
+                "• **複製提示** - 複製系統提示到其他頻道\n"
+                "• **移除提示** - 移除已設定的系統提示\n"
+                "• **重置設定** - 重置系統提示配置"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="📋 使用說明",
+            value=(
+                "點擊下方按鈕來執行對應功能。\n"
+                "系統支援三層繼承機制：YAML 基礎 → 伺服器預設 → 頻道特定"
+            ),
+            inline=False
+        )
+
+        embed.set_footer(text="提示：所有操作都會進行權限檢查，確保安全性")
+
+        # 發送主選單
+        await interaction.response.send_message(
+            embed=embed,
+            view=main_view,
+            ephemeral=True
+        )
 
 
 async def setup(bot):

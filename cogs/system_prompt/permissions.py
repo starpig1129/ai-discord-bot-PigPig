@@ -8,6 +8,8 @@ import discord
 import logging
 from typing import Dict, List, Optional, Set
 from .exceptions import PermissionError
+import function as func
+import asyncio
 
 
 class PermissionValidator:
@@ -57,6 +59,7 @@ class PermissionValidator:
             return False
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error checking channel prompt modification permissions"))
             self.logger.error(f"檢查頻道提示修改權限時發生錯誤: {e}")
             return False
     
@@ -90,6 +93,7 @@ class PermissionValidator:
             return False
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error checking server prompt modification permissions"))
             self.logger.error(f"檢查伺服器提示修改權限時發生錯誤: {e}")
             return False
     
@@ -112,6 +116,7 @@ class PermissionValidator:
             return True
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error checking prompt view permissions"))
             self.logger.error(f"檢查系統提示查看權限時發生錯誤: {e}")
             return False
     
@@ -183,6 +188,7 @@ class PermissionValidator:
             return permissions
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error getting user permissions"))
             self.logger.error(f"取得用戶權限時發生錯誤: {e}")
             return permissions
     
@@ -233,6 +239,7 @@ class PermissionValidator:
             bot_owner_id = getattr(tokens, 'bot_owner_id', 0)
             return user.id == bot_owner_id
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error checking bot owner status"))
             self.logger.error(f"檢查機器人擁有者權限時發生錯誤: {e}")
             return False
     
@@ -258,6 +265,7 @@ class PermissionValidator:
             return False
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error checking custom channel permissions"))
             self.logger.error(f"檢查自訂頻道權限時發生錯誤: {e}")
             return False
     
@@ -274,6 +282,7 @@ class PermissionValidator:
             return any(role_id in manage_server_prompts for role_id in user_role_ids)
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error checking server-level permissions"))
             self.logger.error(f"檢查伺服器級別權限時發生錯誤: {e}")
             return False
     
@@ -318,5 +327,6 @@ class PermissionValidator:
             return custom_perms
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error getting custom permissions"))
             self.logger.error(f"取得自訂權限時發生錯誤: {e}")
             return {}

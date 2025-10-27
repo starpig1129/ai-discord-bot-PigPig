@@ -11,9 +11,14 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
+import function as func
 
 from .exceptions import DatabaseError
+
+if TYPE_CHECKING:
+    from bot import DC_Bot
 
 
 class DatabaseManager:
@@ -23,13 +28,15 @@ class DatabaseManager:
     實作連接池和執行緒安全機制。
     """
     
-    def __init__(self, db_path: Union[str, Path]):
+    def __init__(self, db_path: Union[str, Path], bot: "DC_Bot"):
         """初始化資料庫管理器
         
         Args:
             db_path: 資料庫檔案路徑
+            bot: 機器人實例
         """
         self.db_path = Path(db_path)
+        self.bot = bot
         self.logger = logging.getLogger(__name__)
         self._lock = threading.RLock()
         self._connections: Dict[int, sqlite3.Connection] = {}
@@ -75,7 +82,7 @@ class DatabaseManager:
             self.logger.info(f"資料庫初始化完成: {self.db_path}")
             
         except Exception as e:
-            self.logger.error(f"資料庫初始化失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "資料庫初始化失敗"))
             raise DatabaseError(f"資料庫初始化失敗: {e}")
 
     @contextmanager
@@ -106,6 +113,7 @@ class DatabaseManager:
                     self._connections[thread_id] = conn
                     
                 except Exception as e:
+                    asyncio.create_task(func.func.report_error(e, "建立資料庫連接失敗"))
                     raise DatabaseError(f"建立資料庫連接失敗: {e}")
             
             conn = self._connections[thread_id]
@@ -114,6 +122,7 @@ class DatabaseManager:
             yield conn
         except Exception as e:
             conn.rollback()
+            asyncio.create_task(func.func.report_error(e, "資料庫操作失敗"))
             raise DatabaseError(f"資料庫操作失敗: {e}")
     
     def _create_tables(self, conn: sqlite3.Connection) -> None:
@@ -322,7 +331,7 @@ class DatabaseManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"建立頻道記錄失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "建立頻道記錄失敗"))
             raise DatabaseError(f"建立頻道記錄失敗: {e}", operation="create_channel", table="channels")
     
     def get_channel(self, channel_id: str) -> Optional[Dict[str, Any]]:
@@ -347,7 +356,7 @@ class DatabaseManager:
                 return None
                 
         except Exception as e:
-            self.logger.error(f"取得頻道資訊失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得頻道資訊失敗"))
             raise DatabaseError(f"取得頻道資訊失敗: {e}", operation="get_channel", table="channels")
     
     def update_channel_activity(self, channel_id: str) -> bool:
@@ -372,7 +381,7 @@ class DatabaseManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"更新頻道活動時間失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "更新頻道活動時間失敗"))
             raise DatabaseError(f"更新頻道活動時間失敗: {e}", operation="update_activity", table="channels")
     
     # 訊息操作方法
@@ -429,7 +438,7 @@ class DatabaseManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"儲存訊息失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "儲存訊息失敗"))
             raise DatabaseError(f"儲存訊息失敗: {e}", operation="store_message", table="messages")
     
     def get_messages(
@@ -475,7 +484,7 @@ class DatabaseManager:
                 return [dict(row) for row in rows]
                 
         except Exception as e:
-            self.logger.error(f"取得頻道訊息失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得頻道訊息失敗"))
             raise DatabaseError(f"取得頻道訊息失敗: {e}", operation="get_messages", table="messages")
     
     def get_messages_by_ids(self, message_ids: List[str]) -> List[Dict[str, Any]]:
@@ -508,7 +517,7 @@ class DatabaseManager:
                 return messages
                 
         except Exception as e:
-            self.logger.error(f"批次查詢訊息失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "批次查詢訊息失敗"))
             raise DatabaseError(f"批次查詢訊息失敗: {e}", operation="get_messages_by_ids", table="messages")
 
     def add_messages(self, messages: List[Dict[str, Any]]) -> bool:
@@ -569,7 +578,7 @@ class DatabaseManager:
                 return True
 
         except Exception as e:
-            self.logger.error(f"批次儲存訊息失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "批次儲存訊息失敗"))
             raise DatabaseError(f"批次儲存訊息失敗: {e}", operation="add_messages", table="messages")
     
     def search_messages_by_keywords(
@@ -633,7 +642,7 @@ class DatabaseManager:
                 return messages
                 
         except Exception as e:
-            self.logger.error(f"關鍵字搜尋失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "關鍵字搜尋失敗"))
             raise DatabaseError(f"關鍵字搜尋失敗: {e}", operation="search_by_keywords", table="messages")
 
     def _calculate_keyword_match_score(self, content: str, keywords: List[str]) -> float:
@@ -677,7 +686,7 @@ class DatabaseManager:
                 conn.commit()
             return True
         except Exception as e:
-            self.logger.error(f"設定配置失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "設定配置失敗"))
             raise DatabaseError(f"設定配置失敗: {e}", operation="set_config", table="memory_config")
 
     def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
@@ -698,7 +707,7 @@ class DatabaseManager:
                     return row['config_value']
                 return default
         except Exception as e:
-            self.logger.error(f"取得配置失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得配置失敗"))
             raise DatabaseError(f"取得配置失敗: {e}", operation="get_config", table="memory_config")
 
     # 效能指標操作
@@ -728,7 +737,7 @@ class DatabaseManager:
                 conn.commit()
             return True
         except Exception as e:
-            self.logger.error(f"記錄效能指標失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "記錄效能指標失敗"))
             raise DatabaseError(f"記錄效能指標失敗: {e}", operation="record_metric", table="performance_metrics")
 
     # 資料清理
@@ -779,7 +788,7 @@ class DatabaseManager:
                 return deleted_count, segment_ids_to_check
                 
         except Exception as e:
-            self.logger.error(f"清理舊資料失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "清理舊資料失敗"))
             raise DatabaseError(f"清理舊資料失敗: {e}", operation="cleanup_old_data")
 
     # 統計資訊
@@ -790,7 +799,7 @@ class DatabaseManager:
                 cursor = conn.execute("SELECT COUNT(*) FROM channels")
                 return cursor.fetchone()[0]
         except Exception as e:
-            self.logger.error(f"取得頻道總數失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得頻道總數失敗"))
             raise DatabaseError(f"取得頻道總數失敗: {e}", operation="get_count", table="channels")
 
     def get_message_count(self, channel_id: Optional[str] = None) -> int:
@@ -810,7 +819,7 @@ class DatabaseManager:
                     cursor = conn.execute("SELECT COUNT(*) FROM messages")
                 return cursor.fetchone()[0]
         except Exception as e:
-            self.logger.error(f"取得訊息總數失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得訊息總數失敗"))
             raise DatabaseError(f"取得訊息總數失敗: {e}", operation="get_count", table="messages")
 
     def get_database_stats(self) -> Dict[str, Any]:
@@ -833,7 +842,7 @@ class DatabaseManager:
                 
                 return stats
         except Exception as e:
-            self.logger.error(f"取得資料庫統計資訊失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得資料庫統計資訊失敗"))
             raise DatabaseError(f"取得資料庫統計資訊失敗: {e}", operation="get_stats")
 
     def get_all_message_ids(self) -> List[str]:
@@ -850,7 +859,7 @@ class DatabaseManager:
                 # 從每行中提取第一個元素（message_id）
                 return [row[0] for row in rows]
         except Exception as e:
-            self.logger.error(f"取得所有訊息 ID 失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得所有訊息 ID 失敗"))
             raise DatabaseError(f"取得所有訊息 ID 失敗: {e}", operation="get_all_message_ids", table="messages")
 
     def get_all_segment_ids(self) -> List[str]:
@@ -866,7 +875,7 @@ class DatabaseManager:
                 return [row[0].replace('seg_', '') for row in cursor.fetchall()]
                 
         except Exception as e:
-            self.logger.error(f"取得所有片段 ID 失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得所有片段 ID 失敗"))
             raise DatabaseError(f"取得所有片段 ID 失敗: {e}", operation="get_all_segment_ids", table="conversation_segments")
 
     def close_connections(self) -> None:
@@ -933,7 +942,7 @@ class DatabaseManager:
             return sanitized_segment_id
             
         except Exception as e:
-            self.logger.error(f"建立對話片段失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "建立對話片段失敗"))
             raise DatabaseError(f"建立對話片段失敗: {e}", operation="create_segment", table="conversation_segments")
 
     def create_segment_with_messages(
@@ -1018,7 +1027,7 @@ class DatabaseManager:
                 return sanitized_segment_id
 
         except Exception as e:
-            self.logger.error(f"原子性建立片段 {sanitized_segment_id} 失敗: {e}", exc_info=True)
+            asyncio.create_task(func.func.report_error(e, f"原子性建立片段失敗 (片段 ID: {sanitized_segment_id})"))
             raise DatabaseError(f"原子性建立片段失敗: {e}", operation="create_segment_with_messages")
 
     def get_conversation_segments(
@@ -1056,7 +1065,7 @@ class DatabaseManager:
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
         except Exception as e:
-            self.logger.error(f"取得對話片段失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得對話片段失敗"))
             raise DatabaseError(f"取得對話片段失敗: {e}", operation="get_segments", table="conversation_segments")
 
     def add_message_to_segment(
@@ -1092,7 +1101,7 @@ class DatabaseManager:
             return True
             
         except Exception as e:
-            self.logger.error(f"新增訊息到片段失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "新增訊息到片段失敗"))
             raise DatabaseError(f"新增訊息到片段失敗: {e}", operation="add_message_to_segment", table="segment_messages")
 
     def get_segment_messages(self, segment_id: str) -> List[Dict[str, Any]]:
@@ -1115,7 +1124,7 @@ class DatabaseManager:
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
         except Exception as e:
-            self.logger.error(f"取得片段訊息失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得片段訊息失敗"))
             raise DatabaseError(f"取得片段訊息失敗: {e}", operation="get_segment_messages", table="segment_messages")
     def get_segment_to_message_map(self, segment_ids: List[str]) -> Dict[str, List[str]]:
         """根據片段 ID 列表，取得 segment_id 到 message_id 列表的映射
@@ -1149,7 +1158,7 @@ class DatabaseManager:
                 return result_map
                 
         except Exception as e:
-            self.logger.error(f"查詢 segment-to-message map 失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "查詢 segment-to-message map 失敗"))
             raise DatabaseError(f"查詢 segment-to-message map 失敗: {e}", operation="get_segment_to_message_map", table="segment_messages")
 
 
@@ -1173,7 +1182,7 @@ class DatabaseManager:
                 conn.commit()
             return True
         except Exception as e:
-            self.logger.error(f"更新片段連貫性分數失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "更新片段連貫性分數失敗"))
             raise DatabaseError(f"更新片段連貫性分數失敗: {e}", operation="update_segment_coherence", table="conversation_segments")
 
     def get_overlapping_segments(
@@ -1202,7 +1211,7 @@ class DatabaseManager:
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
         except Exception as e:
-            self.logger.error(f"取得重疊片段失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "取得重疊片段失敗"))
             raise DatabaseError(f"取得重疊片段失敗: {e}", operation="get_overlapping_segments", table="conversation_segments")
 
     def get_all_segment_ids_by_channel(self) -> Dict[str, List[str]]:
@@ -1230,5 +1239,5 @@ class DatabaseManager:
                     result[channel_id].append(segment_id)
                 return result
         except Exception as e:
-            self.logger.error(f"獲取所有 segment id 失敗: {e}")
+            asyncio.create_task(func.func.report_error(e, "獲取所有 segment id 失敗"))
             raise DatabaseError(f"獲取所有 segment id 失敗: {e}", operation="get_all_segment_ids_by_channel")

@@ -25,6 +25,8 @@ from .exceptions import (
 )
 from .permissions import PermissionValidator
 
+import function as func
+import asyncio
 # 生產環境快取修復器已整合到核心模組中，不再需要外部依賴
 PRODUCTION_CACHE_FIXER_AVAILABLE = False
 ProductionCacheFixer = None
@@ -177,6 +179,7 @@ class SystemPromptManager:
             from gpt.prompting.manager import get_prompt_manager
             self._prompt_manager = get_prompt_manager()
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Failed to initialize PromptManager"))
             self.logger.error(f"Failed to initialize PromptManager: {e}")
             self._prompt_manager = None
     
@@ -254,6 +257,7 @@ class SystemPromptManager:
             }
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error getting effective system prompt"))
             self.logger.error(f"取得有效系統提示時發生錯誤: {e}")
             # 降級到 YAML 提示
             return self._get_yaml_prompt(guild_id, message)
@@ -276,6 +280,7 @@ class SystemPromptManager:
             config = self._load_guild_config(guild_id)
             return config.get('system_prompts', {}).get('channels', {}).get(channel_id)
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, f"Error getting raw config for channel {channel_id}"))
             self.logger.error(f"取得頻道 {channel_id} 的原始設定時發生錯誤: {e}")
             return None
     
@@ -399,6 +404,7 @@ class SystemPromptManager:
             return True
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error setting channel system prompt"))
             self.logger.error(f"設定頻道系統提示時發生錯誤: {e}")
             raise SystemPromptError(f"設定失敗: {str(e)}")
     
@@ -459,6 +465,7 @@ class SystemPromptManager:
             return True
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error setting server system prompt"))
             self.logger.error(f"設定伺服器系統提示時發生錯誤: {e}")
             raise SystemPromptError(f"設定失敗: {str(e)}")
     
@@ -494,6 +501,7 @@ class SystemPromptManager:
             return True
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error removing channel system prompt"))
             self.logger.error(f"移除頻道系統提示時發生錯誤: {e}")
             raise SystemPromptError(f"移除失敗: {str(e)}")
     
@@ -526,6 +534,7 @@ class SystemPromptManager:
             return True
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error removing server system prompt"))
             self.logger.error(f"移除伺服器系統提示時發生錯誤: {e}")
             raise SystemPromptError(f"移除失敗: {str(e)}")
     
@@ -583,6 +592,7 @@ class SystemPromptManager:
             return True
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error copying channel prompt"))
             self.logger.error(f"複製頻道提示時發生錯誤: {e}")
             raise SystemPromptError(f"複製失敗: {str(e)}")
     
@@ -605,6 +615,7 @@ class SystemPromptManager:
                     'professional_personality'
                 ]
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error getting available modules"))
             self.logger.error(f"取得可用模組列表時發生錯誤: {e}")
             return []
     
@@ -696,6 +707,7 @@ class SystemPromptManager:
                     return str(module_config)
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, f"Error getting default content for module '{module_name}'"))
             self.logger.error(f"獲取模組 '{module_name}' 預設內容時發生錯誤: {e}")
             return ""
     
@@ -744,6 +756,7 @@ class SystemPromptManager:
                 return prompt_data.get('prompt', '')
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error getting full effective prompt"))
             self.logger.error(f"獲取完整系統提示時發生錯誤: {e}")
             return ""
     
@@ -916,6 +929,7 @@ class SystemPromptManager:
             return verification_result
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error reloading system prompts"))
             self.logger.error(f"重新載入系統提示時發生錯誤: {e}")
             return False
     
@@ -954,6 +968,7 @@ class SystemPromptManager:
                 self.logger.warning("無法匯入 sendmessage 快取清除函式")
                     
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error clearing YAML PromptManager cache"))
             self.logger.warning(f"清除 YAML PromptManager 快取時發生錯誤: {e}")
     
     def _force_clear_yaml_cache(self, guild_id: str) -> None:
@@ -990,6 +1005,7 @@ class SystemPromptManager:
                 self.logger.debug(f"強制清除 YAML 快取完成 - 伺服器: {guild_id}")
                 
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error force-clearing YAML cache"))
             self.logger.warning(f"強制清除 YAML 快取時發生錯誤: {e}")
     
     def _force_clear_sendmessage_cache(self, guild_id: str, channel_id: Optional[str] = None) -> None:
@@ -1040,6 +1056,7 @@ class SystemPromptManager:
             self.logger.info(f"✅ sendmessage 快取強制清除完成")
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error force-clearing sendmessage cache"))
             self.logger.warning(f"強制清除 sendmessage 快取時發生錯誤: {e}")
             import traceback
             self.logger.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
@@ -1081,6 +1098,7 @@ class SystemPromptManager:
             self.logger.debug(f"清除隱藏快取完成 - 伺服器: {guild_id}")
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error clearing hidden caches"))
             self.logger.warning(f"清除隱藏快取時發生錯誤: {e}")
     
     def _deep_cache_cleanup(self, guild_id: str, channel_id: Optional[str] = None) -> None:
@@ -1130,6 +1148,7 @@ class SystemPromptManager:
             self.logger.debug(f"✅ 深度快取清理完成")
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error during deep cache cleanup"))
             self.logger.warning(f"深度快取清理時發生錯誤: {e}")
     
     def _reinitialize_components(self) -> None:
@@ -1147,6 +1166,7 @@ class SystemPromptManager:
             self.logger.debug("組件重新初始化完成")
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error reinitializing components"))
             self.logger.warning(f"重新初始化組件時發生錯誤: {e}")
     
     def _verify_reload_result(self, guild_id: str, channel_id: Optional[str] = None) -> bool:
@@ -1193,6 +1213,7 @@ class SystemPromptManager:
             return verification_result
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error verifying reload result"))
             self.logger.error(f"驗證重新載入結果時發生錯誤: {e}")
             return False
     
@@ -1205,6 +1226,7 @@ class SystemPromptManager:
                 with open(config_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except Exception as e:
+                asyncio.create_task(func.func.report_error(e, f"Error loading guild config {guild_id}"))
                 self.logger.error(f"載入伺服器配置失敗 {guild_id}: {e}")
                 return self._get_default_config()
         else:
@@ -1218,6 +1240,7 @@ class SystemPromptManager:
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, f"Error saving guild config {guild_id}"))
             self.logger.error(f"保存伺服器配置失敗 {guild_id}: {e}")
             raise ConfigurationError(f"無法保存配置: {str(e)}", str(config_file))
     
@@ -1258,6 +1281,7 @@ class SystemPromptManager:
                     'timestamp': time.time()
                 }
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error getting YAML prompt"))
             self.logger.error(f"取得 YAML 提示時發生錯誤: {e}")
             return {
                 'prompt': '',
@@ -1291,6 +1315,7 @@ class SystemPromptManager:
             return self._apply_variable_replacements(prompt)
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error applying server overrides"))
             self.logger.error(f"應用伺服器覆蓋時發生錯誤: {e}")
             return base_prompt
     
@@ -1320,6 +1345,7 @@ class SystemPromptManager:
             return self._apply_variable_replacements(prompt)
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error applying channel overrides"))
             self.logger.error(f"應用頻道覆蓋時發生錯誤: {e}")
             return base_prompt
     
@@ -1357,6 +1383,7 @@ class SystemPromptManager:
             return prompt
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error applying language localization"))
             self.logger.error(f"應用語言本地化時發生錯誤: {e}")
             return prompt
     
@@ -1435,6 +1462,7 @@ class SystemPromptManager:
             return prompt
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error rebuilding prompt with module overrides"))
             self.logger.error(f"重新建構提示時發生錯誤: {e}")
             # 降級到原始提示
             if self._prompt_manager:
@@ -1443,6 +1471,7 @@ class SystemPromptManager:
                     default_modules = config.get('composition', {}).get('default_modules', [])
                     return self._prompt_manager.builder.build_system_prompt(config, default_modules)
                 except Exception as fallback_error:
+                    asyncio.create_task(func.func.report_error(fallback_error, "Fallback prompt rebuild failed"))
                     self.logger.error(f"降級重建也失敗: {fallback_error}")
             return ""
     
@@ -1475,6 +1504,7 @@ class SystemPromptManager:
             self.logger.warning(f"⚠️ 變數替換時缺少變數: {e}，返回原始提示")
             return prompt
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error during variable replacement"))
             self.logger.error(f"❌ 變數替換時發生錯誤: {e}，返回原始提示")
             return prompt
     
@@ -1516,6 +1546,7 @@ class SystemPromptManager:
                     variables['creator'] = '星豬'
                     variables['environment'] = 'Discord server'
             except Exception as e:
+                asyncio.create_task(func.func.report_error(e, "Could not get base variables from YAML"))
                 self.logger.warning(f"無法從 YAML 取得基礎變數，使用預設值: {e}")
                 variables['bot_name'] = '🐖🐖'
                 variables['creator'] = '星豬'
@@ -1528,6 +1559,7 @@ class SystemPromptManager:
             return variables
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error getting system variables"))
             self.logger.error(f"獲取系統變數時發生錯誤: {e}")
             return {
                 'bot_id': '0',
@@ -1545,7 +1577,8 @@ class SystemPromptManager:
             if lang_manager:
                 return lang_manager.get_server_lang(guild_id)
             return "zh_TW"
-        except Exception:
+        except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Error getting language"))
             return "zh_TW"
     
     async def debug_cache_state(self, guild_id: str, channel_id: str = None) -> Dict[str, Any]:
@@ -1589,6 +1622,7 @@ class SystemPromptManager:
             return cache_info
             
         except Exception as e:
+            await func.func.report_error(e, "Failed to debug cache state")
             self.logger.error(f"快取狀態除錯失敗: {e}")
             return {'error': str(e)}
     
@@ -1612,6 +1646,7 @@ class SystemPromptManager:
             return diagnostics
             
         except Exception as e:
+            asyncio.create_task(func.func.report_error(e, "Failed to get diagnostics"))
             self.logger.error(f"取得診斷資訊失敗: {e}")
             return {'error': str(e)}
     
@@ -1644,5 +1679,6 @@ class SystemPromptManager:
                 return {'error': '無法取得有效的 guild_id', 'method': 'no_guild'}
                 
         except Exception as e:
+            await func.func.report_error(e, "Failed to handle discord interaction cache issues")
             self.logger.error(f"handle_discord_interaction_cache_issues 失敗: {e}")
             return {'error': str(e), 'method': 'exception'}
