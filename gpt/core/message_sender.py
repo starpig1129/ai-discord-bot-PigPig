@@ -199,8 +199,7 @@ def get_channel_system_prompt(channel_id: str, guild_id: str, bot_id: str, messa
         return ""
         
     except Exception as e:
-            asyncio.create_task(func.report_error(e, f"Channel system prompt retrieval for channel {channel_id} failed"))
-        return ""
+        asyncio.create_task(func.report_error(e, f"Channel system prompt retrieval for channel {channel_id} failed"))
 
 
 def clear_system_prompt_cache(guild_id: str = None, channel_id: str = None):
@@ -450,7 +449,7 @@ def format_intelligent_context(context_data: Dict[str, Any]) -> Dict[str, Any]:
             "content": json.dumps(context_data, ensure_ascii=False, indent=2)
         }
     except Exception as e:
-            asyncio.create_task(func.report_error(e, "Intelligent context formatting failed"))
+        asyncio.create_task(func.report_error(e, "Intelligent context formatting failed"))
         return {
             "role": "function",
             "name": "memory_search",

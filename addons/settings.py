@@ -2,7 +2,6 @@ import json
 import os
 import sys
 from dotenv import load_dotenv
-from function import func
 import asyncio
 
 class Settings:
@@ -258,6 +257,7 @@ class UpdateSettings:
             
         except Exception as e:
             print(f"載入更新配置失敗: {e}")
+            from function import func
             asyncio.create_task(func.report_error(e, "addons/settings.py/UpdateSettings/__init__"))
             self.config = self._get_default_config()
         
