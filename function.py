@@ -57,11 +57,20 @@ class Function:
             color=discord.Color.red()
         )
 
-        embed.add_field(name="錯誤", value=f"```{type(error).__name__}: {error}```", inline=False)
+        error_field_value = f"```{type(error).__name__}: {error}```"
+        if len(error_field_value) > 1024:
+            error_field_value = error_field_value[:1021] + "...```"
+        embed.add_field(name="錯誤", value=error_field_value, inline=False)
 
         if len(traceback_str) > 1024:
             traceback_str = traceback_str[:1021] + "..."
-        embed.add_field(name="追蹤記錄", value=f"```python\n{traceback_str}\n```", inline=False)
+        traceback_field_value = f"```python\n{traceback_str}\n```"
+        if len(traceback_field_value) > 1024:
+            # 重新計算截斷長度
+            max_content_len = 1024 - len("```python\n\n```")
+            traceback_str = traceback_str[:max_content_len - 3] + "..." if max_content_len > 3 else "..."
+            traceback_field_value = f"```python\n{traceback_str}\n```"
+        embed.add_field(name="追蹤記錄", value=traceback_field_value, inline=False)
         embed.set_footer(text=f"時間: {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
         await self.bot._send_error_report(embed)
