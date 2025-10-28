@@ -46,7 +46,7 @@ class GeminiCacheManager:
         """
         try:
             if len(self.active_caches) >= self.cleanup_threshold:
-                self._cleanup_least_used_caches()
+                asyncio.create_task(self._cleanup_least_used_caches())
 
             self.logger.info(f"本地快取未命中。正在創建新的遠端快取: '{display_name}'...")
             config = types.CreateCachedContentConfig(
@@ -76,12 +76,13 @@ class GeminiCacheManager:
             return cache
             
         except Exception as e:
-            func.report_error(e, "Gemini cache creation")
+            asyncio.create_task(func.report_error(e, "Gemini cache creation"))
             return None
 
     async def get_cache_by_key(self, cache_key: str) -> Optional[Any]:
         """根據（由內容生成的）唯一鍵值獲取快取"""
         if cache_key in self.active_caches:
+            cache = None
             try:
                 cache = self.active_caches[cache_key]
                 # 驗證遠端快取是否仍然存在
@@ -90,7 +91,7 @@ class GeminiCacheManager:
                 self.cache_access_times[cache_key] = time.time()
                 return cache
             except Exception as e:
-                func.report_error(e, f"Gemini cache retrieval for {cache.name}")
+                asyncio.create_task(func.report_error(e, f"Gemini cache access for cache"))
                 self._cleanup_cache_record(cache_key)
         return None
 
@@ -163,7 +164,7 @@ class GeminiCacheManager:
             self.logger.info(f"主動清理了 {cleaned_count} 個最少使用的快取，當前快取數量: {len(self.active_caches)}")
             
         except Exception as e:
-            func.report_error(e, "least used Gemini cache cleanup")
+            asyncio.create_task(func.report_error(e, "least used Gemini cache cleanup"))
         
         return cleaned_count
     
