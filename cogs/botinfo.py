@@ -136,7 +136,7 @@ class BotInfo(commands.Cog):
                 name=basic_stats_name,
                 value="```yml\n"
                     f"{servers_label}: {len(getattr(bot, 'guilds', [])):,}\n"
-                    f"{users_label}: {len(getattr(bot, 'users', [])):,}\n"
+                    f"{users_label}: {sum(getattr(g, 'member_count', 0) for g in getattr(bot, 'guilds', [])):,}\n"
                     f"{text_channels_label}: {len([c for c in bot.get_all_channels() if isinstance(c, discord.TextChannel)]):,}\n"
                     f"{voice_channels_label}: {len([c for c in bot.get_all_channels() if isinstance(c, discord.VoiceChannel)]):,}\n"
                     f"{loaded_cogs_label}: {len(getattr(bot, 'cogs', {})):,}\n"

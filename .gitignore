@@ -2,6 +2,7 @@
 .env
 *.pyc
 .roomodes
+.roo
 __pycache__/
 
 # 忽略應用程式的設定檔案
