@@ -30,13 +30,15 @@ class DatabaseManager:
     
     def __init__(self, db_path: Union[str, Path], bot: "DC_Bot"):
         """初始化資料庫管理器
-        
+         
         Args:
             db_path: 資料庫檔案路徑
             bot: 機器人實例
         """
         self.db_path = Path(db_path)
         self.bot = bot
+        # 儲存 bot 的事件迴圈引用（若有），以便在同步路徑 thread-safe 地提交 coroutine
+        self._loop = getattr(self.bot, "loop", None)
         self.logger = logging.getLogger(__name__)
         self._lock = threading.RLock()
         self._connections: Dict[int, sqlite3.Connection] = {}
@@ -82,8 +84,42 @@ class DatabaseManager:
             self.logger.info(f"資料庫初始化完成: {self.db_path}")
             
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "資料庫初始化失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "資料庫初始化失敗")
             raise DatabaseError(f"資料庫初始化失敗: {e}")
+
+    def _report_error_threadsafe(self, exc: Exception, ctx: str) -> None:
+        """在同步/執行緒上下文中安全地回報錯誤給異步錯誤報告服務。
+
+        1) 若有可用的事件迴圈（self._loop），使用
+           asyncio.run_coroutine_threadsafe(...) 提交 coroutine；
+        2) 否則降級為同步 logger 記錄，
+           並捕捉任何在提交時發生的例外以避免在 except path 再拋出。
+        """
+        try:
+            if getattr(self, "_loop", None):
+                try:
+                    asyncio.run_coroutine_threadsafe(func.report_error(exc, ctx), self._loop)
+                except Exception:
+                    # 若提交失敗，降級為同步記錄，且不再拋出
+                    try:
+                        self.logger.exception("Failed to submit async error report, falling back to logger")
+                        self.logger.exception("%s: %s", ctx, exc)
+                    except Exception:
+                        # 最後防護：避免在 error-report path 再次爆炸
+                        pass
+            else:
+                # 沒有事件迴圈，直接同步記錄
+                try:
+                    self.logger.exception("%s (no loop): %s", ctx, exc)
+                except Exception:
+                    pass
+        except Exception:
+            # 最後防護：確保不在 except path 再爆炸
+            try:
+                self.logger.exception("Error while reporting DB error")
+            except Exception:
+                pass
 
     @contextmanager
     def get_connection(self):
@@ -113,7 +149,8 @@ class DatabaseManager:
                     self._connections[thread_id] = conn
                     
                 except Exception as e:
-                    asyncio.create_task(func.report_error(e, "建立資料庫連接失敗"))
+                    self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+                    self._report_error_threadsafe(e, "建立資料庫連接失敗")
                     raise DatabaseError(f"建立資料庫連接失敗: {e}")
             
             conn = self._connections[thread_id]
@@ -122,7 +159,8 @@ class DatabaseManager:
             yield conn
         except Exception as e:
             conn.rollback()
-            asyncio.create_task(func.report_error(e, "資料庫操作失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "資料庫操作失敗")
             raise DatabaseError(f"資料庫操作失敗: {e}")
     
     def _create_tables(self, conn: sqlite3.Connection) -> None:
@@ -331,7 +369,8 @@ class DatabaseManager:
             return True
             
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "建立頻道記錄失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "建立頻道記錄失敗")
             raise DatabaseError(f"建立頻道記錄失敗: {e}", operation="create_channel", table="channels")
     
     def get_channel(self, channel_id: str) -> Optional[Dict[str, Any]]:
@@ -356,7 +395,8 @@ class DatabaseManager:
                 return None
                 
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得頻道資訊失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得頻道資訊失敗")
             raise DatabaseError(f"取得頻道資訊失敗: {e}", operation="get_channel", table="channels")
     
     def update_channel_activity(self, channel_id: str) -> bool:
@@ -381,7 +421,8 @@ class DatabaseManager:
             return True
             
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "更新頻道活動時間失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "更新頻道活動時間失敗")
             raise DatabaseError(f"更新頻道活動時間失敗: {e}", operation="update_activity", table="channels")
     
     # 訊息操作方法
@@ -438,7 +479,8 @@ class DatabaseManager:
             return True
             
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "儲存訊息失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "儲存訊息失敗")
             raise DatabaseError(f"儲存訊息失敗: {e}", operation="store_message", table="messages")
     
     def get_messages(
@@ -484,7 +526,8 @@ class DatabaseManager:
                 return [dict(row) for row in rows]
                 
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得頻道訊息失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得頻道訊息失敗")
             raise DatabaseError(f"取得頻道訊息失敗: {e}", operation="get_messages", table="messages")
     
     def get_messages_by_ids(self, message_ids: List[str]) -> List[Dict[str, Any]]:
@@ -517,7 +560,8 @@ class DatabaseManager:
                 return messages
                 
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "批次查詢訊息失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "批次查詢訊息失敗")
             raise DatabaseError(f"批次查詢訊息失敗: {e}", operation="get_messages_by_ids", table="messages")
 
     def add_messages(self, messages: List[Dict[str, Any]]) -> bool:
@@ -578,7 +622,8 @@ class DatabaseManager:
                 return True
 
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "批次儲存訊息失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "批次儲存訊息失敗")
             raise DatabaseError(f"批次儲存訊息失敗: {e}", operation="add_messages", table="messages")
     
     def search_messages_by_keywords(
@@ -642,7 +687,8 @@ class DatabaseManager:
                 return messages
                 
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "關鍵字搜尋失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "關鍵字搜尋失敗")
             raise DatabaseError(f"關鍵字搜尋失敗: {e}", operation="search_by_keywords", table="messages")
 
     def _calculate_keyword_match_score(self, content: str, keywords: List[str]) -> float:
@@ -686,7 +732,8 @@ class DatabaseManager:
                 conn.commit()
             return True
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "設定配置失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "設定配置失敗")
             raise DatabaseError(f"設定配置失敗: {e}", operation="set_config", table="memory_config")
 
     def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
@@ -707,7 +754,8 @@ class DatabaseManager:
                     return row['config_value']
                 return default
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得配置失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得配置失敗")
             raise DatabaseError(f"取得配置失敗: {e}", operation="get_config", table="memory_config")
 
     # 效能指標操作
@@ -737,7 +785,8 @@ class DatabaseManager:
                 conn.commit()
             return True
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "記錄效能指標失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "記錄效能指標失敗")
             raise DatabaseError(f"記錄效能指標失敗: {e}", operation="record_metric", table="performance_metrics")
 
     # 資料清理
@@ -788,7 +837,8 @@ class DatabaseManager:
                 return deleted_count, segment_ids_to_check
                 
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "清理舊資料失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "清理舊資料失敗")
             raise DatabaseError(f"清理舊資料失敗: {e}", operation="cleanup_old_data")
 
     # 統計資訊
@@ -799,7 +849,8 @@ class DatabaseManager:
                 cursor = conn.execute("SELECT COUNT(*) FROM channels")
                 return cursor.fetchone()[0]
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得頻道總數失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得頻道總數失敗")
             raise DatabaseError(f"取得頻道總數失敗: {e}", operation="get_count", table="channels")
 
     def get_message_count(self, channel_id: Optional[str] = None) -> int:
@@ -819,7 +870,8 @@ class DatabaseManager:
                     cursor = conn.execute("SELECT COUNT(*) FROM messages")
                 return cursor.fetchone()[0]
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得訊息總數失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得訊息總數失敗")
             raise DatabaseError(f"取得訊息總數失敗: {e}", operation="get_count", table="messages")
 
     def get_database_stats(self) -> Dict[str, Any]:
@@ -842,7 +894,8 @@ class DatabaseManager:
                 
                 return stats
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得資料庫統計資訊失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得資料庫統計資訊失敗")
             raise DatabaseError(f"取得資料庫統計資訊失敗: {e}", operation="get_stats")
 
     def get_all_message_ids(self) -> List[str]:
@@ -859,7 +912,8 @@ class DatabaseManager:
                 # 從每行中提取第一個元素（message_id）
                 return [row[0] for row in rows]
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得所有訊息 ID 失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得所有訊息 ID 失敗")
             raise DatabaseError(f"取得所有訊息 ID 失敗: {e}", operation="get_all_message_ids", table="messages")
 
     def get_all_segment_ids(self) -> List[str]:
@@ -875,7 +929,8 @@ class DatabaseManager:
                 return [row[0].replace('seg_', '') for row in cursor.fetchall()]
                 
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得所有片段 ID 失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得所有片段 ID 失敗")
             raise DatabaseError(f"取得所有片段 ID 失敗: {e}", operation="get_all_segment_ids", table="conversation_segments")
 
     def close_connections(self) -> None:
@@ -942,7 +997,8 @@ class DatabaseManager:
             return sanitized_segment_id
             
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "建立對話片段失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "建立對話片段失敗")
             raise DatabaseError(f"建立對話片段失敗: {e}", operation="create_segment", table="conversation_segments")
 
     def create_segment_with_messages(
@@ -972,45 +1028,48 @@ class DatabaseManager:
         if sanitized_segment_id != segment_id:
             self.logger.warning(f"修正了格式錯誤的 segment ID：'{segment_id}' -> '{sanitized_segment_id}'")
             segment_data['segment_id'] = sanitized_segment_id
-        
+
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
 
-                # 檢查 segment_id 是否已經存在
-                cursor.execute("""
-                    SELECT segment_id FROM conversation_segments WHERE segment_id = ?
-                """, (sanitized_segment_id,))
+                # 在嘗試插入前記錄一次 segment_id 與執行緒資訊 (DEBUG)
+                self.logger.debug("[%s] 嘗試插入片段 (thread=%s)", sanitized_segment_id, threading.get_ident())
 
-                existing_segment = cursor.fetchone()
-                if existing_segment:
-                    self.logger.warning(f"片段 {sanitized_segment_id} 已存在，跳過建立操作")
-                    return sanitized_segment_id
+                # 使用 SQLite UPSERT 保證原子性：若已存在，僅更新 metadata 與 updated_at（避免覆寫其他歷史欄位）
+                try:
+                    cursor.execute("""
+                        INSERT INTO conversation_segments (
+                            segment_id, channel_id, start_time, end_time, message_count,
+                            semantic_coherence_score, activity_level, segment_summary,
+                            vector_data, metadata
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(segment_id) DO UPDATE SET
+                            metadata = excluded.metadata,
+                            updated_at = CURRENT_TIMESTAMP
+                    """, (
+                        sanitized_segment_id,
+                        segment_data['channel_id'],
+                        segment_data['start_time'],
+                        segment_data['end_time'],
+                        segment_data['message_count'],
+                        segment_data.get('semantic_coherence_score', 0.0),
+                        segment_data.get('activity_level', 0.0),
+                        segment_data.get('segment_summary'),
+                        segment_data.get('vector_data'),
+                        segment_data.get('metadata')
+                    ))
+                    self.logger.debug("[%s] 執行 INSERT ... ON CONFLICT 完成", sanitized_segment_id)
+                except sqlite3.IntegrityError as e:
+                    # 若發生 UNIQUE 衝突，視為已存在，安全記錄並繼續
+                    if "UNIQUE constraint failed: conversation_segments.segment_id" in str(e):
+                        self.logger.debug("片段已存在 (捕捉到 UNIQUE)：%s (thread=%s)", sanitized_segment_id, threading.get_ident())
+                    else:
+                        # 其它 IntegrityError 仍需向上拋出
+                        raise
 
-                # 1. 建立對話片段主記錄
-                cursor.execute("""
-                    INSERT INTO conversation_segments (
-                        segment_id, channel_id, start_time, end_time, message_count,
-                        semantic_coherence_score, activity_level, segment_summary,
-                        vector_data, metadata
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    sanitized_segment_id,
-                    segment_data['channel_id'],
-                    segment_data['start_time'],
-                    segment_data['end_time'],
-                    segment_data['message_count'],
-                    segment_data.get('semantic_coherence_score', 0.0),
-                    segment_data.get('activity_level', 0.0),
-                    segment_data.get('segment_summary'),
-                    segment_data.get('vector_data'),
-                    segment_data.get('metadata')
-                ))
-                self.logger.debug(f"[{sanitized_segment_id}] 原子操作：插入了 conversation_segments 主記錄。")
-
-                # 2. 批次建立訊息與片段的關聯（加入去重與容錯保護）
+                # 2. 批次建立訊息與片段的關聯（保持 INSERT OR IGNORE）
                 if message_links:
-                    # 2.1 基於 (segment_id, message_id) 去重，保持第一個 position_in_segment
                     seen = set()
                     deduped = []
                     for link in message_links:
@@ -1020,24 +1079,42 @@ class DatabaseManager:
                             deduped.append((sanitized_segment_id, link['message_id'], link['position']))
                     ignored_count = len(message_links) - len(deduped)
                     if ignored_count > 0:
-                        # 僅在發生忽略時記錄一則 DEBUG，避免噪音
                         sample_ids = [link['message_id'] for link in message_links][:2]
                         self.logger.debug(f"[{sanitized_segment_id}] 去重 segment_messages：忽略 {ignored_count} 條重複關聯，樣本 message_id={sample_ids}")
 
-                    # 2.2 使用 SQLite 最小入侵容錯：INSERT OR IGNORE 避免 UNIQUE 衝突導致整批失敗
                     cursor.executemany("""
                         INSERT OR IGNORE INTO segment_messages (segment_id, message_id, position_in_segment)
                         VALUES (?, ?, ?)
                     """, deduped)
-                    self.logger.debug(f"[{sanitized_segment_id}] 原子操作：插入了 {len(deduped)} 條 segment_messages 關聯（已去重，採用 OR IGNORE）。")
+                    self.logger.debug(f"[{sanitized_segment_id}] 插入 {len(deduped)} 條 segment_messages（OR IGNORE）。")
 
                 # 提交交易
                 conn.commit()
-                self.logger.info(f"原子性地建立了片段 {sanitized_segment_id} 並關聯了 {len(message_links)} 條訊息。")
+                self.logger.info(f"原子性地建立或更新片段 {sanitized_segment_id} 並關聯了 {len(message_links)} 條訊息。")
                 return sanitized_segment_id
 
+        except sqlite3.IntegrityError as e:
+            # 捕捉到資料庫唯一鍵衝突時，將其視為已存在並記錄，不向外 re-raise 原始 UNIQUE 錯誤
+            if "UNIQUE constraint failed: conversation_segments.segment_id" in str(e):
+                self.logger.debug("捕捉到 UNIQUE constraint 衝突（外層）：%s (thread=%s)", sanitized_segment_id, threading.get_ident())
+                # 嘗試查詢已存在的 row 作為成功的結果
+                try:
+                    with self.get_connection() as conn:
+                        cur = conn.execute("SELECT segment_id FROM conversation_segments WHERE segment_id = ?", (sanitized_segment_id,))
+                        if cur.fetchone():
+                            return sanitized_segment_id
+                except Exception as inner_e:
+                    self.logger.debug("查詢已存在片段時發生錯誤: %s", inner_e)
+                # 若無法確認，將一般性錯誤包裝上報
+                self._report_error_threadsafe(e, f"建立或確認片段時發生 UNIQUE 衝突 (片段 ID: {sanitized_segment_id})")
+                raise DatabaseError(f"建立片段時發生 UNIQUE 衝突: {e}", operation="create_segment_with_messages")
+            else:
+                self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+                self._report_error_threadsafe(e, f"建立或更新片段失敗 (片段 ID: {sanitized_segment_id})")
+                raise DatabaseError(f"建立或更新片段失敗: {e}", operation="create_segment_with_messages")
         except Exception as e:
-            asyncio.create_task(func.report_error(e, f"原子性建立片段失敗 (片段 ID: {sanitized_segment_id})"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, f"原子性建立片段失敗 (片段 ID: {sanitized_segment_id})")
             raise DatabaseError(f"原子性建立片段失敗: {e}", operation="create_segment_with_messages")
 
     def get_conversation_segments(
@@ -1075,7 +1152,8 @@ class DatabaseManager:
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得對話片段失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得對話片段失敗")
             raise DatabaseError(f"取得對話片段失敗: {e}", operation="get_segments", table="conversation_segments")
 
     def add_message_to_segment(
@@ -1111,7 +1189,8 @@ class DatabaseManager:
             return True
             
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "新增訊息到片段失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "新增訊息到片段失敗")
             raise DatabaseError(f"新增訊息到片段失敗: {e}", operation="add_message_to_segment", table="segment_messages")
 
     def get_segment_messages(self, segment_id: str) -> List[Dict[str, Any]]:
@@ -1134,7 +1213,8 @@ class DatabaseManager:
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得片段訊息失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得片段訊息失敗")
             raise DatabaseError(f"取得片段訊息失敗: {e}", operation="get_segment_messages", table="segment_messages")
     def get_segment_to_message_map(self, segment_ids: List[str]) -> Dict[str, List[str]]:
         """根據片段 ID 列表，取得 segment_id 到 message_id 列表的映射
@@ -1168,7 +1248,8 @@ class DatabaseManager:
                 return result_map
                 
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "查詢 segment-to-message map 失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "查詢 segment-to-message map 失敗")
             raise DatabaseError(f"查詢 segment-to-message map 失敗: {e}", operation="get_segment_to_message_map", table="segment_messages")
 
 
@@ -1192,7 +1273,8 @@ class DatabaseManager:
                 conn.commit()
             return True
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "更新片段連貫性分數失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "更新片段連貫性分數失敗")
             raise DatabaseError(f"更新片段連貫性分數失敗: {e}", operation="update_segment_coherence", table="conversation_segments")
 
     def get_overlapping_segments(
@@ -1221,7 +1303,8 @@ class DatabaseManager:
                 rows = cursor.fetchall()
                 return [dict(row) for row in rows]
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "取得重疊片段失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "取得重疊片段失敗")
             raise DatabaseError(f"取得重疊片段失敗: {e}", operation="get_overlapping_segments", table="conversation_segments")
 
     def get_all_segment_ids_by_channel(self) -> Dict[str, List[str]]:
@@ -1249,5 +1332,6 @@ class DatabaseManager:
                     result[channel_id].append(segment_id)
                 return result
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "獲取所有 segment id 失敗"))
+            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
+            self._report_error_threadsafe(e, "獲取所有 segment id 失敗")
             raise DatabaseError(f"獲取所有 segment id 失敗: {e}", operation="get_all_segment_ids_by_channel")
