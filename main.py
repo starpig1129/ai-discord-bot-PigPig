@@ -22,6 +22,8 @@
 import discord
 import asyncio
 import logging
+import os
+import wavelink
 import update
 from function import func, tokens,get_settings,settings
 from bot import PigPig
@@ -64,6 +66,17 @@ bot = PigPig(
     case_insensitive=True,
     intents=intents
 )
+
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user.name}')
+
+async def setup_hook():
+    """A hook to setup Lavalink before the bot logs in."""
+    nodes = [wavelink.Node(uri=f"http://{os.getenv('LAVALINK_HOST')}:{os.getenv('LAVALINK_PORT')}", password=os.getenv('LAVALINK_PASSWORD'))]
+    await wavelink.Pool.connect(nodes=nodes, client=bot, cache_capacity=100)
+
+bot.setup_hook = setup_hook
 
 if __name__ == "__main__":
     update.check_version(with_msg=True)

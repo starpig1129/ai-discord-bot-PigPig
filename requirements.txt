@@ -62,3 +62,4 @@ scikit-learn>=1.0.0           # 機器學習工具（相似度計算）
 # Note: 記憶系統已整合至主要依賴項目
 # GPU 用戶可選擇安裝: pip install faiss-gpu
 # Apple Silicon 用戶建議: pip install torch torchvision torchaudio
+wavelink

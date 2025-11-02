@@ -49,13 +49,13 @@ class UIManager:
     def get_current_view(self, guild_id: int) -> Optional[MusicControlView]:
         return self.views.get(guild_id)
 
-    async def update_player_ui(self, interaction: discord.Interaction, item: Dict[str, Any],
-                             current_message: Optional[discord.Message], youtube_manager, music_cog) -> discord.Message:
+    async def update_player_ui(self, interaction: discord.Interaction, track: wavelink.Track,
+                             current_message: Optional[discord.Message], music_cog) -> discord.Message:
         """Update or create the music player UI"""
         try:
             guild_id = interaction.guild.id
             guild_id_str = str(guild_id)
-            embed = self._create_player_embed(item, youtube_manager, guild_id_str)
+            embed = self._create_player_embed(track, guild_id_str)
 
             callbacks = {
                 "previous_callback": music_cog.handle_previous,
@@ -66,23 +66,19 @@ class UIManager:
                 "toggle_shuffle_callback": music_cog.handle_toggle_shuffle,
                 "show_queue_callback": music_cog.handle_show_queue,
                 "toggle_autoplay_callback": music_cog.handle_toggle_autoplay,
-                "get_queue_manager": music_cog.get_queue_manager,
-                "get_state_manager": music_cog.get_state_manager,
                 "get_voice_client": lambda: music_cog.get_voice_client(guild_id),
                 "get_lang_manager": music_cog.get_lang_manager,
             }
 
-            # 在創建新 View 之前，先停止舊 View 的背景任務
             if guild_id in self.views:
                 old_view = self.views[guild_id]
                 old_view.stop_progress_updater()
 
-            view = MusicControlView(interaction, song_info=item, **callbacks)
+            view = MusicControlView(interaction, song_info=track, **callbacks)
             self.views[guild_id] = view
 
             state = music_cog.state_manager.get_state(guild_id)
             
-            # Clean up all previous UI messages
             for old_message in state.ui_messages:
                 try:
                     await old_message.delete()
@@ -90,13 +86,11 @@ class UIManager:
                     pass
             state.ui_messages.clear()
 
-            # Always send a new message to ensure it's at the bottom
             message = await interaction.channel.send(embed=embed, view=view)
             
             if not message:
                 raise RuntimeError("Failed to send the new player message.")
 
-            # Track the new player message
             state.current_message = message
             state.ui_messages.append(message)
             
@@ -105,77 +99,64 @@ class UIManager:
             
             await view.update_button_state()
             
-            # 只有在非直播時才啟動進度條
-            if not item.get('is_live', False):
-                view.start_progress_updater(item['duration'])
+            if not track.is_stream:
+                view.start_progress_updater(track.length / 1000)
             
             return message
             
         except Exception as e:
-            logger.error(f"更新播放器UI失敗: {e}")
+            logger.error(f"Failed to update player UI: {e}")
             raise
 
-    def _create_player_embed(self, item: Dict[str, Any], youtube_manager, guild_id: str = None) -> discord.Embed:
+    def _create_player_embed(self, track: wavelink.Track, guild_id: str = None) -> discord.Embed:
         """Create the player embed with song information"""
-        # 使用翻譯系統獲取文字
         if guild_id:
             title_text = self._translate_music(guild_id, "player", "now_playing")
             uploader_text = self._translate_music(guild_id, "player", "uploader")
             duration_text = self._translate_music(guild_id, "player", "duration")
-            views_text = self._translate_music(guild_id, "player", "views")
             progress_text = self._translate_music(guild_id, "player", "progress")
             queue_text = self._translate_music(guild_id, "player", "queue")
             queue_empty_text = self._translate_music(guild_id, "player", "queue_empty")
-            added_by_text = self._translate_music(guild_id, "player", "added_by", user=item['requester'].name)
+            added_by_text = self._translate_music(guild_id, "player", "added_by", user=track.extras.requester.name)
         else:
-            # 備用機制
+            # Fallback
             title_text = self._get_fallback_text("now_playing")
             uploader_text = self._get_fallback_text("uploader")
             duration_text = self._get_fallback_text("duration")
-            views_text = self._get_fallback_text("views")
             progress_text = self._get_fallback_text("progress")
             queue_text = self._get_fallback_text("queue")
             queue_empty_text = self._get_fallback_text("queue_empty")
-            added_by_text = self._get_fallback_text("added_by", user=item['requester'].name)
+            added_by_text = self._get_fallback_text("added_by", user=track.extras.requester.name)
         
         embed = discord.Embed(
             title=title_text,
-            description=f"**[{item['title']}]({item['url']})**",
+            description=f"**[{track.title}]({track.uri})**",
             color=discord.Color.blue()
         )
         
-        is_live = item.get('is_live', False)
+        embed.add_field(name=uploader_text, value=track.author, inline=True)
 
-        embed.add_field(name=uploader_text, value=item['author'], inline=True)
-
-        if is_live:
+        if track.is_stream:
             live_text = self._translate_music(guild_id, "player", "live")
             embed.add_field(name=duration_text, value=f"**{live_text}** 🔴", inline=True)
         else:
-            minutes, seconds = divmod(item['duration'], 60)
+            minutes, seconds = divmod(track.length / 1000, 60)
             embed.add_field(name=duration_text, value=f"{int(minutes):02d}:{int(seconds):02d}", inline=True)
 
-        # Add views field
-        try:
-            views = int(float(item.get('views', 0)))
-            views_str = f"{views:,}"
-        except (ValueError, TypeError):
-            views_str = "N/A"
-        embed.add_field(name=views_text, value=views_str, inline=True)
-        
-        # Add progress bar only if not live
-        if not is_live:
-            progress_bar = ProgressDisplay.create_progress_bar(0, item['duration'])
+        if not track.is_stream:
+            progress_bar = ProgressDisplay.create_progress_bar(0, track.length / 1000)
             embed.add_field(name=progress_text, value=progress_bar, inline=False)
         
+        if hasattr(track, 'views'):
+             views_text = self._translate_music(guild_id, "player", "views")
+             embed.add_field(name=views_text, value=f"{track.views:,}", inline=True)
+
         embed.add_field(name=queue_text, value=queue_empty_text, inline=False)
         
-        # Add thumbnail
-        thumbnail = youtube_manager.get_thumbnail_url(item['video_id'])
-        embed.set_thumbnail(url=thumbnail)
+        if track.thumbnail:
+            embed.set_thumbnail(url=track.thumbnail)
         
-        # Add footer
-        embed.set_footer(text=added_by_text, icon_url=item['user_avatar'])
+        embed.set_footer(text=added_by_text, icon_url=track.extras.requester.display_avatar.url)
         
         return embed
         
