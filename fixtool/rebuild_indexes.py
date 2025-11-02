@@ -68,7 +68,8 @@ def _init_components(logger: logging.Logger) -> Tuple[DatabaseManager, MemoryPro
     db_path = memory_cfg.get("database_path", "data/memory/memory.db")
 
     logger.info(f"初始化資料庫: {db_path}")
-    dbm = DatabaseManager(db_path)
+    from main import bot
+    dbm = DatabaseManager(db_path, bot=bot)
 
     if not profile.vector_enabled:
         logger.warning("目前配置檔案關閉了向量功能(vector_enabled=False)，將仍嘗試重建，但嵌入可能被跳過。")

@@ -358,7 +358,8 @@ class PigPig(commands.Bot):
         tokens.client_id = self.user.id
         
         # 啟動狀態更新任務
-        self.change_status_task.start()
+        if not self.change_status_task.is_running():
+            self.change_status_task.start()
 
     async def _send_error_report(self, embed: discord.Embed):
         bug_report_channel_id = os.getenv("BUG_REPORT_CHANNEL_ID")

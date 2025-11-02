@@ -28,17 +28,17 @@ class DatabaseManager:
     實作連接池和執行緒安全機制。
     """
     
-    def __init__(self, db_path: Union[str, Path], bot: "DC_Bot"):
+    def __init__(self, db_path: Union[str, Path], bot: Optional["DC_Bot"] = None):
         """初始化資料庫管理器
-         
+
         Args:
             db_path: 資料庫檔案路徑
-            bot: 機器人實例
+            bot: 機器人實例（可選，用於錯誤報告）
         """
         self.db_path = Path(db_path)
         self.bot = bot
         # 儲存 bot 的事件迴圈引用（若有），以便在同步路徑 thread-safe 地提交 coroutine
-        self._loop = getattr(self.bot, "loop", None)
+        self._loop = getattr(self.bot, "loop", None) if bot else None
         self.logger = logging.getLogger(__name__)
         self._lock = threading.RLock()
         self._connections: Dict[int, sqlite3.Connection] = {}

@@ -2744,8 +2744,9 @@ class VectorManager:
             # 若目錄存在但沒有檔案，仍嘗試從資料庫列出所有 channel
             try:
                 from .database import DatabaseManager
+                from main import bot
                 db_path = Path("data/memory/memory.db")
-                db_manager = DatabaseManager(db_path) if db_path.exists() else None
+                db_manager = DatabaseManager(db_path, bot=bot) if db_path.exists() else None
             except Exception as e:
                 asyncio.create_task(func.report_error(e, "DatabaseManager initialization failure"))
                 db_manager = None
