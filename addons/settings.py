@@ -1,162 +1,10 @@
-import json
 import os
+import yaml
+import asyncio
 import sys
 from dotenv import load_dotenv
-import asyncio
 
-class Settings:
-    def __init__(self, settings_path: str = "settings.json") -> None:
-        with open(settings_path, 'r') as f:
-            settings = json.load(f)
-        self.invite_link: str = "https://discord.gg/BvP64mqKzR"
-        self.bot_prefix: str = settings.get("prefix", "")
-        self.activity: dict = settings.get("activity", [{"listen": "/help"}])
-        self.ipc_server: dict = settings.get("ipc_server", {})
-        self.version: str = settings.get("version", "")
-        self.mongodb_uri: str = settings.get("mongodb", "")
-        self.music_temp_base: str = settings.get("music_temp_base", "./temp/music")
-        self.youtube_cookies_path: str = settings.get("youtube_cookies_path", "data/cookies.txt")
-        self.model_priority: list = settings.get("model_priority", ["gemini","local", "openai", "claude"])
-        
-        # 自動更新配置
-        self.auto_update: dict = settings.get("auto_update", {
-            "enabled": True,
-            "check_interval": 21600,
-            "require_owner_confirmation": True,
-            "auto_restart": True
-        })
-        self.notification: dict = settings.get("notification", {
-            "discord_dm": True,
-            "update_channel_id": None,
-            "notification_mentions": []
-        })
-        self.security: dict = settings.get("security", {
-            "backup_enabled": True,
-            "max_backups": 5,
-            "verify_downloads": True,
-            "protected_files": [
-                "settings.json",
-                ".env",
-                ".git/",
-                ".gitignore",
-                ".gitattributes",
-                "data/schedule/",
-                "data/dialogue_history.json",
-                "data/channel_configs/",
-                "data/user_data/",
-                "data/update_logs/"
-            ]
-        })
-        self.restart: dict = settings.get("restart", {
-            "graceful_shutdown_timeout": 30,
-            "restart_command": "python main.py",
-            "pre_restart_delay": 5
-        })
-        self.github: dict = settings.get("github", {
-            "repository": "starpig1129/ai-discord-bot-PigPig",
-            "api_url": "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest",
-            "download_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
-        })
-        
-        # FFmpeg 設定
-        self.ffmpeg: dict = settings.get("ffmpeg", self._get_default_ffmpeg())
-        
-        # 記憶系統設定
-        self.memory_system: dict = settings.get("memory_system", self._get_default_memory_system())
-    
-    def _get_default_ffmpeg(self) -> dict:
-        """獲取預設 FFmpeg 設定"""
-        return {
-            "location": "/usr/bin/ffmpeg",
-            "audio_quality": "192",
-            "audio_codec": "mp3",
-            "postprocessor_args": {
-                "threads": 2,
-                "loglevel": "warning",
-                "overwrite_output": True,
-                "max_muxing_queue_size": 2048,
-                "analyzeduration": "20M",
-                "probesize": "20M",
-                "reconnect": True,
-                "reconnect_streamed": True,
-                "reconnect_delay_max": 30,
-                "timeout": 30000000,
-                "rw_timeout": 30000000
-            },
-            "ytdlp_options": {
-                "socket_timeout": 300,
-                "retries": 10,
-                "concurrent_fragment_downloads": 1,
-                "file_access_retries": 5,
-                "fragment_retries": 10,
-                "retry_sleep_http": 5
-            },
-            "http_headers": {
-                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36",
-                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "accept_language": "en-us,en;q=0.5",
-                "sec_fetch_mode": "navigate"
-            }
-        }
-    
-    def _get_default_memory_system(self) -> dict:
-        """獲取預設記憶系統設定"""
-        return {
-            "enabled": True,
-            "auto_detection": True,
-            "vector_enabled": True,
-            "cpu_only_mode": False,
-            "memory_threshold_mb": 2048,
-            "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-            "database_path": "data/memory/memory.db",
-            "channel_settings": {
-                "default_enabled": True,
-                "whitelist_channels": [],
-                "blacklist_channels": [],
-                "auto_initialize": True
-            },
-            "search_settings": {
-                "default_search_type": "hybrid",
-                "semantic_threshold": 0.7,
-                "keyword_threshold": 0.5,
-                "max_context_messages": 5,
-                "enable_temporal_decay": True
-            },
-            "index_optimization": {
-                "enabled": True,
-                "interval_hours": 24,
-                "cleanup_old_data_days": 90,
-                "auto_rebuild": False,
-                "compression_enabled": True
-            },
-            "cache": {
-                "enabled": True,
-                "max_size_mb": 512,
-                "ttl_seconds": 3600,
-                "query_cache_size": 1000,
-                "preload_frequent_queries": True
-            },
-            "performance": {
-                "max_concurrent_queries": 10,
-                "query_timeout_seconds": 30,
-                "batch_size": 50,
-                "async_storage": True,
-                "memory_pool_size": 4
-            },
-            "monitoring": {
-                "enable_metrics": True,
-                "log_slow_queries": True,
-                "slow_query_threshold_ms": 1000,
-                "performance_alerts": False
-            },
-            "backup": {
-                "enabled": True,
-                "interval_hours": 168,
-                "max_backups": 7,
-                "compression": True
-            }
-        }
-
+from function import func
 class TOKENS:
     def __init__(self) -> None:
         load_dotenv()
@@ -164,7 +12,8 @@ class TOKENS:
         self.client_id = os.getenv("CLIENT_ID")
         self.client_secret_id = os.getenv("CLIENT_SECRET_ID")
         self.sercet_key = os.getenv("SERCET_KEY")
-        self.bug_report_channel_id = int(os.getenv("BUG_REPORT_CHANNEL_ID"))
+        raw_bug_report_channel_id = os.getenv("BUG_REPORT_CHANNEL_ID")
+        self.bug_report_channel_id = int(raw_bug_report_channel_id) if raw_bug_report_channel_id not in (None, "") else None
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY",None)
         self.openai_api_key = os.getenv("OPENAI_API_KEY",None)
         self.gemini_api_key = os.getenv("GEMINI_API_KEY",None)
@@ -225,140 +74,52 @@ class TOKENS:
             print(error_msg)
             sys.exit(1)
 
-
-class UpdateSettings:
-    """更新系統配置管理器"""
-    
-    def __init__(self, settings_path: str = "settings.json"):
-        """
-        初始化更新配置
-        
-        Args:
-            settings_path: 主要設定檔案路徑
-        """
-        load_dotenv()
-        
-        # 從環境變數讀取 Bot 擁有者 ID
-        self.bot_owner_id = int(os.getenv("BOT_OWNER_ID", 0))
-        
-        # 從統一設定檔讀取配置
+def _load_yaml_file(path: str) -> dict:
+    """安全讀取 YAML 檔案，失敗時回報錯誤並回傳空 dict"""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f) or {}
+        return data
+    except Exception as e:
         try:
-            with open(settings_path, 'r', encoding='utf-8') as f:
-                main_settings = json.load(f)
-            
-            self.config = {
-                "auto_update": main_settings.get("auto_update", self._get_default_auto_update()),
-                "notification": main_settings.get("notification", self._get_default_notification()),
-                "security": main_settings.get("security", self._get_default_security()),
-                "restart": main_settings.get("restart", self._get_default_restart()),
-                "github": main_settings.get("github", self._get_default_github())
-            }
-            
-        except Exception as e:
-            print(f"載入更新配置失敗: {e}")
-            from function import func
-            asyncio.create_task(func.report_error(e, "addons/settings.py/UpdateSettings/__init__"))
-            self.config = self._get_default_config()
-        
-        # 更新相關配置
-        self.auto_update = self.config.get("auto_update", {})
-        self.notification = self.config.get("notification", {})
-        self.security = self.config.get("security", {})
-        self.restart = self.config.get("restart", {})
-        self.github = self.config.get("github", {})
-    
-    def _get_default_auto_update(self) -> dict:
-        """獲取預設自動更新配置"""
-        return {
-            "enabled": True,
-            "check_interval": 21600,
-            "require_owner_confirmation": True,
-            "auto_restart": True
-        }
-    
-    def _get_default_notification(self) -> dict:
-        """獲取預設通知配置"""
-        return {
-            "discord_dm": True,
-            "update_channel_id": None,
-            "notification_mentions": []
-        }
-    
-    def _get_default_security(self) -> dict:
-        """獲取預設安全配置"""
-        return {
-            "backup_enabled": True,
-            "max_backups": 5,
-            "verify_downloads": True,
-            "protected_files": [
-                "settings.json",
-                ".env",
-                ".git/",
-                ".gitignore",
-                ".gitattributes",
-                "data/schedule/",
-                "data/dialogue_history.json",
-                "data/channel_configs/",
-                "data/user_data/",
-                "data/update_logs/"
-            ]
-        }
-    
-    def _get_default_restart(self) -> dict:
-        """獲取預設重啟配置"""
-        # 根據作業系統調整重啟命令
-        if os.name == 'nt':  # Windows
-            restart_command = "python.exe main.py"
-        else:  # Unix/Linux
-            restart_command = "python main.py"
-            
-        return {
-            "graceful_shutdown_timeout": 30,
-            "restart_command": restart_command,
-            "pre_restart_delay": 5,
-            "restart_flag_file": "data/restart_flag.json"
-        }
-    
-    def _get_default_github(self) -> dict:
-        """獲取預設 GitHub 配置"""
-        return {
-            "repository": "starpig1129/ai-discord-bot-PigPig",
-            "api_url": "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest",
-            "download_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
-        }
-    
-    def _get_default_config(self) -> dict:
-        """獲取預設配置"""
-        return {
-            "auto_update": self._get_default_auto_update(),
-            "notification": self._get_default_notification(),
-            "security": self._get_default_security(),
-            "restart": self._get_default_restart(),
-            "github": self._get_default_github()
-        }
-    
-    def update_config(self, section: str, key: str, value):
-        """
-        更新配置值
-        
-        Args:
-            section: 配置區段
-            key: 配置鍵
-            value: 配置值
-        """
-        if section in self.config:
-            self.config[section][key] = value
-            # 同步更新屬性
-            setattr(self, section, self.config[section])
-    
-    def is_auto_update_enabled(self) -> bool:
-        """檢查是否啟用自動更新"""
-        return self.auto_update.get("enabled", False)
-    
-    def get_check_interval(self) -> int:
-        """獲取檢查間隔（秒）"""
-        return self.auto_update.get("check_interval", 21600)
-    
-    def requires_owner_confirmation(self) -> bool:
-        """檢查是否需要擁有者確認"""
-        return self.auto_update.get("require_owner_confirmation", True)
+            # 使用一致的錯誤回報機制
+            asyncio.create_task(func.report_error(e, "addons/settings.py/_load_yaml_file"))
+        except Exception:
+            # 若無法使用 func.report_error 則 fallback 到 stdout（不得發生，但保險處理）
+            print(f"載入 YAML 檔案失敗 ({path}): {e}")
+        return {}
+
+class BaseConfig:
+    """對應 config/base.yaml 的設定物件"""
+    def __init__(self, path: str = "config/base.yaml") -> None:
+        self.path = path
+        data = _load_yaml_file(path)
+        # 直接對應常用欄位，若未設定則使用合理預設（非用來逃避錯誤）
+        self.prefix: str = data.get("prefix", "/")
+        self.activity: list = data.get("activity", [])
+        self.ipc_server: dict = data.get("ipc_server", {})
+        self.version: str = data.get("version", "")
+        self.music_temp_base: str = data.get("music_temp_base", "./temp/music")
+        self.logging: dict = data.get("logging", {})
+
+class LLMConfig:
+    """對應 config/llm.yaml 的設定物件"""
+    def __init__(self, path: str = "config/llm.yaml") -> None:
+        self.path = path
+        self.data: dict = _load_yaml_file(path)
+
+class UpdateConfig:
+    """對應 config/update.yaml 的設定物件"""
+    def __init__(self, path: str = "config/update.yaml") -> None:
+        self.path = path
+        data = _load_yaml_file(path)
+        self.auto_update: dict = data.get("auto_update", {})
+        self.security: dict = data.get("security", {})
+        self.restart: dict = data.get("restart", {})
+        self.github: dict = data.get("github", {})
+
+# 快速示範：根據 config 目錄現有檔名建立實例（使用時可移動到適當初始化位置）
+# from addons.settings import BaseConfig, LLMConfig, UpdateConfig
+# base_cfg = BaseConfig("config/base.yaml")
+# llm_cfg = LLMConfig("config/llm.yaml")
+# update_cfg = UpdateConfig("config/update.yaml")
