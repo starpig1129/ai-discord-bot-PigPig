@@ -39,7 +39,6 @@ from discord.ext import commands, tasks
 from itertools import cycle
 from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
-from gpt.core.action_dispatcher import ActionDispatcher
 from gpt.core.message_handler import MessageHandler
 from logs import TimedRotatingFileHandler
 
@@ -104,7 +103,6 @@ class PigPig(commands.Bot):
         state_manager (StateManager): Manager for music playback states.
         ui_manager (UIManager): Manager for music player UI components.
         status_cycle (itertools.cycle): Cycle iterator for rotating bot status messages.
-        action_dispatcher (ActionDispatcher): Dispatcher for handling bot actions.
         message_handler (MessageHandler): Handler for processing Discord messages.
     """
     
@@ -321,7 +319,7 @@ class PigPig(commands.Bot):
         
         This method is called automatically by discord.py and performs:
         1. Loading all cog modules from the cogs folder
-        2. Initializing core services (ActionDispatcher, MessageHandler)
+        2. Initializing MessageHandler
         3. Starting IPC server if enabled
         4. Updating version in settings
         5. Syncing command tree with Discord
@@ -353,8 +351,7 @@ class PigPig(commands.Bot):
                     print(traceback.format_exc())
 
         # Initialize core services
-        self.action_dispatcher = ActionDispatcher(self)
-        self.message_handler = MessageHandler(self, self.action_dispatcher, self.performance_monitor)
+        self.message_handler = MessageHandler(self)
 
         if settings.ipc_server.get("enable", False):
             await self.ipc.start()
