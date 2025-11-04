@@ -21,7 +21,6 @@
 # SOFTWARE.
 import discord
 import asyncio
-import logging
 import update
 from function import func, tokens,get_settings,settings
 from bot import PigPig

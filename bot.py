@@ -39,7 +39,7 @@ from discord.ext import commands, tasks
 from itertools import cycle
 from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
-from gpt.core.message_handler import MessageHandler
+from llm.orchestrator import Orchestrator
 from logs import TimedRotatingFileHandler
 
 
@@ -252,7 +252,7 @@ class PigPig(commands.Bot):
 
                 # Only trigger handle_message if in allowed channel and mentioned or auto-response enabled
                 if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
-                    await self.message_handler.handle_message(message)
+                    await self.orchestrator.handle_message(message)
         except Exception as e:
             await func.report_error(e, f"on_message: {e}")
             
@@ -309,7 +309,7 @@ class PigPig(commands.Bot):
                             return  # In story mode, don't continue with general message processing
                         
                         if is_allowed and (self.user.id in after.raw_mentions and not after.mention_everyone or auto_response_enabled):
-                            await self.message_handler.handle_message(after)
+                            await self.orchestrator.handle_message(after)
                             
         except Exception as e:
             await func.report_error(e, f"on_message_edit: {e}")
@@ -351,7 +351,7 @@ class PigPig(commands.Bot):
                     print(traceback.format_exc())
 
         # Initialize core services
-        self.message_handler = MessageHandler(self)
+        self.orchestrator = Orchestrator(self)
 
         if settings.ipc_server.get("enable", False):
             await self.ipc.start()

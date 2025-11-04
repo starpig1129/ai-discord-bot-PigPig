@@ -8,6 +8,7 @@ from cogs.eat.embeds import mapEmbed, menuEmbed
 from cogs.eat.train.train import Train
 from cogs.eat.embeds import eatEmbed
 import random
+from function import func
 from gpt.core.response_generator import generate_response
 from gpt.utils.discord_utils import safe_edit_message
 map = GoogleMapCrawler()

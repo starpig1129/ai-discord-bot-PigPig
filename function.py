@@ -1,5 +1,6 @@
 import json, os
-from typing import Dict, Any
+import logging
+from typing import  Any
 from addons import Settings, TOKENS
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -45,10 +46,9 @@ class Function:
         if not self.bot:
             print("錯誤：Function class中的bot實例未設置。")
             return
-
         import traceback
         import discord
-
+        logging.error(f"error: {error} details: {details}", exc_info=error)
         traceback_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
 
         embed = discord.Embed(
