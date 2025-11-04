@@ -19,46 +19,55 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
+"""Discord bot main module.
+
+This module contains the main bot class and configuration for a Discord bot
+with music playback, message handling, and logging capabilities.
+"""
+
 import discord
 import sys
 import os
-import re
 import traceback
 import update
 from function import func, ROOT_DIR, tokens, settings, update_json
 import json
 import logging
 import asyncio
-from typing import Optional
 from discord.ext import commands, tasks
 from itertools import cycle
 from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
 from gpt.core.action_dispatcher import ActionDispatcher
-from gpt.core.response_generator import get_model_and_tokenizer
 from gpt.core.message_handler import MessageHandler
-from gpt.performance_monitor import PerformanceMonitor
 from logs import TimedRotatingFileHandler
-from cogs.memory.memory_manager import MemoryManager
-import gpt.tools.builtin
-from cogs.memory.exceptions import MemorySystemError
 
-# 導入優化模組
-from gpt.optimization_integration import (
-    initialize_optimization_from_file,
-    get_optimized_bot,
-    process_optimized_request,
-)
-from gpt.optimization_config_manager import is_optimization_enabled
-# 配置 logging
+
 def setup_logger(server_name):
-    # 1. 將根記錄器的預設級別設定為 WARNING
-    # 這樣可以抑制所有未明確設定級別的記錄器的 INFO 和 DEBUG 訊息。
+    """Configure logging for a specific server.
+    
+    Sets up a logger with timed rotating file handler for a Discord server.
+    Suppresses INFO and DEBUG messages from third-party libraries while
+    maintaining INFO level logging for application-specific logs.
+    
+    Args:
+        server_name (str): The name of the Discord server to create logger for.
+        
+    Returns:
+        logging.Logger: Configured logger instance for the specified server.
+        
+    Note:
+        - Root logger is set to WARNING level to suppress third-party logs
+        - Application logger is set to INFO level
+        - Uses TimedRotatingFileHandler for log rotation
+        - Prevents duplicate handlers by checking existing handlers
+    """
+    # Set root logger default level to WARNING
+    # This suppresses INFO and DEBUG messages from loggers without explicit level settings
     logging.getLogger().setLevel(logging.WARNING)
 
-    # 2. 明確將特定第三方函式庫的日誌級別也設定為 WARNING
-    # 雖然根記錄器已經是 WARNING，但明確設定可以防止它們自己的程式碼
-    # 以任何方式覆蓋級別。
+    # Explicitly set log level to WARNING for specific third-party libraries
     third_party_loggers = [
         "faiss", "WDM", "sqlalchemy", "httpx", "google_genai",
         "discord", "websockets", "cogs.memory", "gpt", "jieba"
@@ -66,11 +75,11 @@ def setup_logger(server_name):
     for logger_name in third_party_loggers:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
-    # 3. 為我們的應用程式（每個 guild）設定特定的 logger
+    # Set up specific logger for our application (per guild)
     logger = logging.getLogger(server_name)
-    logger.setLevel(logging.INFO)  # 讓我們的應用程式日誌從 INFO 開始記錄
+    logger.setLevel(logging.INFO)  # Application logs start from INFO level
 
-    # 確保只為每個 logger 添加一次 handler，以避免日誌重複
+    # Ensure handler is added only once per logger to avoid duplicate logs
     if not logger.handlers:
         handler = TimedRotatingFileHandler(server_name)
         formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
@@ -78,27 +87,42 @@ def setup_logger(server_name):
         logger.addHandler(handler)
         
     return logger
+
+
 class PigPig(commands.Bot):
+    """Main Discord bot class with music, messaging, and logging features.
+    
+    This bot extends discord.ext.commands.Bot with additional functionality including:
+    - Per-guild logging system
+    - Music playback state management
+    - AI-powered message handling
+    - Performance monitoring
+    - Dynamic status updates
+    
+    Attributes:
+        loggers (dict): Dictionary mapping guild names to their logger instances.
+        state_manager (StateManager): Manager for music playback states.
+        ui_manager (UIManager): Manager for music player UI components.
+        status_cycle (itertools.cycle): Cycle iterator for rotating bot status messages.
+        action_dispatcher (ActionDispatcher): Dispatcher for handling bot actions.
+        message_handler (MessageHandler): Handler for processing Discord messages.
+    """
+    
     def __init__(self, *args, **kwargs):
+        """Initialize the PigPig bot instance.
+        
+        Args:
+            *args: Variable length argument list passed to parent Bot class.
+            **kwargs: Arbitrary keyword arguments passed to parent Bot class.
+        """
         super().__init__(*args, **kwargs)
         func.set_bot(self)
         self.loggers = {}
-        # ActionDispatcher 將在 setup_hook 中被創建和注入
-        self.action_dispatcher: Optional[ActionDispatcher] = None
-        self.message_handler: Optional[MessageHandler] = None
         
-        # 記憶系統初始化
-        self.memory_manager: Optional[MemoryManager] = None
-        self.memory_enabled = False
-        
-        # 音樂系統管理器
+        # Music system managers
         self.state_manager = StateManager()
         self.ui_manager = UIManager(self)
         
-        # 優化系統初始化
-        self.optimization_enabled = False
-        self.optimized_bot = None
-        self.performance_monitor = PerformanceMonitor()
         
         self.status_cycle = cycle([
             (discord.ActivityType.listening, "大家的聲音"),
@@ -107,7 +131,14 @@ class PigPig(commands.Bot):
 
     @tasks.loop(seconds=15)
     async def change_status_task(self):
-        """每 15 秒更換一次機器人狀態"""
+        """Update bot status every 15 seconds.
+        
+        Cycles through predefined status messages, replacing placeholders
+        with current bot statistics (e.g., number of guilds).
+        
+        Note:
+            This is a discord.ext.tasks loop that runs continuously.
+        """
         activity_type, name = next(self.status_cycle)
         
         if "{n}" in name:
@@ -121,18 +152,36 @@ class PigPig(commands.Bot):
         )
 
     async def _change_presence(self, *args, **kwargs):
-        """包裝 change_presence 以處理連線錯誤"""
+        """Wrapper for change_presence to handle connection errors.
+        
+        Attempts to change bot presence and handles ConnectionResetError
+        by waiting 60 seconds before allowing retry.
+        
+        Args:
+            *args: Variable length argument list passed to change_presence.
+            **kwargs: Arbitrary keyword arguments passed to change_presence.
+            
+        Note:
+            Prints error message and sleeps on ConnectionResetError.
+        """
         try:
             await self.change_presence(*args, **kwargs)
         except ConnectionResetError:
             print("Connection reset error while changing presence, retrying in 60 seconds...")
             await asyncio.sleep(60)
 
-    def setup_logger_for_guild(self, guild_name):
-        if guild_name not in self.loggers:
-            self.loggers[guild_name] = setup_logger(guild_name)
-
     def get_logger_for_guild(self, guild_name):
+        """Get or create logger for a specific guild.
+        
+        Args:
+            guild_name (str): Name of the guild to get logger for.
+            
+        Returns:
+            logging.Logger: Logger instance for the specified guild.
+            
+        Note:
+            Creates a new logger if one doesn't exist for the guild.
+        """
         if guild_name in self.loggers:
             return self.loggers[guild_name]
         else:
@@ -140,162 +189,158 @@ class PigPig(commands.Bot):
             return self.loggers[guild_name]
         
     def setup_logger_for_guild(self, guild_name):
+        """Set up logger for a guild if it doesn't exist.
+        
+        Args:
+            guild_name (str): Name of the guild to set up logger for.
+            
+        Note:
+            Only creates logger if one doesn't already exist for the guild.
+        """
         if guild_name not in self.loggers:
             self.loggers[guild_name] = setup_logger(guild_name)
-
-    async def initialize_memory_system(self):
-        """初始化記憶系統"""
-        try:
-            # 檢查設定是否啟用記憶系統
-            memory_config = settings.memory_system if hasattr(settings, 'memory_system') else {}
-            if not memory_config.get("enabled", False):
-                print("記憶系統已在設定中停用")
-                return
-            
-            self.memory_manager = MemoryManager(self)
-            self.memory_enabled = await self.memory_manager.initialize()
-            
-            if self.memory_enabled:
-                print("記憶系統初始化成功")
-            else:
-                print("記憶系統初始化失敗")
-                
-        except Exception as e:
-            print(f"記憶系統初始化失敗: {e}")
-            self.memory_enabled = False
-    
-    async def initialize_optimization_system(self):
-        """根據配置文件初始化各個優化模組。"""
-        try:
-            if not is_optimization_enabled():
-                print("優化系統已在配置中停用。")
-                self.optimization_enabled = False
-                return
-
-            print("正在初始化優化系統...")
-            # 這裡不再初始化一個完整的 Bot，而是根據需要初始化各個模組
-            # 例如，未來可以這樣做：
-            # config = get_optimization_config()
-            # if config.get('gemini_cache'):
-            #     self.gemini_cache = GeminiCache()
-            # if config.get('parallel_tools'):
-            #     self.tool_executor = ParallelToolExecutor()
-            
-            # 目前，我們只設置一個標誌
-            self.optimization_enabled = True
-            print("優化系統初始化完成。")
-
-        except Exception as e:
-            print(f"優化系統初始化失敗: {e}")
-            print("將使用傳統處理方式。")
-            self.optimization_enabled = False
-    
-    async def store_message_to_memory(self, message: discord.Message):
-        """將訊息儲存到記憶系統"""
-        if not self.memory_enabled or not self.memory_manager:
-            return
         
+    async def on_message(self, message: discord.Message, /) -> None:
+        """Handle incoming Discord messages.
+        
+        Processes messages by:
+        1. Setting up guild-specific logging
+        2. Logging message details
+        3. Ignoring bot messages
+        4. Processing commands
+        5. Handling special channel modes (story mode)
+        6. Delegating to message handler for AI responses
+        
+        Args:
+            message (discord.Message): The incoming Discord message object.
+            
+        Returns:
+            None
+            
+        Note:
+            - Ignores messages from DMs (no guild)
+            - Ignores messages from other bots
+            - Checks channel permissions and modes before processing
+        """
         try:
-            # 過濾機器人訊息和非伺服器訊息
-            if message.author.bot or not message.guild:
+            
+            if not message.guild:
                 return
             
-            # 檢查頻道是否允許記憶功能
+            guild_name = message.guild.name
+            self.setup_logger_for_guild(guild_name)
+            logger = self.loggers[guild_name]
+            
+            logger.info(f'收到訊息: {message.content} (來自:伺服器:{message.guild},頻道:{message.channel.name},{message.author.name})')
+            
+            if message.author.bot:
+                return
+            
+            await self.process_commands(message)
+            
+            # Delegate message processing to MessageHandler
+            # Check if message should be handled by bot (e.g., @mention or in specific channel)
             channel_manager = self.get_cog('ChannelManager')
             if channel_manager:
                 guild_id = str(message.guild.id)
-                is_allowed, _, __ = channel_manager.is_allowed_channel(message.channel, guild_id)
-                if not is_allowed:
-                    return
-            
-            # 儲存訊息到記憶系統
-            await self.memory_manager.store_message(message)
-            
-        except MemorySystemError as e:
-            print(f"記憶系統儲存訊息失敗: {e}")
+                is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(message.channel, guild_id)
+
+                # Check if it's a story mode channel
+                if channel_mode == 'story':
+                    story_manager_cog = self.get_cog('StoryManagerCog')
+                    if story_manager_cog:
+                        await story_manager_cog.handle_story_message(message)
+                    return  # In story mode, don't continue with general message processing
+
+                # Only trigger handle_message if in allowed channel and mentioned or auto-response enabled
+                if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
+                    await self.message_handler.handle_message(message)
         except Exception as e:
-            print(f"儲存訊息到記憶系統時發生未預期錯誤: {e}")
-        
-    async def on_message(self, message: discord.Message, /) -> None:
-        if message.author.bot or not message.guild:
-            return
-        
-        guild_name = message.guild.name
-        self.setup_logger_for_guild(guild_name)
-        logger = self.loggers[guild_name]
-        
-        logger.info(f'收到訊息: {message.content} (來自:伺服器:{message.guild},頻道:{message.channel.name},{message.author.name})')
-        
-        # 儲存訊息到記憶系統
-        await self.store_message_to_memory(message)
-        
-        await self.process_commands(message)
-        
-        # 將訊息處理委派給 MessageHandler
-        # 檢查訊息是否需要由機器人處理 (例如 @mention 或在特定頻道)
-        channel_manager = self.get_cog('ChannelManager')
-        if channel_manager:
-            guild_id = str(message.guild.id)
-            is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(message.channel, guild_id)
-
-            # 檢查是否為故事模式頻道
-            if channel_mode == 'story':
-                story_manager_cog = self.get_cog('StoryManagerCog')
-                if story_manager_cog:
-                    await story_manager_cog.handle_story_message(message)
-                return # 故事模式下，不繼續執行一般訊息處理
-
-            # 只有在允許的頻道且被提及或啟用自動回應時，才觸發 handle_message
-            if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
-                await self.message_handler.handle_message(message)
-    
+            await func.report_error(e, f"on_message: {e}")
+            
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        if before.author.bot or not before.guild:
-            return
+        """Handle edited Discord messages.
         
-        logger = self.get_logger_for_guild(before.guild.name)
-        logger.info(
-            f"訊息修改: 原訊息({before.content}) 新訊息({after.content}) 頻道:{before.channel.name}, 作者:{before.author}"
-        )
+        When a message mentioning the bot is edited:
+        1. Logs the edit details
+        2. Deletes the bot's previous reply to the original message
+        3. Generates a new response to the edited message
+        4. Handles story mode channels specially
         
-        # 更新記憶系統中的訊息
-        await self.store_message_to_memory(after)
-
-        guild_id = str(after.guild.id)
-        channel_manager = self.get_cog('ChannelManager')
-        if channel_manager:
-            is_allowed, _, __ = channel_manager.is_allowed_channel(after.channel, guild_id)
-            if not is_allowed:
-                return
-
+        Args:
+            before (discord.Message): The message before editing.
+            after (discord.Message): The message after editing.
+            
+        Returns:
+            None
+            
+        Note:
+            - Ignores edits in DMs
+            - Ignores edits from bots
+            - Only responds to messages that mention the bot
+            - Searches last 50 messages to find bot's previous reply
+        """
         try:
-            match = re.search(r"<@\d+>\s*(.*)", after.content)
-            prompt = match.group(1)
-        except AttributeError:  # 如果正則表達式沒有匹配到，會拋出 AttributeError
-            prompt = after.content
-        
-        # 實現生成回應的邏輯
-        if self.user.id in after.raw_mentions and not after.mention_everyone:
-            try:
-                # Fetch the bot's previous reply
-                async for msg in after.channel.history(limit=50):
-                    if msg.reference and msg.reference.message_id == before.id and msg.author.id == self.user.id:
-                        await msg.delete()  # 删除之前的回复
-
-                message_to_edit = await after.reply("思考中...")  # 创建新的回复
-                execute_action = await self.action_dispatcher.choose_act(prompt, after, message_to_edit)
-                await execute_action(message_to_edit, prompt, after)
-            except Exception as e:
-                await func.report_error(e, f"on_message_edit: {e}")
+            if not before.guild:
+                return
+            
+            logger = self.get_logger_for_guild(before.guild.name)
+            logger.info(
+                f"訊息修改: 原訊息({before.content}) 新訊息({after.content}) 頻道:{before.channel.name}, 作者:{before.author}"
+            )
+            if after.author.bot:
+                return
+            
+            guild_id = str(after.guild.id)
+            channel_manager = self.get_cog('ChannelManager')
+            
+            # Implement logic for generating responses
+            if self.user.id in after.raw_mentions and not after.mention_everyone:
+                    # Fetch the bot's previous reply
+                    async for msg in after.channel.history(limit=50):
+                        if msg.reference and msg.reference.message_id == before.id and msg.author.id == self.user.id:
+                            await msg.delete()  # Delete previous reply
+                    if channel_manager:
+                        guild_id = str(after.guild.id)
+                        is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(after.channel, guild_id)
+                        # Check if it's a story mode channel
+                        if channel_mode == 'story':
+                            story_manager_cog = self.get_cog('StoryManagerCog')
+                            if story_manager_cog:
+                                await story_manager_cog.handle_story_message(after)
+                            return  # In story mode, don't continue with general message processing
+                        
+                        if is_allowed and (self.user.id in after.raw_mentions and not after.mention_everyone or auto_response_enabled):
+                            await self.message_handler.handle_message(after)
+                            
+        except Exception as e:
+            await func.report_error(e, f"on_message_edit: {e}")
         
     async def setup_hook(self) -> None:
-        # Loading all the module in `cogs` folder
+        """Set up bot before connecting to Discord.
+        
+        This method is called automatically by discord.py and performs:
+        1. Loading all cog modules from the cogs folder
+        2. Initializing core services (ActionDispatcher, MessageHandler)
+        3. Starting IPC server if enabled
+        4. Updating version in settings
+        5. Syncing command tree with Discord
+        
+        Returns:
+            None
+            
+        Note:
+            - Filters out __init__.py, private modules (_*), and hidden files (.*) 
+            - Prints success/failure for each cog load attempt
+            - Initializes performance monitoring
+        """
+        # Loading all the modules in `cogs` folder
         for module in os.listdir(ROOT_DIR + '/cogs'):
-            # 過濾條件：
-            # 1. 必須是 .py 文件
-            # 2. 排除 __init__.py（包初始化文件）
-            # 3. 排除以 _ 開頭的文件（私有模組）
-            # 4. 排除以 . 開頭的文件（隱藏文件）
+            # Filter conditions:
+            # 1. Must be a .py file
+            # 2. Exclude __init__.py (package initialization file)
+            # 3. Exclude files starting with _ (private modules)
+            # 4. Exclude files starting with . (hidden files)
             if (module.endswith('.py') and
                 module != '__init__.py' and
                 not module.startswith('_') and
@@ -307,15 +352,9 @@ class PigPig(commands.Bot):
                     print(f"Failed to load {module[:-3]}: {e}")
                     print(traceback.format_exc())
 
-        # 初始化核心服務
+        # Initialize core services
         self.action_dispatcher = ActionDispatcher(self)
         self.message_handler = MessageHandler(self, self.action_dispatcher, self.performance_monitor)
-
-        # 初始化記憶系統
-        await self.initialize_memory_system()
-        
-        # 初始化優化系統
-        await self.initialize_optimization_system()
 
         if settings.ipc_server.get("enable", False):
             await self.ipc.start()
@@ -326,6 +365,23 @@ class PigPig(commands.Bot):
         await self.tree.sync()
 
     async def on_ready(self):
+        """Handle bot ready event.
+        
+        Called when the bot has successfully connected to Discord. Performs:
+        1. Prints bot information (name, ID, versions)
+        2. Collects and saves guild/channel information to JSON
+        3. Sets up loggers for all guilds
+        4. Updates client ID in tokens
+        5. Starts status update task
+        
+        Returns:
+            None
+            
+        Note:
+            - Creates logs/guilds_and_channels.json with server structure
+            - Initializes logger for each guild the bot is in
+            - Starts periodic status updates if not already running
+        """
         print("------------------")
         print(f"Logging As {self.user}")
         print(f"Bot ID: {self.user.id}")
@@ -341,41 +397,44 @@ class PigPig(commands.Bot):
                 'channels': []
             }
             for channel in guild.channels:
-                channel_info =f"channel_name: {channel.name},channel_id: {channel.id},channel_type: {str(channel.type)}"
+                channel_info = f"channel_name: {channel.name},channel_id: {channel.id},channel_type: {str(channel.type)}"
                 guild_info['channels'].append(channel_info)
             data['guilds'].append(guild_info)
-            self.setup_logger_for_guild(guild.name)  # 設置每個伺服器的 logger
-        try:
-            model_management_cog = self.get_cog('ModelManagement')
-            # if model_management_cog:
-            #     await model_management_cog.reload_model()
-        except Exception as e:
-            await func.report_error(e, f"on_ready: {e}")
-        # 將資料寫入 JSON 文件
+            self.setup_logger_for_guild(guild.name)  # Set up logger for each server
+        # Write data to JSON file
         with open('logs/guilds_and_channels.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
         print('update succesfully guilds_and_channels.json')
         tokens.client_id = self.user.id
         
-        # 啟動狀態更新任務
+        # Start status update task
         if not self.change_status_task.is_running():
             self.change_status_task.start()
 
-    async def _send_error_report(self, embed: discord.Embed):
-        bug_report_channel_id = os.getenv("BUG_REPORT_CHANNEL_ID")
-        if bug_report_channel_id:
-            channel = self.get_channel(int(bug_report_channel_id))
-            if channel:
-                await channel.send(embed=embed)
-            else:
-                logger = self.get_logger_for_guild("Bot")
-                logger.error(f"找不到指定的錯誤報告頻道: {bug_report_channel_id}")
-
     async def on_error(self, event_method: str, *args, **kwargs):
-        # 取得 logger
+        """Handle errors in event handlers.
+        
+        Called when an exception occurs in an event handler. Performs:
+        1. Gets appropriate logger
+        2. Logs error details and traceback
+        3. Reports error through error reporting system
+        
+        Args:
+            event_method (str): Name of the event method where error occurred.
+            *args: Variable length argument list from the event.
+            **kwargs: Arbitrary keyword arguments from the event.
+            
+        Returns:
+            None
+            
+        Note:
+            - Uses "Bot" as guild name for logger if guild context unavailable
+            - Prints to console in addition to logging to file
+        """
+        # Get logger
         logger = self.get_logger_for_guild("Bot")
 
-        # 記錄錯誤
+        # Log error
         logger.error(f"事件 '{event_method}' 發生錯誤")
         logger.error(traceback.format_exc())
         print(f"事件 '{event_method}' 發生錯誤")
@@ -384,64 +443,92 @@ class PigPig(commands.Bot):
         await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
-        # 忽略某些錯誤
+        """Handle errors in command execution.
+        
+        Called when a command raises an exception. Performs:
+        1. Ignores certain expected errors (CommandNotFound, DisabledCommand)
+        2. Logs error details with full traceback
+        3. Reports error through error reporting system
+        4. Sends error message to channel
+        
+        Args:
+            ctx (commands.Context): The invocation context where error occurred.
+            error (commands.CommandError): The exception that was raised.
+            
+        Returns:
+            None
+            
+        Note:
+            - Uses guild name for logger, or "DirectMessage" for DMs
+            - Gracefully handles failures in error message sending
+            - Prints to console as fallback if logger unavailable
+        """
+        # Ignore certain errors
         ignored = (commands.CommandNotFound, commands.DisabledCommand)
         if isinstance(error, ignored):
             return
 
-        # 取得 logger
-        logger = self.get_logger_for_guild(ctx.guild.name if ctx.guild else "DirectMessage")
+        # Try to get logger through bot
+        logger = None
+        if hasattr(self, "get_logger_for_guild"):
+            guild_name = ctx.guild.name if getattr(ctx, "guild", None) else "DirectMessage"
+            try:
+                logger = self.get_logger_for_guild(guild_name)
+            except Exception:
+                logger = None
 
-        # 記錄錯誤
-        logger.error(f"指令 '{ctx.command}' 發生錯誤: {error}")
-        logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+        # Log error
+        if logger:
+            logger.error(f"指令 '{ctx.command}' 發生錯誤: {error}")
+            logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
         print(f"指令 '{ctx.command}' 發生錯誤: {error}")
         print("".join(traceback.format_exception(type(error), error, error.__traceback__)))
 
         await func.report_error(error, f"on_command_error: {ctx.command}")
 
-        await ctx.send(f"發生錯誤：{error}")
+        # Try to reply to channel (only log if reply fails, don't raise)
+        try:
+            await ctx.send("error on command execution.")
+        except Exception as e:
+            if logger:
+                logger.exception("回覆錯誤訊息時發生例外")
+            else:
+                print(f"回覆錯誤訊息時發生例外: {e}")
+            await func.report_error(ctx, error)
     
     async def close(self):
-        """優雅關閉機器人和所有系統"""
-        try:
-            # 關閉記憶系統（先於 super().close()）
-            if self.memory_manager:
-                # 先嘗試優雅關閉 VectorManager（可重入，避免卡死）
-                try:
-                    vm = getattr(self.memory_manager, "vector_manager", None)
-                    if vm and hasattr(vm, "shutdown"):
-                        await vm.shutdown()
-                except Exception as e:
-                    print(f"關閉向量管理器時發生錯誤: {e}")
-
-                # 若提供 shutdown，優先使用以確保外部資源先被釋放
-                if hasattr(self.memory_manager, "shutdown"):
-                    await self.memory_manager.shutdown()
-                else:
-                    await self.memory_manager.cleanup()
-                print("記憶系統已優雅關閉")
+        """Gracefully shut down the bot and all systems.
+        
+        Performs cleanup in the following order:
+        1. Calls parent class close() to disconnect from Discord
+        2. Cancels all pending asyncio tasks
+        3. Shuts down default executor thread pool
+        
+        Returns:
+            None
             
-            # 關閉優化系統
-            if self.optimization_enabled and self.optimized_bot:
-                await self.optimized_bot.shutdown()
-                print("優化系統已優雅關閉")
-            
-            # 關閉父類（斷開 Discord 連線等）
+        Note:
+            - Prevents "Task exception was never retrieved" warnings
+            - Avoids threading._shutdown hanging issues
+            - Handles exceptions during shutdown gracefully
+            - Should be called before program termination
+        """
+        try:         
+            # Close parent class (disconnect from Discord, etc.)
             await super().close()
 
-            # 優雅取消其餘所有仍在事件迴圈中的任務，避免 Task exception was never retrieved
+            # Gracefully cancel all remaining tasks in event loop to avoid Task exception was never retrieved
             pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task() and not t.done()]
             for task in pending:
                 task.cancel()
             if pending:
                 await asyncio.gather(*pending, return_exceptions=True)
 
-            # 最後關閉 asyncio 預設執行緒池，避免 threading._shutdown 掛起
+            # Finally close asyncio default thread pool to avoid threading._shutdown hanging
             try:
                 loop = asyncio.get_running_loop()
                 await loop.shutdown_default_executor()
             except Exception as e:
-                print(f"關閉預設執行緒池時發生錯誤: {e}")
+                print(f"Error occurred while shutting down default executor: {e}")
         except Exception as e:
-            print(f"關閉機器人時發生錯誤: {e}")
+            print(f"Error occurred while closing bot: {e}")
