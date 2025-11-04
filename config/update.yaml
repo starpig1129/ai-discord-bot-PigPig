@@ -1,33 +1,38 @@
-"auto_update":
-  "enabled": true
-  "check_interval": 21600
-  "require_owner_confirmation": true
-  "auto_restart": true
+auto_update:
+  enabled: true
+  check_interval: 21600
+  require_owner_confirmation: true
+  auto_restart: true
 
-"security":
-  "backup_enabled": true
-  "max_backups": 5
-  "verify_downloads": true
-  "protected_files": [
-    "settings.json",
-    "systemPrompt.yaml",
-    ".env",
-    ".git/",
-    ".gitignore",
-    ".gitattributes",
-    "data/schedule/",
-    "data/dialogue_history.json",
-    "data/channel_configs/",
-    "data/user_data/",
-    "data/update_logs/"
-  ]
+security:
+  backup_enabled: true
+  max_backups: 5
+  verify_downloads: true
+  protected_files:
+    - "settings.json"
+    - "systemPrompt.yaml"
+    - ".env"
+    - ".git/"
+    - ".gitignore"
+    - ".gitattributes"
+    - "data/schedule/"
+    - "data/dialogue_history.json"
+    - "data/channel_configs/"
+    - "data/user_data/"
+    - "data/update_logs/"
 
-"restart": 
-  "graceful_shutdown_timeout": 30
-  "restart_command": "python main.py"
-  "pre_restart_delay": 10
+notification:
+  discord_dm: true
+  update_channel_id: null
+  notification_mentions: []
 
-"github":
-  "repository": "starpig1129/ai-discord-bot-PigPig"
-  "api_url": "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest"
-  "download_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
+restart:
+  graceful_shutdown_timeout: 30
+  restart_command: "python main.py"
+  pre_restart_delay: 10
+
+github:
+  repository: "starpig1129/ai-discord-bot-PigPig"
+  api_url: "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest"
+  download_url: "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
+

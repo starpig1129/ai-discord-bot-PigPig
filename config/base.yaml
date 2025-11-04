@@ -1,21 +1,15 @@
-"prefix": "/"
-"activity": [
-  {
-    "play": "學習說話"
-  }
-]
-"ipc_server": 
-  "host": "127.0.0.1"
-  "port": 8000
-  "enable": false
+prefix: "/"
+activity:
+  - play: "學習說話"
+ipc_server:
+  host: "127.0.0.1"
+  port: 8000
+  enable: false
 
-"version": "v2.7.0"
-
-"music_temp_base": "./temp/music"
-
-"logging": 
-  "level": "INFO"
-  "file_path": "logs/memory_system.log"
-  "max_file_size_mb": 100
-  "backup_count": 5
+version: "v2.7.0"
+logging:
+  level: "INFO"
+  file_path: "logs/memory_system.log"
+  max_file_size_mb: 100
+  backup_count: 5
 
