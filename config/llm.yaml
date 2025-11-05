@@ -1,0 +1,13 @@
+model_priorities:
+  info_agent_model:
+    - google:
+      - gemini-pro
+    - ollama:
+    - anthropic:
+    - openai:
+  message_agent_model:
+    - google:
+      - gemini-pro
+    - openai:
+    - anthropic:
+    - ollama:

@@ -33,16 +33,14 @@ class BaseProvider(BaseChatModel, ABC):
     @abstractmethod
     def model_name(self) -> str:
         """Return the model name used by the provider."""
-
+ 
+ 
     @abstractmethod
-    def _generate(self, messages: Any, stop: Optional[List[str]] = None) -> ChatResult:
-        """Generate chat responses for the given messages.
-
-        Args:
-            messages: The input messages in a provider-specific format.
-            stop: Optional list of stop tokens.
-
-        Returns:
-            A ChatResult instance describing the generated outputs.
+    def get_chat_model(self) -> BaseChatModel:
+        """Return the underlying chat model instance.
+ 
+        Concrete providers that wrap another chat model (for example the Google
+        provider) should return that underlying model instance here. Providers
+        that are themselves chat models may return self.
         """
         raise NotImplementedError
