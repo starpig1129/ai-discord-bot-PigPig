@@ -6,7 +6,7 @@ create_tool_calling_agent + AgentExecutor 執行 LLM 代理流程。
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from discord import Message
 from langchain.tools import ToolRuntime
@@ -14,7 +14,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
 from llm.model_manager import ModelManager
-from llm.tools import get_tools
+from llm.tools_factory import get_tools
 from llm.schema import OrchestratorResponse
 from llm.utils.send_message import send_message
 from function import func
@@ -45,17 +45,15 @@ class Orchestrator:
         """
         try:
             # 驗證 message.author 與 guild
-            author = getattr(message, "author", None)
-            if author is None:
-                raise ValueError("Discord message has no author")
-            user_id = getattr(author, "id", None)
-            if user_id is None:
+            user = getattr(message, "author", None)
+            if user is None:
                 raise ValueError("Discord message.author has no id")
 
             guild = getattr(message, "guild", None)
-            guild_id = getattr(guild, "id", 0) if guild is not None else 0
-
-            tool_list = get_tools(user_id, guid=guild_id)
+            if guild is None:
+                raise ValueError("Discord message.guild is None")
+            
+            tool_list = get_tools(user, guid=guild)
 
             info_model = self.model_manager.get_model("info_model")
             if info_model is None:

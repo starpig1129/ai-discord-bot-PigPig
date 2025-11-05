@@ -10,6 +10,8 @@
 
 from typing import Any, Iterable, List, Optional, cast
 import os
+
+import discord
 import pkgutil
 import importlib
 import asyncio
@@ -146,7 +148,7 @@ def _extract_tools_from_module(mod: Any) -> List[Any]:
     return tools
 
 
-def _get_user_permissions(user_id: int, guid: int) -> dict:
+def _get_user_permissions(user: discord.Member, guid: discord.Guild) -> dict:
     """嘗試從專案內部取得該 Discord 使用者的權限資訊。
 
     此函式嘗試匯入 `cogs.system_prompt.permissions` 模組並呼叫 `get_user_permissions(user_id)`。
@@ -157,7 +159,7 @@ def _get_user_permissions(user_id: int, guid: int) -> dict:
         from cogs.system_prompt.permissions import PermissionValidator
         permissions = PermissionValidator(bot)  # type: ignore
 
-        perms = permissions.get_user_permissions(user_id, guid)
+        perms = permissions.get_user_permissions(user, guid)
         if isinstance(perms, dict):
             return perms
     except Exception as e:
@@ -165,7 +167,7 @@ def _get_user_permissions(user_id: int, guid: int) -> dict:
     return {"is_admin": False, "is_moderator": False}
 
 
-def get_tools(user_id: int, guid: int) -> List[BaseTool]:
+def get_tools(user: discord.Member, guid: discord.Guild) -> List[BaseTool]:
     """根據 Discord 使用者權限回傳可用的 LangChain 工具清單。
 
     簡易權限策略:
@@ -208,7 +210,7 @@ def get_tools(user_id: int, guid: int) -> List[BaseTool]:
         collected = list(_cached_collected_tools or [])
 
     # 根據使用者權限過濾
-    perms = _get_user_permissions(user_id, guid)
+    perms = _get_user_permissions(user, guid)
     result: List[Any] = []
     for t in collected:
         try:

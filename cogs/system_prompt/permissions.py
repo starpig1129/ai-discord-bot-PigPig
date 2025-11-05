@@ -6,9 +6,10 @@
 
 import discord
 import logging
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 from .exceptions import PermissionError
 from function import func
+from addons.tokens import tokens
 import asyncio
 
 
@@ -233,8 +234,6 @@ class PermissionValidator:
     def _is_bot_owner(self, user: discord.Member) -> bool:
         """檢查是否為機器人擁有者"""
         try:
-            # 從 tokens.py 取得 bot_owner_id
-            from addons.settings import tokens
             bot_owner_id = getattr(tokens, 'bot_owner_id', 0)
             return user.id == bot_owner_id
         except Exception as e:
