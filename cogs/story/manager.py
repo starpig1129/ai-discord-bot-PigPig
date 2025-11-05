@@ -288,7 +288,10 @@ class StoryManager:
 
                 # Call GM agent via ModelManager + LangChain create_agent
                 story_gm_model = ModelManager().get_model("story_gm_model")
-                agent = create_agent(story_gm_model, system_prompt=gm_prompt, response_format=GMActionPlan)
+                agent = create_agent(story_gm_model, 
+                                     tools=[], 
+                                     system_prompt=gm_prompt, 
+                                     response_format=GMActionPlan)
                 message = [HumanMessage(content=message.content)] + gm_dialogue_history
                 response = await agent.ainvoke({
                     "messages": message,
@@ -380,7 +383,8 @@ class StoryManager:
 
                             # Call character model via ModelManager + LangChain create_agent
                             story_character_model = ModelManager().get_model("story_character_model")
-                            agent = create_agent(story_character_model, system_prompt=char_system_prompt, response_format=CharacterAction)
+                            agent = create_agent(story_character_model, tools=[], 
+                                                 system_prompt=char_system_prompt, response_format=CharacterAction)
                             response = await agent.ainvoke({
                                 "messages": dialogue_history + [HumanMessage(content=char_user_prompt)],
                             })
@@ -487,7 +491,7 @@ class StoryManager:
 
             # Call summary model via ModelManager + LangChain create_agent
             story_summary_model = ModelManager().get_model("story_summary_model")
-            agent = create_agent(story_summary_model, system_prompt=summary_system_prompt)
+            agent = create_agent(story_summary_model, tools=[], system_prompt=summary_system_prompt)
             response = await agent.ainvoke({
                 "messages": [HumanMessage(content=summary_inst), dialogue_history],
             })
@@ -547,7 +551,7 @@ class StoryManager:
         try:
             # Call outline model via ModelManager + LangChain create_agent
             story_outline_model = ModelManager().get_model("story_outline_model")
-            agent = create_agent(story_outline_model, system_prompt=outline_system_prompt)
+            agent = create_agent(story_outline_model, tools=[], system_prompt=outline_system_prompt)
             response = await agent.ainvoke({
                 "messages": [outline_inst, dialogue_history],
             })
@@ -668,7 +672,7 @@ class StoryManager:
                 # --- Step 2: Call GM Model for a structured plan ---
                 # Call GM model for initial scene via ModelManager + LangChain create_agent
                 story_gm_model = ModelManager().get_model("story_gm_model")
-                agent = create_agent(story_gm_model, system_prompt=gm_prompt, response_format=GMActionPlan)
+                agent = create_agent(story_gm_model, tools=[], system_prompt=gm_prompt, response_format=GMActionPlan)
                 message = [HumanMessage("You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.")]
                 response = await agent.ainvoke({
                     "messages": message,

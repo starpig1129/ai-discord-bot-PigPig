@@ -167,7 +167,9 @@ class UserDataCog(commands.Cog):
                     model = ModelManager().get_model("user_data_model")
                     if model is None:
                         raise RuntimeError("user_data_model not available")
-                    agent = create_agent(model=model, system_prompt=system_prompt)
+                    agent = create_agent(model=model,
+                                         tools=[],
+                                         system_prompt=system_prompt)
                     
                     # 將既有資料與新資料包成 LangChain 標準 messages 格式
                     messages = [

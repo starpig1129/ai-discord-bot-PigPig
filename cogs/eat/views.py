@@ -133,6 +133,7 @@ class EatWhatView(discord.ui.View):
                 raise RuntimeError("review_model not available")
             review_agent = create_agent(
                 model=review_model,
+                tools=[],
                 system_prompt=system_prompt
             )
             messages = dialogue_history + [

@@ -54,7 +54,7 @@ class Orchestrator:
                 raise ValueError("Discord message.guild is None")
             
             tool_list = get_tools(user, guid=guild)
-
+            print(tool_list)        
             info_model = self.model_manager.get_model("info_model")
             if info_model is None:
                 raise RuntimeError("info_model not available")

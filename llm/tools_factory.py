@@ -19,7 +19,7 @@ import threading
 import logging
 logger = logging.getLogger(__name__)
 
-from langchain.tools import BaseTool
+from langchain_core.tools import StructuredTool,BaseTool
 from function import func
 
 # 快取變數：儲存已解析出的 decorated tools 以及對應的檔案最大 mtime
@@ -239,7 +239,7 @@ def get_tools(user: discord.Member, guid: discord.Guild) -> List[BaseTool]:
                 result.append(t)
         except Exception as e:
             _report_async(e, f"llm.tools: filtering tool {getattr(t, '__name__', repr(t))}")
-
+    result = [t for t in result if isinstance(t, StructuredTool)]
     # 最後嘗試轉型為 List[BaseTool] 以符合呼叫端預期；實際上 LangChain 接受 callable 或 BaseTool
     try:
         return cast(List[BaseTool], result)

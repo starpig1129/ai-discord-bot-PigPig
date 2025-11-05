@@ -122,6 +122,7 @@ class SummarizerCog(commands.Cog):
             # 建立 agent（維持 create_agent，但傳入 SystemMessage 作為系統角色）
             summarize_agent = create_agent(
                 model=self.model,
+                tools=[],
                 system_prompt=system_prompt
             )
 

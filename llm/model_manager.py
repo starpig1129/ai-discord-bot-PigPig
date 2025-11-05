@@ -114,9 +114,9 @@ class ModelManager:
           - locate the provider instance by name (from self.providers)
           - if the entry lists specific model names, prefer a provider whose
             provider.model_name matches one of those
-          - call provider.get_chat_model() if available to obtain the underlying
-            chat model (this is required for some providers like Google)
- 
+          - call provider.get_model_class() if available to obtain the underlying
+            model class (this is required for some providers like Google)
+
         On provider or model invocation errors the exception is reported via
         func.report_error and the next provider is tried. If no provider can be
         returned, None is returned.
@@ -165,14 +165,14 @@ class ModelManager:
                     # skip this provider as model name not allowed
                     return None
  
-            # Prefer provider.get_chat_model() when available
+            # Prefer provider.get_model_class() when available
             try:
-                getter = getattr(prov, "get_chat_model", None)
+                getter = getattr(prov, "get_model_class", None)
                 if callable(getter):
                     return getter()
                 return prov
             except Exception as e:
-                asyncio.create_task(func.report_error(e, f"llm.providers:get_provider failed to obtain chat model from {provider_name}"))
+                asyncio.create_task(func.report_error(e, f"llm.providers:get_provider failed to obtain model class from {provider_name}"))
                 return None
  
         # Iterate configured entries in order
