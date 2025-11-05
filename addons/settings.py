@@ -1,8 +1,6 @@
-import os
-import json
 import yaml
 import asyncio
-import sys
+
 
 def _load_yaml_file(path: str) -> dict:
     """安全讀取 YAML 檔案，失敗時使用 func.report_error 回報並回傳空 dict"""
@@ -53,7 +51,14 @@ class UpdateConfig:
         self.restart: dict = data.get("restart", {})
         self.github: dict = data.get("github", {})
 
+class MusicConfig:
+    """對應 config/music.yaml 的設定物件"""
 
+    def __init__(self, path: str = "config/music.yaml") -> None:
+        self.path = path
+        data = _load_yaml_file(path)
+        self.music_temp_base: dict = data.get("music_temp_base", "temp/music")
+        self.ffmpeg : dict = data.get("ffmpeg", {})
 
 
 # 在模組層級建立預設實例（YAML config）以維持向後相容
@@ -86,13 +91,23 @@ except Exception as e:
     except Exception:
         print(f"初始化 UpdateConfig 時發生錯誤: {e}")
     update_config = UpdateConfig()
+try:
+    music_config = MusicConfig("config/music.yaml")
+except Exception as e:
+    try:
+        from function import func
+        asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
+    except Exception:
+        print(f"初始化 MusicConfig 時發生錯誤: {e}")
+    music_config = MusicConfig()
 
 __all__ = [
-    "Settings",
     "BaseConfig",
     "base_config",
     "LLMConfig",
     "llm_config",
     "UpdateConfig",
     "update_config",
+    "MusicConfig",
+    "music_config",
 ]

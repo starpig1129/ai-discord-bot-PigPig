@@ -81,14 +81,9 @@ class UserDataCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    def _get_guild_id_from_context(self, context: Union[discord.Interaction, discord.Message, ToolExecutionContext, None]) -> Optional[str]:
+    def _get_guild_id_from_context(self, context: Union[discord.Interaction, discord.Message]) -> Optional[str]:
         """從各種上下文中提取 guild_id"""
-        if isinstance(context, ToolExecutionContext):
-            # ToolExecutionContext 沒有 interaction 屬性，
-            # 但它有 message 屬性，可以從中獲取 guild 資訊。
-            if context.message and context.message.guild:
-                return str(context.message.guild.id)
-        elif isinstance(context, discord.Interaction):
+        if isinstance(context, discord.Interaction):
             # 處理來自斜線指令的互動
             if context.guild_id:
                 return str(context.guild_id)

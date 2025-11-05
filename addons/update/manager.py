@@ -19,7 +19,7 @@ from .downloader import UpdateDownloader
 from .security import UpdatePermissionChecker, BackupManager, ConfigProtector
 from .notifier import DiscordNotifier
 from .restart import GracefulRestartManager
-from ..settings import UpdateSettings
+from addons.settings import update_config
 from function import func
 
 
@@ -140,7 +140,7 @@ class UpdateManager:
         self.logger = logging.getLogger(__name__)
         
         # 載入配置
-        self.update_settings = UpdateSettings()
+        self.update_settings = update_config
         self.config = {
             "auto_update": self.update_settings.auto_update,
             "notification": self.update_settings.notification,
