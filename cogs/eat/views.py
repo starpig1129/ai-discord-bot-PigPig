@@ -9,8 +9,8 @@ from cogs.eat.train.train import Train
 from cogs.eat.embeds import eatEmbed
 import random
 from function import func
-from gpt.core.response_generator import generate_response
-from gpt.utils.discord_utils import safe_edit_message
+from llm.orchestrator import generate_response
+from llm.utils.send_message import safe_edit_message
 map = GoogleMapCrawler()
 class EatWhatView(discord.ui.View):
     def __init__(self,result,predict:str,keyword:str, db: DB, record_id: int, discord_id:str):

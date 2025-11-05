@@ -49,7 +49,7 @@ import asyncio
 
 from typing import Optional
 from .language_manager import LanguageManager
-from gpt.utils.discord_utils import safe_edit_message
+from llm.utils.send_message import safe_edit_message
 from function import func
 
 def install_driver():

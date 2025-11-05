@@ -494,7 +494,17 @@ class PigPig(commands.Bot):
             else:
                 print(f"回覆錯誤訊息時發生例外: {e}")
             await func.report_error(ctx, error)
-    
+            
+    async def send_error_report(self, embed: discord.Embed):
+        bug_report_channel_id = tokens.bug_report_channel_id
+        if bug_report_channel_id:
+            channel = self.get_channel(int(bug_report_channel_id))
+            if channel:
+                await channel.send(embed=embed)
+            else:
+                logger = self.get_logger_for_guild("Bot")
+                logger.error(f"找不到指定的錯誤報告頻道: {bug_report_channel_id}")
+                
     async def close(self):
         """Gracefully shut down the bot and all systems.
         

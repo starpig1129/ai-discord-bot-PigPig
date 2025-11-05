@@ -27,7 +27,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, AutoModel
 import os
 from dotenv import load_dotenv
-from gpt.core.response_generator import get_model_and_tokenizer, set_model_and_tokenizer
+from llm.orchestrator import get_model_and_tokenizer, set_model_and_tokenizer
 import gc
 from typing import Optional
 from .language_manager import LanguageManager

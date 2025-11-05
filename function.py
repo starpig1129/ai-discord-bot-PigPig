@@ -41,7 +41,7 @@ class Function:
         embed.add_field(name="追蹤記錄", value=traceback_field_value, inline=False)
         embed.set_footer(text=f"時間: {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
-        await self.bot._send_error_report(embed)
+        await self.bot.send_error_report(embed)
 
     def open_json(self, path: str) -> dict:
         try:

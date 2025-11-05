@@ -13,8 +13,8 @@ import asyncio
 from function import func
 import asyncio
 
-from gpt.core.response_generator import generate_response, get_model_and_tokenizer
-from gpt.utils.discord_utils import safe_edit_message
+from llm.orchestrator import generate_response, get_model_and_tokenizer
+from llm.utils.send_message import safe_edit_message
 
 class DiscordManagerAgent(commands.Cog):
     """Discord管理代理人系統。"""

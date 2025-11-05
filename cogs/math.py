@@ -32,7 +32,7 @@ from typing import Optional
 import re
 import unicodedata
 from .language_manager import LanguageManager
-from gpt.utils.discord_utils import safe_edit_message
+from llm.utils.send_message import safe_edit_message
 from function import func
 import asyncio
 

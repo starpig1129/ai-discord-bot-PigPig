@@ -31,9 +31,9 @@ from google.genai import types
 from PIL import Image
 from typing import List, Optional, Dict
 from addons.tokens import TOKENS
-from gpt.utils.media import image_to_base64
+from llm.utils.media import image_to_base64
 from .language_manager import LanguageManager
-from gpt.utils.discord_utils import safe_edit_message
+from llm.utils.send_message import safe_edit_message
 from function import func
 
 
