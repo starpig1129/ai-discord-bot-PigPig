@@ -28,7 +28,7 @@ import requests
 import logging
 import random
 from typing import Optional
-from addons.settings import TOKENS
+from addons.tokens import TOKENS
 from .language_manager import LanguageManager
 from function import func
 

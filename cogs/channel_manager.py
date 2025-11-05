@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, List, Any, Tuple
 from .language_manager import LanguageManager
-from addons.settings import TOKENS
+from addons.tokens import TOKENS
 from function import func
 import asyncio
 

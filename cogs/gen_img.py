@@ -30,7 +30,7 @@ from google import genai
 from google.genai import types
 from PIL import Image
 from typing import List, Optional, Dict
-from addons.settings import TOKENS
+from addons.tokens import TOKENS
 from gpt.utils.media import image_to_base64
 from .language_manager import LanguageManager
 from gpt.utils.discord_utils import safe_edit_message
