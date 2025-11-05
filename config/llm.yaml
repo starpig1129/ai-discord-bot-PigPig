@@ -6,8 +6,11 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
+      - gpt-oss-20b
     - openai:
+      - gpt-5-nano
     - anthropic:
+      - claude-haiku-4.5
     
   message_model:
     - google:
@@ -16,8 +19,11 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
+      - gpt-oss-20b
     - openai:
+      - gpt-5-nano
     - anthropic:
+      - claude-haiku-4.5
 
 
   review_model:
@@ -27,8 +33,11 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
+      - gpt-oss-20b
     - openai:
+      - gpt-5-nano
     - anthropic:
+      - claude-haiku-4.5
 
   summerize_model:
     - google:
@@ -37,8 +46,11 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
+      - gpt-oss-20b
     - openai:
+      - gpt-5-nano
     - anthropic:
+      - claude-haiku-4.5
 
   user_data_model:
     - google:
@@ -47,8 +59,11 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
+      - gpt-oss-20b
     - openai:
+      - gpt-5-nano
     - anthropic:
+      - claude-haiku-4.5
 
   story_gm_model:
     - google:
@@ -57,8 +72,11 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
+      - gpt-oss-20b
     - openai:
+      - gpt-5-nano
     - anthropic:
+      - claude-haiku-4.5
 
   story_character_model:
     - google:
@@ -67,8 +85,11 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
+      - gpt-oss-20b
     - openai:
+      - gpt-5-nano
     - anthropic:
+      - claude-haiku-4.5
 
   story_summary_model:
     - google:
@@ -77,8 +98,11 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
+      - gpt-oss-20b
     - openai:
+      - gpt-5-nano
     - anthropic:
+      - claude-haiku-4.5
 
   story_outline_model:
     - google:
@@ -87,5 +111,8 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
+      - gpt-oss-20b
     - openai:
+      - gpt-5-nano
     - anthropic:
+      - claude-haiku-4.5

@@ -6,9 +6,15 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
-
+from dataclasses import dataclass
 from pydantic import BaseModel, Field
 
+from discord import Message
+@dataclass
+class OrchestratorRequest:
+    bot: Any
+    message: Message
+    logger: Any
 
 class OrchestratorResponse(BaseModel):
     """Response model returned by the orchestrator.

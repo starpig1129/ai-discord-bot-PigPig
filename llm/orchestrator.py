@@ -15,7 +15,7 @@ from langchain.agents.middleware import ModelCallLimitMiddleware
 
 from llm.model_manager import ModelManager
 from llm.tools_factory import get_tools
-from llm.schema import OrchestratorResponse
+from llm.schema import OrchestratorResponse, OrchestratorRequest
 from llm.utils.send_message import send_message
 from function import func
 
@@ -62,26 +62,27 @@ class Orchestrator:
             info_agent = create_agent(
                 model=info_model,
                 tools=tool_list,
-                context=ToolRuntime(bot=bot, message=message, logger=logger),  # type: ignore[arg-type]
+                context_schema=OrchestratorRequest,
                 system_prompt="You are a helpful assistant for Discord users.",
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")]  # type: ignore[arg-type]
             )
 
-            info_result = await info_agent.ainvoke({"messages": [{"role": "user", "content": message.content}]})
+            info_result = await info_agent.ainvoke({"messages": [{"role": "user", "content": message.content}]},
+                                                   context=OrchestratorRequest(bot=bot, message=message, logger=logger))
 
         except Exception as e:
             # 非同步回報錯誤並重新拋出以便上層處理
             asyncio.create_task(func.report_error(e, "info_agent failed"))
             raise
         try:
-            message_models = self.model_manager.get_model("message_models")
-            if message_models is None:
-                raise RuntimeError("message_models not available")
+            message_model = self.model_manager.get_model("message_model")
+            if message_model is None:
+                raise RuntimeError("message_model not available")
             
             message_agent = create_agent(
-                model=message_models,
+                model=message_model,
                 tools=tool_list,
-                context=ToolRuntime(bot=bot, message=message, logger=logger),  # type: ignore[arg-type]
+                context_schema=OrchestratorRequest,
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")]  # type: ignore[arg-type]
             )
 
@@ -97,6 +98,7 @@ class Orchestrator:
             message_result = ""
             streamer = message_agent.stream(
                 {"messages": [{"role": "user", "content": output}]},
+                context=OrchestratorRequest(bot=bot, message=message, logger=logger),
                 stream_mode="values"
             )
             # 傳入 bot 以避免模組層級依賴 main.bot
