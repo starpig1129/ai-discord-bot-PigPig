@@ -1526,8 +1526,7 @@ class SystemPromptManager:
             
             # 獲取機器人擁有者 ID
             try:
-                from addons.settings import TOKENS
-                tokens = TOKENS()
+                from addons.tokens import tokens
                 variables['bot_owner_id'] = getattr(tokens, 'bot_owner_id', 0)
             except ImportError:
                 variables['bot_owner_id'] = 0

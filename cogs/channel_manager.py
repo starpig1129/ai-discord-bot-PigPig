@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, List, Any, Tuple
 from .language_manager import LanguageManager
-from addons.tokens import TOKENS
+from addons.tokens import tokens
 from function import func
 import asyncio
 
@@ -17,7 +17,7 @@ class ChannelManager(commands.Cog):
         self.bot = bot
         self.data_dir = "data/channel_configs"
         self.lang_manager: Optional[LanguageManager] = None
-        self.tokens = TOKENS()  # 初始化 TOKENS 實例以獲取 BOT_OWNER_ID
+        self.tokens = tokens
         os.makedirs(self.data_dir, exist_ok=True)
 
     async def cog_load(self):

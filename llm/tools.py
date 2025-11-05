@@ -14,6 +14,8 @@ import pkgutil
 import importlib
 import asyncio
 import threading
+import logging
+logger = logging.getLogger(__name__)
 
 from langchain.tools import BaseTool
 from function import func
@@ -55,7 +57,28 @@ def _compute_pkg_dir_mtime(pkg_dir: str) -> float:
 
 def _discover_tools_package() -> Iterable[Any]:
     """匯入並回傳 llm/tools 下所有模組（若資料夾存在）。"""
+
     pkg_dir = os.path.join(os.path.dirname(__file__), "tools")
+    tools_py = os.path.join(os.path.dirname(__file__), "tools.py")
+
+    # 非破壞性 debug 日誌：紀錄是否存在 llm/tools.py 與 llm/tools/ 資料夾
+    try:
+        logger.debug(
+            "llm.tools debug: tools_py exists=%s, tools_dir exists=%s, pkg_dir=%s",
+            os.path.isfile(tools_py),
+            os.path.isdir(pkg_dir),
+            pkg_dir,
+        )
+    except Exception:
+        # 若 logger 尚未正確建立，回退到 print（不改變程式行為）
+        try:
+            print(
+                f"[llm.tools debug] tools_py exists={os.path.isfile(tools_py)}, "
+                f"tools_dir exists={os.path.isdir(pkg_dir)}, pkg_dir={pkg_dir}"
+            )
+        except Exception:
+            pass
+
     if not os.path.isdir(pkg_dir):
         return []
 

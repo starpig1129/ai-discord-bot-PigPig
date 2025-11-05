@@ -28,7 +28,7 @@ import requests
 import logging
 import random
 from typing import Optional
-from addons.tokens import TOKENS
+from addons.tokens import tokens
 from .language_manager import LanguageManager
 from function import func
 
@@ -37,7 +37,6 @@ class GifTools(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        tokens = TOKENS()
         self.tenor_api_key = tokens.tenor_api_key
         if not self.tenor_api_key:
             raise ValueError("TENOR_API_KEY not found in environment variables")

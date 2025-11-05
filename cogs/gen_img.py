@@ -30,7 +30,7 @@ from google import genai
 from google.genai import types
 from PIL import Image
 from typing import List, Optional, Dict
-from addons.tokens import TOKENS
+from addons.tokens import tokens
 from llm.utils.media import image_to_base64
 from .language_manager import LanguageManager
 from llm.utils.send_message import safe_edit_message
@@ -42,8 +42,8 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
         self.bot = bot
         self.lang_manager: Optional[LanguageManager] = None
         self.session = aiohttp.ClientSession()
-        tokens = TOKENS()
-        self.client = genai.Client(api_key=tokens.gemini_api_key)
+        self.tokens = tokens
+        self.client = genai.Client(api_key=self.tokens.gemini_api_key)
         self.model_id = "timbrooks/instruct-pix2pix"
         self.conversation_history: Dict[int, List[Dict]] = {}
 

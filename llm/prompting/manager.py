@@ -150,8 +150,7 @@ class PromptManager:
         """
         # 基本變數替換
         try:
-            from addons.settings import TOKENS
-            tokens = TOKENS()
+            from addons.tokens import tokens
             bot_owner_id = getattr(tokens, 'bot_owner_id', 0)
         except ImportError:
             bot_owner_id = 0
@@ -203,8 +202,7 @@ class PromptManager:
             基本的系統提示
         """
         try:
-            from addons.settings import TOKENS
-            tokens = TOKENS()
+            from addons.tokens import tokens
             bot_owner_id = getattr(tokens, 'bot_owner_id', 0)
         except ImportError:
             bot_owner_id = 0

@@ -234,8 +234,7 @@ class PermissionValidator:
         """檢查是否為機器人擁有者"""
         try:
             # 從 tokens.py 取得 bot_owner_id
-            from addons.settings import TOKENS
-            tokens = TOKENS()
+            from addons.settings import tokens
             bot_owner_id = getattr(tokens, 'bot_owner_id', 0)
             return user.id == bot_owner_id
         except Exception as e:
