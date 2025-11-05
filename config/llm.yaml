@@ -1,55 +1,91 @@
 model_priorities:
   info_model:
     - google:
-      - gemini-pro
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-2.0-flash-lite
     - ollama:
-    - anthropic:
     - openai:
+    - anthropic:
+    
   message_model:
     - google:
-      - gemini-pro
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-2.0-flash-lite
+    - ollama:
     - openai:
     - anthropic:
-    - ollama:
+
+
   review_model:
     - google:
-      - gemini-pro
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-2.0-flash-lite
+    - ollama:
     - openai:
     - anthropic:
-    - ollama:
+
   summerize_model:
     - google:
-      - gemini-pro
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-2.0-flash-lite
+    - ollama:
     - openai:
     - anthropic:
-    - ollama:
+
   user_data_model:
     - google:
-      - gemini-pro
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-2.0-flash-lite
+    - ollama:
     - openai:
     - anthropic:
-    - ollama:
+
   story_gm_model:
     - google:
-      - gemini-pro
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-2.0-flash-lite
+    - ollama:
     - openai:
     - anthropic:
-    - ollama:
+
   story_character_model:
     - google:
-      - gemini-pro
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-2.0-flash-lite
+    - ollama:
     - openai:
     - anthropic:
-    - ollama:
+
   story_summary_model:
     - google:
-      - gemini-pro
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-2.0-flash-lite
+    - ollama:
     - openai:
     - anthropic:
-    - ollama:
+
   story_outline_model:
     - google:
-      - gemini-pro
+      - gemini-2.5-flash
+      - gemini-2.5-flash-lite
+      - gemini-2.0-flash
+      - gemini-2.0-flash-lite
+    - ollama:
     - openai:
     - anthropic:
-    - ollama:
