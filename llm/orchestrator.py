@@ -9,6 +9,7 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 from discord import Message
+from langchain.tools import ToolRuntime
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
@@ -28,7 +29,7 @@ class Orchestrator:
         """初始化 ModelManager。"""
         self.model_manager = ModelManager()
 
-    async def handle_message(self, message: Message) -> OrchestratorResponse:
+    async def handle_message(self, bot: Any, message: Message, logger: Any) -> OrchestratorResponse:
         """處理傳入的 Discord 訊息並回傳 OrchestratorResponse。
 
         流程：
@@ -63,6 +64,7 @@ class Orchestrator:
             info_agent = create_agent(
                 model=info_model,
                 tools=tool_list,
+                context=ToolRuntime(bot=bot, message=message, logger=logger),  # type: ignore[arg-type]
                 system_prompt="You are a helpful assistant for Discord users.",
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")]  # type: ignore[arg-type]
             )
@@ -81,6 +83,7 @@ class Orchestrator:
             message_agent = create_agent(
                 model=message_models,
                 tools=tool_list,
+                context=ToolRuntime(bot=bot, message=message, logger=logger),  # type: ignore[arg-type]
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")]  # type: ignore[arg-type]
             )
 
