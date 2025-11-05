@@ -47,7 +47,7 @@ class UpdateConfig:
         data = _load_yaml_file(path)
         self.auto_update: dict = data.get("auto_update", {})
         self.security: dict = data.get("security", {})
-        self.notifications: dict = data.get("notifications", {})
+        self.notification: dict = data.get("notification", {})
         self.restart: dict = data.get("restart", {})
         self.github: dict = data.get("github", {})
 
