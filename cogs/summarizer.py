@@ -1,13 +1,18 @@
+import re
+import logging
+from datetime import datetime
+
 import discord
 from discord.ext import commands
 from discord import app_commands
-import re
-from datetime import datetime
-import logging
+from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage, AIMessage
 
-from llm.orchestrator import generate_response, GeminiError
+from function import func
+from llm.model_manager import ModelManager
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class SummarizerCog(commands.Cog):
     """一個專門用於處理對話摘要功能的 Cog，整合了訊息數與字元數雙重限制。"""
@@ -16,6 +21,7 @@ class SummarizerCog(commands.Cog):
         self.bot = bot
         self.MAX_CHAR_COUNT = 15000
         self.EMBED_DESC_LIMIT = 4000
+        self.model = ModelManager().get_model("summarize_agent")
 
     def _split_text_robustly(self, text: str):
         """
@@ -60,10 +66,10 @@ class SummarizerCog(commands.Cog):
             dialogue_history_reversed = []
             source_mapping = {}
             current_char_count = 0
-            human_msg_count = 0 # 只計算人類訊息的數量
+            human_msg_count = 0  # 只計算人類訊息的數量
 
-            for msg in history: # 迴圈從新到舊
-                if not msg.content: # 忽略沒有文字內容的訊息 (例如只有 embed)
+            for msg in history:  # 迴圈從新到舊
+                if not msg.content:  # 忽略沒有文字內容的訊息 (例如只有 embed)
                     continue
 
                 formatted_content = ""
@@ -72,21 +78,23 @@ class SummarizerCog(commands.Cog):
                 if msg.author.bot:
                     # 對於機器人，使用簡潔的佔位符
                     formatted_content = f"({timestamp}) [Bot @{msg.author.display_name}'s message]"
+                    # 將機器人訊息視為 AIMessage（作為上下文）
+                    dialogue_history_reversed.append(AIMessage(content=formatted_content))
                 else:
                     # 對於人類，使用包含 MSG-ID 的詳細格式
                     human_msg_count += 1
                     msg_id = f"MSG-{human_msg_count}"
                     source_mapping[msg_id] = msg.jump_url
-                    formatted_content = f"[{msg_id}] ({timestamp}) {msg.author.display_name}: {msg.content}"
+                    formatted_content = f"[{msg_id}] ({timestamp}) {msg.content}"
+                    # 將人類訊息視為 HumanMessage
+                    dialogue_history_reversed.append(HumanMessage(content=formatted_content,name = msg.author.display_name))
 
                 # 檢查字元數限制
                 content_len = len(formatted_content)
                 if current_char_count + content_len > self.MAX_CHAR_COUNT:
                     logging.warning(f"達到字元數上限 {self.MAX_CHAR_COUNT}。停止收集訊息。")
                     break
-                
-                # 將格式化後的內容加入列表（目前是反向的）
-                dialogue_history_reversed.append({'role': 'user', 'content': formatted_content})
+
                 current_char_count += content_len
 
             # 將歷史紀錄反轉為正確的時間順序（從舊到新）
@@ -110,18 +118,27 @@ class SummarizerCog(commands.Cog):
             """
             user_instruction = "請根據我提供的對話歷史紀錄，開始進行摘要。"
             logging.info(f"正在調用語言模型生成摘要... (分析 {human_msg_count} 則人類訊息，總輸入 {current_char_count} 字元)")
-            thread, generator = await generate_response(
-                inst=user_instruction,
-                system_prompt=system_prompt,
-                dialogue_history=dialogue_history
+
+            # 建立 agent（維持 create_agent，但傳入 SystemMessage 作為系統角色）
+            summarize_agent = create_agent(
+                model=self.model,
+                system_prompt=system_prompt
             )
-            full_summary = "".join([chunk async for chunk in generator])
-            if not full_summary: raise ValueError("模型沒有生成任何回應。")
+
+            # 最後追加使用者指令，並確保所有訊息皆為 HumanMessage/AIMessage 的實例
+            messages = dialogue_history + [HumanMessage(content=user_instruction)]
+
+            # 新版 langchain 傳遞 message 物件實例給 agent
+            response = await summarize_agent.ainvoke({"messages": messages})
+
+            full_summary = response["messages"][-1].content
             logging.info("摘要生成完畢，開始進行後處理。")
+
             def replace_with_link(match):
                 ids = re.findall(r'MSG-\d+', match.group(0))
                 links = [f"[[來源-{msg_id.split('-')[1]}]]({source_mapping.get(msg_id)})" for msg_id in ids if source_mapping.get(msg_id)]
                 return ' '.join(links) if links else match.group(0)
+
             processed_summary = re.sub(r'\[(MSG-\d+(?:,\s*MSG-\d+)*)\]', replace_with_link, full_summary)
             summary_chunks = self._split_text_robustly(processed_summary)
             main_embed = discord.Embed(
@@ -143,12 +160,10 @@ class SummarizerCog(commands.Cog):
                     continuation_embed.set_footer(text=f"摘要接續... (第 {i+1}/{len(summary_chunks)} 頁)")
                     await interaction.followup.send(embed=continuation_embed)
 
-        except GeminiError as e:
-            logging.error(f"模型 API 錯誤: {e}")
-            await interaction.followup.send(f"❌ Gemini 模型服務出錯了：\n`{e}`", ephemeral=True)
         except Exception as e:
-            func.report_error(e, "summarizing channel")
+            await func.report_error(e, "summarizing channel")
             await interaction.followup.send(f"❌ 糟糕，發生了一個未預期的錯誤，請聯繫管理員。\n`{e}`", ephemeral=True)
+
 
 async def setup(bot: commands.Bot):
     """將 Cog 加入 Bot 的設置函式。"""

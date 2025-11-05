@@ -74,7 +74,7 @@ def _sanitize_response(text: str) -> str:
     return sanitized
 
 
-async def _safe_edit_message(
+async def safe_edit_message(
     message: discord.Message,
     content: str,
     max_retries: int = _MAX_RETRIES
@@ -255,7 +255,7 @@ async def _process_token_stream(
                 converted_response = converted_response[:_HARD_LIMIT]
             
             try:
-                await _safe_edit_message(current_message, converted_response)
+                await safe_edit_message(current_message, converted_response)
             except discord.errors.NotFound:
                 _logger.warning(
                     'Message not found during edit, creating new message'
@@ -344,7 +344,7 @@ async def send_message(
         converted_response = (converter.convert(responsesall)
                               if converter else responsesall)
         try:
-            await _safe_edit_message(current_message, converted_response)
+            await safe_edit_message(current_message, converted_response)
         except discord.errors.NotFound:
             await _safe_send_message(channel, converted_response)
         
@@ -358,7 +358,7 @@ async def send_message(
         try:
             if message_to_edit:
                 try:
-                    await _safe_edit_message(message_to_edit, error_message)
+                    await safe_edit_message(message_to_edit, error_message)
                 except discord.errors.NotFound:
                     await _safe_send_message(channel, error_message)
             else:

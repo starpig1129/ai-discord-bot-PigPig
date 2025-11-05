@@ -16,7 +16,7 @@ class TOKENS:
         self.bug_report_channel_id = int(raw_bug_report_channel_id) if raw_bug_report_channel_id not in (None, "") else None
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", None)
         self.openai_api_key = os.getenv("OPENAI_API_KEY", None)
-        self.google_api_key = os.getenv("GOOGLE_API_KEY", None)
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", None)
         self.tenor_api_key = os.getenv("TENOR_API_KEY", None)
 
         bot_owner_raw = os.getenv("BOT_OWNER_ID")
@@ -56,7 +56,7 @@ class TOKENS:
         optional_api_keys = {
             "ANTHROPIC_API_KEY": self.anthropic_api_key,
             "OPENAI_API_KEY": self.openai_api_key,
-            "GOOGLE_API_KEY": self.google_api_key,
+            "GEMINI_API_KEY": self.gemini_api_key,
         }
 
         for api_name, api_value in optional_api_keys.items():

@@ -26,7 +26,6 @@ import json
 from discord.ext import commands
 from discord import app_commands
 import discord
-from addons.settings import Settings
 from typing import Optional, Any, Union
 from .language_manager import LanguageManager
 
@@ -51,7 +50,6 @@ FALLBACK_TRANSLATIONS = {
 class UserDataCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.settings = Settings()
         self.lang_manager: Optional[LanguageManager] = None
         self.logger = logging.getLogger(__name__)
 

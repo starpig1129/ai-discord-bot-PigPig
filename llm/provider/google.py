@@ -24,11 +24,11 @@ class GoogleProvider(BaseProvider):
         Reads the GOOGLE_API_KEY environment variable and raises ValueError if it
         is not set. Initializes ChatGoogleGenerativeAI with the desired model.
         """
-        api_key = tokens.google_api_key
+        api_key = tokens.gemini_api_key
         if api_key is None:
-            raise ValueError("Environment variable GOOGLE_API_KEY is not set")
+            raise ValueError("Environment variable GEMINI_API_KEY is not set")
         # Ensure the API key is available to the underlying library via env.
-        os.environ["GOOGLE_API_KEY"] = api_key
+        os.environ["GEMINI_API_KEY"] = api_key
 
         # Initialize the LangChain Google generative model.
         self.model = ChatGoogleGenerativeAI()

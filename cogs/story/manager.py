@@ -11,13 +11,16 @@ from .database import StoryDB, CharacterDB
 from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationship, Event, Location, GMActionPlan, RelationshipUpdate, CharacterAction
 from .prompt_engine import StoryPromptEngine
 from .state_manager import StoryStateManager
-from cogs.memory.memory_manager import MemoryManager
-from llm.orchestrator import generate_response, GeminiError
 from cogs.system_prompt.manager import SystemPromptManager
 from cogs.language_manager import LanguageManager
 from .ui.modals import InterventionModal
-from llm.utils.send_message import ALLOWED_MENTIONS
 
+_ALLOWED_MENTIONS = discord.AllowedMentions(
+    users=True,
+    roles=False,
+    everyone=False,
+    replied_user=True
+)
 
 class StoryManager:
     """
@@ -34,7 +37,6 @@ class StoryManager:
         self.db_instances: Dict[int, StoryDB] = {}
         self.character_db = CharacterDB()
         self.prompt_engine = StoryPromptEngine(self.bot, self.system_prompt_manager)
-        self.memory_manager: MemoryManager = self.bot.memory_manager
         self.state_manager = StoryStateManager(bot)
         self.language_manager: LanguageManager = self.bot.get_cog("LanguageManager")
         self.interventions: Dict[int, str] = {}
@@ -70,7 +72,7 @@ class StoryManager:
             await interaction.response.send_message(
                 "❌ 此頻道沒有正在進行的故事，無法進行干預。",
                 ephemeral=True,
-                allowed_mentions=ALLOWED_MENTIONS
+                allowed_mentions=_ALLOWED_MENTIONS
             )
             return
             
@@ -214,13 +216,13 @@ class StoryManager:
                         embed=embed,
                         username=character.name,
                         avatar_url=avatar_url,
-                        allowed_mentions=ALLOWED_MENTIONS,
+                        allowed_mentions=_ALLOWED_MENTIONS,
                     )
             except Exception as e:
                 self.logger.error(f"Webhook send failed for character {character.name}: {e}. Falling back to channel.send.")
-                await channel.send(embed=embed, allowed_mentions=ALLOWED_MENTIONS)
+                await channel.send(embed=embed, allowed_mentions=_ALLOWED_MENTIONS)
         else:
-            await channel.send(embed=embed, allowed_mentions=ALLOWED_MENTIONS)
+            await channel.send(embed=embed, allowed_mentions=_ALLOWED_MENTIONS)
 
     async def process_story_message(self, message: discord.Message):
         """
@@ -241,7 +243,7 @@ class StoryManager:
 
         world = db.get_world(story_instance.world_name)
         if not world:
-            await message.reply(f"錯誤：找不到世界 `{story_instance.world_name}`。", allowed_mentions=ALLOWED_MENTIONS)
+            await message.reply(f"錯誤：找不到世界 `{story_instance.world_name}`。", allowed_mentions=_ALLOWED_MENTIONS)
             return
 
         characters = [char for char_id in story_instance.active_character_ids if (char := self.character_db.get_character(char_id))]
@@ -424,10 +426,10 @@ class StoryManager:
 
             except (GeminiError, json.JSONDecodeError, ValidationError) as e:
                 self.logger.error(f"Error in V5 story generation pipeline: {e}", exc_info=True)
-                await message.reply("故事之神的大腦似乎纏在一起了，祂需要一點時間來解開... 請稍後再試。", allowed_mentions=ALLOWED_MENTIONS)
+                await message.reply("故事之神的大腦似乎纏在一起了，祂需要一點時間來解開... 請稍後再試。", allowed_mentions=_ALLOWED_MENTIONS)
             except Exception as e:
                 self.logger.error(f"An unexpected error occurred in V5 story generation: {e}", exc_info=True)
-                await message.reply("一陣無法預測的宇宙射線干擾了故事的進行，請稍後再試...", allowed_mentions=ALLOWED_MENTIONS)
+                await message.reply("一陣無法預測的宇宙射線干擾了故事的進行，請稍後再試...", allowed_mentions=_ALLOWED_MENTIONS)
 
     async def _generate_and_save_summary(self, story_instance: StoryInstance):
         """
@@ -567,7 +569,7 @@ class StoryManager:
         world = db.get_world(world_name)
         if not world:
             self.logger.error(f"FATAL: Could not find world '{world_name}' during story start.")
-            await interaction.edit_original_response(content="❌ 無法載入世界資料，故事無法開始。", embed=None, view=None, allowed_mentions=ALLOWED_MENTIONS)
+            await interaction.edit_original_response(content="❌ 無法載入世界資料，故事無法開始。", embed=None, view=None, allowed_mentions=_ALLOWED_MENTIONS)
             return
 
         if use_narrator:
@@ -601,7 +603,7 @@ class StoryManager:
 
             if not all_selected_chars:
                 self.logger.error("Error: No character objects were fetched despite receiving IDs.")
-                await interaction.edit_original_response(content="❌ 錯誤：選擇的角色無法載入，故事無法開始。", embed=None, view=None, allowed_mentions=ALLOWED_MENTIONS)
+                await interaction.edit_original_response(content="❌ 錯誤：選擇的角色無法載入，故事無法開始。", embed=None, view=None, allowed_mentions=_ALLOWED_MENTIONS)
                 return
 
             director_character = all_selected_chars[0]
@@ -706,12 +708,12 @@ class StoryManager:
 
                 embed.set_footer(text="💡 在此頻道輸入訊息來與故事互動")
                 
-                await interaction.edit_original_response(content=None, embed=embed, view=None, allowed_mentions=ALLOWED_MENTIONS)
+                await interaction.edit_original_response(content=None, embed=embed, view=None, allowed_mentions=_ALLOWED_MENTIONS)
                 self.logger.info(f"V5 story started successfully in channel {interaction.channel_id}")
 
             except (GeminiError, json.JSONDecodeError, ValidationError) as e:
                 self.logger.error(f"Error in V5 first scene generation: {e}", exc_info=True)
-                await interaction.edit_original_response(content="❌ 故事開始了，但開場白被一陣神秘的靜電干擾了...", embed=None, view=None, allowed_mentions=ALLOWED_MENTIONS)
+                await interaction.edit_original_response(content="❌ 故事開始了，但開場白被一陣神秘的靜電干擾了...", embed=None, view=None, allowed_mentions=_ALLOWED_MENTIONS)
             except Exception as e:
                 self.logger.error(f"An unexpected error occurred in V5 first scene generation: {e}", exc_info=True)
-                await interaction.edit_original_response(content="一陣無法預測的宇宙射線干擾了故事的進行，請稍後再試...", embed=None, view=None, allowed_mentions=ALLOWED_MENTIONS)
+                await interaction.edit_original_response(content="一陣無法預測的宇宙射線干擾了故事的進行，請稍後再試...", embed=None, view=None, allowed_mentions=_ALLOWED_MENTIONS)

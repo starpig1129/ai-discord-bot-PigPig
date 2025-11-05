@@ -1,7 +1,6 @@
-"""LangChain 相容的資料綱要 (schema) 用於 orchestrator。
+"""LangChain 相容的資料綱要 (schema)
 
 此檔案定義接收 Discord 請求與回傳回覆的 Pydantic 模型。
-遵循 Google Python Style Guide。
 """
 
 from __future__ import annotations
@@ -9,7 +8,6 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
-
 
 
 class OrchestratorResponse(BaseModel):

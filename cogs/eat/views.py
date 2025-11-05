@@ -1,17 +1,19 @@
+import random
 import discord
-import asyncio
 import json
-from typing import Dict, Any, List
+
 from cogs.eat.db.db import DB
 from cogs.eat.providers.googlemap_crawler import GoogleMapCrawler
-from cogs.eat.embeds import mapEmbed, menuEmbed
+from cogs.eat.embeds import menuEmbed
 from cogs.eat.train.train import Train
 from cogs.eat.embeds import eatEmbed
-import random
 from function import func
-from llm.orchestrator import generate_response
+from llm.model_manager import ModelManager
+from langchain.agents import create_agent
 from llm.utils.send_message import safe_edit_message
+
 map = GoogleMapCrawler()
+
 class EatWhatView(discord.ui.View):
     def __init__(self,result,predict:str,keyword:str, db: DB, record_id: int, discord_id:str):
         super().__init__()
@@ -91,7 +93,6 @@ class EatWhatView(discord.ui.View):
         4. 加強錯誤處理和中文註解
         """
         try:
-            # === Google Gemini API 官方標準系統提示 (優化為英文) ===
             system_prompt = '''You are a professional and witty food critic who excels at writing vivid and interesting reviews based on restaurant information.
                             Interact with users in a humorous yet professional tone, providing valuable dining recommendations.
                             Your reviews should include comprehensive analysis of food quality, atmosphere, and service standards.
@@ -125,13 +126,18 @@ class EatWhatView(discord.ui.View):
             await interaction.response.send_message("🍽️ AI 美食評論家正在分析中...", ephemeral=True)
             message_to_edit = await interaction.followup.send("📝 準備撰寫專業評論...", ephemeral=True)
             
-            # === 使用新的 Google Gemini API 官方格式標準生成評論 ===
-            # 符合升級後的 generate_response 函數規範
-            thread, streamer = await generate_response(
-                inst="Based on the provided restaurant information, write a professional and witty food review.",
-                system_prompt=system_prompt,
-                dialogue_history=dialogue_history
+            review_model = ModelManager().get_model("review_agent")
+            if review_model is None:
+                raise RuntimeError("review_agent not available")
+            review_agent = create_agent(
+                model=review_model,
+                system_prompt=system_prompt
             )
+            messages = dialogue_history + [
+                {"role": "user", "content": "Based on the provided restaurant information, write a professional and witty food review."}
+            ]
+            # 取得非同步串流器（向下相容於原本使用 async for 的處理）
+            streamer = review_agent.stream({"messages": messages}, stream_mode="values")
             
             # === 優化的串流回應處理 ===
             buffer_size = 40  # 設置緩衝區大小，提供流暢的即時顯示
@@ -153,9 +159,5 @@ class EatWhatView(discord.ui.View):
             responsesall += responses
             responsesall = responsesall.replace('<|eot_id|>', "").strip()
             await safe_edit_message(message_to_edit, responsesall)
-            
-            # 等待執行緒完成（向後相容性處理）
-            if thread:
-                thread.join()
         except Exception as e:
             await func.report_error(e, "cogs/eat/views.py/review")

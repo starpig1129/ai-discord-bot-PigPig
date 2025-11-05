@@ -5,7 +5,6 @@ import logging
 from typing import Optional, Any
  
 from langchain.tools import tool, ToolRuntime
-from typing import Any
 from function import func
 
 @tool
