@@ -10,27 +10,6 @@ from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
 
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.tools import BaseTool
-from discord import Message
-
-
-class OrchestratorRequest(BaseModel):
-    """Request model received from Discord for orchestration.
-
-    Attributes:
-        message: The original Discord Message object.
-        user_id: The Discord user ID who initiated the request.
-        provider_name: Optional name of the LLM provider to use.
-    """
-
-    message: Message
-    user_id: int
-    provider_name: str | None = None
-
-    class Config:
-        # 設定允許任意類型 (discord.Message 非 Pydantic 型別)
-        arbitrary_types_allowed = True
 
 
 class OrchestratorResponse(BaseModel):
@@ -47,4 +26,4 @@ class OrchestratorResponse(BaseModel):
     )
 
 
-__all__ = ["OrchestratorRequest", "OrchestratorResponse"]
+__all__ = ["OrchestratorResponse"]

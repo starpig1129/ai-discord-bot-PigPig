@@ -99,7 +99,7 @@ class Orchestrator:
             message_result = ""
             streamer = message_agent.stream(
                 {"messages": [{"role": "user", "content": output}]},
-                stream_mode="messages"
+                stream_mode="values"
             )
             message_result = await send_message(None, message, streamer)
 

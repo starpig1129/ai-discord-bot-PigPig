@@ -215,6 +215,11 @@ async def _process_token_stream(
     iterator = streamer if is_async else iter(streamer)
     
     async def process_item(item):
+        latest_message = item["messages"][-1]
+    
+        # 判斷是否為最終回覆
+        if not (latest_message.content and not latest_message.tool_calls):
+            pass
         nonlocal responses, responsesall, message_result, current_message
         
         # Extract token from item
