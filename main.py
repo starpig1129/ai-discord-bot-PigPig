@@ -22,9 +22,9 @@
 import discord
 import asyncio
 import update
-from function import func, tokens,get_settings,settings
+from function import func
 from bot import PigPig
-from addons import Settings
+from addons import base_config,tokens
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,17 +36,10 @@ class CommandCheck(discord.app_commands.CommandTree):
             return False
 
         return await super().interaction_check(interaction)
-    
-async def get_prefix(bot, message: discord.Message):
-    guild_settings = await get_settings(message.guild.id)
-    return guild_settings.get("prefix", settings.bot_prefix)
-
-# Loading settings
-settings = Settings("settings.json")
 
 # Setup the bot object
 intents = discord.Intents.default()
-intents.message_content = True if settings.bot_prefix else False
+intents.message_content = True if base_config.prefix else False
 intents.members = True
 member_cache = discord.MemberCacheFlags(
     voice=True,
@@ -54,7 +47,7 @@ member_cache = discord.MemberCacheFlags(
 )
 
 bot = PigPig(
-    command_prefix=get_prefix,
+    command_prefix=base_config.prefix,
     help_command=None,
     tree_cls=CommandCheck,
     chunk_guilds_at_startup=False,

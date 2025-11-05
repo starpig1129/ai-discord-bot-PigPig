@@ -7,7 +7,7 @@ import discord
 import random
 import re
 from youtube_search import YoutubeSearch
-from addons.settings import Settings
+from addons.settings import music_config
 
 async def check_ffmpeg(ffmpeg_path='/usr/bin/ffmpeg'):
     try:
@@ -23,7 +23,7 @@ class YouTubeManager:
     def __init__(self, time_limit=1800):
         self.time_limit = time_limit
         try:
-            self.settings = Settings()
+            self.settings = music_config
             self.ffmpeg_config = self.settings.ffmpeg
         except Exception as e:
             logger.error(f"載入 FFmpeg 設定失敗，使用預設值: {e}")

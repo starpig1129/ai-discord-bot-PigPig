@@ -26,12 +26,8 @@ import json
 from discord.ext import commands
 from discord import app_commands
 import discord
-from gpt.core.response_generator import generate_response
 from addons.settings import Settings
-from gpt.utils.discord_utils import safe_edit_message
-
-from typing import Optional, Dict, Any, List, Union
-from gpt.tools.tool_context import ToolExecutionContext
+from typing import Optional, Any, Union
 from .language_manager import LanguageManager
 
 # 備用翻譯字典

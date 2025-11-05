@@ -1,9 +1,8 @@
 import os
+import json
 import yaml
 import asyncio
 import sys
-from function import func
-
 
 def _load_yaml_file(path: str) -> dict:
     """安全讀取 YAML 檔案，失敗時使用 func.report_error 回報並回傳空 dict"""
@@ -13,6 +12,7 @@ def _load_yaml_file(path: str) -> dict:
         return data
     except Exception as e:
         try:
+            from function import func
             asyncio.create_task(func.report_error(e, "addons/settings.py/_load_yaml_file"))
         except Exception:
             print(f"載入 YAML 檔案失敗 ({path}): {e}")
@@ -54,13 +54,14 @@ class UpdateConfig:
         self.github: dict = data.get("github", {})
 
 
-# 在模組層級建立預設實例，方便使用 from addons.settings import llm_config 直接載入
 
 
+# 在模組層級建立預設實例（YAML config）以維持向後相容
 try:
     base_config = BaseConfig("config/base.yaml")
 except Exception as e:
     try:
+        from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
         print(f"初始化 BaseConfig 時發生錯誤: {e}")
@@ -70,6 +71,7 @@ try:
     llm_config = LLMConfig("config/llm.yaml")
 except Exception as e:
     try:
+        from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
         print(f"初始化 LLMConfig 時發生錯誤: {e}")
@@ -79,12 +81,14 @@ try:
     update_config = UpdateConfig("config/update.yaml")
 except Exception as e:
     try:
+        from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
         print(f"初始化 UpdateConfig 時發生錯誤: {e}")
     update_config = UpdateConfig()
 
 __all__ = [
+    "Settings",
     "BaseConfig",
     "base_config",
     "LLMConfig",

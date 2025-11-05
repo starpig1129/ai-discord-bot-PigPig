@@ -7,7 +7,7 @@ import logging as logger
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-from addons.settings import Settings
+from addons.settings import music_config
 from .music_lib.youtube import YouTubeManager
 from .music_lib.audio_manager import AudioManager
 from .music_lib.state_manager import StateManager
@@ -22,7 +22,7 @@ class YTMusic(commands.Cog):
         self.bot = bot
         self.youtube = None  # Will be initialized in setup_hook
         self._executor = ThreadPoolExecutor(max_workers=3)
-        self.settings = Settings()
+        self.settings = music_config
         
         # Initialize managers
         self.audio_manager = AudioManager()

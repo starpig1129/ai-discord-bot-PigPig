@@ -101,7 +101,8 @@ class Orchestrator:
                 {"messages": [{"role": "user", "content": output}]},
                 stream_mode="values"
             )
-            message_result = await send_message(None, message, streamer)
+            # 傳入 bot 以避免模組層級依賴 main.bot
+            message_result = await send_message(bot, None, message, streamer)
 
 
         except Exception as e:

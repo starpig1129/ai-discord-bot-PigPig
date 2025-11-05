@@ -8,10 +8,8 @@ properties and the _generate method.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
 
-from langchain_core.chat_models import BaseChatModel
-from langchain_core.outputs import ChatResult
+from langchain.chat_models import BaseChatModel
 
 
 class BaseProvider(BaseChatModel, ABC):

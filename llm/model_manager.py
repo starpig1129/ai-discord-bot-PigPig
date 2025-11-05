@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
  
 import llm.provider as provider_pkg
 from llm.provider.base import BaseProvider
-from langchain_core.chat_models import BaseChatModel
+from langchain.chat_models import BaseChatModel
 from function import func
 from addons.settings import llm_config
 

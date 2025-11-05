@@ -3,9 +3,6 @@ import asyncio
 
 from dotenv import load_dotenv
 
-from function import func
-
-# 載入 .env
 load_dotenv()
 
 
@@ -59,17 +56,18 @@ class TOKENS:
         optional_api_keys = {
             "ANTHROPIC_API_KEY": self.anthropic_api_key,
             "OPENAI_API_KEY": self.openai_api_key,
-            "GEMINI_API_KEY": self.gemini_api_key,
+            "GOOGLE_API_KEY": self.google_api_key,
         }
 
         for api_name, api_value in optional_api_keys.items():
             if not api_value:
                 # 僅回報警告，不終止程式
                 try:
+                    from function import func
                     asyncio.create_task(
                         func.report_error(
                             Exception(f"警告：{api_name} 未設定，可能影響相關功能"),
-                            "addons/settings.py/_validate_environment_variables",
+                            "addons/tokens.py/_validate_environment_variables",
                         )
                     )
                 except Exception:
@@ -86,7 +84,8 @@ class TOKENS:
             error_msg += "\n請檢查 .env 檔案並設定所有必要的環境變數。"
 
             try:
-                asyncio.create_task(func.report_error(Exception(error_msg), "addons/settings.py/_validate_environment_variables"))
+                from function import func
+                asyncio.create_task(func.report_error(Exception(error_msg), "addons/tokens.py/_validate_environment_variables"))
             except Exception:
                 print(error_msg)
 
@@ -101,9 +100,10 @@ except SystemExit:
     raise
 except Exception as e:
     try:
-        asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
+        from function import func
+        asyncio.create_task(func.report_error(e, "addons/tokens.py/module_init"))
     except Exception:
         print(f"初始化 TOKENS 時發生錯誤: {e}")
     tokens = None
-    
+
 __all__ = ["TOKENS", "tokens"]

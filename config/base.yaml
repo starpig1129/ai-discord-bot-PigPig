@@ -6,7 +6,7 @@ ipc_server:
   port: 8000
   enable: false
 
-version: "v2.7.0"
+version: "v3.0.0"
 logging:
   level: "INFO"
   file_path: "logs/memory_system.log"

@@ -9,12 +9,11 @@ channel-level system prompts, and basic message reply functionality.
 
 import asyncio
 import logging
-from typing import List, Optional, Union, Tuple, AsyncIterator, Iterator
+from typing import Any, List, Optional, Union, Tuple, AsyncIterator, Iterator
 
 import discord
 import opencc
 
-from main import bot
 from function import func
 
 
@@ -285,6 +284,7 @@ async def _process_token_stream(
 
 
 async def send_message(
+    bot: Any,
     message_to_edit: Optional[discord.Message],
     message: discord.Message,
     streamer: Union[AsyncIterator, Iterator],

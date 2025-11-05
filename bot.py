@@ -31,7 +31,7 @@ import sys
 import os
 import traceback
 import update
-from function import func, ROOT_DIR, tokens, settings, update_json
+from function import func, ROOT_DIR
 import json
 import logging
 import asyncio
@@ -41,6 +41,8 @@ from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
 from llm.orchestrator import Orchestrator
 from logs import TimedRotatingFileHandler
+
+from addons import tokens, base_config
 
 
 def setup_logger(server_name):
@@ -353,11 +355,11 @@ class PigPig(commands.Bot):
         # Initialize core services
         self.orchestrator = Orchestrator()
 
-        if settings.ipc_server.get("enable", False):
+        if base_config.ipc_server.get("enable", False):
             await self.ipc.start()
 
-        if not settings.version or settings.version != update.__version__:
-            update_json("settings.json", new_data={"version": update.__version__})
+        if not base_config.version or base_config.version != update.__version__:
+            func.update_json("settings.json", new_data={"version": update.__version__})
 
         await self.tree.sync()
 
