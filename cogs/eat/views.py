@@ -2,6 +2,9 @@ import random
 import discord
 import json
 
+from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage
+
 from cogs.eat.db.db import DB
 from cogs.eat.providers.googlemap_crawler import GoogleMapCrawler
 from cogs.eat.embeds import menuEmbed
@@ -9,7 +12,6 @@ from cogs.eat.train.train import Train
 from cogs.eat.embeds import eatEmbed
 from function import func
 from llm.model_manager import ModelManager
-from langchain.agents import create_agent
 from llm.utils.send_message import safe_edit_message
 
 map = GoogleMapCrawler()
@@ -134,7 +136,7 @@ class EatWhatView(discord.ui.View):
                 system_prompt=system_prompt
             )
             messages = dialogue_history + [
-                {"role": "user", "content": "Based on the provided restaurant information, write a professional and witty food review."}
+                HumanMessage(content="Based on the provided restaurant information, write a professional and witty food review.")
             ]
             streamer = review_agent.stream(
                 {"messages": messages}, 
