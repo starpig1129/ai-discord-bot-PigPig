@@ -22,10 +22,11 @@
 
 import io
 import aiohttp
+import logging
 from typing import Optional, TYPE_CHECKING
-
+ 
 from PIL import Image
-
+ 
 from langchain.tools import tool, ToolRuntime
 from function import func
 
@@ -36,23 +37,28 @@ if TYPE_CHECKING:
 @tool
 async def generate_image(
     prompt: str,
-    context: ToolRuntime,  # type: ignore[arg-type]
+    runtime: ToolRuntime,  # type: ignore[arg-type]
     image_url: Optional[str] = None
 ) -> str:
-    """為 LLM 工具重新封裝的圖片產生器。
+    """Image generator wrapper for LLM tools.
 
-    - 明確要求 context 作為第一個參數（與其他工具一致）。
-    - 以 cog 作為實際執行單位，並在任何異常時使用 func.report_error 紀錄。
+    - runtime is the ToolRuntime parameter (consistent with other tools).
+    - Delegates execution to a cog and reports exceptions via func.report_error.
 
     Args:
-        prompt: 文字提示。
-        image_url: 可選的基礎圖片 URL（若提供，將嘗試下載並作為 input image）。
+        prompt: Text prompt.
+        image_url: Optional base image URL; if provided, will be downloaded and used as the input image.
     Returns:
-        成功或錯誤訊息（字串）。
+        Success or error message (string).
     """
-    logger = context.logger
+    # runtime provides logger and bot; runtime.context contains custom context attributes
+    context = runtime.context
+    logger = getattr(context, "logger", logging.getLogger(__name__))
     logger.info("Tool 'generate_image' called", extra={"prompt": prompt})
-
+    bot = getattr(context, "bot", None)
+    if not bot:
+        logger.error("Bot instance not available in runtime.")
+        return "Error: Bot instance not available."
     cog: Optional["ImageGenerationCog"] = bot.get_cog("ImageGenerationCog")
     if not cog:
         logger.error("ImageGenerationCog not found.")
@@ -101,8 +107,8 @@ async def generate_image(
 
     if result.get("file"):
         discord_file = result["file"]
-        # 安全取得 message 與 channel
-        message = getattr(context, "message", None)
+        # Safely obtain message and channel (prefer custom context.message, fallback to runtime.message)
+        message = getattr(context, "message", getattr(runtime, "message", None))
         channel = getattr(message, "channel", None) if message else None
         try:
             if channel:

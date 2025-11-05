@@ -1,6 +1,7 @@
 # MIT License
 # Copyright (c) 2024 starpig1129
 
+import logging
 from typing import Literal
 from langchain.tools import tool, ToolRuntime
 from function import func
@@ -8,27 +9,30 @@ from function import func
 @tool
 async def internet_search(
     query: str,
-    context: ToolRuntime,
+    runtime: ToolRuntime,  # type: ignore[arg-type]
     search_type: Literal["general", "image", "youtube", "url", "eat"] = "general",
 ) -> str:
-    """在 LLM 工具中封裝的網路搜尋接口。
+    """Internet search interface wrapped for LLM tools.
 
-    - 第一個參數為 ToolExecutionContext（與其他工具一致）。
-    - 將實際工作委派給 InternetSearchCog。
-    - 所有異常使用 func.report_error 上報。
+    - Delegates actual work to InternetSearchCog.
+    - Reports all exceptions via func.report_error.
 
     Args:
-        context: 工具執行上下文。
-        query: 搜尋字串或 URL。
-        search_type: 搜尋類型。
+        query: Search string or URL.
+        search_type: Type of search.
 
     Returns:
-        搜尋結果或錯誤說明字串。
+        Search results or an error string.
     """
-    logger = context.logger
+    context = runtime.context
+    logger = getattr(context, "logger", logging.getLogger(__name__))
     logger.info("internet_search called", extra={"query": query, "type": search_type})
+    bot = getattr(context, "bot", None)
+    if not bot:
+        logger.error("Bot instance not available in runtime.")
+        return "Error: Bot instance not available."
 
-    cog = context.bot.get_cog("InternetSearchCog")
+    cog = bot.get_cog("InternetSearchCog")
     if not cog:
         msg = "Error: InternetSearchCog not found."
         logger.error(msg)

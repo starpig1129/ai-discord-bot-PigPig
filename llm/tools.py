@@ -15,7 +15,7 @@ import importlib
 import asyncio
 import threading
 
-from langchain_core.tools import BaseTool, tool
+from langchain.tools import BaseTool
 from function import func
 
 # 快取變數：儲存已解析出的 decorated tools 以及對應的檔案最大 mtime

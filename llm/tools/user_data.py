@@ -1,8 +1,9 @@
 # MIT License
 # Copyright (c) 2024 starpig1129
 
+import logging
 from typing import Optional, Any
-
+ 
 from langchain.tools import tool, ToolRuntime
 from typing import Any
 from function import func
@@ -11,18 +12,23 @@ from function import func
 async def manage_user_data(
     action: str,
     user_id: int,
-    context: ToolRuntime,
+    runtime: ToolRuntime,  # type: ignore[arg-type]
     user_data: Optional[str] = None,
 ) -> str:
-    """管理使用者資料的工具封裝（read / save）。
+    """User data management tool wrapper (read / save).
 
-    - context 必須為第一參數。
-    - read: 回傳使用者資料（由 UserDataCog 處理）。
-    - save: 將資料存入並與既有資料合併。
-    - 所有錯誤使用 func.report_error 上報，保證日誌一致性。
+    - runtime must be the ToolRuntime parameter.
+    - 'read' returns user data (handled by UserDataCog).
+    - 'save' stores data and merges with existing data.
+    - All errors are reported via func.report_error to ensure consistent logging.
     """
-    logger = context.logger
-    cog = context.bot.get_cog("UserDataCog")
+    context = runtime.context
+    logger = getattr(context, "logger", logging.getLogger(__name__))
+    bot = getattr(context, "bot", None)
+    if not bot:
+        logger.error("Bot instance not available in runtime.")
+        return "Error: Bot instance not available."
+    cog = bot.get_cog("UserDataCog")
 
     if not cog:
         msg = "Error: UserDataCog is not loaded."
@@ -40,7 +46,8 @@ async def manage_user_data(
 
             logger.info("Saving user data", extra={"user_id": user_id})
             try:
-                user = await context.bot.fetch_user(user_id)
+                # prefer bot.fetch_user; context may not contain bot
+                user = await bot.fetch_user(user_id)
                 display_name = getattr(user, "display_name", f"User_{user_id}")
             except Exception:
                 display_name = f"User_{user_id}"

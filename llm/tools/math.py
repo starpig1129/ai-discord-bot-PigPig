@@ -1,8 +1,9 @@
 # MIT License
 # Copyright (c) 2024 starpig1129
 
+import logging
 from typing import Optional
-
+ 
 from langchain.tools import tool, ToolRuntime
 from typing import Any, Optional
 from function import func
@@ -10,18 +11,22 @@ from function import func
 @tool
 async def calculate_math(
     expression: str,
-    context: ToolRuntime,
+    runtime: ToolRuntime,  # type: ignore[arg-type]
 ) -> str:
-    """委派給 MathCalculatorCog 的數學計算工具封裝。
+    """Math calculation tool wrapper delegated to MathCalculatorCog.
 
-    - context 必須是第一個參數，與其他工具一致。
-    - 所有錯誤透過 func.report_error 上報，遵守專案錯誤處理規範。
+    - All errors are reported via func.report_error to follow project error handling standards.
     """
-    logger = context.logger
+    context = runtime.context
+    logger = getattr(context, "logger", logging.getLogger(__name__))
     logger.info("calculate_math called", extra={"expression": expression})
+    bot = getattr(context, "bot", None)
+    if not bot:
+        logger.error("Bot instance not available in runtime.")
+        return "Error: Bot instance not available."
 
     try:
-        cog = context.bot.get_cog("MathCalculatorCog")
+        cog = bot.get_cog("MathCalculatorCog")
         if not cog:
             msg = "Error: MathCalculatorCog not found."
             logger.error(msg)

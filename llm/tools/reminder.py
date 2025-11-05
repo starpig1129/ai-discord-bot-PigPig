@@ -1,8 +1,9 @@
 # MIT License
 # Copyright (c) 2024 starpig1129
 
+import logging
 from typing import Optional
-
+ 
 from langchain.tools import tool, ToolRuntime
 from typing import Any
 from cogs.remind import ReminderCog
@@ -12,17 +13,22 @@ from function import func
 async def set_reminder(
     time_str: str,
     message: str,
-    context: ToolRuntime,
+    runtime: ToolRuntime,  # type: ignore[arg-type]
     user_id: Optional[int] = None,
 ) -> str:
-    """為 LLM 工具封裝的提醒設定接口。
+    """Reminder setting interface wrapped for LLM tools.
 
-    - 使用 context 作為第一參數。
-    - 依賴 ReminderCog 的 _set_reminder_logic 執行詳細排程與驗證。
-    - 所有錯誤以 func.report_error 上報。
+    - runtime is the ToolRuntime parameter.
+    - Relies on ReminderCog._set_reminder_logic for scheduling and validation.
+    - All errors are reported via func.report_error.
     """
-    logger = context.logger
-    bot = context.bot
+    context = runtime.context
+    logger = getattr(context, "logger", logging.getLogger(__name__))
+    bot = getattr(context, "bot", None)
+    if not bot:
+        logger.error("Bot instance not available in runtime.")
+        return "Error: Bot instance not available."
+    message_obj = getattr(context, "message", getattr(runtime, "message", None))
 
     cog: Optional[ReminderCog] = bot.get_cog("ReminderCog")
     if not cog:
@@ -30,24 +36,28 @@ async def set_reminder(
         logger.error(msg)
         return msg
 
-    # 決定目標使用者
+    # Determine target user
     try:
         if user_id is None:
-            # 若沒有指定 user_id，使用發起者
-            target_user_id = context.message.author.id
+            # If user_id is not specified, use the requester
+            if message_obj and getattr(message_obj, "author", None):
+                target_user_id = message_obj.author.id
+            else:
+                target_user_id = None
         else:
             target_user_id = user_id
 
         try:
-            target_user = await bot.fetch_user(target_user_id)
+            target_user = await bot.fetch_user(target_user_id) if target_user_id is not None else None
         except Exception:
-            # fetch_user 可能失敗，使用 fallback 名稱
+            # fetch_user may fail; use fallback name
             target_user = None
 
-        channel = getattr(context.message, "channel", None)
+        channel = getattr(message_obj, "channel", None)
         guild_id = None
-        if getattr(context.message, "guild", None):
-            guild_id = str(context.message.guild.id)
+        guild_obj = getattr(message_obj, "guild", None)
+        if guild_obj:
+            guild_id = str(guild_obj.id)
         else:
             guild_id = "@me"
 
