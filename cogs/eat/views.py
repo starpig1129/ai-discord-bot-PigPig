@@ -136,28 +136,26 @@ class EatWhatView(discord.ui.View):
             messages = dialogue_history + [
                 {"role": "user", "content": "Based on the provided restaurant information, write a professional and witty food review."}
             ]
-            # 取得非同步串流器（向下相容於原本使用 async for 的處理）
-            streamer = review_agent.stream({"messages": messages}, stream_mode="values")
-            
-            # === 優化的串流回應處理 ===
-            buffer_size = 40  # 設置緩衝區大小，提供流暢的即時顯示
+            streamer = review_agent.stream(
+                {"messages": messages}, 
+                stream_mode="messages"
+            )
+            buffer_size = 40  # 每次更新的字元數
             responses = ""
             responsesall = ""
-            
-            # 使用 async for 處理串流回應（符合新的非同步處理標準）
-            async for response in streamer:
-                print(response, end="", flush=True)  # 終端輸出調試
-                responses += response
 
-                # 達到緩衝區大小時即時更新 Discord 訊息
-                if len(responses) >= buffer_size:
-                    responsesall += responses
-                    await safe_edit_message(message_to_edit, responsesall)
-                    responses = ""  # 清空緩衝區
+            async for token, metadata in streamer:
+                if hasattr(token, 'content'):
+                    responses += token.content
+                    
+                    if len(responses) >= buffer_size:
+                        responsesall += responses
+                        await safe_edit_message(message_to_edit, responsesall)
+                        responses = ""
 
             # 處理剩餘的回應內容並清理特殊標記
             responsesall += responses
-            responsesall = responsesall.replace('<|eot_id|>', "").strip()
+            responsesall = responsesall.strip()
             await safe_edit_message(message_to_edit, responsesall)
         except Exception as e:
             await func.report_error(e, "cogs/eat/views.py/review")
