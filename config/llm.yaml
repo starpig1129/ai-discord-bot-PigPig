@@ -1,11 +1,53 @@
 model_priorities:
-  info_agent_model:
+  info_model:
     - google:
       - gemini-pro
     - ollama:
     - anthropic:
     - openai:
-  message_agent_model:
+  message_model:
+    - google:
+      - gemini-pro
+    - openai:
+    - anthropic:
+    - ollama:
+  review_model:
+    - google:
+      - gemini-pro
+    - openai:
+    - anthropic:
+    - ollama:
+  summerize_model:
+    - google:
+      - gemini-pro
+    - openai:
+    - anthropic:
+    - ollama:
+  user_data_model:
+    - google:
+      - gemini-pro
+    - openai:
+    - anthropic:
+    - ollama:
+  story_gm_model:
+    - google:
+      - gemini-pro
+    - openai:
+    - anthropic:
+    - ollama:
+  story_character_model:
+    - google:
+      - gemini-pro
+    - openai:
+    - anthropic:
+    - ollama:
+  story_summary_model:
+    - google:
+      - gemini-pro
+    - openai:
+    - anthropic:
+    - ollama:
+  story_outline_model:
     - google:
       - gemini-pro
     - openai:

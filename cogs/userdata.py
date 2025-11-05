@@ -23,11 +23,17 @@
 import re
 import logging
 import json
+import discord
 from discord.ext import commands
 from discord import app_commands
-import discord
+from langchain.agents import create_agent
+from langchain_core.messages import ToolMessage, HumanMessage
+
 from typing import Optional, Any, Union
 from .language_manager import LanguageManager
+
+from llm.model_manager import ModelManager
+
 
 # 備用翻譯字典
 FALLBACK_TRANSLATIONS = {
@@ -162,19 +168,31 @@ class UserDataCog(commands.Cog):
                                  Always respond in Traditional Chinese.'''
                 
                 try:
-                    dialogue_history = [
-                        {"role": "function", "name": "existing_user_data", "content": json.dumps({"existing_data": existing_data}, ensure_ascii=False, indent=2)},
-                        {"role": "function", "name": "new_user_data", "content": json.dumps({"new_data": user_data}, ensure_ascii=False, indent=2)}
+                    # 取得註冊於 ModelManager 的 agent 型別 user_data_model
+                    model = ModelManager().get_model("user_data_model")
+                    if model is None:
+                        raise RuntimeError("user_data_model not available")
+                    agent = create_agent(model=model, system_prompt=system_prompt)
+                    
+                    # 將既有資料與新資料包成 LangChain 標準 messages 格式
+                    messages = [
+                        HumanMessage(content=f"""
+                    Existing data: {json.dumps({'existing_data': existing_data}, ensure_ascii=False)}
+
+                    New data: {json.dumps({'new_data': user_data}, ensure_ascii=False)}
+
+                    Merge these intelligently and return complete user information.
+                    """)
                     ]
                     
-                    _, streamer = await generate_response(
-                        inst="Based on the provided existing user data and new data, intelligently merge them and return complete user information.",
-                        system_prompt=system_prompt,
-                        dialogue_history=dialogue_history
-                    )
+                    # 使用 LangChain agent 的 ainvoke 進行非同步呼叫，取得回傳結果字典
+                    response = await agent.ainvoke({"messages": messages})
                     
-                    response_chunks = [chunk async for chunk in streamer]
-                    new_data = ''.join(response_chunks).replace("<|eot_id|>", "").strip()
+                    new_data = response["messages"][-1].content
+                    
+                    # 若模型回傳結構化資料，轉成字串；並清理特殊終止標記
+                    if isinstance(new_data, (dict, list)):
+                        new_data = json.dumps(new_data, ensure_ascii=False)
                     
                 except Exception as e:
                     return self._translate(

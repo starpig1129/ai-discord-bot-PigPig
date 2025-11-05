@@ -7,6 +7,10 @@ import aiohttp
 import json
 from pydantic import ValidationError
 
+from llm.model_manager import ModelManager
+from langchain.agents import create_agent
+from langchain_core.messages import HumanMessage, AIMessage
+
 from .database import StoryDB, CharacterDB
 from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationship, Event, Location, GMActionPlan, RelationshipUpdate, CharacterAction
 from .prompt_engine import StoryPromptEngine
@@ -14,6 +18,7 @@ from .state_manager import StoryStateManager
 from cogs.system_prompt.manager import SystemPromptManager
 from cogs.language_manager import LanguageManager
 from .ui.modals import InterventionModal
+
 
 _ALLOWED_MENTIONS = discord.AllowedMentions(
     users=True,
@@ -272,29 +277,26 @@ class StoryManager:
                 gm_dialogue_history = []
                 if story_instance.outlines:
                     for outline in story_instance.outlines:
-                        gm_dialogue_history.append({
-                            "role": "user",
-                            "content": f"High-level story outline: {outline}"
-                        })
+                        gm_dialogue_history.append(HumanMessage(
+                            content=f"High-level story outline: {outline}"
+                        ))
                 if story_instance.summaries:
                     for summary in story_instance.summaries[-5:]:
-                        gm_dialogue_history.append({
-                            "role": "user",
-                            "content": f"Recent plot summary: {summary}"
-                        })
+                        gm_dialogue_history.append(HumanMessage(
+                            content=f"Recent plot summary: {summary}"
+                        ))
 
-                # Use the new structured response function to get the GM plan directly.
-                _, gm_plan = await generate_response(
-                    inst=message.content,
-                    system_prompt=gm_prompt,
-                    dialogue_history=gm_dialogue_history,
-                    response_schema=GMActionPlan
-                )
+                # Call GM agent via ModelManager + LangChain create_agent
+                story_gm_model = ModelManager().get_model("story_gm_model")
+                agent = create_agent(story_gm_model, system_prompt=gm_prompt, response_format=GMActionPlan)
+                message = [HumanMessage(content=message.content)] + gm_dialogue_history
+                response = await agent.ainvoke({
+                    "messages": message,
+                })
+                
+                gm_plan = None
 
-                # --- Step 2: The GM Action Plan is already parsed ---
-                if not gm_plan:
-                    # Handle cases where the response could not be parsed or is empty
-                    raise GeminiError("Failed to generate a valid GM action plan.")
+                gm_plan = response.get("structured_response")
 
                 # --- Step 3: Execute the plan (NARRATE or DIALOGUE) ---
                 event_text_for_log = ""
@@ -375,13 +377,19 @@ class StoryManager:
                                 date=latest_date,
                                 time=latest_time
                             )
-                            
-                            _, character_action = await generate_response(
-                                inst=char_user_prompt,
-                                system_prompt=char_system_prompt,
-                                dialogue_history=dialogue_history,
-                                response_schema=CharacterAction
-                            )
+
+                            # Call character model via ModelManager + LangChain create_agent
+                            story_character_model = ModelManager().get_model("story_character_model")
+                            agent = create_agent(story_character_model, system_prompt=char_system_prompt, response_format=CharacterAction)
+                            response = await agent.ainvoke({
+                                "messages": dialogue_history + [HumanMessage(content=char_user_prompt)],
+                            })
+                            character_action = None
+                            try:
+                                output = response.get("output") if isinstance(response, dict) else str(response)
+                                character_action = CharacterAction.model_validate_json(output)
+                            except Exception as e:
+                                self.logger.warning(f"Failed to parse character action for {speaker_name}: {e}")
                             
                             if character_action:
                                 await self._send_story_response(
@@ -424,7 +432,7 @@ class StoryManager:
                 else:
                     db.save_story_instance(updated_instance)
 
-            except (GeminiError, json.JSONDecodeError, ValidationError) as e:
+            except (json.JSONDecodeError, ValidationError) as e:
                 self.logger.error(f"Error in V5 story generation pipeline: {e}", exc_info=True)
                 await message.reply("故事之神的大腦似乎纏在一起了，祂需要一點時間來解開... 請稍後再試。", allowed_mentions=_ALLOWED_MENTIONS)
             except Exception as e:
@@ -477,13 +485,17 @@ class StoryManager:
             
             summary_inst = "Please provide a concise, one-paragraph summary of the preceding conversation."
 
-            _, summary_gen = await generate_response(
-                inst=summary_inst,
-                system_prompt=summary_system_prompt,
-                dialogue_history=dialogue_history,
-            )
-            
-            summary_text = "".join([chunk async for chunk in summary_gen]).strip()
+            # Call summary model via ModelManager + LangChain create_agent
+            story_summary_model = ModelManager().get_model("story_summary_model")
+            agent = create_agent(story_summary_model, system_prompt=summary_system_prompt)
+            response = await agent.ainvoke({
+                "messages": [HumanMessage(content=summary_inst), dialogue_history],
+            })
+            summary_text = ""
+            if isinstance(response, dict) and "output" in response:
+                summary_text = str(response["output"]).strip()
+            else:
+                summary_text = str(response).strip()
 
             if summary_text:
                 story_instance.summaries.append(summary_text)
@@ -526,20 +538,24 @@ class StoryManager:
             "The goal is to create a concise, big-picture view of the story so far for the Director AI. "
             "Do not add any introductory or concluding phrases."
         )
-        
-        outline_inst = "Based on the following 10 plot summaries, please synthesize them into a single, high-level outline paragraph."
-        
+
+        outline_inst = HumanMessage("Based on the following 10 plot summaries, please synthesize them into a single, high-level outline paragraph.")
+
         # Format summaries into the dialogue history structure
-        dialogue_history = [{'role': 'user', 'content': f"## Recent Plot Summaries\n{formatted_summaries}"}]
+        dialogue_history = HumanMessage(f"## Recent Plot Summaries\n{formatted_summaries}")
 
         try:
-            _, outline_gen = await generate_response(
-                inst=outline_inst,
-                system_prompt=outline_system_prompt,
-                dialogue_history=dialogue_history,
-            )
-            
-            outline_text = "".join([chunk async for chunk in outline_gen]).strip()
+            # Call outline model via ModelManager + LangChain create_agent
+            story_outline_model = ModelManager().get_model("story_outline_model")
+            agent = create_agent(story_outline_model, system_prompt=outline_system_prompt)
+            response = await agent.ainvoke({
+                "messages": [outline_inst, dialogue_history],
+            })
+            outline_text = ""
+            if isinstance(response, dict) and "output" in response:
+                outline_text = str(response["output"]).strip()
+            else:
+                outline_text = str(response).strip()
 
             if outline_text:
                 story_instance.outlines.append(outline_text)
@@ -648,28 +664,19 @@ class StoryManager:
                 # --- Step 1: Build the prompt for the GM to start the story ---
                 characters = self.character_db.get_characters_by_ids(story_instance.active_character_ids)
                 gm_prompt = await self.prompt_engine.build_story_start_prompt(story_instance, world, characters)
+                
+                # --- Step 2: Call GM Model for a structured plan ---
+                # Call GM model for initial scene via ModelManager + LangChain create_agent
+                story_gm_model = ModelManager().get_model("story_gm_model")
+                agent = create_agent(story_gm_model, system_prompt=gm_prompt, response_format=GMActionPlan)
+                message = [HumanMessage("You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.")]
+                response = await agent.ainvoke({
+                    "messages": message,
+                })
+                
+                gm_plan = None
 
-                # --- Step 2: Call GM Agent for a structured plan ---
-                _, gm_plan = await generate_response(
-                    inst=gm_prompt,
-                    system_prompt="You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.",
-                    response_schema=GMActionPlan
-                )
-
-                # Defensive coding: Handle if the API returns a generator function due to hot-reload issues
-                if callable(gm_plan):
-                    self.logger.warning("GM plan is a callable, processing as a stream.")
-                    full_response_text = "".join([chunk async for chunk in gm_plan()])
-                    
-                    # Manually parse the JSON string to the Pydantic model
-                    try:
-                        gm_plan = GMActionPlan.model_validate_json(full_response_text)
-                        self.logger.info("Successfully parsed streamed response into GMActionPlan.")
-                    except Exception as e:
-                        raise GeminiError(f"Failed to parse streamed JSON response: {e}\nContent: {full_response_text}")
-
-                if not gm_plan or gm_plan.action_type != "NARRATE" or not gm_plan.narration_content:
-                    raise GeminiError("Failed to generate a valid opening narration plan.")
+                gm_plan = response.get("structured_response")
 
                 # --- Step 3: Update World State & Relationships (if any) ---
                 updated_instance = await self.state_manager.update_state_from_gm_plan(story_instance, gm_plan)
@@ -710,10 +717,7 @@ class StoryManager:
                 
                 await interaction.edit_original_response(content=None, embed=embed, view=None, allowed_mentions=_ALLOWED_MENTIONS)
                 self.logger.info(f"V5 story started successfully in channel {interaction.channel_id}")
-
-            except (GeminiError, json.JSONDecodeError, ValidationError) as e:
-                self.logger.error(f"Error in V5 first scene generation: {e}", exc_info=True)
-                await interaction.edit_original_response(content="❌ 故事開始了，但開場白被一陣神秘的靜電干擾了...", embed=None, view=None, allowed_mentions=_ALLOWED_MENTIONS)
+                
             except Exception as e:
                 self.logger.error(f"An unexpected error occurred in V5 first scene generation: {e}", exc_info=True)
                 await interaction.edit_original_response(content="一陣無法預測的宇宙射線干擾了故事的進行，請稍後再試...", embed=None, view=None, allowed_mentions=_ALLOWED_MENTIONS)

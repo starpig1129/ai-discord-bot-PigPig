@@ -21,7 +21,7 @@ class SummarizerCog(commands.Cog):
         self.bot = bot
         self.MAX_CHAR_COUNT = 15000
         self.EMBED_DESC_LIMIT = 4000
-        self.model = ModelManager().get_model("summarize_agent")
+        self.model = ModelManager().get_model("summarize_model")
 
     def _split_text_robustly(self, text: str):
         """
