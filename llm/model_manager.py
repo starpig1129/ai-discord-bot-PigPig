@@ -67,6 +67,10 @@ class ModelManager:
                 if obj.__module__ != module.__name__:
                     continue
  
+                # Skip abstract provider classes (e.g., base classes that shouldn't be instantiated).
+                if inspect.isabstract(obj):
+                    continue
+
                 try:
                     instance = obj()
                 except Exception as e:
