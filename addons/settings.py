@@ -65,8 +65,30 @@ class PromptConfig:
 
     def __init__(self, path: str = "config/prompt") -> None:
         self.path = path
-        self.info_agent: dict = _load_yaml_file(f"{path}/info_agent.yaml")
-        self.message_agent: dict = _load_yaml_file(f"{path}/message_agent.yaml")
+    
+    def get_system_prompt(self, agent_name: str) -> str:
+        """
+        從指定的 agent 設定中取得 system_prompt
+        
+        Args:
+            agent_name: agent 名稱
+        
+        Returns:
+            system_prompt 字串，若找不到則返回空字串
+        """
+        try:
+            from llm.prompting.manager import get_prompt_manager
+            
+            config_file = f"{self.path}/{agent_name}.yaml"
+            prompt_manager = get_prompt_manager(config_file)
+            system_prompt = prompt_manager.compose_prompt(['base'])
+            return system_prompt if system_prompt else ''
+        except Exception as e:
+            try:
+                asyncio.create_task(func.report_error(e, f"loading {agent_name} system prompt"))
+            except Exception:
+                pass
+            return ''
 
 class MemoryConfig:
     """對應 config/memory.yaml 的設定物件"""

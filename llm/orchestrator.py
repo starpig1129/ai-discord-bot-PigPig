@@ -18,8 +18,8 @@ from llm.tools_factory import get_tools
 from llm.schema import OrchestratorResponse, OrchestratorRequest
 from llm.utils.send_message import send_message
 from function import func
-from .prompting.system_prompt import get_system_prompt
 from addons.settings import prompt_config
+from .prompting.system_prompt import get_system_prompt
 
 
 class Orchestrator:
@@ -35,7 +35,7 @@ class Orchestrator:
     def _build_info_agent_prompt(
         self, bot_id: int, message: Message
     ) -> str:
-        """從 addons/settings.py 構建 info_agent 系統提示詞。
+        """從 addons/settings 構建 info_agent 系統提示詞。
 
         Args:
             bot_id: Discord 機器人 ID
@@ -45,56 +45,17 @@ class Orchestrator:
             完整的系統提示詞
         """
         try:
-            # 從 prompt_config 取得 info_agent YAML 配置
-            info_config = prompt_config.info_agent
+            # 從 addons/settings 取得 info_agent system_prompt
+            info_system_prompt = prompt_config.get_system_prompt('info_agent')
             
-            if not info_config:
+            if not info_system_prompt:
+                asyncio.create_task(func.report_error(
+                    Exception("info_agent system_prompt 為空"),
+                    "building info_agent prompt"
+                ))
                 return self._get_info_agent_fallback_prompt(bot_id)
             
-            # 構建基本提示詞
-            base_instruction = info_config.get("base", {}).get("core_instruction", "")
-            
-            # 構建角色描述
-            role_sections = []
-            if "role" in info_config:
-                role_data = info_config["role"]
-                if "primary_function" in role_data:
-                    role_sections.append("Primary Functions:")
-                    for func_item in role_data["primary_function"]:
-                        role_sections.append(f"- {func_item}")
-                
-                if "responsibilities" in role_data:
-                    role_sections.append("\nResponsibilities:")
-                    for resp in role_data["responsibilities"]:
-                        role_sections.append(f"- {resp}")
-            
-            # 構建分析原則
-            principles_sections = []
-            if "analysis_principles" in info_config:
-                principles = info_config["analysis_principles"]
-                if "message_understanding" in principles:
-                    principles_sections.append("Message Understanding:")
-                    for principle in principles["message_understanding"]:
-                        principles_sections.append(f"- {principle}")
-                
-                if "tool_selection" in principles:
-                    principles_sections.append("\nTool Selection:")
-                    for principle in principles["tool_selection"]:
-                        principles_sections.append(f"- {principle}")
-            
-            # 組合完整提示詞
-            prompt_parts = [
-                base_instruction,
-                "\n" + "\n".join(role_sections) if role_sections else "",
-                "\n" + "\n".join(principles_sections) if principles_sections else "",
-                "\nOutput Format:",
-                "- Provide a brief summary of the user's intent",
-                "- List any tools or resources that might be helpful",
-                "- Flag any special considerations or concerns",
-                "- Keep analysis focused and actionable",
-            ]
-            
-            return "\n".join(filter(None, prompt_parts))
+            return info_system_prompt
             
         except Exception as e:
             asyncio.create_task(func.report_error(e, "building info_agent prompt"))
@@ -168,7 +129,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             if info_model is None and fallback is None:
                 raise RuntimeError("info_model not available")
 
-            # 從 addons/settings.py 載入 info_agent 系統提示詞
+            # 從 config/prompt/info_agent.yaml 載入 info_agent 系統提示詞
             info_system_prompt = self._build_info_agent_prompt(
                 bot_id=bot.user.id,
                 message=message
@@ -181,7 +142,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 middleware=[
                     ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
                     fallback,
-                ],  # type: ignore[arg-type]
+                ],  # type: ignore
             )
 
             info_result = await info_agent.ainvoke(
@@ -199,11 +160,20 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             if message_model is None and fallback is None:
                 raise RuntimeError("message_model not available")
             
+            # 從 addons/settings 載入 message_agent 系統提示詞
+            message_system_prompt = prompt_config.get_system_prompt('message_agent')
+            if not message_system_prompt:
+                asyncio.create_task(func.report_error(
+                    Exception("message_agent system_prompt 為空"),
+                    "building message_agent prompt"
+                ))
+                message_system_prompt = get_system_prompt(bot.user.id, message)
+            
             message_agent = create_agent(
                 model=message_model,
                 tools=[],
-                system_prompt=get_system_prompt(bot.user.id, message),
-                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore[arg-type]
+                system_prompt=message_system_prompt,
+                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore
             )
             info_message = info_result["messages"][-1] 
 

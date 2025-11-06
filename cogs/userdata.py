@@ -27,7 +27,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from langchain.agents import create_agent
-from langchain_core.messages import ToolMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 
 from typing import Optional, Any, Union
 from .language_manager import LanguageManager
@@ -35,7 +35,7 @@ from .language_manager import LanguageManager
 from llm.model_manager import ModelManager
 from llm.utils.send_message import safe_edit_message
 from function import func
-from addons.settings import memory_config
+from addons.settings import memory_config, prompt_config
 # 備用翻譯字典
 FALLBACK_TRANSLATIONS = {
     "searching": "查詢用戶資料中...",
@@ -179,10 +179,16 @@ class UserDataCog(commands.Cog):
             if user_info and user_info.user_data:
                 # 使用 AI 智慧合併新舊資料
                 existing_data = user_info.user_data
-                system_prompt = '''You are a professional user data management assistant.
-                                 Intelligently merge existing user data with new data to return complete and accurate user information.
-                                 Maintain data integrity and consistency while avoiding duplicate information.
-                                 Always respond in Traditional Chinese.'''
+                
+                # 從 addons/settings 載入 system_prompt
+                system_prompt = prompt_config.get_system_prompt('user_data_agent')
+                
+                # 降級到硬編碼的 fallback prompt
+                if not system_prompt:
+                    system_prompt = '''You are a professional user data management assistant.
+Intelligently merge existing user data with new data to return complete and accurate user information.
+Maintain data integrity and consistency while avoiding duplicate information.
+Always respond in Traditional Chinese.'''
                 
                 try:
                     # 取得註冊於 ModelManager 的 agent 型別 user_data_model
