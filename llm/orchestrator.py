@@ -9,7 +9,7 @@ import asyncio
 from typing import Any
 
 from discord import Message
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
@@ -206,12 +206,11 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore[arg-type]
             )
             info_message = info_result["messages"][-1] 
-            # Stream tokens from the agent and delegate message handling to send_message.
-            # send_message will create an initial "processing" message if needed and
-            # will edit/send messages as tokens arrive.
+
+            
             message_result = ""
             streamer = message_agent.astream(
-                {"messages": [HumanMessage(content=info_message.content)]},
+                {"messages": [AIMessage(content=info_message.content), HumanMessage(content=message.content)]},
                 stream_mode="messages"
             )
             # 傳入 bot 以避免模組層級依賴 main.bot
