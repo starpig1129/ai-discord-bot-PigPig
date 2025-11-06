@@ -1,0 +1,4 @@
+user_data_path: data/memory/memory.db # Path to user data file
+short_term_memory_size: 10 # Number of Discord messages to keep in short-term memory
+long_term_memory_size: 1024 # Number of tokens for one long-term memory chunk
+longg_term_memory_count: 5 # Number of long-term memory chunks for context

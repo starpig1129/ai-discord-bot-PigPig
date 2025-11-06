@@ -34,11 +34,14 @@ from .language_manager import LanguageManager
 
 from llm.model_manager import ModelManager
 from llm.utils.send_message import safe_edit_message
-
+from function import func
+from addons.settings import memory_config
 # 備用翻譯字典
 FALLBACK_TRANSLATIONS = {
     "searching": "查詢用戶資料中...",
     "updating": "資料更新中...",
+    "processing": "處理中...",
+    "no_data_provided": "未提供任何資料。",
     "data_found": "用戶 <@{user_id}> 的資料：{data}",
     "data_not_found": "找不到用戶 <@{user_id}> 的資料。",
     "data_updated": "已更新用戶 <@{user_id}> 的資料：{data}",
@@ -58,6 +61,8 @@ class UserDataCog(commands.Cog):
         self.bot = bot
         self.lang_manager: Optional[LanguageManager] = None
         self.logger = logging.getLogger(__name__)
+        self.user_manager = None
+        self.db_manager = None
 
     def _translate(self, guild_id: str, *path, fallback_key: str = '', **kwargs) -> str:
         """統一的翻譯方法，包含備用機制"""
@@ -78,8 +83,13 @@ class UserDataCog(commands.Cog):
         return "操作完成"
 
     async def cog_load(self):
-        """當 Cog 載入時初始化語言管理器"""
+        """當 Cog 載入時初始化語言管理器和使用者管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
+        # 初始化資料庫管理器和使用者管理器
+        if not self.db_manager:
+            from cogs.memory.database import DatabaseManager
+            self.db_manager = DatabaseManager(memory_config.user_data_path, self.bot)
+            self.user_manager = self.db_manager.user_manager
 
     def _get_guild_id_from_context(self, context: Union[discord.Interaction, discord.Message]) -> str:
         """從各種上下文中提取 guild_id"""
@@ -91,13 +101,6 @@ class UserDataCog(commands.Cog):
             # 處理一般的訊息物件
             return str(context.guild.id)
         return ''
-
-    @property
-    def user_manager(self):
-        """取得 SQLite 使用者管理器"""
-        if hasattr(self.bot, 'memory_manager') and self.bot.memory_manager:
-            return self.bot.memory_manager.db_manager.user_manager
-        return None
 
     @app_commands.command(name="userdata", description="管理用戶數據")
     @app_commands.choices(action=[
@@ -123,7 +126,15 @@ class UserDataCog(commands.Cog):
         """核心邏輯：讀取使用者資料"""
         guild_id = self._get_guild_id_from_context(context)
         try:
-            user_info = await self.user_manager.get_user_info(user_id)
+            user_mgr = self.user_manager
+            if not user_mgr:
+                return self._translate(
+                    guild_id,
+                    "system", "userdata", "errors", "sqlite_not_available",
+                    fallback_key="sqlite_not_available"
+                )
+
+            user_info = await user_mgr.get_user_info(user_id)
             if user_info and user_info.user_data:
                 return self._translate(
                     guild_id,
@@ -140,6 +151,10 @@ class UserDataCog(commands.Cog):
                     user_id=user_id
                 )
         except Exception as e:
+            try:
+                await func.report_error(e, f"讀取使用者資料失敗 (使用者: {user_id})")
+            except Exception:
+                pass
             return self._translate(
                 guild_id,
                 "system", "userdata", "errors", "database_error",
@@ -151,7 +166,15 @@ class UserDataCog(commands.Cog):
         """核心邏輯：儲存使用者資料（包含 AI 合併）"""
         guild_id = self._get_guild_id_from_context(context)
         try:
-            user_info = await self.user_manager.get_user_info(user_id)
+            user_mgr = self.user_manager
+            if not user_mgr:
+                return self._translate(
+                    guild_id,
+                    "system", "userdata", "errors", "sqlite_not_available",
+                    fallback_key="sqlite_not_available"
+                )
+
+            user_info = await user_mgr.get_user_info(user_id)
             
             if user_info and user_info.user_data:
                 # 使用 AI 智慧合併新舊資料
@@ -171,26 +194,30 @@ class UserDataCog(commands.Cog):
                                          system_prompt=system_prompt)
                     
                     # 將既有資料與新資料包成 LangChain 標準 messages 格式
-                    messages = [
-                        HumanMessage(content=f"""
-                    Existing data: {json.dumps({'existing_data': existing_data}, ensure_ascii=False)}
+                    prompt_text = f"""Existing data: {json.dumps({'existing_data': existing_data}, ensure_ascii=False)}
 
-                    New data: {json.dumps({'new_data': user_data}, ensure_ascii=False)}
+New data: {json.dumps({'new_data': user_data}, ensure_ascii=False)}
 
-                    Merge these intelligently and return complete user information.
-                    """)
-                    ]
+Merge these intelligently and return complete user information."""
                     
                     # 使用 LangChain agent 的 ainvoke 進行非同步呼叫，取得回傳結果字典
-                    response = await agent.ainvoke({"messages": messages})
+                    response = await agent.ainvoke({"messages": [HumanMessage(content=prompt_text)]})
                     
-                    new_data = response["messages"][-1].content
+                    # 從回應中提取文本內容
+                    if isinstance(response, dict) and "messages" in response and response["messages"]:
+                        new_data = response["messages"][-1].content
+                    else:
+                        new_data = str(response)
                     
                     # 若模型回傳結構化資料，轉成字串；並清理特殊終止標記
                     if isinstance(new_data, (dict, list)):
                         new_data = json.dumps(new_data, ensure_ascii=False)
                     
                 except Exception as e:
+                    try:
+                        await func.report_error(e, f"AI 處理使用者資料失敗 (使用者: {user_id})")
+                    except Exception:
+                        pass
                     return self._translate(
                         guild_id,
                         "system", "userdata", "errors", "ai_processing_failed",
@@ -199,7 +226,7 @@ class UserDataCog(commands.Cog):
                     )
                 
                 # 更新使用者資料
-                success = await self.user_manager.update_user_data(user_id, new_data, display_name)
+                success = await user_mgr.update_user_data(user_id, new_data, display_name)
                 if success:
                     return self._translate(
                         guild_id,
@@ -209,6 +236,10 @@ class UserDataCog(commands.Cog):
                         data=new_data
                     )
                 else:
+                    try:
+                        await func.report_error(Exception("資料庫更新失敗"), f"更新使用者資料失敗 (使用者: {user_id})")
+                    except Exception:
+                        pass
                     return self._translate(
                         guild_id,
                         "system", "userdata", "errors", "update_failed",
@@ -217,7 +248,7 @@ class UserDataCog(commands.Cog):
                     )
             else:
                 # 建立新使用者資料
-                success = await self.user_manager.update_user_data(user_id, user_data, display_name)
+                success = await user_mgr.update_user_data(user_id, user_data, display_name)
                 if success:
                     return self._translate(
                         guild_id,
@@ -227,6 +258,10 @@ class UserDataCog(commands.Cog):
                         data=user_data
                     )
                 else:
+                    try:
+                        await func.report_error(Exception("資料庫建立失敗"), f"建立使用者資料失敗 (使用者: {user_id})")
+                    except Exception:
+                        pass
                     return self._translate(
                         guild_id,
                         "system", "userdata", "errors", "update_failed",
@@ -235,6 +270,10 @@ class UserDataCog(commands.Cog):
                     )
                     
         except Exception as e:
+            try:
+                await func.report_error(e, f"儲存使用者資料失敗 (使用者: {user_id})")
+            except Exception:
+                pass
             return self._translate(
                 guild_id,
                 "system", "userdata", "errors", "update_failed",

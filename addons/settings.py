@@ -67,7 +67,17 @@ class PromptConfig:
         self.path = path
         self.info_agent: dict = _load_yaml_file(f"{path}/info_agent.yaml")
         self.message_agent: dict = _load_yaml_file(f"{path}/message_agent.yaml")
-# 在模組層級建立預設實例（YAML config）以維持向後相容
+
+class MemoryConfig:
+    """對應 config/memory.yaml 的設定物件"""
+
+    def __init__(self, path: str = "config/memory.yaml") -> None:
+        self.path = path
+        data = _load_yaml_file(path)
+        self.user_data_path: str = data.get("user_data_path", "data/memory/memory.db")
+        self.short_term_memory_size: int = data.get("short_term_memory_size", 10)
+        self.long_term_memory_size: int = data.get("long_term_memory_size", 1024)
+        self.long_term_memory_count: int = data.get("long_term_memory_count", 5)
 try:
     base_config = BaseConfig("config/base.yaml")
 except Exception as e:
@@ -115,7 +125,15 @@ except Exception as e:
     except Exception:
         print(f"初始化 PromptConfig 時發生錯誤: {e}")
     prompt_config = PromptConfig()
-    
+try:
+    memory_config = MemoryConfig("config/memory.yaml")
+except Exception as e:
+    try:
+        from function import func
+        asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
+    except Exception:
+        print(f"初始化 MemoryConfig 時發生錯誤: {e}")
+    memory_config = MemoryConfig()    
 __all__ = [
     "BaseConfig",
     "base_config",
@@ -127,4 +145,6 @@ __all__ = [
     "music_config",
     "PromptConfig",
     "prompt_config",
+    "MemoryConfig",
+    "memory_config",
 ]
