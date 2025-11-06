@@ -33,7 +33,7 @@ from typing import Optional, Any, Union
 from .language_manager import LanguageManager
 
 from llm.model_manager import ModelManager
-
+from llm.utils.send_message import safe_edit_message
 
 # 備用翻譯字典
 FALLBACK_TRANSLATIONS = {
@@ -59,7 +59,7 @@ class UserDataCog(commands.Cog):
         self.lang_manager: Optional[LanguageManager] = None
         self.logger = logging.getLogger(__name__)
 
-    def _translate(self, guild_id: str, *path, fallback_key: str = None, **kwargs) -> str:
+    def _translate(self, guild_id: str, *path, fallback_key: str = '', **kwargs) -> str:
         """統一的翻譯方法，包含備用機制"""
         if self.lang_manager:
             try:
@@ -81,7 +81,7 @@ class UserDataCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    def _get_guild_id_from_context(self, context: Union[discord.Interaction, discord.Message]) -> Optional[str]:
+    def _get_guild_id_from_context(self, context: Union[discord.Interaction, discord.Message]) -> str:
         """從各種上下文中提取 guild_id"""
         if isinstance(context, discord.Interaction):
             # 處理來自斜線指令的互動
@@ -90,7 +90,7 @@ class UserDataCog(commands.Cog):
         elif isinstance(context, discord.Message) and context.guild:
             # 處理一般的訊息物件
             return str(context.guild.id)
-        return None
+        return ''
 
     @property
     def user_manager(self):
@@ -106,13 +106,12 @@ class UserDataCog(commands.Cog):
     ])
     async def userdata_command(self, interaction: discord.Interaction, 
                               action: str, 
-                              user: discord.User = None, 
-                              user_data: str = None):
+                              user: Optional[Union[discord.User, discord.Member]] = None, 
+                              user_data: str = ''):
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
 
         await interaction.response.defer(thinking=True, ephemeral=True)
-        guild_id = str(interaction.guild_id)
         
         result = await self.manage_user_data(
             interaction, user or interaction.user, user_data, action
@@ -243,9 +242,9 @@ class UserDataCog(commands.Cog):
                 error=str(e)
             )
 
-    async def manage_user_data(self, context: Any, user: discord.User,
-                               user_data: str = None, action: str = 'read',
-                               message_to_edit: discord.Message = None):
+    async def manage_user_data(self, context: Any, user: Union[discord.User, discord.Member],
+                               user_data: str = '', action: str = 'read',
+                               message_to_edit: Optional[discord.Message] = None):
         """管理使用者資料（使用 SQLite） - 分派器"""
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
@@ -279,8 +278,8 @@ class UserDataCog(commands.Cog):
         else:
             return self._translate(guild_id, "commands", "userdata", "responses", "invalid_action", fallback_key="invalid_action")
 
-    async def manage_user_data_message(self, message, user_id=None, user_data=None,
-                                     action='read', message_to_edit: discord.Message = None):
+    async def manage_user_data_message(self, message, user_id=None, user_data='',
+                                     action='read', message_to_edit: Optional[discord.Message] = None):
         """從訊息管理使用者資料"""
         guild_id = self._get_guild_id_from_context(message)
         
@@ -330,7 +329,7 @@ class UserDataCog(commands.Cog):
             self.logger.error(f"取得使用者統計失敗: {e}")
             return {"error": str(e)}
 
-    async def update_user_activity(self, user_id: str, display_name: str = None) -> bool:
+    async def update_user_activity(self, user_id: str, display_name: str = '') -> bool:
         """更新使用者活躍狀態"""
         if not self.user_manager:
             return False
