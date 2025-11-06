@@ -254,7 +254,8 @@ class PigPig(commands.Bot):
 
                 # Only trigger handle_message if in allowed channel and mentioned or auto-response enabled
                 if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
-                    await self.orchestrator.handle_message(self, message, logger)
+                    message_edit = await message.reply("...")
+                    await self.orchestrator.handle_message(self,message_edit, message, logger)
         except Exception as e:
             await func.report_error(e, f"on_message: {e}")
             
@@ -311,7 +312,8 @@ class PigPig(commands.Bot):
                             return  # In story mode, don't continue with general message processing
                         
                         if is_allowed and (self.user.id in after.raw_mentions and not after.mention_everyone or auto_response_enabled):
-                            await self.orchestrator.handle_message(self, after, logger)
+                            message_edit = await after.reply("...")
+                            await self.orchestrator.handle_message(self,message_edit, after, logger)
                             
         except Exception as e:
             await func.report_error(e, f"on_message_edit: {e}")

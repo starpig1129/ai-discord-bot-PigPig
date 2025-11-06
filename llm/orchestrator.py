@@ -9,6 +9,7 @@ import asyncio
 from typing import Any
 
 from discord import Message
+from langchain_core.messages import HumanMessage
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
@@ -28,7 +29,7 @@ class Orchestrator:
         """初始化 ModelManager。"""
         self.model_manager = ModelManager()
 
-    async def handle_message(self, bot: Any, message: Message, logger: Any) -> OrchestratorResponse:
+    async def handle_message(self, bot: Any,message_edit: Message,message: Message, logger: Any) -> OrchestratorResponse:
         """處理傳入的 Discord 訊息並回傳 OrchestratorResponse。
 
         流程：
@@ -68,9 +69,9 @@ class Orchestrator:
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore[arg-type]
             )
 
-            info_result = await info_agent.ainvoke({"messages": [{"role": "user", "content": message.content}]},
+            info_result = await info_agent.ainvoke({"messages": [HumanMessage(content=message.content)]},
                                                    context=OrchestratorRequest(bot=bot, message=message, logger=logger))
-
+            print(f"Info Agent Result: {info_result}")
         except Exception as e:
             asyncio.create_task(func.report_error(e, "info_agent failed"))
             raise
@@ -89,24 +90,18 @@ class Orchestrator:
                 context_schema=OrchestratorRequest,
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore[arg-type]
             )
-
-            # 從 info_result 嘗試擷取可當作下一階段輸入的文字
-            if isinstance(info_result, dict):
-                output = info_result.get("output") or info_result.get("text") or info_result.get("content") or str(info_result)
-            else:
-                output = str(info_result)
-
+            info_message = info_result["messages"][-1] 
             # Stream tokens from the agent and delegate message handling to send_message.
             # send_message will create an initial "processing" message if needed and
             # will edit/send messages as tokens arrive.
             message_result = ""
             streamer = message_agent.stream(
-                {"messages": [{"role": "user", "content": output}]},
+                {"messages": [HumanMessage(content=info_message.content)]},
                 context=OrchestratorRequest(bot=bot, message=message, logger=logger),
                 stream_mode="values"
             )
             # 傳入 bot 以避免模組層級依賴 main.bot
-            message_result = await send_message(bot, None, message, streamer)
+            message_result = await send_message(bot, message_edit, message, streamer)
 
 
         except Exception as e:
