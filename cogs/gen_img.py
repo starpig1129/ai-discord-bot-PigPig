@@ -43,7 +43,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
         self.lang_manager: Optional[LanguageManager] = None
         self.session = aiohttp.ClientSession()
         self.tokens = tokens
-        self.client = genai.Client(api_key=self.tokens.gemini_api_key)
+        self.client = genai.Client(api_key=self.tokens.google_api_key)
         self.model_id = "timbrooks/instruct-pix2pix"
         self.conversation_history: Dict[int, List[Dict]] = {}
 

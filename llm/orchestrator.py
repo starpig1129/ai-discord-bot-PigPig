@@ -9,7 +9,6 @@ import asyncio
 from typing import Any
 
 from discord import Message
-from langchain.tools import ToolRuntime
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
@@ -53,37 +52,42 @@ class Orchestrator:
             if guild is None:
                 raise ValueError("Discord message.guild is None")
             
-            tool_list = get_tools(user, guid=guild)
-            print(tool_list)        
-            info_model = self.model_manager.get_model("info_model")
-            if info_model is None:
+            tool_list = get_tools(user, guid=guild)       
+            message_pair = self.model_manager.get_model("info_model")
+            if message_pair is None:
                 raise RuntimeError("info_model not available")
-            
+            info_model, fallback = message_pair
+            if info_model is None and fallback is None:
+                raise RuntimeError("info_model not available")
+
             info_agent = create_agent(
                 model=info_model,
                 tools=tool_list,
                 context_schema=OrchestratorRequest,
                 system_prompt="You are a helpful assistant for Discord users.",
-                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")]  # type: ignore[arg-type]
+                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore[arg-type]
             )
 
             info_result = await info_agent.ainvoke({"messages": [{"role": "user", "content": message.content}]},
                                                    context=OrchestratorRequest(bot=bot, message=message, logger=logger))
 
         except Exception as e:
-            # 非同步回報錯誤並重新拋出以便上層處理
             asyncio.create_task(func.report_error(e, "info_agent failed"))
             raise
+
         try:
-            message_model = self.model_manager.get_model("message_model")
-            if message_model is None:
+            message_pair = self.model_manager.get_model("message_model")
+            if message_pair is None:
+                raise RuntimeError("message_model not available")
+            message_model, fallback = message_pair
+            if message_model is None and fallback is None:
                 raise RuntimeError("message_model not available")
             
             message_agent = create_agent(
                 model=message_model,
                 tools=tool_list,
                 context_schema=OrchestratorRequest,
-                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")]  # type: ignore[arg-type]
+                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore[arg-type]
             )
 
             # 從 info_result 嘗試擷取可當作下一階段輸入的文字

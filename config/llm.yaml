@@ -1,6 +1,6 @@
 model_priorities:
   info_model:
-    - google:
+    - google_genai:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-2.0-flash
@@ -13,7 +13,7 @@ model_priorities:
       - claude-haiku-4.5
     
   message_model:
-    - google:
+    - google_genai:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-2.0-flash
@@ -27,7 +27,7 @@ model_priorities:
 
 
   review_model:
-    - google:
+    - google_genai:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-2.0-flash
@@ -40,7 +40,7 @@ model_priorities:
       - claude-haiku-4.5
 
   summerize_model:
-    - google:
+    - google_genai:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-2.0-flash
@@ -53,7 +53,7 @@ model_priorities:
       - claude-haiku-4.5
 
   user_data_model:
-    - google:
+    - google_genai:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-2.0-flash
@@ -66,7 +66,7 @@ model_priorities:
       - claude-haiku-4.5
 
   story_gm_model:
-    - google:
+    - google_genai:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-2.0-flash
@@ -79,7 +79,7 @@ model_priorities:
       - claude-haiku-4.5
 
   story_character_model:
-    - google:
+    - google_genai:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-2.0-flash
@@ -92,7 +92,7 @@ model_priorities:
       - claude-haiku-4.5
 
   story_summary_model:
-    - google:
+    - google_genai:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-2.0-flash
@@ -105,7 +105,7 @@ model_priorities:
       - claude-haiku-4.5
 
   story_outline_model:
-    - google:
+    - google_genai:
       - gemini-2.5-flash
       - gemini-2.5-flash-lite
       - gemini-2.0-flash
