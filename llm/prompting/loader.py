@@ -4,11 +4,12 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
 import asyncio
+from addons.settings import prompt_config
 from function import func
 class PromptLoader:
     """YAML 提示配置載入器"""
     
-    def __init__(self, config_path: str = "./systemPrompt.yaml"):
+    def __init__(self, config_path: str = "./config/prompt/message_agent.yaml"):
         """
         初始化載入器
         

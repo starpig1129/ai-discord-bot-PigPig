@@ -11,6 +11,7 @@ security:
   protected_files:
     - "settings.json"
     - "systemPrompt.yaml"
+    - "config/"
     - ".env"
     - ".git/"
     - ".gitignore"

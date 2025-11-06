@@ -10,7 +10,7 @@ from function import func
 class PromptManager:
     """YAML 基礎的系統提示管理器"""
     
-    def __init__(self, config_path: str = "./systemPrompt.yaml"):
+    def __init__(self, config_path: str = r"config/prompt/message_agent.yaml"):
         """
         初始化提示管理器
         
@@ -380,7 +380,7 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
 # 全域實例（延遲初始化）
 _prompt_manager_instance: Optional[PromptManager] = None
 
-def get_prompt_manager(config_path: str = "./systemPrompt.yaml") -> PromptManager:
+def get_prompt_manager(config_path: str = r"./config/prompt/message_agent.yaml") -> PromptManager:
     """
     取得全域 PromptManager 實例（單例模式）
     

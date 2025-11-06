@@ -19,6 +19,7 @@ from llm.schema import OrchestratorResponse, OrchestratorRequest
 from llm.utils.send_message import send_message
 from function import func
 from .prompting.system_prompt import get_system_prompt
+from addons.settings import prompt_config
 
 
 class Orchestrator:
@@ -30,6 +31,105 @@ class Orchestrator:
     def __init__(self) -> None:
         """初始化 ModelManager。"""
         self.model_manager = ModelManager()
+
+    def _build_info_agent_prompt(
+        self, bot_id: int, message: Message
+    ) -> str:
+        """從 addons/settings.py 構建 info_agent 系統提示詞。
+
+        Args:
+            bot_id: Discord 機器人 ID
+            message: Discord 訊息物件
+
+        Returns:
+            完整的系統提示詞
+        """
+        try:
+            # 從 prompt_config 取得 info_agent YAML 配置
+            info_config = prompt_config.info_agent
+            
+            if not info_config:
+                return self._get_info_agent_fallback_prompt(bot_id)
+            
+            # 構建基本提示詞
+            base_instruction = info_config.get("base", {}).get("core_instruction", "")
+            
+            # 構建角色描述
+            role_sections = []
+            if "role" in info_config:
+                role_data = info_config["role"]
+                if "primary_function" in role_data:
+                    role_sections.append("Primary Functions:")
+                    for func_item in role_data["primary_function"]:
+                        role_sections.append(f"- {func_item}")
+                
+                if "responsibilities" in role_data:
+                    role_sections.append("\nResponsibilities:")
+                    for resp in role_data["responsibilities"]:
+                        role_sections.append(f"- {resp}")
+            
+            # 構建分析原則
+            principles_sections = []
+            if "analysis_principles" in info_config:
+                principles = info_config["analysis_principles"]
+                if "message_understanding" in principles:
+                    principles_sections.append("Message Understanding:")
+                    for principle in principles["message_understanding"]:
+                        principles_sections.append(f"- {principle}")
+                
+                if "tool_selection" in principles:
+                    principles_sections.append("\nTool Selection:")
+                    for principle in principles["tool_selection"]:
+                        principles_sections.append(f"- {principle}")
+            
+            # 組合完整提示詞
+            prompt_parts = [
+                base_instruction,
+                "\n" + "\n".join(role_sections) if role_sections else "",
+                "\n" + "\n".join(principles_sections) if principles_sections else "",
+                "\nOutput Format:",
+                "- Provide a brief summary of the user's intent",
+                "- List any tools or resources that might be helpful",
+                "- Flag any special considerations or concerns",
+                "- Keep analysis focused and actionable",
+            ]
+            
+            return "\n".join(filter(None, prompt_parts))
+            
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "building info_agent prompt"))
+            return self._get_info_agent_fallback_prompt(bot_id)
+
+    def _get_info_agent_fallback_prompt(self, bot_id: int) -> str:
+        """取得備用的 info_agent 提示詞。
+
+        Args:
+            bot_id: Discord 機器人 ID
+
+        Returns:
+            備用提示詞
+        """
+        return f"""You are an information analysis assistant helping a Discord chatbot <@{bot_id}>. Your role is to analyze user messages and extract key information.
+
+Your responsibilities:
+- Analyze user intent and message content
+- Classify the type of query (question, command, conversation, etc.)
+- Identify required tools or external resources
+- Extract key entities and context from messages
+
+Analysis Guidelines:
+- Read the entire message carefully before drawing conclusions
+- Consider context from previous conversations when available
+- Identify the core request even if wrapped in casual language
+- Determine which tools or capabilities might be needed
+
+Output Format:
+- Provide a brief summary of the user's intent
+- List any tools or resources that might be helpful
+- Flag any special considerations or concerns
+- Keep analysis focused and actionable
+
+Focus on understanding what the user actually needs and prepare a clear analysis for the response generation phase."""
 
     async def handle_message(
         self, bot: Any, message_edit: Message, message: Message, logger: Any
@@ -68,10 +168,16 @@ class Orchestrator:
             if info_model is None and fallback is None:
                 raise RuntimeError("info_model not available")
 
+            # 從 addons/settings.py 載入 info_agent 系統提示詞
+            info_system_prompt = self._build_info_agent_prompt(
+                bot_id=bot.user.id,
+                message=message
+            )
+            
             info_agent = create_agent(
                 model=info_model,
                 tools=tool_list,
-                system_prompt="You are a helpful assistant for Discord users.",
+                system_prompt=info_system_prompt,
                 middleware=[
                     ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
                     fallback,

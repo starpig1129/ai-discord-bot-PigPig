@@ -7,7 +7,7 @@ __version__ = "v2.7.0"  # 當前版本號
 GITHUB_API_URL = "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest"  # GitHub API 地址,用於獲取最新版本信息
 PIGPIG_URL = "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"  # 下載 PigPig Bot 的 URL
 IGNORE_FILES = [
-    "settings.json", ".env", "data/", "systemPrompt.yaml",
+    "settings.json", ".env", "data/", "systemPrompt.yaml",'config/',
     "logs/", "temp/", "__pycache__/", "*.pyc", "models/", 
     "lavalink/", "chromedriver*/", "school", ".git/", ".gitignore"
 ]  # 忽略的文件和目錄列表

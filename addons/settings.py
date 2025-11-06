@@ -60,7 +60,13 @@ class MusicConfig:
         self.music_temp_base: dict = data.get("music_temp_base", "temp/music")
         self.ffmpeg : dict = data.get("ffmpeg", {})
 
+class PromptConfig:
+    """對應 config/prompt/*.yaml 的設定物件"""
 
+    def __init__(self, path: str = "config/prompt") -> None:
+        self.path = path
+        self.info_agent: dict = _load_yaml_file(f"{path}/info_agent.yaml")
+        self.message_agent: dict = _load_yaml_file(f"{path}/message_agent.yaml")
 # 在模組層級建立預設實例（YAML config）以維持向後相容
 try:
     base_config = BaseConfig("config/base.yaml")
@@ -100,7 +106,16 @@ except Exception as e:
     except Exception:
         print(f"初始化 MusicConfig 時發生錯誤: {e}")
     music_config = MusicConfig()
-
+try:
+    prompt_config = PromptConfig("config/prompt")
+except Exception as e:
+    try:
+        from function import func
+        asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
+    except Exception:
+        print(f"初始化 PromptConfig 時發生錯誤: {e}")
+    prompt_config = PromptConfig()
+    
 __all__ = [
     "BaseConfig",
     "base_config",
@@ -110,4 +125,6 @@ __all__ = [
     "update_config",
     "MusicConfig",
     "music_config",
+    "PromptConfig",
+    "prompt_config",
 ]
