@@ -3,7 +3,8 @@ import os
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
-
+import asyncio
+from function import func
 class PromptLoader:
     """YAML 提示配置載入器"""
     
@@ -50,7 +51,7 @@ class PromptLoader:
             self.logger.error(f"YAML parsing error in {self.config_path}: {e}")
             raise
         except Exception as e:
-            func.report_error(e, f"loading configuration from {self.config_path}")
+            asyncio.create_task(func.report_error(e, f"loading configuration from {self.config_path}"))
             raise
     
     def reload_if_changed(self) -> bool:
@@ -74,7 +75,7 @@ class PromptLoader:
             return False
             
         except Exception as e:
-            func.report_error(e, "checking for file changes")
+            asyncio.create_task(func.report_error(e, "checking for file changes"))
             return False
     
     def get_last_modified(self) -> Optional[datetime]:
@@ -89,7 +90,7 @@ class PromptLoader:
                 return datetime.fromtimestamp(os.path.getmtime(self.config_path))
             return None
         except Exception as e:
-            func.report_error(e, "getting file modification time")
+            asyncio.create_task(func.report_error(e, "getting file modification time"))
             return None
     
     def get_cached_config(self) -> Optional[Dict[str, Any]]:
@@ -159,5 +160,5 @@ class PromptLoader:
             return True
             
         except Exception as e:
-            func.report_error(e, "configuration validation")
+            asyncio.create_task(func.report_error(e, "configuration validation"))
             return False

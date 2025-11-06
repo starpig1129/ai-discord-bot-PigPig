@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional
-
+import asyncio
+from function import func
 class PromptBuilder:
     """提示建構器"""
     
@@ -52,7 +53,7 @@ class PromptBuilder:
             return full_prompt
             
         except Exception as e:
-            func.report_error(e, "building system prompt")
+            asyncio.create_task(func.report_error(e, "building system prompt"))
             raise
     
     def _format_module_content(self, module_config: dict, module_name: str) -> str:
@@ -178,7 +179,7 @@ class PromptBuilder:
             self.logger.warning(f"Missing variable in prompt formatting: {e}")
             return prompt
         except Exception as e:
-            func.report_error(e, "formatting prompt with variables")
+            asyncio.create_task(func.report_error(e, "formatting prompt with variables"))
             return prompt
     
     def compose_modules(self, config: dict, module_list: List[str]) -> str:

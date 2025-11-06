@@ -2,7 +2,8 @@ import threading
 import logging
 from typing import Dict, Any, Optional, Set
 from datetime import datetime, timedelta
-
+from function import func
+import asyncio
 class PromptCache:
     """智慧快取系統"""
     
@@ -125,7 +126,7 @@ class PromptCache:
                 self.logger.info(f"Precompiled {len(self.precompiled_cache)} template combinations")
                 
             except Exception as e:
-                func.report_error(e, "precompiling templates")
+                asyncio.create_task(func.report_error(e, "precompiling templates"))
     
     def get_precompiled(self, key: str) -> Optional[str]:
         """
@@ -190,7 +191,7 @@ class PromptCache:
                 'most_accessed': most_accessed
             }
     
-    def get_cache_keys(self, prefix: str = None) -> Set[str]:
+    def get_cache_keys(self, prefix: str = '') -> Set[str]:
         """
         獲取快取鍵值列表
         

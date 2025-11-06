@@ -1,9 +1,8 @@
 import asyncio
-
+import logging
 from typing import List, Optional
 
 import discord
-
 from llm.prompting.manager import get_prompt_manager
 from function import func
 
@@ -99,7 +98,7 @@ def get_channel_system_prompt(
       return ""
 
 
-def get_system_prompt(bot_id: str, message: Optional[discord.Message] = None) -> str:
+def get_system_prompt(bot_id: str, message: Optional[discord.Message]) -> str:
   """Gets system prompt with fallback hierarchy.
   
   Priority order:

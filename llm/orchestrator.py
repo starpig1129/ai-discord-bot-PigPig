@@ -18,6 +18,7 @@ from llm.tools_factory import get_tools
 from llm.schema import OrchestratorResponse, OrchestratorRequest
 from llm.utils.send_message import send_message
 from function import func
+from .prompting.system_prompt import get_system_prompt
 
 
 class Orchestrator:
@@ -95,7 +96,7 @@ class Orchestrator:
             message_agent = create_agent(
                 model=message_model,
                 tools=[],
-                system_prompt="You are a helpful assistant for Discord users.",
+                system_prompt=get_system_prompt(bot.user.id, message),
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore[arg-type]
             )
             info_message = info_result["messages"][-1] 
