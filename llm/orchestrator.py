@@ -19,6 +19,7 @@ from llm.schema import OrchestratorResponse, OrchestratorRequest
 from llm.utils.send_message import send_message
 from function import func
 
+
 class Orchestrator:
     """核心 Orchestrator，將 Discord 訊息路由到 LangChain Agent 並回傳結果。
 
@@ -29,7 +30,9 @@ class Orchestrator:
         """初始化 ModelManager。"""
         self.model_manager = ModelManager()
 
-    async def handle_message(self, bot: Any,message_edit: Message,message: Message, logger: Any) -> OrchestratorResponse:
+    async def handle_message(
+        self, bot: Any, message_edit: Message, message: Message, logger: Any
+    ) -> OrchestratorResponse:
         """處理傳入的 Discord 訊息並回傳 OrchestratorResponse。
 
         流程：
@@ -52,8 +55,11 @@ class Orchestrator:
             guild = getattr(message, "guild", None)
             if guild is None:
                 raise ValueError("Discord message.guild is None")
-            
-            tool_list = get_tools(user, guid=guild)       
+
+            runtime_context = OrchestratorRequest(
+                bot=bot, message=message, logger=logger
+            )
+            tool_list = get_tools(user, guid=guild, runtime=runtime_context)
             message_pair = self.model_manager.get_model("info_model")
             if message_pair is None:
                 raise RuntimeError("info_model not available")
@@ -64,14 +70,16 @@ class Orchestrator:
             info_agent = create_agent(
                 model=info_model,
                 tools=tool_list,
-                context_schema=OrchestratorRequest,
                 system_prompt="You are a helpful assistant for Discord users.",
-                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore[arg-type]
+                middleware=[
+                    ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
+                    fallback,
+                ],  # type: ignore[arg-type]
             )
 
-            info_result = await info_agent.ainvoke({"messages": [HumanMessage(content=message.content)]},
-                                                   context=OrchestratorRequest(bot=bot, message=message, logger=logger))
-            print(f"Info Agent Result: {info_result}")
+            info_result = await info_agent.ainvoke(
+                {"messages": [HumanMessage(content=message.content)]},
+            )
         except Exception as e:
             asyncio.create_task(func.report_error(e, "info_agent failed"))
             raise
@@ -86,8 +94,8 @@ class Orchestrator:
             
             message_agent = create_agent(
                 model=message_model,
-                tools=tool_list,
-                context_schema=OrchestratorRequest,
+                tools=[],
+                system_prompt="You are a helpful assistant for Discord users.",
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore[arg-type]
             )
             info_message = info_result["messages"][-1] 
@@ -95,10 +103,9 @@ class Orchestrator:
             # send_message will create an initial "processing" message if needed and
             # will edit/send messages as tokens arrive.
             message_result = ""
-            streamer = message_agent.stream(
+            streamer = message_agent.astream(
                 {"messages": [HumanMessage(content=info_message.content)]},
-                context=OrchestratorRequest(bot=bot, message=message, logger=logger),
-                stream_mode="values"
+                stream_mode="messages"
             )
             # 傳入 bot 以避免模組層級依賴 main.bot
             message_result = await send_message(bot, message_edit, message, streamer)

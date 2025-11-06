@@ -185,7 +185,7 @@ def _get_processing_message(
 
 
 async def _process_token_stream(
-    streamer: Union[AsyncIterator, Iterator],
+    streamer: AsyncIterator,
     converter: Optional[opencc.OpenCC],
     current_message: discord.Message,
     channel: discord.abc.Messageable,
@@ -209,85 +209,55 @@ async def _process_token_stream(
     responsesall = ''  # Accumulated text for current message block
     message_result = ''  # Full result as returned to caller
     
-    # Determine if streamer is async iterable
-    is_async = hasattr(streamer, '__aiter__')
-    iterator = streamer if is_async else iter(streamer)
-    
-    async def process_item(item):
-        latest_message = item["messages"][-1]
-    
-        # 判斷是否為最終回覆
-        if not (latest_message.content and not latest_message.tool_calls):
-            pass
+    async def process_item(token, metadata):
         nonlocal responses, responsesall, message_result, current_message
         
-        # Extract token from item
-        token = (item[0] if isinstance(item, (list, tuple)) and len(item) > 0
-                 else item)
-        token_str = str(token or '')
-        
-        responses += token_str
-        message_result += token_str
-        
-        if len(responses) >= _BUFFER_SIZE:
-            responsesall += responses
-            converted_response = (converter.convert(responsesall)
-                                  if converter else responsesall)
             
-            # If too long, create a new continuation message
-            if len(converted_response) > _HARD_LIMIT:
-                processing_message = _get_processing_message(
-                    message,
-                    lang_manager,
-                    'continuation'
-                )
-                new_chunk_message = await _safe_send_message(
-                    channel,
-                    processing_message
-                )
-                current_message = new_chunk_message
-                responsesall = ''
-                converted_response = (converter.convert(responsesall)
-                                      if converter else responsesall)
+        # 提取文字 token
+        if hasattr(token, "content") and token.content:
+            token_str = str(token.content)
+            responses += token_str
+            message_result += token_str
             
-            # Truncate if still too long
-            if len(converted_response) > _HARD_LIMIT:
-                converted_response = converted_response[:_HARD_LIMIT]
-            
-            try:
-                await safe_edit_message(current_message, converted_response)
-            except discord.errors.NotFound:
-                _logger.warning(
-                    'Message not found during edit, creating new message'
-                )
-                current_message = await _safe_send_message(
-                    channel,
-                    converted_response
-                )
-            
-            responses = ''
-            await asyncio.sleep(0)
+            # 達到緩衝區大小時更新
+            if len(responses) >= _BUFFER_SIZE:
+                responsesall += responses
+                converted = (converter.convert(responsesall) 
+                            if converter else responsesall)
+                
+                # 處理訊息長度限制
+                if len(converted) > _HARD_LIMIT:
+                    processing_msg = _get_processing_message(
+                        message, lang_manager, 'continuation'
+                    )
+                    current_message = await _safe_send_message(
+                        channel, processing_msg
+                    )
+                    responsesall = ''
+                    converted = ''
+
+                if converted and (len(converted) != 0) <= _HARD_LIMIT:
+                    await safe_edit_message(current_message, converted)
+                
+                responses = ''  # 清空緩衝區
+                await asyncio.sleep(0)
     
-    # Process stream based on type
-    if is_async:
-        async for item in iterator:
-            await process_item(item)
-    else:
-        for item in iterator:
-            await process_item(item)
+
+    async for token, metadata in streamer:
+        await process_item(token, metadata)
     
     # Handle remaining buffered tokens
     if responses:
         responsesall += responses
     
-    return message_result, current_message, responsesall
+    return responsesall,current_message
 
 
 async def send_message(
     bot: Any,
     message_to_edit: Optional[discord.Message],
     message: discord.Message,
-    streamer: Union[AsyncIterator, Iterator],
+    streamer: AsyncIterator,
 ) -> str:
     """Consumes a token stream and updates Discord messages with buffering.
     
@@ -331,7 +301,7 @@ async def send_message(
     
     try:
         # Process token stream
-        message_result, current_message, responsesall = await _process_token_stream(
+        responsesall, current_message = await _process_token_stream(
             streamer,
             converter,
             current_message,
@@ -339,17 +309,9 @@ async def send_message(
             message,
             lang_manager
         )
-        
-        # Final update with all accumulated content
-        converted_response = (converter.convert(responsesall)
-                              if converter else responsesall)
-        try:
-            await safe_edit_message(current_message, converted_response)
-        except discord.errors.NotFound:
-            await _safe_send_message(channel, converted_response)
-        
-        return message_result
-        
+
+        return responsesall
+
     except Exception as exc:
         await func.report_error(exc, 'Error generating GPT response')
         _logger.error('Error generating GPT response: %s', exc)
@@ -365,5 +327,5 @@ async def send_message(
                 await _safe_send_message(channel, error_message)
         except Exception as send_exc:
             _logger.error('Failed to send error message: %s', send_exc)
-        
-        return message_result if 'message_result' in locals() else error_message
+
+        return error_message

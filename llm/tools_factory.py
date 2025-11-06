@@ -127,7 +127,7 @@ def _is_decorated_tool(obj: Any) -> bool:
     return False
 
 
-def _extract_tools_from_module(mod: Any) -> List[Any]:
+def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List[Any]:
     """從模組中抽取所有已裝飾為工具的物件。"""
     tools: List[Any] = []
     try:
@@ -138,11 +138,22 @@ def _extract_tools_from_module(mod: Any) -> List[Any]:
                 obj = getattr(mod, name)
             except Exception:
                 continue
-            try:
-                if _is_decorated_tool(obj):
-                    tools.append(obj)
-            except Exception as e:
-                _report_async(e, f"llm.tools: checking {name} in {getattr(mod, '__name__', repr(mod))}")
+            
+            # 檢查是否為工具類別
+            if isinstance(obj, type) and hasattr(obj, "__init__") and name.endswith("Tools"):
+                try:
+                    instance = obj(runtime)
+                    for member_name in dir(instance):
+                        if not member_name.startswith("_"):
+                            member = getattr(instance, member_name)
+                            if _is_decorated_tool(member):
+                                tools.append(member)
+                except Exception as e:
+                    _report_async(e, f"llm.tools: instantiating or inspecting class {name}")
+            # 檢查是否為獨立的工具函式
+            elif _is_decorated_tool(obj):
+                tools.append(obj)
+
     except Exception as e:
         _report_async(e, f"llm.tools: extract_tools_from_module {getattr(mod, '__name__', repr(mod))}")
     return tools
@@ -167,7 +178,12 @@ def _get_user_permissions(user: discord.Member, guid: discord.Guild) -> dict:
     return {"is_admin": False, "is_moderator": False}
 
 
-def get_tools(user: discord.Member, guid: discord.Guild) -> List[BaseTool]:
+from llm.schema import OrchestratorRequest
+
+
+def get_tools(
+    user: discord.Member, guid: discord.Guild, runtime: OrchestratorRequest
+) -> List[BaseTool]:
     """根據 Discord 使用者權限回傳可用的 LangChain 工具清單。
 
     簡易權限策略:
@@ -186,44 +202,53 @@ def get_tools(user: discord.Member, guid: discord.Guild) -> List[BaseTool]:
 
     collected: List[Any] = []
 
-    # 檢查是否需要重新掃描工具目錄（基於 mtime）
+    # 檢查是否需要重新掃描工具目錄
     pkg_dir = os.path.join(os.path.dirname(__file__), "tools")
     try:
-        current_mtime = _compute_pkg_dir_mtime(pkg_dir) if os.path.isdir(pkg_dir) else 0.0
+        current_mtime = (
+            _compute_pkg_dir_mtime(pkg_dir) if os.path.isdir(pkg_dir) else 0.0
+        )
     except Exception:
         current_mtime = 0.0
 
     with _cache_lock:
-        if _cached_collected_tools is None or current_mtime != _cached_collected_mtime:
-            # 重新掃描並更新快取
+        if (
+            _cached_collected_tools is None
+            or current_mtime != _cached_collected_mtime
+        ):
             try:
                 temp_collected: List[Any] = []
                 for mod in _discover_tools_package():
-                    temp_collected.extend(_extract_tools_from_module(mod))
+                    temp_collected.extend(_extract_tools_from_module(mod, runtime))
                 _cached_collected_tools = temp_collected
                 _cached_collected_mtime = current_mtime
             except Exception as e:
                 _report_async(e, "llm.tools: scanning tools for cache")
                 _cached_collected_tools = _cached_collected_tools or []
 
-        # 使用快取結果
         collected = list(_cached_collected_tools or [])
 
     # 根據使用者權限過濾
     perms = _get_user_permissions(user, guid)
     result: List[Any] = []
+
     for t in collected:
         try:
+            # 只接受 StructuredTool 實例
+            if not isinstance(t, StructuredTool):
+                continue
+
+
             required = getattr(t, "required_permission", None)
-            # 若 tool 為 BaseTool，某些實作把 meta 放在 .name 或 .description；我們僅依 required_permission 篩選
             if required is None:
                 result.append(t)
                 continue
-            # required can be comma separated permissions
+
             if isinstance(required, str):
-                required_set = {p.strip().lower() for p in required.split(",") if p.strip()}
+                required_set = {
+                    p.strip().lower() for p in required.split(",") if p.strip()
+                }
             else:
-                # 若工具以 list/iterable 指定權限
                 try:
                     required_set = {str(p).lower() for p in required}
                 except Exception:
@@ -234,13 +259,14 @@ def get_tools(user: discord.Member, guid: discord.Guild) -> List[BaseTool]:
                 allowed = True
             if "moderator" in required_set and perms.get("is_moderator"):
                 allowed = True
-            # 未滿足任何 required_permission 則跳過
+
             if allowed:
                 result.append(t)
         except Exception as e:
-            _report_async(e, f"llm.tools: filtering tool {getattr(t, '__name__', repr(t))}")
-    result = [t for t in result if isinstance(t, StructuredTool)]
-    # 最後嘗試轉型為 List[BaseTool] 以符合呼叫端預期；實際上 LangChain 接受 callable 或 BaseTool
+            _report_async(
+                e, f"llm.tools: filtering tool {getattr(t, 'name', repr(t))}"
+            )
+
     try:
         return cast(List[BaseTool], result)
     except Exception as e:
