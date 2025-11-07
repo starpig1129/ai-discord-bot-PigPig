@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List, Optional, Any
+from typing import List, Tuple
+import logging
 
 from langchain.agents.middleware import ModelFallbackMiddleware
 
@@ -59,26 +60,36 @@ class ModelManager:
                 print(f"llm/model_manager.py/_resolve_priority_list error: {e}")
             return []
 
-    def get_model(self, agent_type: str) -> Optional[Any]:
-        """公開方法，回傳 ModelFallbackMiddleware 或 None
+    def get_model(self, agent_type: str) -> Tuple[str, ModelFallbackMiddleware]:
+        """公開方法，回傳 (primary_model, ModelFallbackMiddleware)。
 
-        Args:
-            agent_type: 如 'info_model' 或 'message_model'
-
-        Returns:
-            ModelFallbackMiddleware 或 None（找不到設定或建立失敗時）
+        若找不到對應的 model_priorities，會丟出 ValueError 以避免呼叫端誤解包 None。
+        同時在發生錯誤時會使用 func.report_error 上報錯誤以便集中化日誌管理。
         """
+        # 先解析 priorities 並記錄，便於後續排查
+        priorities = self._resolve_priority_list(agent_type)
+
+        if not priorities:
+            err = ValueError(f"No model priorities configured for agent_type '{agent_type}'")
+            try:
+                # 非同步上報錯誤，不要阻塞呼叫流程
+                asyncio.create_task(func.report_error(err, "llm/model_manager.py/get_model"))
+            except Exception:
+                logging.exception("Failed to schedule func.report_error for missing model priorities")
+            # 明確丟出例外，讓呼叫端能夠判斷並處理
+            raise err
+
         try:
-            priorities = self._resolve_priority_list(agent_type)
-            if not priorities:
-                return None
-            return priorities[0], ModelFallbackMiddleware(*priorities[1:])  # type: ignore[return-value]
+            primary = priorities[0]
+            fallback_mw = ModelFallbackMiddleware(*priorities[1:])  # type: ignore[arg-type]
+            return primary, fallback_mw
         except Exception as e:
             try:
                 asyncio.create_task(func.report_error(e, "llm/model_manager.py/get_model"))
             except Exception:
-                print(f"llm/model_manager.py/get_model error: {e}")
-            return None
+                logging.exception("Failed to schedule func.report_error for ModelFallbackMiddleware error")
+            # 保留原始例外以便上層取得詳細錯誤資訊
+            raise
 
 
 __all__ = ["ModelManager"]

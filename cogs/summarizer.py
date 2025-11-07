@@ -7,6 +7,7 @@ from discord.ext import commands
 from discord import app_commands
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain.agents.middleware import ModelCallLimitMiddleware
 
 from function import func
 from llm.model_manager import ModelManager
@@ -21,7 +22,6 @@ class SummarizerCog(commands.Cog):
         self.bot = bot
         self.MAX_CHAR_COUNT = 15000
         self.EMBED_DESC_LIMIT = 4000
-        self.model = ModelManager().get_model("summarize_model")
 
     def _split_text_robustly(self, text: str):
         """
@@ -120,10 +120,15 @@ class SummarizerCog(commands.Cog):
             logging.info(f"正在調用語言模型生成摘要... (分析 {human_msg_count} 則人類訊息，總輸入 {current_char_count} 字元)")
 
             # 建立 agent（維持 create_agent，但傳入 SystemMessage 作為系統角色）
+            model, fallback = ModelManager().get_model("summarize_model")
             summarize_agent = create_agent(
-                model=self.model,
+                model=model,
                 tools=[],
-                system_prompt=system_prompt
+                system_prompt=system_prompt,
+                middleware=[
+                                ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
+                                fallback,
+                            ]
             )
 
             # 最後追加使用者指令，並確保所有訊息皆為 HumanMessage/AIMessage 的實例

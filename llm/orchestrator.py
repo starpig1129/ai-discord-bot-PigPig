@@ -122,12 +122,14 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 bot=bot, message=message, logger=logger
             )
             tool_list = get_tools(user, guid=guild, runtime=runtime_context)
-            message_pair = self.model_manager.get_model("info_model")
-            if message_pair is None:
-                raise RuntimeError("info_model not available")
-            info_model, fallback = message_pair
-            if info_model is None and fallback is None:
-                raise RuntimeError("info_model not available")
+            try:
+                info_model, fallback = self.model_manager.get_model("info_model")
+            except ValueError as e:
+                await asyncio.create_task(func.report_error(e, "info_model not configured"))
+                raise RuntimeError(f"info_model 未正確配置: {e}") from e
+            except Exception as e:
+                await asyncio.create_task(func.report_error(e, "ModelManager.get_model failed for info_model"))
+                raise RuntimeError(f"取得 info_model 失敗: {e}") from e
 
             # 從 config/prompt/info_agent.yaml 載入 info_agent 系統提示詞
             info_system_prompt = self._build_info_agent_prompt(
@@ -153,12 +155,14 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             raise
 
         try:
-            message_pair = self.model_manager.get_model("message_model")
-            if message_pair is None:
-                raise RuntimeError("message_model not available")
-            message_model, fallback = message_pair
-            if message_model is None and fallback is None:
-                raise RuntimeError("message_model not available")
+            try:
+                message_model, fallback = self.model_manager.get_model("message_model")
+            except ValueError as e:
+                await asyncio.create_task(func.report_error(e, "message_model not configured"))
+                raise RuntimeError(f"message_model 未正確配置: {e}") from e
+            except Exception as e:
+                await asyncio.create_task(func.report_error(e, "ModelManager.get_model failed for message_model"))
+                raise RuntimeError(f"取得 message_model 失敗: {e}") from e
             
             # 從 addons/settings 載入 message_agent 系統提示詞
             message_system_prompt = prompt_config.get_system_prompt('message_agent')
