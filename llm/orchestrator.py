@@ -149,6 +149,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             info_result = await info_agent.ainvoke(
                 {"messages": [HumanMessage(content=message.content)]},
             )
+            print("Info Agent Result:", info_result)
         except Exception as e:
             asyncio.create_task(func.report_error(e, "info_agent failed"))
             raise
