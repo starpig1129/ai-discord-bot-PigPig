@@ -2,15 +2,17 @@
 # Copyright (c) 2024 starpig1129
 
 import logging
-from typing import Optional
+from typing import Any, Optional, TYPE_CHECKING
  
-from langchain.tools import tool, ToolRuntime
-from typing import Any, Optional
+from langchain.tools import tool
 from function import func
+
+if TYPE_CHECKING:
+    from llm.schema import OrchestratorRequest
 
 
 class MathTools:
-    def __init__(self, runtime: ToolRuntime):
+    def __init__(self, runtime: "OrchestratorRequest"):
         self.runtime = runtime
 
     @tool
@@ -19,10 +21,9 @@ class MathTools:
 
         - All errors are reported via func.report_error to follow project error handling standards.
         """
-        context = self.runtime.context
-        logger = getattr(context, "logger", logging.getLogger(__name__))
+        logger = getattr(self.runtime, "logger", logging.getLogger(__name__))
         logger.info("calculate_math called", extra={"expression": expression})
-        bot = getattr(context, "bot", None)
+        bot = getattr(self.runtime, "bot", None)
         if not bot:
             logger.error("Bot instance not available in runtime.")
             return "Error: Bot instance not available."
@@ -35,7 +36,7 @@ class MathTools:
                 return msg
 
             guild_id: Optional[str] = None
-            message = getattr(context, "message", None)
+            message = getattr(self.runtime, "message", None)
             if message and getattr(message, "guild", None):
                 guild_id = str(message.guild.id)
 

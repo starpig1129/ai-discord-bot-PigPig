@@ -2,16 +2,18 @@
 # Copyright (c) 2024 starpig1129
 
 import logging
-from typing import Optional, Literal
+from typing import Any, Optional, Literal, TYPE_CHECKING, cast
  
-from langchain.tools import tool, ToolRuntime
-from typing import Any, Optional, Literal
+from langchain.tools import tool
 from cogs.schedule import ScheduleManager
 from function import func
 
+if TYPE_CHECKING:
+    from llm.schema import OrchestratorRequest
+
 
 class ScheduleTools:
-    def __init__(self, runtime: ToolRuntime):
+    def __init__(self, runtime: "OrchestratorRequest"):
         self.runtime = runtime
 
     @tool
@@ -29,19 +31,13 @@ class ScheduleTools:
         - Uses ScheduleManager to handle queries and updates.
         - Keeps error reporting consistent via func.report_error.
         """
-        context = self.runtime.context
-        logger = getattr(context, "logger", logging.getLogger(__name__))
-        message_obj = getattr(
-            context, "message", getattr(self.runtime, "message", None)
-        )
+        logger = getattr(self.runtime, "logger", logging.getLogger(__name__))
+        message_obj = getattr(self.runtime, "message", None)
         author_id = getattr(message_obj, "author", None)
         if user_id is None:
             try:
-                target_user_id = (
-                    getattr(message_obj, "author", None).id
-                    if message_obj and getattr(message_obj, "author", None)
-                    else None
-                )
+                author = getattr(message_obj, "author", None)
+                target_user_id = author.id if author is not None else None
             except Exception:
                 target_user_id = None
         else:
@@ -109,11 +105,15 @@ class ScheduleTools:
                         "time": time,
                     },
                 )
+                # static type helper: cast to str since we've validated presence above
+                day_s = cast(str, day)
+                time_s = cast(str, time)
+                desc_s = cast(str, description)
                 await cog._core_update_schedule(
                     user_id=target_user_id_int,
-                    day=day,
-                    time=time,
-                    description=description,
+                    day=day_s,
+                    time=time_s,
+                    description=desc_s,
                 )
                 return (
                     f"Successfully updated schedule for user {target_user_id_int}."

@@ -2,16 +2,19 @@
 # Copyright (c) 2024 starpig1129
 
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
  
-from langchain.tools import tool, ToolRuntime
+from langchain.tools import tool
 from typing import Any
 from cogs.remind import ReminderCog
 from function import func
 
+if TYPE_CHECKING:
+    from llm.schema import OrchestratorRequest
+
 
 class ReminderTools:
-    def __init__(self, runtime: ToolRuntime):
+    def __init__(self, runtime: "OrchestratorRequest"):
         self.runtime = runtime
 
     @tool
@@ -23,15 +26,13 @@ class ReminderTools:
         - Relies on ReminderCog._set_reminder_logic for scheduling and validation.
         - All errors are reported via func.report_error.
         """
-        context = self.runtime.context
-        logger = getattr(context, "logger", logging.getLogger(__name__))
-        bot = getattr(context, "bot", None)
+        logger = getattr(self.runtime, "logger", logging.getLogger(__name__))
+        bot = getattr(self.runtime, "bot", None)
         if not bot:
+            logger = logging.getLogger(__name__)
             logger.error("Bot instance not available in runtime.")
             return "Error: Bot instance not available."
-        message_obj = getattr(
-            context, "message", getattr(self.runtime, "message", None)
-        )
+        message_obj = getattr(self.runtime, "message", None)
 
         cog: Optional[ReminderCog] = bot.get_cog("ReminderCog")
         if not cog:

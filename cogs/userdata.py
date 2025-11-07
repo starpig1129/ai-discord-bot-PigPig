@@ -178,7 +178,7 @@ class UserDataCog(commands.Cog):
         await interaction.followup.send(result, ephemeral=True)
 
 
-    async def _read_user_data(self, user_id: str, context: Any) -> str:
+    async def _read_user_data(self, user_id: str, context: Union[discord.Interaction, discord.Message]) -> str:
         """
         核心邏輯：讀取並格式化使用者的儲存資料。
 
@@ -221,7 +221,7 @@ class UserDataCog(commands.Cog):
                 fallback_key="database_error", error=str(e)
             )
 
-    async def _save_user_data(self, user_id: str, display_name: str, user_data: str, context: Any) -> str:
+    async def _save_user_data(self, user_id: str, display_name: str, user_data: str, context: Union[discord.Interaction, discord.Message]) -> str:
         """
         核心邏輯：儲存使用者資料（包含 AI 智慧合併）。
 
@@ -357,7 +357,7 @@ Merge these intelligently and return complete user information."""
                 error=str(e)
             )
 
-    async def manage_user_data(self, context: Any, user: Union[discord.User, discord.Member],
+    async def manage_user_data(self, context: Union[discord.Interaction, discord.Message], user: Union[discord.User, discord.Member],
                                user_data: str = '', action: str = 'read',
                                message_to_edit: Optional[discord.Message] = None) -> str:
         """
@@ -407,7 +407,7 @@ Merge these intelligently and return complete user information."""
         else:
             return self._translate(guild_id, "commands", "userdata", "responses", "invalid_action", fallback_key="invalid_action")
 
-    async def manage_user_data_message(self, message, user_id=None, user_data='',
+    async def manage_user_data_message(self, message: Union[discord.Interaction, discord.Message], user_id=None, user_data='',
                                         action='read', message_to_edit: Optional[discord.Message] = None):
         """
         (供內部工具使用) 從訊息觸發使用者資料管理。

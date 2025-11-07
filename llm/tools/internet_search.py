@@ -2,13 +2,16 @@
 # Copyright (c) 2024 starpig1129
 
 import logging
-from typing import Literal
-from langchain.tools import tool, ToolRuntime
+from typing import Literal, TYPE_CHECKING
+from langchain.tools import tool
 from function import func
+
+if TYPE_CHECKING:
+    from llm.schema import OrchestratorRequest
 
 
 class InternetSearchTools:
-    def __init__(self, runtime: ToolRuntime):
+    def __init__(self, runtime: "OrchestratorRequest"):
         self.runtime = runtime
 
     @tool
@@ -31,12 +34,11 @@ class InternetSearchTools:
         Returns:
             Search results or an error string.
         """
-        context = self.runtime.context
-        logger = getattr(context, "logger", logging.getLogger(__name__))
+        logger = getattr(self.runtime, "logger", logging.getLogger(__name__))
         logger.info(
             "internet_search called", extra={"query": query, "type": search_type}
         )
-        bot = getattr(context, "bot", None)
+        bot = getattr(self.runtime, "bot", None)
         if not bot:
             logger.error("Bot instance not available in runtime.")
             return "Error: Bot instance not available."
@@ -47,8 +49,8 @@ class InternetSearchTools:
             logger.error(msg)
             return msg
 
-        message = getattr(context, "message", None)
-        message_to_edit = getattr(context, "message_to_edit", None)
+        message = getattr(self.runtime, "message", None)
+        message_to_edit = getattr(self.runtime, "message_to_edit", None)
         guild_id = None
         if message and getattr(message, "guild", None):
             guild_id = str(message.guild.id)

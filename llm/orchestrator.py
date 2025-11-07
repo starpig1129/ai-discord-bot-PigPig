@@ -136,7 +136,6 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 bot_id=bot.user.id,
                 message=message
             )
-            print("info_system_prompt:", info_system_prompt)
             info_agent = create_agent(
                 model=info_model,
                 tools=tool_list,

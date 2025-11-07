@@ -27,16 +27,17 @@ from typing import Optional, TYPE_CHECKING
  
 from PIL import Image
  
-from langchain.tools import tool, ToolRuntime
+from langchain.tools import tool
 from function import func
 
 if TYPE_CHECKING:
     from cogs.gen_img import ImageGenerationCog
     from main import bot
+    from llm.schema import OrchestratorRequest
 
 
 class ImageTools:
-    def __init__(self, runtime: ToolRuntime):
+    def __init__(self, runtime: "OrchestratorRequest"):
         self.runtime = runtime
 
     @tool
@@ -53,11 +54,10 @@ class ImageTools:
         Returns:
             Success or error message (string).
         """
-        # runtime provides logger and bot; runtime.context contains custom context attributes
-        context = self.runtime.context
-        logger = getattr(context, "logger", logging.getLogger(__name__))
+        # runtime is an OrchestratorRequest: use its explicit attributes.
+        logger = getattr(self.runtime, "logger", logging.getLogger(__name__))
         logger.info("Tool 'generate_image' called", extra={"prompt": prompt})
-        bot = getattr(context, "bot", None)
+        bot = getattr(self.runtime, "bot", None)
         if not bot:
             logger.error("Bot instance not available in runtime.")
             return "Error: Bot instance not available."
@@ -88,16 +88,21 @@ class ImageTools:
                 )
                 return f"Error: Failed to process the provided image URL. {e}"
 
-        guild_id = getattr(context, "guild_id", "0")
-        channel_id = getattr(context, "channel_id", 0)
-
+        message_obj = getattr(self.runtime, "message", None)
+        guild_id = (
+            str(message_obj.guild.id)
+            if message_obj and getattr(message_obj, "guild", None)
+            else "0"
+        )
+        channel_id = getattr(getattr(message_obj, "channel", None), "id", 0)
+ 
         try:
             result = await cog._generate_image_logic(
                 prompt=prompt,
                 guild_id=guild_id,
                 channel_id=channel_id,
                 input_images=input_images,
-                channel=getattr(context.message, "channel", None),
+                channel=getattr(message_obj, "channel", None),
             )
         except Exception as e:
             await func.report_error(
@@ -120,10 +125,8 @@ class ImageTools:
 
         if result.get("file"):
             discord_file = result["file"]
-            # Safely obtain message and channel (prefer custom context.message, fallback to runtime.message)
-            message = getattr(
-                context, "message", getattr(self.runtime, "message", None)
-            )
+            # Obtain message/channel from runtime
+            message = getattr(self.runtime, "message", None)
             channel = getattr(message, "channel", None) if message else None
             try:
                 if channel:

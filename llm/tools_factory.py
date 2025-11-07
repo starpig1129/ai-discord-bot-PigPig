@@ -219,6 +219,7 @@ def get_tools(
             try:
                 temp_collected: List[Any] = []
                 for mod in _discover_tools_package():
+                    # 傳入專案的 OrchestratorRequest，確保工具類別建構子接收正確型態
                     temp_collected.extend(_extract_tools_from_module(mod, runtime))
                 _cached_collected_tools = temp_collected
                 _cached_collected_mtime = current_mtime
