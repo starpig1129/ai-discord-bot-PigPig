@@ -102,12 +102,12 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     try:
                         raw = image_buffer.read()
                         if not raw:
-                            print("[GenImg][WARN] image_buffer 為空（Gemini 分支），將視為失敗")
+                            print("[GenImg][WARN] image_buffer is empty (Gemini branch); treating as failure")
                             raise ValueError("empty_image_buffer")
                         b64 = base64.b64encode(raw).decode("utf-8")
                     except Exception as enc_err:
                         asyncio.create_task(func.report_error(enc_err, "Gemini image encoding failed"))
-                        print(f"[GenImg][ERROR] 影像編碼失敗（Gemini 分支）: {enc_err}")
+                        print(f"[GenImg][ERROR] Gemini image encoding failed: {enc_err}")
                         raise
 
                     success_message = self.lang_manager.translate(
@@ -128,7 +128,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                             }
                         ]
                     }
-                    print("[GenImg][INFO] 生成成功（Gemini 分支），已含附件，準備返回")
+                    print("[GenImg][INFO] Generation succeeded (Gemini branch); returning with attachment")
                     return payload
                 elif response_text.strip():
 
@@ -150,12 +150,12 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     try:
                         raw = image_buffer.read()
                         if not raw:
-                            print("[GenImg][WARN] image_buffer 為空（Local 分支），將視為失敗")
+                            print("[GenImg][WARN] image_buffer is empty (Local branch); treating as failure")
                             raise ValueError("empty_image_buffer")
                         b64 = base64.b64encode(raw).decode("utf-8")
                     except Exception as enc_err:
                         asyncio.create_task(func.report_error(enc_err, "Local model image encoding failed"))
-                        print(f"[GenImg][ERROR] 影像編碼失敗（Local 分支）: {enc_err}")
+                        print(f"[GenImg][ERROR] Local model image encoding failed: {enc_err}")
                         raise
                     print("[GenImg][INFO] Generation succeeded (Local branch); returning with attachment")
                     return {
@@ -228,7 +228,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                         files.append(discord.File(io.BytesIO(data), filename=fname))
                 except Exception as e:
                     await func.report_error(e, "Slash command file conversion failed")
-                    print(f"Slash 回覆轉檔失敗: {e}")
+                    print(f"Slash reply conversion failed: {e}")
             content = result.get("content")
             if files:
                 await interaction.followup.send(content=content, files=files)
@@ -236,14 +236,14 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                 await interaction.followup.send(content=content)
 
     def _image_to_base64(self, image: Image.Image) -> str:
-        """將 PIL Image 轉換為 base64 字符串"""
+        """Convert a PIL Image to a base64-encoded string"""
         buffered = io.BytesIO()
         image.save(buffered, format="JPEG")
         img_str = base64.b64encode(buffered.getvalue()).decode()
         return img_str
 
     async def generate_with_gemini(self, prompt: str, image_input: List[Image.Image], dialogue_history: List[Dict]) -> tuple[Optional[io.BytesIO], Optional[str]]:
-        """使用 Gemini API 生成圖片"""
+        """Generate images using the Gemini API"""
         try:
             content_parts = []
             if dialogue_history:
@@ -323,7 +323,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
             return None, None
 
     async def generate_with_local_model(self, channel, prompt: str, n_steps: int = 10, message_to_edit: discord.Message = None, guild_id: str = None):
-        """使用本地模型生成圖片"""
+        """Generate images using a local model"""
         try:
             if not hasattr(self, 'pipe') or self.pipe is None:
                 return None
@@ -395,8 +395,8 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                 )
                 print(error_msg)
             else:
-                print(f"本地模型生成錯誤：{str(e)}")
-            return None
+                print(f"Local model generation error: {str(e)}")
+                return None
 
     async def cog_unload(self):
         """清理資源"""
