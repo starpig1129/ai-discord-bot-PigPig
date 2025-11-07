@@ -31,6 +31,8 @@ import logging
 from typing import Optional, TYPE_CHECKING
 
 import aiohttp
+import base64
+import discord
 from PIL import Image
 from langchain_core.tools import tool
 
@@ -178,23 +180,63 @@ class ImageTools:
                 )
                 return f"Error: {result['error']}"
 
-            # Send generated image to Discord channel
-            if result.get("file"):
-                discord_file = result["file"]
-                message = getattr(runtime, "message", None)
-                channel = getattr(message, "channel", None) if message else None
-                try:
+            # Send generated image to Discord channel or return content
+            message = getattr(runtime, "message", None)
+            channel = getattr(message, "channel", None) if message else None
+            try:
+                # Legacy: a discord.File was returned directly
+                if result.get("file"):
+                    discord_file = result["file"]
                     if channel:
                         await channel.send(files=[discord_file])
                         return "Image sent successfully."
                     return "Error: No channel available to send the image."
-                except Exception as e:
-                    await func.report_error(e, "sending generated image failed")
-                    return f"Error: Failed to send generated image: {e}"
 
-            if result.get("content"):
-                return result["content"]
+                # Newer path: attachments may be base64 strings or raw bytes
+                attachments = result.get("attachments") or []
+                files = []
+                for att in attachments:
+                    try:
+                        if att.get("type") != "image":
+                            continue
+                        data_bytes = None
+                        # Support legacy/new fields: prefer 'data_base64' (string)
+                        if "data_base64" in att and att["data_base64"] is not None:
+                            data_bytes = base64.b64decode(att["data_base64"])
+                        # Support raw binary data in 'data' (bytes/bytearray/memoryview)
+                        elif "data" in att and att["data"] is not None:
+                            raw = att["data"]
+                            if isinstance(raw, (bytes, bytearray, memoryview)):
+                                data_bytes = bytes(raw)
+                            elif isinstance(raw, str):
+                                # The string may be base64 or plain text. Try base64 decode; on failure use utf-8 bytes.
+                                try:
+                                    data_bytes = base64.b64decode(raw)
+                                except Exception:
+                                    data_bytes = raw.encode("utf-8")
+                            else:
+                                raise TypeError(f"Unsupported attachment data type: {type(raw)}")
+                        if data_bytes:
+                            fname = att.get("filename", "generated_image.png")
+                            files.append(discord.File(io.BytesIO(data_bytes), filename=fname))
+                    except Exception as e:
+                        # Report conversion errors via func.report_error and log context
+                        await func.report_error(e, "converting attachment to discord.File")
+                        logger.exception("Attachment conversion failed", extra={"attachment": att, "error": str(e)})
 
-            return "Image generated successfully, but no image data was returned."
+                content = result.get("content")
+                if files:
+                    if channel:
+                        await channel.send(content=content, files=files)
+                        return "Image sent successfully."
+                    return "Error: No channel available to send the image."
+
+                if content:
+                    return content
+
+                return "Image generated successfully, but no image data was returned."
+            except Exception as e:
+                await func.report_error(e, "sending generated image failed")
+                return f"Error: Failed to send generated image: {e}"
 
         return [generate_image]

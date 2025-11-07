@@ -48,15 +48,15 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
         self.conversation_history: Dict[int, List[Dict]] = {}
 
     async def cog_load(self):
-        """當 Cog 載入時初始化語言管理器"""
+        """Initialize the language manager when the cog is loaded"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
     def _get_conversation_history(self, channel_id: int) -> List[Dict]:
-        """獲取特定頻道的對話歷史"""
+        """Get the conversation history for a specific channel"""
         return self.conversation_history.get(channel_id, [])
 
     def _update_conversation_history(self, channel_id: int, role: str, content: str, images: Optional[List[Image.Image]] = None):
-        """更新對話歷史"""
+        """Update the conversation history"""
         if channel_id not in self.conversation_history:
             self.conversation_history[channel_id] = []
         
@@ -77,9 +77,9 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
         channel: Optional[discord.TextChannel] = None
     ) -> Dict:
         """
-        核心的圖片生成邏輯。
+        Core image generation logic.
         
-        返回一個包含 'content' 和/或 'file' 的字典，或一個包含 'error' 的字典。
+        Returns a dict containing 'content' and/or 'file', or a dict with 'error'.
         """
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
@@ -97,7 +97,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                 response_text = response_text or ""
                 
                 if image_buffer:
-                    # 不回傳 discord.File，改回傳 base64 附件描述，讓上游統一合併發送
+                    # Do not return discord.File; return base64-encoded attachment description so upstream can send uniformly
                     image_buffer.seek(0)
                     try:
                         raw = image_buffer.read()
@@ -131,9 +131,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     print("[GenImg][INFO] 生成成功（Gemini 分支），已含附件，準備返回")
                     return payload
                 elif response_text.strip():
-                    # 僅有文字無圖片，判定為失敗，避免上游提前完成
-                    print("[GenImg][WARN] 僅有文字無圖片（Gemini 分支），返回錯誤以避免競態條件")
-                    print("[GenImg][ERROR] 所有生成方法皆無法取得圖片，返回錯誤避免上游提前完成")
+
                     error_message = self.lang_manager.translate(
                         guild_id, "commands", "generate_image", "responses", "all_methods_failed"
                     )
@@ -159,7 +157,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                         asyncio.create_task(func.report_error(enc_err, "Local model image encoding failed"))
                         print(f"[GenImg][ERROR] 影像編碼失敗（Local 分支）: {enc_err}")
                         raise
-                    print("[GenImg][INFO] 生成成功（Local 分支），已含附件，準備返回")
+                    print("[GenImg][INFO] Generation succeeded (Local branch); returning with attachment")
                     return {
                         "attachments": [
                             {
@@ -172,7 +170,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                         ]
                     }
                 else:
-                    print("[GenImg][WARN] Local 分支未取得圖片，將嘗試回傳錯誤")
+                    print("[GenImg][WARN] Local branch did not produce an image; returning error")
 
             error_message = self.lang_manager.translate(
                 guild_id, "commands", "generate_image", "responses", "all_methods_failed"
@@ -184,7 +182,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
             error_message = self.lang_manager.translate(
                 guild_id, "commands", "generate_image", "responses", "general_error", error=str(e)
             )
-            print(f"圖片生成過程出現錯誤：{str(e)}")
+            print(f"Image generation process error: {str(e)}")
             return {"error": error_message}
 
     @app_commands.command(name="generate_image", description="生成或編輯圖片")
@@ -206,7 +204,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                         input_images.append(img)
                     except Exception as e:
                         await func.report_error(e, f"generate_image_command attachment read: {e}")
-                        print(f"無法讀取附件圖片: {e}")
+                        print(f"Failed to read attachment image: {e}")
 
         result = await self._generate_image_logic(
             prompt=prompt,
@@ -216,7 +214,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
             channel=interaction.channel
         )
 
-        # Slash 指令仍沿用立即回覆，但改為支援 attachments（base64 → discord.File）
+        # Slash command still uses immediate reply but supports attachments (base64 → discord.File)
         if "error" in result:
             await interaction.followup.send(result["error"])
         else:
@@ -303,7 +301,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                             )
                             print(error_msg)
                         else:
-                            print(f"圖片處理錯誤：{str(e)}")
+                            print(f"Image processing error: {str(e)}")
             
             final_text = " ".join(text for text in response_text if text)
             return image_buffer, final_text or None
@@ -321,7 +319,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                 )
                 print(error_msg)
             else:
-                print(f"Gemini API 生成錯誤：{str(e)}")
+                print(f"Gemini API generation error: {str(e)}")
             return None, None
 
     async def generate_with_local_model(self, channel, prompt: str, n_steps: int = 10, message_to_edit: discord.Message = None, guild_id: str = None):
