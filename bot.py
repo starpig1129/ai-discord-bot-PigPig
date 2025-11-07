@@ -223,8 +223,8 @@ class PigPig(commands.Bot):
             - Checks channel permissions and modes before processing
         """
         try:
-            
-            if not message.guild or not message.author.bot:
+
+            if not message.guild or message.author.bot:
                 return
             
             guild_name = message.guild.name
@@ -280,7 +280,7 @@ class PigPig(commands.Bot):
             - Searches last 50 messages to find bot's previous reply
         """
         try:
-            if not before.guild or not before.author.bot or not after.guild or after.author.bot:
+            if not before.guild or before.author.bot or not after.guild or after.author.bot:
                 return
             
             logger = self.get_logger_for_guild(before.guild.name)
