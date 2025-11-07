@@ -128,9 +128,56 @@ def _is_decorated_tool(obj: Any) -> bool:
 
 
 def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List[Any]:
-    """從模組中抽取所有已裝飾為工具的物件。"""
+    """從模組中以「get_tools()」收集工具。
+    
+    策略：
+    - 若模組提供 module-level get_tools()，則呼叫它並使用回傳的同步 list。
+    - 否則尋找以 *Tools 命名的類別，建立 instance(runtime) 並呼叫 instance.get_tools()（必須回傳同步 list）。
+    - 不再掃描 instance 的成員或模組層級的任意成員。
+    - 若 get_tools() 回傳 coroutine，會非同步回報錯誤並跳過該項。
+    """
     tools: List[Any] = []
+    mod_name = getattr(mod, "__name__", repr(mod))
     try:
+        logger.debug("llm.tools: collecting tools from module %s", mod_name)
+        # 1) module-level get_tools 優先
+        module_get_fn = getattr(mod, "get_tools", None)
+        if callable(module_get_fn):
+            try:
+                # 儘量嘗試以 runtime 當參數呼叫；若不接受參數則改用無參呼叫
+                try:
+                    returned = module_get_fn(runtime)
+                except TypeError:
+                    returned = module_get_fn()
+            except Exception as e:
+                _report_async(e, f"llm.tools: calling module.get_tools in {mod_name}")
+                returned = []
+            if asyncio.iscoroutine(returned):
+                _report_async(
+                    Exception("module.get_tools returned coroutine"),
+                    f"llm.tools: {mod_name}.get_tools returned coroutine",
+                )
+            else:
+                # 確認回傳值為可疊代（同步）容器，再進行迭代
+                if not isinstance(returned, (list, tuple, set)):
+                    _report_async(
+                        Exception("module.get_tools did not return iterable"),
+                        f"llm.tools: {mod_name}.get_tools returned non-iterable {type(returned)}",
+                    )
+                else:
+                    for item in (returned or []):
+                        tools.append(item)
+                        try:
+                            logger.debug(
+                                "llm.tools: module %s provided tool %s",
+                                mod_name,
+                                getattr(item, "name", getattr(item, "__name__", repr(item))),
+                            )
+                        except Exception:
+                            pass
+                return tools
+
+        # 2) 尋找以 Tools 結尾的類別並呼叫其 get_tools()
         for name in dir(mod):
             if name.startswith("_"):
                 continue
@@ -138,24 +185,44 @@ def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List
                 obj = getattr(mod, name)
             except Exception:
                 continue
-            
-            # 檢查是否為工具類別
-            if isinstance(obj, type) and hasattr(obj, "__init__") and name.endswith("Tools"):
+            if isinstance(obj, type) and name.endswith("Tools"):
                 try:
                     instance = obj(runtime)
-                    for member_name in dir(instance):
-                        if not member_name.startswith("_"):
-                            member = getattr(instance, member_name)
-                            if _is_decorated_tool(member):
-                                tools.append(member)
+                    get_fn = getattr(instance, "get_tools", None)
+                    if callable(get_fn):
+                        try:
+                            returned = get_fn()
+                        except Exception as e:
+                            _report_async(e, f"llm.tools: calling {mod_name}.{name}.get_tools")
+                            returned = []
+                        if asyncio.iscoroutine(returned):
+                            _report_async(
+                                Exception("instance.get_tools returned coroutine"),
+                                f"llm.tools: {mod_name}.{name}.get_tools returned coroutine",
+                            )
+                            continue
+                        # 確認 instance.get_tools() 回傳可疊代結果
+                        if not isinstance(returned, (list, tuple, set)):
+                            _report_async(
+                                Exception("instance.get_tools did not return iterable"),
+                                f"llm.tools: {mod_name}.{name}.get_tools returned non-iterable {type(returned)}",
+                            )
+                            continue
+                        for item in (returned or []):
+                            tools.append(item)
+                            try:
+                                logger.debug(
+                                    "llm.tools: %s.%s.get_tools -> %s",
+                                    mod_name,
+                                    name,
+                                    getattr(item, "name", getattr(item, "__name__", repr(item))),
+                                )
+                            except Exception:
+                                pass
                 except Exception as e:
-                    _report_async(e, f"llm.tools: instantiating or inspecting class {name}")
-            # 檢查是否為獨立的工具函式
-            elif _is_decorated_tool(obj):
-                tools.append(obj)
-
+                    _report_async(e, f"llm.tools: instantiating or calling get_tools on {mod_name}.{name}")
     except Exception as e:
-        _report_async(e, f"llm.tools: extract_tools_from_module {getattr(mod, '__name__', repr(mod))}")
+        _report_async(e, f"llm.tools: collecting from module {mod_name}")
     return tools
 
 
@@ -235,10 +302,9 @@ def get_tools(
 
     for t in collected:
         try:
-            # 只接受 StructuredTool 實例
-            if not isinstance(t, StructuredTool):
+            # 僅接受由 @tool 裝飾或 BaseTool 的物件
+            if not (_is_decorated_tool(t) or isinstance(t, BaseTool)):
                 continue
-
 
             required = getattr(t, "required_permission", None)
             if required is None:

@@ -280,8 +280,13 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     response_text.append(part.text)
                 elif hasattr(part, 'inline_data') and part.inline_data:
                     try:
+                        if isinstance(part.inline_data.data, bytes):
+                            image_bytes = part.inline_data.data
+                        else:
+                            # 相容舊版本 SDK（返回 base64 字符串）
+                            image_bytes = base64.b64decode(part.inline_data.data)
+                        
                         image_buffer = io.BytesIO()
-                        image_bytes = base64.b64decode(part.inline_data.data)
                         image = Image.open(io.BytesIO(image_bytes))
                         image.save(image_buffer, format="PNG")
                         image_buffer.seek(0)
@@ -299,8 +304,6 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                             print(error_msg)
                         else:
                             print(f"圖片處理錯誤：{str(e)}")
-                        print(f"Data type: {type(part.inline_data.data)}")
-                        print(f"Data preview: {str(part.inline_data.data)[:100]}")
             
             final_text = " ".join(text for text in response_text if text)
             return image_buffer, final_text or None

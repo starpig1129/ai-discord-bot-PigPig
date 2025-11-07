@@ -157,9 +157,50 @@ class DatabaseManager:
         try:
             yield conn
         except Exception as e:
-            conn.rollback()
+            # 回滾交易並嘗試收集 schema 快照以協助診斷（若可用）
+            try:
+                conn.rollback()
+            except Exception as rb_exc:
+                # 即使回滾失敗，也要繼續嘗試記錄原始錯誤與 schema
+                self.logger.warning("DB rollback failed: %s", rb_exc)
             self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
-            self._report_error_threadsafe(e, "資料庫操作失敗")
+    
+            # 嘗試取得資料表清單與 users 表結構以做診斷（失敗時繼續，不阻斷原錯誤拋出）
+            schema_info = {}
+            try:
+                try:
+                    tables = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+                except Exception:
+                    tables = None
+                try:
+                    users_schema_rows = conn.execute("PRAGMA table_info('users')").fetchall()
+                    # 將 sqlite3.Row 轉為簡單 dict 列表供日誌輸出
+                    users_schema = []
+                    for r in users_schema_rows:
+                        try:
+                            users_schema.append(dict(r))
+                        except Exception:
+                            # fallback: 將 row 轉為 tuple
+                            users_schema.append(tuple(r))
+                except Exception:
+                    users_schema = None
+                schema_info = {"tables": tables, "users_schema": users_schema}
+                self.logger.error("資料庫操作失敗，schema snapshot: %s", schema_info)
+            except Exception as schema_exc:
+                self.logger.warning("無法取得 schema snapshot: %s", schema_exc)
+                schema_info = f"schema dump failed: {schema_exc}"
+    
+            # 使用 thread-safe 的回報機制上報原始錯誤並夾帶 schema 訊息
+            try:
+                self._report_error_threadsafe(e, f"資料庫操作失敗; schema: {schema_info}")
+            except Exception:
+                # 若回報也失敗，記錄到 logger（避免在 except path 再次崩潰）
+                try:
+                    self.logger.exception("Failed to thread-safe report DB error: %s", e)
+                except Exception:
+                    pass
+    
+            # 最後包裝並拋出 DatabaseError
             raise DatabaseError(f"資料庫操作失敗: {e}")
     
     def _create_tables(self, conn: sqlite3.Connection) -> None:

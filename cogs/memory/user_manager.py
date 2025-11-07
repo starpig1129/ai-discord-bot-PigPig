@@ -6,11 +6,12 @@
 
 import json
 import logging
+import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 import asyncio
-
+ 
 from .exceptions import DatabaseError
 from function import func
 
@@ -305,6 +306,7 @@ class SQLiteUserManager:
             bool: 是否成功更新
         """
         try:
+            logging.debug(f"update_user_data called with user_id={user_id}, display_name={display_name}, preferences={preferences}")
             with self.db_manager.get_connection() as conn:
                 # 檢查使用者是否存在
                 cursor = conn.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
@@ -312,24 +314,38 @@ class SQLiteUserManager:
                 
                 preferences_json = json.dumps(preferences, ensure_ascii=False) if preferences else None
                 
-                if exists:
-                    # 更新現有使用者
-                    conn.execute("""
-                        UPDATE users 
-                        SET user_data = ?, 
-                            display_name = COALESCE(?, display_name), 
-                            preferences = COALESCE(?, preferences),
-                            last_active = CURRENT_TIMESTAMP
-                        WHERE user_id = ?
-                    """, (user_data, display_name, preferences_json, user_id))
-                else:
-                    # 建立新使用者
-                    conn.execute("""
-                        INSERT INTO users (user_id, display_name, user_data, preferences)
-                        VALUES (?, ?, ?, ?)
-                    """, (user_id, display_name, user_data, preferences_json))
-                
-                conn.commit()
+                try:
+                    # 我們把 discord_id 同步填入（以相容現有資料庫 schema）
+                    discord_id_val = user_id
+                    
+                    if exists:
+                        # 更新現有使用者，確保 discord_id 也被更新或保持
+                        conn.execute("""
+                            UPDATE users
+                            SET user_data = ?,
+                                display_name = COALESCE(?, display_name),
+                                preferences = COALESCE(?, preferences),
+                                discord_id = COALESCE(?, discord_id),
+                                last_active = CURRENT_TIMESTAMP
+                            WHERE user_id = ?
+                        """, (user_data, display_name, preferences_json, discord_id_val, user_id))
+                    else:
+                        # 建立新使用者，包含 discord_id 欄位以避免 NOT NULL 約束
+                        conn.execute("""
+                            INSERT INTO users (user_id, discord_id, display_name, user_data, preferences)
+                            VALUES (?, ?, ?, ?, ?)
+                        """, (user_id, discord_id_val, display_name, user_data, preferences_json))
+                    
+                    conn.commit()
+                except sqlite3.IntegrityError as ie:
+                    # 若發生完整性錯誤，記錄 schema 以便診斷並上報
+                    try:
+                        schema_rows = conn.execute("PRAGMA table_info('users')").fetchall()
+                    except Exception as schema_exc:
+                        schema_rows = f"failed to get schema: {schema_exc}"
+                    logging.error(f"IntegrityError updating user {user_id}: {ie}; users schema: {schema_rows}")
+                    await func.report_error(ie, f"使用者資料更新失敗 (使用者: {user_id}); schema: {schema_rows}")
+                    return False
                 
                 # 清除快取
                 if user_id in self._user_cache:
@@ -367,11 +383,11 @@ class SQLiteUserManager:
                         WHERE user_id = ?
                     """, (display_name, user_id))
                 else:
-                    # 建立新使用者記錄
+                    # 建立新使用者記錄（包含 discord_id，以滿足現有 schema 的 NOT NULL 約束）
                     conn.execute("""
-                        INSERT INTO users (user_id, display_name)
-                        VALUES (?, ?)
-                    """, (user_id, display_name))
+                        INSERT INTO users (user_id, discord_id, display_name)
+                        VALUES (?, ?, ?)
+                    """, (user_id, user_id, display_name))
                 
                 conn.commit()
                 

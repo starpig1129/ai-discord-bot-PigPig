@@ -66,6 +66,20 @@ class ReminderCog(commands.Cog):
                 return error_msg
 
             # 準備確認消息
+            mention_safe = None
+            try:
+                mention_safe = target_user.mention if target_user is not None else None
+            except Exception:
+                mention_safe = None
+            if not mention_safe:
+                logging.warning(f"remind: target_user 無法取得 mention (target_user={target_user}, channel={getattr(channel,'id',None)}, interaction_user={getattr(interaction,'user',None)})")
+                # 嘗試用 user id 回退；若都不可用則使用通用替代文字
+                if target_user and getattr(target_user, "id", None):
+                    mention_safe = f"<@{getattr(target_user, 'id')}>"
+                else:
+                    mention_safe = (self.lang_manager.translate(guild_id, "commands", "remind", "responses", "fallback_user")
+                                    if self.lang_manager else "使用者")
+    
             confirm_message = self.lang_manager.translate(
                 guild_id,
                 "commands",
@@ -73,13 +87,13 @@ class ReminderCog(commands.Cog):
                 "responses",
                 "confirm_setup",
                 duration=self.format_timedelta(time_diff, guild_id),
-                user=target_user.mention,
+                user=mention_safe,
                 message=message
             )
-            
+    
             if interaction:
                 await interaction.edit_original_response(content=confirm_message)
-            
+    
             # 建立一個背景任務來處理等待和發送
             async def reminder_task():
                 await asyncio.sleep(time_diff.total_seconds())
@@ -89,7 +103,7 @@ class ReminderCog(commands.Cog):
                     "remind",
                     "responses",
                     "reminder_message",
-                    user=target_user.mention,
+                    user=mention_safe,
                     message=message
                 )
                 await channel.send(reminder_message_content)

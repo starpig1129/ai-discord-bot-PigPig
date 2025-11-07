@@ -12,6 +12,7 @@ from discord import Message
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware
+from langchain.agents.middleware import AgentMiddleware, hook_config
 
 from llm.model_manager import ModelManager
 from llm.tools_factory import get_tools
@@ -21,6 +22,12 @@ from function import func
 from addons.settings import prompt_config
 from .prompting.system_prompt import get_system_prompt
 
+
+class DirectToolOutputMiddleware(AgentMiddleware):
+    @hook_config(can_jump_to=["end"])
+    def after_tools(self, state, runtime):
+        # 工具執行後直接結束，不再調用 LLM
+        return {"jump_to": "end"}
 
 class Orchestrator:
     """核心 Orchestrator，將 Discord 訊息路由到 LangChain Agent 並回傳結果。
@@ -141,7 +148,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 tools=tool_list,
                 system_prompt=info_system_prompt,
                 middleware=[
-                    ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
+                    DirectToolOutputMiddleware(),
                     fallback,
                 ],  # type: ignore
             )
@@ -179,12 +186,12 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 system_prompt=message_system_prompt,
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore
             )
-            info_message = info_result["messages"][-1] 
+            info_message = info_result["messages"]
 
             
             message_result = ""
             streamer = message_agent.astream(
-                {"messages": [AIMessage(content=info_message.content), HumanMessage(content=message.content)]},
+                {"messages": info_message + [HumanMessage(content=message.content)]},
                 stream_mode="messages"
             )
             # 傳入 bot 以避免模組層級依賴 main.bot
