@@ -280,21 +280,23 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
             asyncio.create_task(func.report_error(e, f"getting module prompt for '{module_name}'"))
             return ""
     
-    def compose_prompt(self, modules: List[str] = ['']) -> str:
+    def compose_prompt(self, modules: Optional[List[str]] = None) -> str:
         """
         組合指定模組的提示內容
-        
+
         Args:
             modules: 要組合的模組列表，如果為 None 則使用預設模組
-            
+
         Returns:
             組合後的提示內容
         """
         try:
             config = self.loader.load_yaml_config()
-            if modules is None:
-                modules = config['composition']['default_modules']
-            return self.builder.build_system_prompt(config, modules)
+            # 安全取得 default_modules（避免 KeyError）
+            default_modules = config.get('composition', {}).get('default_modules', [])
+            # 確保傳入 build_system_prompt 的參數類型為 List[str]
+            modules_to_use: List[str] = default_modules if modules is None else modules
+            return self.builder.build_system_prompt(config, modules_to_use)
         except Exception as e:
             asyncio.create_task(func.report_error(e, f"composing prompt with modules {modules}"))
             return ""
@@ -377,12 +379,15 @@ Remember: You're in a Discord chat environment - keep responses brief and engagi
         """析構函式"""
         self.cleanup()
 
-# 全域實例（延遲初始化）
-_prompt_manager_instance: Optional[PromptManager] = None
+# 管理多個 PromptManager 實例，key 為配置檔路徑
+from typing import Dict
 
-def get_prompt_manager(config_path: str = r"./config/prompt/message_agent.yaml") -> PromptManager:
+_prompt_manager_instances: Dict[str, PromptManager] = {}
+
+def get_prompt_manager(config_path: str = "./config/prompt/message_agent.yaml") -> PromptManager:
     """
-    取得全域 PromptManager 實例（單例模式）
+    取得指定 config_path 的 PromptManager 實例（若不存在則建立並快取）。
+    這樣可以支援多個不同 agent 的配置檔案，而不會互相覆寫單一全域實例。
     
     Args:
         config_path: 配置檔案路徑
@@ -390,9 +395,8 @@ def get_prompt_manager(config_path: str = r"./config/prompt/message_agent.yaml")
     Returns:
         PromptManager 實例
     """
-    global _prompt_manager_instance
-    
-    if _prompt_manager_instance is None:
-        _prompt_manager_instance = PromptManager(config_path)
-    
-    return _prompt_manager_instance
+    # 使用簡單的路徑字串作為 key（可根據需要擴充為絕對路徑）
+    key = config_path
+    if key not in _prompt_manager_instances:
+        _prompt_manager_instances[key] = PromptManager(config_path)
+    return _prompt_manager_instances[key]

@@ -24,6 +24,8 @@ class PromptBuilder:
         """
         建構完整的系統提示
         
+        追加診斷日誌：記錄 module_order、requested modules，以及每個模組是否存在於配置中。
+        
         Args:
             config: 配置字典
             modules: 要包含的模組列表
@@ -34,22 +36,17 @@ class PromptBuilder:
         try:
             prompt_parts = []
             
-            # 依照指定順序組合模組
+            # 依照指定順序組合模組（假設 caller 已確保 modules 為 list）
             module_order = config.get('composition', {}).get('module_order', modules)
             
             for module_name in module_order:
                 if module_name in modules and module_name in config:
-                    module_content = self._format_module_content(
-                        config[module_name], 
-                        module_name
-                    )
+                    module_content = self._format_module_content(config[module_name], module_name)
                     if module_content:
                         prompt_parts.append(module_content)
             
-            # 組合所有部分
+            # 組合所有部分並回傳
             full_prompt = "\n\n".join(prompt_parts)
-            
-            self.logger.debug(f"Built system prompt with modules: {modules}")
             return full_prompt
             
         except Exception as e:

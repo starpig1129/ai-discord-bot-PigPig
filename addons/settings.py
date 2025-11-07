@@ -1,6 +1,6 @@
 import yaml
 import asyncio
-
+import logging
 
 def _load_yaml_file(path: str) -> dict:
     """安全讀取 YAML 檔案，失敗時使用 func.report_error 回報並回傳空 dict"""
@@ -66,28 +66,86 @@ class PromptConfig:
     def __init__(self, path: str = "config/prompt") -> None:
         self.path = path
     
-    def get_system_prompt(self, agent_name: str) -> str:
+    def get_system_prompt(self, agent_name: str, bot_id: int | None = None, message=None) -> str:
         """
-        從指定的 agent 設定中取得 system_prompt
+        從指定的 agent 設定中取得 system_prompt，並嘗試套用已知變數替換
         
         Args:
             agent_name: agent 名稱
+            bot_id: 可選的機器人 ID（用於替換 {bot_id}）
+            message: 可選的 Discord 訊息物件（未使用，但保留以備將來擴充）
         
         Returns:
             system_prompt 字串，若找不到則返回空字串
         """
         try:
             from llm.prompting.manager import get_prompt_manager
-            
+
+            logger = logging.getLogger(__name__)
             config_file = f"{self.path}/{agent_name}.yaml"
+            logger.debug(f"PromptConfig.get_system_prompt: loading config_file={config_file}")
+
             prompt_manager = get_prompt_manager(config_file)
-            system_prompt = prompt_manager.compose_prompt(['base'])
-            return system_prompt if system_prompt else ''
+            # 嘗試記錄 prompt_manager 的 config_path（若有）
+            try:
+                pm_config_path = getattr(prompt_manager, "config_path", None)
+                logger.debug(f"PromptConfig: prompt_manager.config_path={pm_config_path}")
+            except Exception:
+                logger.debug("PromptConfig: prompt_manager has no attribute 'config_path'")
+
+            # 取得原始 prompt（尚未套用動態變數）
+            system_prompt = prompt_manager.compose_prompt(None)
+            logger.debug(f"PromptConfig.get_system_prompt: raw system_prompt={system_prompt!r}")
+
+            # 準備可替換變數（盡可能填入已知值）
+            try:
+                from addons.tokens import tokens
+                bot_owner_id = getattr(tokens, "bot_owner_id", 0)
+            except Exception:
+                bot_owner_id = 0
+
+            try:
+                # 優先從 prompt_manager 的 loader 讀取 base 配置
+                config = prompt_manager.loader.load_yaml_config()
+                base_cfg = config.get("base", {})
+                bot_name = base_cfg.get("bot_name", "🐖🐖")
+                creator = base_cfg.get("creator", "星豬")
+                environment = base_cfg.get("environment", "Discord server")
+            except Exception:
+                bot_name = "🐖🐖"
+                creator = "星豬"
+                environment = "Discord server"
+
+            # 將 bot_id 明確轉為字串以供 format 使用
+            bot_id_str = str(bot_id) if bot_id is not None else "{bot_id}"
+
+            variables = {
+                "bot_id": bot_id_str,
+                "bot_owner_id": bot_owner_id,
+                "bot_name": bot_name,
+                "creator": creator,
+                "environment": environment,
+            }
+
+            logger.debug(f"PromptConfig.get_system_prompt: variables={variables!r}")
+
+            # 嘗試使用 PromptBuilder 的 format_with_variables 進行替換，並記錄結果
+            try:
+                formatted = prompt_manager.builder.format_with_variables(system_prompt, variables)
+                logger.debug(f"PromptConfig.get_system_prompt: formatted system_prompt={formatted!r}")
+                return formatted if formatted else system_prompt if system_prompt else ''
+            except Exception as e:
+                logger.exception(f"Formatting system_prompt failed: {e}")
+                return system_prompt if system_prompt else ''
+
         except Exception as e:
+            # 先嘗試使用現有的報錯機制
             try:
                 asyncio.create_task(func.report_error(e, f"loading {agent_name} system prompt"))
             except Exception:
-                pass
+                # 若報錯機制不可用，記錄本地日誌以便診斷
+                logger = logging.getLogger(__name__)
+                logger.exception(f"Error loading {agent_name} system prompt: {e}")
             return ''
 
 class MemoryConfig:
