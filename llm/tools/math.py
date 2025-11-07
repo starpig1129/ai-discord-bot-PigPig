@@ -4,7 +4,7 @@
 import logging
 from typing import Any, Optional, TYPE_CHECKING
  
-from langchain.tools import tool
+from langchain_core.tools import tool
 from function import func
 
 if TYPE_CHECKING:

@@ -224,7 +224,7 @@ class PigPig(commands.Bot):
         """
         try:
             
-            if not message.guild:
+            if not message.guild or not message.author.bot:
                 return
             
             guild_name = message.guild.name
@@ -233,8 +233,6 @@ class PigPig(commands.Bot):
             
             logger.info(f'收到訊息: {message.content} (來自:伺服器:{message.guild},頻道:{message.channel.name},{message.author.name})')
             
-            if message.author.bot:
-                return
             
             await self.process_commands(message)
             
@@ -282,15 +280,13 @@ class PigPig(commands.Bot):
             - Searches last 50 messages to find bot's previous reply
         """
         try:
-            if not before.guild:
+            if not before.guild or not before.author.bot or not after.guild or after.author.bot:
                 return
             
             logger = self.get_logger_for_guild(before.guild.name)
             logger.info(
                 f"訊息修改: 原訊息({before.content}) 新訊息({after.content}) 頻道:{before.channel.name}, 作者:{before.author}"
             )
-            if after.author.bot:
-                return
             
             guild_id = str(after.guild.id)
             channel_manager = self.get_cog('ChannelManager')

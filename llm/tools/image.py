@@ -27,7 +27,7 @@ from typing import Optional, TYPE_CHECKING
  
 from PIL import Image
  
-from langchain.tools import tool
+from langchain_core.tools import tool
 from function import func
 
 if TYPE_CHECKING:

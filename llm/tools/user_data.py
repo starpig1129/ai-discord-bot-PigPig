@@ -5,7 +5,7 @@ import logging
 import discord
 from typing import Optional, Any, TYPE_CHECKING, Union, cast
  
-from langchain.tools import tool
+from langchain_core.tools import tool
 from function import func
 from cogs.userdata import UserDataCog
 from typing import TYPE_CHECKING

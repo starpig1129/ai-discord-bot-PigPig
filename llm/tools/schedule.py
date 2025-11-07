@@ -4,7 +4,7 @@
 import logging
 from typing import Any, Optional, Literal, TYPE_CHECKING, cast
  
-from langchain.tools import tool
+from langchain_core.tools import tool
 from cogs.schedule import ScheduleManager
 from function import func
 

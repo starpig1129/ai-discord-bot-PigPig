@@ -4,7 +4,7 @@
 import logging
 from typing import Optional, TYPE_CHECKING
  
-from langchain.tools import tool
+from langchain_core.tools import tool
 from typing import Any
 from cogs.remind import ReminderCog
 from function import func
