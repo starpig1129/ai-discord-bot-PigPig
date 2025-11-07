@@ -25,7 +25,7 @@ _ALLOWED_MENTIONS = discord.AllowedMentions(
     replied_user=True
 )
 
-_BUFFER_SIZE = 40  # Stream buffer size for message updates
+_BUFFER_SIZE = 20  # Stream buffer size for message updates
 _HARD_LIMIT = 2000  # Hard limit for Discord message length
 _MAX_RETRIES = 3  # Maximum number of retry attempts
 
