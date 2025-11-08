@@ -96,7 +96,7 @@ class DatabaseManager:
            並捕捉任何在提交時發生的例外以避免在 except path 再拋出。
         """
         try:
-            if getattr(self, "_loop", None):
+            if self._loop:
                 try:
                     asyncio.run_coroutine_threadsafe(func.report_error(exc, ctx), self._loop)
                 except Exception:
@@ -546,7 +546,7 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 query = "SELECT * FROM messages WHERE channel_id = ?"
-                params = [channel_id]
+                params: List[Any] = [channel_id]
                 
                 if before:
                     query += " AND timestamp < ?"
@@ -800,36 +800,6 @@ class DatabaseManager:
             self._report_error_threadsafe(e, "取得配置失敗")
             raise DatabaseError(f"取得配置失敗: {e}", operation="get_config", table="memory_config")
 
-    # 效能指標操作
-    def record_metric(
-        self,
-        metric_type: str,
-        value: float,
-        metadata: Optional[str] = None
-    ) -> bool:
-        """記錄效能指標
-        
-        Args:
-            metric_type: 指標類型
-            value: 指標值
-            metadata: 元資料
-            
-        Returns:
-            bool: 是否成功記錄
-        """
-        try:
-            metric_id = f"{metric_type}_{datetime.now().isoformat()}"
-            with self.get_connection() as conn:
-                conn.execute("""
-                    INSERT INTO performance_metrics (metric_id, metric_type, value, metadata)
-                    VALUES (?, ?, ?, ?)
-                """, (metric_id, metric_type, value, metadata))
-                conn.commit()
-            return True
-        except Exception as e:
-            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
-            self._report_error_threadsafe(e, "記錄效能指標失敗")
-            raise DatabaseError(f"記錄效能指標失敗: {e}", operation="record_metric", table="performance_metrics")
 
     # 資料清理
     def cleanup_old_data(self, retention_days: int = 90) -> Tuple[int, List[str]]:
@@ -916,64 +886,7 @@ class DatabaseManager:
             self._report_error_threadsafe(e, "取得訊息總數失敗")
             raise DatabaseError(f"取得訊息總數失敗: {e}", operation="get_count", table="messages")
 
-    def get_database_stats(self) -> Dict[str, Any]:
-        """取得資料庫統計資訊"""
-        try:
-            with self.get_connection() as conn:
-                stats = {}
-                stats['channels'] = self.get_channel_count()
-                stats['messages'] = self.get_message_count()
-                
-                # 取得資料庫檔案大小
-                db_size = self.db_path.stat().st_size
-                stats['db_size_mb'] = round(db_size / (1024 * 1024), 2)
-                
-                # 取得 WAL 檔案大小
-                wal_path = self.db_path.with_suffix('.db-wal')
-                if wal_path.exists():
-                    wal_size = wal_path.stat().st_size
-                    stats['wal_size_mb'] = round(wal_size / (1024 * 1024), 2)
-                
-                return stats
-        except Exception as e:
-            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
-            self._report_error_threadsafe(e, "取得資料庫統計資訊失敗")
-            raise DatabaseError(f"取得資料庫統計資訊失敗: {e}", operation="get_stats")
 
-    def get_all_message_ids(self) -> List[str]:
-        """取得資料庫中所有訊息的 ID
-        
-        Returns:
-            List[str]: 所有訊息 ID 的列表
-        """
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.execute("SELECT message_id FROM messages")
-                # 使用 cursor.fetchall() 取得所有結果
-                rows = cursor.fetchall()
-                # 從每行中提取第一個元素（message_id）
-                return [row[0] for row in rows]
-        except Exception as e:
-            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
-            self._report_error_threadsafe(e, "取得所有訊息 ID 失敗")
-            raise DatabaseError(f"取得所有訊息 ID 失敗: {e}", operation="get_all_message_ids", table="messages")
-
-    def get_all_segment_ids(self) -> List[str]:
-        """取得資料庫中所有片段的 ID
-        
-        Returns:
-            List[str]: 片段 ID 列表
-        """
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.execute("SELECT segment_id FROM conversation_segments")
-                # 移除 'seg_' 前綴，因為呼叫者會加上它
-                return [row[0].replace('seg_', '') for row in cursor.fetchall()]
-                
-        except Exception as e:
-            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
-            self._report_error_threadsafe(e, "取得所有片段 ID 失敗")
-            raise DatabaseError(f"取得所有片段 ID 失敗: {e}", operation="get_all_segment_ids", table="conversation_segments")
 
     def close_connections(self) -> None:
         """關閉所有資料庫連接"""
@@ -1180,7 +1093,7 @@ class DatabaseManager:
         try:
             with self.get_connection() as conn:
                 query = "SELECT * FROM conversation_segments WHERE channel_id = ?"
-                params = [channel_id]
+                params: List[Any] = [channel_id]
                 if before:
                     query += " AND end_time < ?"
                     params.append(before)
@@ -1348,32 +1261,3 @@ class DatabaseManager:
             self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
             self._report_error_threadsafe(e, "取得重疊片段失敗")
             raise DatabaseError(f"取得重疊片段失敗: {e}", operation="get_overlapping_segments", table="conversation_segments")
-
-    def get_all_segment_ids_by_channel(self) -> Dict[str, List[str]]:
-        """獲取每個頻道所有有效的 segment_id
-        
-        Returns:
-            Dict[str, List[str]]: {channel_id: [segment_id, ...]}
-        """
-        try:
-            with self.get_connection() as conn:
-                cursor = conn.execute("""
-                    SELECT c.channel_id, s.segment_id
-                    FROM conversation_segments s
-                    JOIN channels c ON s.channel_id = c.channel_id
-                    WHERE s.segment_id IN (SELECT DISTINCT segment_id FROM segment_messages)
-                    ORDER BY c.channel_id
-                """)
-                rows = cursor.fetchall()
-                
-                result = {}
-                for row in rows:
-                    channel_id, segment_id = row
-                    if channel_id not in result:
-                        result[channel_id] = []
-                    result[channel_id].append(segment_id)
-                return result
-        except Exception as e:
-            self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
-            self._report_error_threadsafe(e, "獲取所有 segment id 失敗")
-            raise DatabaseError(f"獲取所有 segment id 失敗: {e}", operation="get_all_segment_ids_by_channel")
