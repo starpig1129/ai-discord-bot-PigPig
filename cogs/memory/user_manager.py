@@ -84,6 +84,7 @@ class SQLiteUserManager:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         user_id TEXT PRIMARY KEY,
+                        discord_id TEXT,
                         display_name TEXT,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -107,11 +108,14 @@ class SQLiteUserManager:
                 
                 # 建立索引
                 conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_users_user_id 
+                    CREATE INDEX IF NOT EXISTS idx_users_user_id
                     ON users(user_id)
                 """)
                 conn.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_users_last_active 
+                    CREATE INDEX IF NOT EXISTS idx_users_discord_id ON users(discord_id)
+                """)
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_users_last_active
                     ON users(last_active)
                 """)
                 conn.execute("""

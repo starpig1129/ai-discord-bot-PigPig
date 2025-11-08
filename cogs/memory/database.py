@@ -258,6 +258,7 @@ class DatabaseManager:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id TEXT PRIMARY KEY,
+                discord_id TEXT,
                 display_name TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -354,6 +355,7 @@ class DatabaseManager:
             "CREATE INDEX IF NOT EXISTS idx_channels_last_active ON channels(last_active)",
             
             # 使用者表索引 (新增)
+            "CREATE INDEX IF NOT EXISTS idx_users_discord_id ON users(discord_id)",
             "CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active)",
             "CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id)",
             
