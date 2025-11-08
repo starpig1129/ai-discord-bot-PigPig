@@ -113,40 +113,6 @@ class ConfigurationError(MemorySystemError):
         )
 
 
-class HardwareIncompatibleError(MemorySystemError):
-    """硬體不相容錯誤
-    
-    系統硬體不符合記憶系統要求時拋出的錯誤。
-    """
-    
-    def __init__(
-        self, 
-        message: str,
-        required_spec: Optional[dict[str, Any]] = None,
-        current_spec: Optional[dict[str, Any]] = None,
-        **kwargs
-    ):
-        """初始化硬體不相容錯誤
-        
-        Args:
-            message: 錯誤訊息
-            required_spec: 所需硬體規格
-            current_spec: 目前硬體規格
-            **kwargs: 其他上下文資訊
-        """
-        context = kwargs
-        if required_spec:
-            context['required_spec'] = required_spec
-        if current_spec:
-            context['current_spec'] = current_spec
-            
-        super().__init__(
-            message,
-            error_code="HARDWARE_ERROR",
-            context=context
-        )
-
-
 class VectorOperationError(MemorySystemError):
     """向量操作錯誤
     
@@ -177,78 +143,5 @@ class VectorOperationError(MemorySystemError):
         super().__init__(
             message,
             error_code="VECTOR_ERROR",
-            context=context
-        )
-
-
-class IndexIntegrityError(VectorOperationError):
-    """索引完整性錯誤
-    
-    向量索引與 ID 映射不匹配或完整性問題相關錯誤。
-    """
-    
-    def __init__(
-        self,
-        message: str,
-        index_size: Optional[int] = None,
-        mapping_size: Optional[int] = None,
-        integrity_issues: Optional[list[str]] = None,
-        **kwargs
-    ):
-        """初始化索引完整性錯誤
-        
-        Args:
-            message: 錯誤訊息
-            index_size: 索引大小
-            mapping_size: 映射大小
-            integrity_issues: 完整性問題列表
-            **kwargs: 其他上下文資訊
-        """
-        context = kwargs
-        if index_size is not None:
-            context['index_size'] = index_size
-        if mapping_size is not None:
-            context['mapping_size'] = mapping_size
-        if integrity_issues:
-            context['integrity_issues'] = integrity_issues
-            
-        super().__init__(
-            message,
-            operation="integrity_check",
-            error_code="INDEX_INTEGRITY_ERROR",
-            context=context
-        )
-
-
-class SearchError(MemorySystemError):
-    """搜尋操作錯誤
-    
-    記憶搜尋過程中的錯誤。
-    """
-    
-    def __init__(
-        self, 
-        message: str,
-        search_type: Optional[str] = None,
-        query: Optional[str] = None,
-        **kwargs
-    ):
-        """初始化搜尋錯誤
-        
-        Args:
-            message: 錯誤訊息
-            search_type: 搜尋類型
-            query: 搜尋查詢
-            **kwargs: 其他上下文資訊
-        """
-        context = kwargs
-        if search_type:
-            context['search_type'] = search_type
-        if query:
-            context['query'] = query
-            
-        super().__init__(
-            message,
-            error_code="SEARCH_ERROR",
             context=context
         )
