@@ -4,7 +4,7 @@ from typing import Type, Optional, TYPE_CHECKING
 from discord.ext.commands import Bot
 from langchain_core.embeddings import Embeddings
 
-from addons.settings import memory_config, MemoryConfig
+from addons.settings import MemoryConfig
 from .vector_store_interface import VectorStoreInterface
 
 if TYPE_CHECKING:
