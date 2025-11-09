@@ -1,6 +1,7 @@
 import yaml
 import asyncio
 import logging
+from typing import Optional, List
 
 def _load_yaml_file(path: str) -> dict:
     """安全讀取 YAML 檔案，失敗時使用 func.report_error 回報並回傳空 dict"""
@@ -154,10 +155,26 @@ class MemoryConfig:
     def __init__(self, path: str = "config/memory.yaml") -> None:
         self.path = path
         data = _load_yaml_file(path)
+
+        # legacy/local DB path
         self.user_data_path: str = data.get("user_data_path", "data/memory/memory.db")
+
+        # short / long term memory sizes
         self.short_term_memory_size: int = data.get("short_term_memory_size", 10)
         self.long_term_memory_size: int = data.get("long_term_memory_size", 1024)
         self.long_term_memory_count: int = data.get("long_term_memory_count", 5)
+
+        # V1.1 memory system settings (snake_case)
+        self.qdrant_url: str = data.get("qdrant_url", "http://localhost:6333")
+        self.qdrant_api_key: Optional[str] = data.get("qdrant_api_key", None)
+        self.qdrant_collection_name: str = data.get("qdrant_collection_name", "ephemeral_memory")
+        self.embedding_model_name: str = data.get("embedding_model_name", "all-MiniLM-L6-v2")
+        self.embedding_dim: int = data.get("embedding_dim", 384)
+        self.vector_search_k: int = data.get("vector_search_k", 5)
+        self.keyword_search_k: int = data.get("keyword_search_k", 3)
+        self.memory_excluded_channels: List[int] = data.get("memory_excluded_channels", [])
+        self.fetch_batch_size: int = data.get("fetch_batch_size", 100)
+        self.process_batch_size: int = data.get("process_batch_size", 50)
 try:
     base_config = BaseConfig("config/base.yaml")
 except Exception as e:

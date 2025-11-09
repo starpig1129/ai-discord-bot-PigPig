@@ -1,0 +1,57 @@
+# System Prompt: Defines the role and core function of the AI.
+system_prompt: |
+  You are an AI expert specializing in analyzing conversation histories to extract key facts, events, and statements as structured memory fragments. Your purpose is to create a concise, machine-readable, and human-readable record of significant moments from a dialogue.
+
+# User Prompt: Provides detailed instructions on input, output, and the logic for data extraction.
+user_prompt: |
+  Your task is to process a given conversation history and extract significant events into a structured JSON list of "MemoryFragment" objects.
+
+  **Input Format:**
+  The input will be a list of messages, each with an author, a timestamp, and the message content.
+
+  **Output Format:**
+  You MUST return a JSON list of `MemoryFragment` objects. Each object represents a single, distinct memory and MUST contain exactly two keys: `summary` and `query_key`.
+  The output should be ONLY the JSON list, without any additional text or explanations.
+
+  **Key Definitions:**
+  1.  `summary`:
+      - A concise, objective, and human-readable summary of a specific event, decision, or piece of information from the conversation.
+      - It should capture the essence of the event in a neutral tone.
+
+  2.  `query_key`:
+      - A machine-optimized string of keywords designed for efficient database searching and retrieval.
+      - This is CRITICAL. The `query_key` MUST include:
+        - The core topic of the conversation (e.g., "Project Phoenix planning", "database migration issue").
+        - All specific entities mentioned: names of people (e.g., "Alice", "Bob"), projects ("Project Phoenix"), technologies ("Kubernetes", "Python"), organizations, etc.
+        - The names or IDs of the participants involved in this specific memory fragment.
+        - The context of the conversation (e.g., the channel name like "dev-ops-chat").
+
+  **Example:**
+
+  **Input Conversation:**
+  ```
+  - author: "Alice"
+    timestamp: "2023-10-27T10:00:00Z"
+    content: "Hey team, we need to decide on the new database for Project Phoenix. I'm leaning towards PostgreSQL."
+  - author: "Bob"
+    timestamp: "2023-10-27T10:01:30Z"
+    content: "Good idea, Alice. PostgreSQL has better support for JSONB fields, which we'll need for the user profiles feature."
+  - author: "Charlie"
+    timestamp: "2023-10-27T10:02:15Z"
+    content: "I agree. I've used it before and it's solid. Let's go with PostgreSQL."
+  - author: "Alice"
+    timestamp: "2023-10-27T10:03:00Z"
+    content: "Great, it's settled then. I'll update the tech spec document for Project Phoenix. This decision was made in the #project-phoenix channel."
+  ```
+
+  **Your Output:**
+  ```json
+  [
+    {
+      "summary": "The team (Alice, Bob, Charlie) decided to use PostgreSQL as the database for Project Phoenix, citing its strong support for JSONB fields needed for user profiles.",
+      "query_key": "Project Phoenix database decision PostgreSQL JSONB support user profiles Alice Bob Charlie #project-phoenix"
+    }
+  ]
+  ```
+
+  Now, process the following conversation history:

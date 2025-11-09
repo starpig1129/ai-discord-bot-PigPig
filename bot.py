@@ -42,7 +42,12 @@ from cogs.music_lib.ui_manager import UIManager
 from llm.orchestrator import Orchestrator
 from logs import TimedRotatingFileHandler
 
-from addons import tokens, base_config
+from cogs.memory.message_tracker import MessageTracker
+from cogs.memory.vector_manager import VectorManager
+from cogs.memory.database import DatabaseManager
+
+from addons.settings import base_config, memory_config
+from addons.tokens import tokens
 
 
 def setup_logger(server_name):
@@ -122,7 +127,9 @@ class PigPig(commands.Bot):
         # Music system managers
         self.state_manager = StateManager()
         self.ui_manager = UIManager(self)
-        
+        self.db_manager = DatabaseManager(db_path=memory_config.user_data_path, bot=self)
+        self.message_tracker = MessageTracker(self, self.db_manager, memory_config)
+        self.vector_manager = VectorManager(self, memory_config)
         
         self.status_cycle = cycle([
             (discord.ActivityType.listening, "大家的聲音"),
@@ -226,6 +233,8 @@ class PigPig(commands.Bot):
 
             if not message.guild or message.author.bot:
                 return
+            
+            await self.message_tracker.track_message(message)
             
             guild_name = message.guild.name
             self.setup_logger_for_guild(guild_name)
@@ -352,13 +361,14 @@ class PigPig(commands.Bot):
 
         # Initialize core services
         self.orchestrator = Orchestrator()
-
+        await self.vector_manager.initialize()
+    
         if base_config.ipc_server.get("enable", False):
             await self.ipc.start()
-
+    
         if not base_config.version or base_config.version != update.__version__:
             func.update_json("settings.json", new_data={"version": update.__version__})
-
+    
         await self.tree.sync()
 
     async def on_ready(self):

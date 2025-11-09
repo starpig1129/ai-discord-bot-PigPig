@@ -362,7 +362,7 @@ class SQLiteUserManager:
             await func.report_error(e, f"使用者資料更新失敗 (使用者: {user_id})")
             return False
     
-    async def update_user_activity(self, user_id: str, display_name: str = None) -> bool:
+    async def update_user_activity(self, user_id: str, display_name: str = '') -> bool:
         """更新使用者活躍時間
         
         Args:

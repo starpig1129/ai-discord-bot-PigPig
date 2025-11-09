@@ -1,9 +1,17 @@
-# cogs/memory/vector_store_interface.py
+# pylint: disable=unnecessary-import
+
+"""
+This module defines the interface for vector stores in the memory system.
+
+It includes:
+- MemoryFragment: A dataclass for representing a piece of memory.
+- VectorStoreInterface: An abstract base class for vector store implementations.
+"""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-import uuid
+
 
 @dataclass
 class MemoryFragment:
@@ -29,14 +37,30 @@ class MemoryFragment:
     """
 
     def __post_init__(self):
-        # Ensure a unique ID for every fragment.
-        if "fragment_id" not in self.metadata:
-            self.metadata["fragment_id"] = str(uuid.uuid4())
+        """
+        Validates that all required metadata keys are present.
+        """
+        required_keys = [
+            'fragment_id',
+            'source_message_ids',
+            'jump_url',
+            'author_id',
+            'channel_id',
+            'guild_id',
+            'timestamp',
+            'reactions_json'
+        ]
+        for key in required_keys:
+            if key not in self.metadata:
+                raise ValueError(f"Missing required metadata key: {key}")
+
 
 class VectorStoreInterface(ABC):
     """
-    Abstract Base Class for vector store implementations.
-    Defines the standard interface for adding and searching episodic memories.
+    Abstract base class for vector store implementations.
+
+    This class defines the standard interface for adding and searching memories
+    in a vector store.
     """
 
     @abstractmethod
@@ -47,10 +71,34 @@ class VectorStoreInterface(ABC):
         Args:
             memories: A list of MemoryFragment objects to be added.
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
-    async def search_memories(
+    async def search_memories_by_vector(
+        self,
+        query_text: str,
+        limit: int = 8,
+        user_id: Optional[str] = None,
+        channel_id: Optional[str] = None,
+        min_score: Optional[float] = None,
+    ) -> List[MemoryFragment]:
+        """
+        Search memories using vector similarity.
+
+        Args:
+            query_text: The text to vectorize and search with.
+            limit: Maximum number of results to return.
+            user_id: Optional user id to restrict results.
+            channel_id: Optional channel id to restrict results.
+            min_score: Optional minimum similarity score to include.
+
+        Returns:
+            A list of MemoryFragment objects that match the vector query.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def search_memories_by_keyword(
         self,
         query_text: str,
         user_id: Optional[str] = None,
@@ -58,15 +106,39 @@ class VectorStoreInterface(ABC):
         k: int = 5
     ) -> List[MemoryFragment]:
         """
-        Searches for relevant memory fragments based on a query.
-
+        Search memories using keyword / full-text payload matching.
+    
+        This method should not vectorize the query_text. Implementations
+        are expected to use the vector store's text-matching capabilities
+        (for example Qdrant's MatchText + scroll/search APIs) and support
+        filtering by user_id and channel_id.
+    
         Args:
-            query_text: The text to search for.
-            user_id: Optional user ID to filter memories by author.
-            channel_id: Optional channel ID to filter memories.
-            k: The number of results to return.
-
+            query_text: Raw text to match against payload text fields.
+            user_id: Optional user id to restrict results.
+            channel_id: Optional channel id to restrict results.
+            k: Number of results to return.
+    
         Returns:
-            A list of relevant MemoryFragment objects.
+            A list of MemoryFragment objects that match the keyword query.
         """
-        pass
+        raise NotImplementedError
+    
+    @abstractmethod
+    async def search(
+        self,
+        vector_query: Optional[str] = None,
+        keyword_query: Optional[str] = None,
+        user_id: Optional[str] = None,
+        channel_id: Optional[str] = None
+    ) -> List[MemoryFragment]:
+        """
+        Performs a hybrid search using separate vector and keyword queries.
+
+        At least one of `vector_query` or `keyword_query` must be provided.
+        Implementations should handle the following cases:
+        - Only `vector_query`: perform vector search.
+        - Only `keyword_query`: perform keyword search.
+        - Both provided: perform both searches and merge/deduplicate results.
+        """
+        raise NotImplementedError
