@@ -42,9 +42,6 @@ from cogs.music_lib.ui_manager import UIManager
 from llm.orchestrator import Orchestrator
 from logs import TimedRotatingFileHandler
 
-from cogs.memory.message_tracker import MessageTracker
-from cogs.memory.vector_manager import VectorManager
-from cogs.memory.database import DatabaseManager
 
 from addons.settings import base_config, memory_config
 from addons.tokens import tokens
@@ -127,9 +124,22 @@ class PigPig(commands.Bot):
         # Music system managers
         self.state_manager = StateManager()
         self.ui_manager = UIManager(self)
-        self.db_manager = DatabaseManager(db_path=memory_config.user_data_path, bot=self)
-        self.message_tracker = MessageTracker(self, self.db_manager, memory_config)
-        self.vector_manager = VectorManager(self, memory_config)
+
+        # Memory subsystem (instantiate only when enabled)
+        if getattr(memory_config, "enabled", True):
+            # lazy import to avoid loading memory modules when disabled
+            from cogs.memory.database import DatabaseManager
+            from cogs.memory.message_tracker import MessageTracker
+            from cogs.memory.vector_manager import VectorManager
+
+            self.db_manager = DatabaseManager(db_path=memory_config.user_data_path, bot=self)
+            self.message_tracker = MessageTracker(self, self.db_manager, memory_config)
+            self.vector_manager = VectorManager(self, memory_config)
+        else:
+            # keep attributes for compatibility but do not initialize subsystems
+            self.db_manager = None
+            self.message_tracker = None
+            self.vector_manager = None
         
         self.status_cycle = cycle([
             (discord.ActivityType.listening, "大家的聲音"),
@@ -234,7 +244,8 @@ class PigPig(commands.Bot):
             if not message.guild or message.author.bot:
                 return
             
-            await self.message_tracker.track_message(message)
+            if self.message_tracker:
+                await self.message_tracker.track_message(message)
             
             guild_name = message.guild.name
             self.setup_logger_for_guild(guild_name)
@@ -367,7 +378,8 @@ class PigPig(commands.Bot):
         except Exception:
             # If this fails, leave as None; error-reporting will fallback to synchronous logging.
             self.db_manager._loop = None
-        await self.vector_manager.initialize()
+        if getattr(memory_config, "enabled", True) and self.vector_manager:
+            await self.vector_manager.initialize()
     
         if base_config.ipc_server.get("enable", False):
             await self.ipc.start()

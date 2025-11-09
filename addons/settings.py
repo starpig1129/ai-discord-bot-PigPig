@@ -156,6 +156,9 @@ class MemoryConfig:
         self.path = path
         data = _load_yaml_file(path)
 
+        # Toggle to enable/disable memory subsystem
+        self.enabled: bool = bool(data.get("enabled", True))
+
         self.user_data_path: str = data.get("user_data_path", "data/memory/memory.db")
         self.vector_store_type: str = data.get("vector_store_type", "qdrant")
         self.qdrant_url: str = data.get("qdrant_url", "http://localhost:6333")
@@ -168,6 +171,10 @@ class MemoryConfig:
         self.memory_excluded_channels: List[int] = data.get("memory_excluded_channels", [])
         self.fetch_batch_size: int = data.get("fetch_batch_size", 100)
         self.process_batch_size: int = data.get("process_batch_size", 50)
+
+        # Optional tuning parameters (present in YAML)
+        self.store_refresh_interval_seconds: int | None = data.get("store_refresh_interval_seconds", None)
+        self.max_memory_items_per_user: int | None = data.get("max_memory_items_per_user", None)
 try:
     base_config = BaseConfig("config/base.yaml")
 except Exception as e:
