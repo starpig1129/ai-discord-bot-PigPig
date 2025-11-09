@@ -60,7 +60,7 @@ class VectorManager:
         Returns:
             VectorStoreInterface: An instance of the configured vector store.
         """
-        store_type = self.settings.get("VECTOR_STORE_TYPE")
+        store_type = self.settings.vector_store_type
         store_class = self._get_store_class(store_type)
         # Dependency injection: Pass settings and the (currently None) embedding model.
         return store_class(settings=self.settings, embedding_model=self.embedding_model)

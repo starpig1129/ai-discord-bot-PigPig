@@ -361,6 +361,12 @@ class PigPig(commands.Bot):
 
         # Initialize core services
         self.orchestrator = Orchestrator()
+        # Provide running event loop to DB manager so thread-safe coroutine submission works.
+        try:
+            self.db_manager._loop = asyncio.get_running_loop()
+        except Exception:
+            # If this fails, leave as None; error-reporting will fallback to synchronous logging.
+            self.db_manager._loop = None
         await self.vector_manager.initialize()
     
         if base_config.ipc_server.get("enable", False):

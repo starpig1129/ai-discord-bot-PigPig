@@ -156,15 +156,8 @@ class MemoryConfig:
         self.path = path
         data = _load_yaml_file(path)
 
-        # legacy/local DB path
         self.user_data_path: str = data.get("user_data_path", "data/memory/memory.db")
-
-        # short / long term memory sizes
-        self.short_term_memory_size: int = data.get("short_term_memory_size", 10)
-        self.long_term_memory_size: int = data.get("long_term_memory_size", 1024)
-        self.long_term_memory_count: int = data.get("long_term_memory_count", 5)
-
-        # V1.1 memory system settings (snake_case)
+        self.vector_store_type: str = data.get("vector_store_type", "qdrant")
         self.qdrant_url: str = data.get("qdrant_url", "http://localhost:6333")
         self.qdrant_api_key: Optional[str] = data.get("qdrant_api_key", None)
         self.qdrant_collection_name: str = data.get("qdrant_collection_name", "ephemeral_memory")

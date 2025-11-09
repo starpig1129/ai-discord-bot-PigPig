@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections import defaultdict
-from typing import List, Dict, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands, tasks
@@ -63,25 +65,25 @@ class EpisodicMemoryService(commands.Cog):
 
         except Exception as e:
             log.error(f"An unexpected error occurred in the fetch_new_messages loop: {e}", exc_info=True)
-            await func.report_error(self.bot, e, "fetch_new_messages_loop")
+            await func.report_error(e, "fetch_new_messages_loop")
         finally:
             self.is_processing = False
 
-    async def _fetch_and_store_messages(self, pending_batch: List[Tuple[int, int, int]]):
+    async def _fetch_and_store_messages(self, pending_batch: list):
         """
         Fetches full discord.Message objects for a batch of pending messages
         and stores them in the database.
 
         Args:
-            pending_batch: A list of tuples, where each tuple contains
+            pending_batch: A list of tuples/dicts containing message metadata
                            (message_id, channel_id, guild_id).
         """
-        messages_by_channel: Dict[int, List[int]] = defaultdict(list)
+        messages_by_channel: dict[int, list[int]] = defaultdict(list)
         for message_id, channel_id, _ in pending_batch:
             messages_by_channel[channel_id].append(message_id)
 
-        fetched_messages: List[discord.Message] = []
-        processed_ids: List[int] = []
+        fetched_messages: list[discord.Message] = []
+        processed_ids: list[int] = []
 
         for channel_id, message_ids in messages_by_channel.items():
             channel = self.bot.get_channel(channel_id)
@@ -100,7 +102,7 @@ class EpisodicMemoryService(commands.Cog):
                     log.error(f"Missing permissions to fetch message {message_id} in channel {channel_id}.")
                 except Exception as e:
                     log.error(f"Failed to fetch message {message_id} due to an unexpected error: {e}", exc_info=True)
-                    await func.report_error(self.bot, e, f"fetch_message_{message_id}")
+                    await func.report_error(e, f"fetch_message_{message_id}")
                 finally:
                     # Mark as processed regardless of success or failure to avoid retrying forever.
                     processed_ids.append(message_id)

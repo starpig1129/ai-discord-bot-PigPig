@@ -99,9 +99,14 @@ class QdrantStore(VectorStoreInterface):
                 # Collection exists; ensure payload indexes exist (create_payload_index is idempotent)
             except Exception:
                 # Recreate collection with required vector size
+                # Using vectors_config parameter for newer Qdrant API versions
+                from qdrant_client.http.models import VectorParams, Distance
                 self.qdrant_client.recreate_collection(
                     collection_name=self.collection_name,
-                    vectors={"size": self.embedding_dim, "distance": "Cosine"},
+                    vectors_config=VectorParams(
+                        size=self.embedding_dim,
+                        distance=Distance.COSINE
+                    ),
                 )
 
             # Create payload indexes for author_id and channel_id to accelerate filtering.

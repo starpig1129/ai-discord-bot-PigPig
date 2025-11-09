@@ -49,3 +49,5 @@ data/backups/*.db
 PHASE*_*.md
 # 忽略 cookies 檔案
 data/cookies.txt
+
+qdrant_storage/

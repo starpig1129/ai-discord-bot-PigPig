@@ -39,8 +39,7 @@ class DatabaseManager:
         """
         self.db_path = Path(db_path)
         self.bot = bot
-        # 儲存 bot 的事件迴圈引用（若有），以便在同步路徑 thread-safe 地提交 coroutine
-        self._loop = getattr(self.bot, "loop", None) if bot else None
+        self._loop = None
         self.logger = logging.getLogger(__name__)
         self._lock = threading.RLock()
         self._connections: Dict[int, sqlite3.Connection] = {}
@@ -238,6 +237,19 @@ class DatabaseManager:
                 vectorized INTEGER NOT NULL DEFAULT 0
             )
         """)
+        # Migrate older schemas that lack 'vectorized' column:
+        try:
+            cols = [r['name'] for r in cursor.execute("PRAGMA table_info('messages')").fetchall()]
+            if 'vectorized' not in cols:
+                try:
+                    cursor.execute("ALTER TABLE messages ADD COLUMN vectorized INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError:
+                    # Fallback if NOT NULL with default is not accepted by this SQLite build
+                    cursor.execute("ALTER TABLE messages ADD COLUMN vectorized INTEGER DEFAULT 0")
+        except Exception as e:
+            # Log migration warning and continue; further operations will surface errors if any
+            self.logger.warning("Failed to ensure 'vectorized' column exists: %s", e)
+
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages (user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_vectorized ON messages (vectorized)")
         
