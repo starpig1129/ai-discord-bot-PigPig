@@ -40,15 +40,12 @@ class MessageTracker:
         if message.author.bot:
             return
 
-        if message.channel.id in self.settings.memory_excluded_channels:
-            return
 
         try:
-            success = await self.db_manager.add_pending_message(message.id, message.channel.id)
-            if success:
-                self._pending_message_count += 1
+            await self.db_manager.add_pending_message(message)
+            self._pending_message_count += 1
         except Exception as e:
-            await func.report_error(self.bot, e, f"Failed to track message {message.id}")
+            await func.report_error(e, f"Failed to track message {message.id}")
 
     def get_pending_count(self) -> int:
         """

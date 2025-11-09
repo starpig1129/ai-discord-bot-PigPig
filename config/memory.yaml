@@ -11,9 +11,6 @@ embedding_model_name: all-MiniLM-L6-v2
 embedding_dim: 384
 vector_search_k: 5
 keyword_search_k: 3
-memory_excluded_channels:
-  - 123456789012345678 # example channel ID to exclude
-  - 987654321098765432
 fetch_batch_size: 100
 process_batch_size: 50
 # Optional tuning parameters

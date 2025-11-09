@@ -168,7 +168,6 @@ class MemoryConfig:
         self.embedding_dim: int = data.get("embedding_dim", 384)
         self.vector_search_k: int = data.get("vector_search_k", 5)
         self.keyword_search_k: int = data.get("keyword_search_k", 3)
-        self.memory_excluded_channels: List[int] = data.get("memory_excluded_channels", [])
         self.fetch_batch_size: int = data.get("fetch_batch_size", 100)
         self.process_batch_size: int = data.get("process_batch_size", 50)
 
