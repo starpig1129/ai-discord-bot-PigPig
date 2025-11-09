@@ -77,3 +77,17 @@ class DatabaseError(MemorySystemError):
             error_code="DB_ERROR",
             context=context
         )
+
+class VectorOperationError(MemorySystemError):
+    """Errors related to vector storage operations."""
+    pass
+
+
+class SearchError(MemorySystemError):
+    """Errors related to search operations."""
+    pass
+
+
+class IndexIntegrityError(VectorOperationError):
+    """Errors related to index integrity."""
+    pass
