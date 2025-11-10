@@ -88,7 +88,18 @@ class EpisodicMemoryService(commands.Cog):
                            (message_id, channel_id, guild_id).
         """
         messages_by_channel: dict[int, list[int]] = defaultdict(list)
-        for message_id, channel_id, _ in pending_batch:
+        log.debug("Pending batch type: %s, sample: %s", type(pending_batch).__name__, pending_batch[:5])
+        for row in pending_batch:
+            # support dict rows returned by SQLiteStorage and sequence tuples/lists from other storages
+            if isinstance(row, dict):
+                message_id = row["message_id"]
+                channel_id = row["channel_id"]
+            else:
+                try:
+                    message_id, channel_id, *_ = row
+                except Exception:
+                    log.warning("Unexpected pending_batch item format: %r", row)
+                    continue
             messages_by_channel[channel_id].append(message_id)
 
         fetched_messages: list[discord.Message] = []
