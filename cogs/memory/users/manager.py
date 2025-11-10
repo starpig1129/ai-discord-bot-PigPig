@@ -1,86 +1,44 @@
-"""SQLite 使用者管理器
+"""SQLite user manager moved from cogs/memory/user_manager.py.
 
-實現智慧背景知識整合系統的使用者資訊管理功能，
-支援從 MongoDB 遷移到 SQLite，並提供高效的使用者資料查詢和管理。
+Contains SQLiteUserManager and helper functions.
 """
-
 import json
 import logging
 import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
 import asyncio
- 
-from .exceptions import DatabaseError
+
+from .models import UserInfo
+from ..exceptions import DatabaseError
 from function import func
 
 
-@dataclass
-class UserInfo:
-    """使用者資訊資料類別"""
-    user_id: str
-    display_name: str = ""
-    user_data: Optional[str] = None
-    last_active: Optional[datetime] = None
-    profile_data: Optional[Dict] = None
-    preferences: Optional[Dict] = None
-    created_at: Optional[datetime] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """轉換為字典格式"""
-        data = asdict(self)
-        # 處理 datetime 物件
-        if self.last_active:
-            data['last_active'] = self.last_active.isoformat()
-        if self.created_at:
-            data['created_at'] = self.created_at.isoformat()
-        return data
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'UserInfo':
-        """從字典建立 UserInfo 實例"""
-        # 處理 datetime 字串
-        if data.get('last_active'):
-            try:
-                data['last_active'] = datetime.fromisoformat(data['last_active'])
-            except (ValueError, TypeError):
-                data['last_active'] = None
-        
-        if data.get('created_at'):
-            try:
-                data['created_at'] = datetime.fromisoformat(data['created_at'])
-            except (ValueError, TypeError):
-                data['created_at'] = None
-        
-        return cls(**data)
-
-
 class SQLiteUserManager:
-    """SQLite 使用者管理器
-    
-    負責管理 Discord 使用者的資訊，包括基本資料、檔案、偏好設定等。
-    支援從 MongoDB 的資料遷移和高效的批量查詢操作。
+    """SQLite user manager.
+ 
+    Manages Discord user information, profiles and preferences.
+    Supports migration from MongoDB and bulk queries.
     """
-    
+
     def __init__(self, db_manager):
-        """初始化使用者管理器
-        
+        """Initialize user manager
+
         Args:
-            db_manager: 資料庫管理器實例
+            db_manager: Database manager instance
         """
         self.db_manager = db_manager
         self.logger = logging.getLogger(__name__)
-        self._user_cache = {}  # 簡單的記憶體快取
-        self._cache_size_limit = 1000  # 快取大小限制
-        
+        self._user_cache = {}  # Simple in-memory cache
+        self._cache_size_limit = 1000  # Cache size limit
+
         self._ensure_user_tables()
-    
+
     def _ensure_user_tables(self):
-        """確保使用者相關表格存在"""
+        """Ensure user-related tables exist in the database."""
         try:
             with self.db_manager.get_connection() as conn:
-                # 建立 users 表格
+                # Create users table
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         user_id TEXT PRIMARY KEY,
@@ -92,8 +50,8 @@ class SQLiteUserManager:
                         preferences TEXT
                     )
                 """)
-                
-                # 建立 user_profiles 表格
+
+                # Create user_profiles table
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS user_profiles (
                         profile_id TEXT PRIMARY KEY,
@@ -105,8 +63,8 @@ class SQLiteUserManager:
                             ON DELETE CASCADE
                     )
                 """)
-                
-                # 建立索引
+
+                # Create indexes
                 conn.execute("""
                     CREATE INDEX IF NOT EXISTS idx_users_user_id
                     ON users(user_id)
@@ -122,28 +80,28 @@ class SQLiteUserManager:
                     CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id 
                     ON user_profiles(user_id)
                 """)
-                
+
                 conn.commit()
-                self.logger.info("使用者資料表初始化完成")
-                
+                self.logger.info("User tables initialized")
+ 
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "使用者資料表建立失敗"))
-            raise DatabaseError(f"建立使用者資料表失敗: {e}")
-    
+            asyncio.create_task(func.report_error(e, "Failed to create user tables"))
+            raise DatabaseError(f"Failed to create user tables: {e}")
+
     async def get_user_info(self, user_id: str, use_cache: bool = True) -> Optional[UserInfo]:
-        """取得使用者完整資訊
-        
+        """Retrieve full user information.
+ 
         Args:
-            user_id: 使用者 ID
-            use_cache: 是否使用快取
-            
+            user_id: The user identifier.
+            use_cache: Whether to use in-memory cache.
+ 
         Returns:
-            UserInfo 物件或 None
+            UserInfo instance or None if not found.
         """
-        # 檢查快取
+        # Check cache
         if use_cache and user_id in self._user_cache:
             return self._user_cache[user_id]
-        
+
         try:
             with self.db_manager.get_connection() as conn:
                 cursor = conn.execute("""
@@ -153,39 +111,39 @@ class SQLiteUserManager:
                     LEFT JOIN user_profiles up ON u.user_id = up.user_id
                     WHERE u.user_id = ?
                 """, (user_id,))
-                
+
                 row = cursor.fetchone()
                 if row:
-                    # 解析 JSON 資料
+                    # Parse JSON data
                     preferences = None
                     if row[4]:
                         try:
                             preferences = json.loads(row[4])
                         except json.JSONDecodeError:
-                            self.logger.warning(f"無法解析使用者 {user_id} 的偏好設定")
-                    
+                            self.logger.warning(f"Unable to parse preferences for user {user_id}")
+
                     profile_data = None
                     if row[6]:
                         try:
                             profile_data = json.loads(row[6])
                         except json.JSONDecodeError:
-                            self.logger.warning(f"無法解析使用者 {user_id} 的檔案資料")
-                    
-                    # 處理時間欄位
+                            self.logger.warning(f"Unable to parse profile data for user {user_id}")
+
+                    # Handle datetime fields
                     last_active = None
                     if row[3]:
                         try:
                             last_active = datetime.fromisoformat(row[3])
                         except (ValueError, TypeError):
                             pass
-                    
+
                     created_at = None
                     if row[5]:
                         try:
                             created_at = datetime.fromisoformat(row[5])
                         except (ValueError, TypeError):
                             pass
-                    
+
                     user_info = UserInfo(
                         user_id=row[0],
                         display_name=row[1] or "",
@@ -195,33 +153,33 @@ class SQLiteUserManager:
                         created_at=created_at,
                         profile_data=profile_data
                     )
-                    
-                    # 更新快取
+
+                    # Update cache
                     if use_cache:
                         self._update_cache(user_id, user_info)
-                    
+
                     return user_info
-                
+
                 return None
-                
+
         except Exception as e:
-            await func.report_error(e, f"使用者資訊檢索失敗 (使用者: {user_id})")
+            await func.report_error(e, f"Failed to retrieve user info (user: {user_id})")
             return None
-    
+
     async def get_multiple_users(self, user_ids: List[str], use_cache: bool = True) -> Dict[str, UserInfo]:
-        """批量取得使用者資訊
-        
+        """Retrieve multiple users in a single query.
+ 
         Args:
-            user_ids: 使用者 ID 列表
-            use_cache: 是否使用快取
-            
+            user_ids: List of user identifiers.
+            use_cache: Whether to consult the in-memory cache first.
+ 
         Returns:
-            Dict[str, UserInfo]: 使用者 ID 對應的 UserInfo 字典
+            Dict mapping user_id to UserInfo for found users.
         """
         result = {}
         uncached_ids = []
-        
-        # 檢查快取
+
+        # Check cache
         if use_cache:
             for user_id in user_ids:
                 if user_id in self._user_cache:
@@ -230,8 +188,8 @@ class SQLiteUserManager:
                     uncached_ids.append(user_id)
         else:
             uncached_ids = user_ids
-        
-        # 查詢未快取的使用者
+
+        # Query uncached users
         if uncached_ids:
             try:
                 placeholders = ','.join('?' for _ in uncached_ids)
@@ -243,37 +201,37 @@ class SQLiteUserManager:
                         LEFT JOIN user_profiles up ON u.user_id = up.user_id
                         WHERE u.user_id IN ({placeholders})
                     """, uncached_ids)
-                    
+
                     for row in cursor.fetchall():
-                        # 解析資料（與 get_user_info 相同的邏輯）
+                        # Parse data (same logic as get_user_info)
                         preferences = None
                         if row[4]:
                             try:
                                 preferences = json.loads(row[4])
                             except json.JSONDecodeError:
                                 pass
-                        
+
                         profile_data = None
                         if row[6]:
                             try:
                                 profile_data = json.loads(row[6])
                             except json.JSONDecodeError:
                                 pass
-                        
+
                         last_active = None
                         if row[3]:
                             try:
                                 last_active = datetime.fromisoformat(row[3])
                             except (ValueError, TypeError):
                                 pass
-                        
+
                         created_at = None
                         if row[5]:
                             try:
                                 created_at = datetime.fromisoformat(row[5])
                             except (ValueError, TypeError):
                                 pass
-                        
+
                         user_info = UserInfo(
                             user_id=row[0],
                             display_name=row[1] or "",
@@ -283,47 +241,47 @@ class SQLiteUserManager:
                             created_at=created_at,
                             profile_data=profile_data
                         )
-                        
+
                         result[row[0]] = user_info
-                        
-                        # 更新快取
+
+                        # Update cache
                         if use_cache:
                             self._update_cache(row[0], user_info)
-                            
+
             except Exception as e:
-                await func.report_error(e, "多使用者資訊檢索失敗")
-        
+                await func.report_error(e, "Failed to retrieve multiple users")
+
         return result
-    
-    async def update_user_data(self, user_id: str, user_data: str, 
-                              display_name: str = None, 
-                              preferences: Dict = None) -> bool:
-        """更新使用者資料
-        
+
+    async def update_user_data(self, user_id: str, user_data: str,
+                               display_name: Optional[str] = None,
+                               preferences: Optional[Dict] = None) -> bool:
+        """Create or update user's stored data and preferences.
+ 
         Args:
-            user_id: 使用者 ID
-            user_data: 使用者資料
-            display_name: 顯示名稱
-            preferences: 偏好設定
-            
+            user_id: The user identifier.
+            user_data: Arbitrary user data (stored as text).
+            display_name: Optional display name to set or update.
+            preferences: Optional preferences dict to store as JSON.
+ 
         Returns:
-            bool: 是否成功更新
+            True on success, False on failure.
         """
         try:
             logging.debug(f"update_user_data called with user_id={user_id}, display_name={display_name}, preferences={preferences}")
             with self.db_manager.get_connection() as conn:
-                # 檢查使用者是否存在
+                # Check if user exists
                 cursor = conn.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
                 exists = cursor.fetchone()
-                
+
                 preferences_json = json.dumps(preferences, ensure_ascii=False) if preferences else None
-                
+
                 try:
-                    # 我們把 discord_id 同步填入（以相容現有資料庫 schema）
+                    # Sync discord_id field (for compatibility with existing database schema)
                     discord_id_val = user_id
-                    
+
                     if exists:
-                        # 更新現有使用者，確保 discord_id 也被更新或保持
+                        # Update existing user, ensure discord_id is also updated or maintained
                         conn.execute("""
                             UPDATE users
                             SET user_data = ?,
@@ -334,52 +292,52 @@ class SQLiteUserManager:
                             WHERE user_id = ?
                         """, (user_data, display_name, preferences_json, discord_id_val, user_id))
                     else:
-                        # 建立新使用者，包含 discord_id 欄位以避免 NOT NULL 約束
+                        # Create new user, include discord_id field to avoid NOT NULL constraint
                         conn.execute("""
                             INSERT INTO users (user_id, discord_id, display_name, user_data, preferences)
                             VALUES (?, ?, ?, ?, ?)
                         """, (user_id, discord_id_val, display_name, user_data, preferences_json))
-                    
+
                     conn.commit()
                 except sqlite3.IntegrityError as ie:
-                    # 若發生完整性錯誤，記錄 schema 以便診斷並上報
+                    # On integrity error, capture schema to help diagnosis and report
                     try:
                         schema_rows = conn.execute("PRAGMA table_info('users')").fetchall()
                     except Exception as schema_exc:
                         schema_rows = f"failed to get schema: {schema_exc}"
                     logging.error(f"IntegrityError updating user {user_id}: {ie}; users schema: {schema_rows}")
-                    await func.report_error(ie, f"使用者資料更新失敗 (使用者: {user_id}); schema: {schema_rows}")
+                    await func.report_error(ie, f"Failed to update user data (user: {user_id}); schema: {schema_rows}")
                     return False
-                
-                # 清除快取
+
+                # Invalidate cache for this user
                 if user_id in self._user_cache:
                     del self._user_cache[user_id]
-                
-                self.logger.info(f"使用者資料更新成功: {user_id}")
+ 
+                self.logger.info(f"User data updated: {user_id}")
                 return True
-                
+ 
         except Exception as e:
-            await func.report_error(e, f"使用者資料更新失敗 (使用者: {user_id})")
+            await func.report_error(e, f"Failed to update user data (user: {user_id})")
             return False
-    
+
     async def update_user_activity(self, user_id: str, display_name: str = '') -> bool:
-        """更新使用者活躍時間
-        
+        """Update user activity timestamp
+
         Args:
-            user_id: 使用者 ID
-            display_name: 顯示名稱（可選）
-            
+            user_id: User ID
+            display_name: Display name (optional)
+
         Returns:
-            bool: 是否成功更新
+            bool: Whether update was successful
         """
         try:
             with self.db_manager.get_connection() as conn:
-                # 確保使用者記錄存在
+                # Ensure user record exists
                 cursor = conn.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
                 exists = cursor.fetchone()
-                
+
                 if exists:
-                    # 更新活躍時間
+                    # Update activity timestamp
                     conn.execute("""
                         UPDATE users 
                         SET last_active = CURRENT_TIMESTAMP,
@@ -387,33 +345,33 @@ class SQLiteUserManager:
                         WHERE user_id = ?
                     """, (display_name, user_id))
                 else:
-                    # 建立新使用者記錄（包含 discord_id，以滿足現有 schema 的 NOT NULL 約束）
+                    # Create new user record (include discord_id to satisfy existing schema's NOT NULL constraint)
                     conn.execute("""
                         INSERT INTO users (user_id, discord_id, display_name)
                         VALUES (?, ?, ?)
                     """, (user_id, user_id, display_name))
-                
+
                 conn.commit()
-                
-                # 清除快取
+
+                # Clear cache
                 if user_id in self._user_cache:
                     del self._user_cache[user_id]
-                
+
                 return True
-                
+
         except Exception as e:
-            await func.report_error(e, f"使用者活動更新失敗 (使用者: {user_id})")
+            await func.report_error(e, f"Failed to update user activity (user: {user_id})")
             return False
-    
+
     async def search_users_by_display_name(self, name_pattern: str, limit: int = 10) -> List[UserInfo]:
-        """根據顯示名稱搜尋使用者
-        
+        """Search users by display name using SQL LIKE.
+ 
         Args:
-            name_pattern: 名稱模式（支援 LIKE 搜尋）
-            limit: 結果數量限制
-            
+            name_pattern: Pattern to match against display_name.
+            limit: Maximum number of results.
+ 
         Returns:
-            List[UserInfo]: 搜尋結果列表
+            List of UserInfo objects matching the pattern.
         """
         try:
             with self.db_manager.get_connection() as conn:
@@ -426,38 +384,38 @@ class SQLiteUserManager:
                     ORDER BY u.last_active DESC
                     LIMIT ?
                 """, (f"%{name_pattern}%", limit))
-                
+
                 results = []
                 for row in cursor.fetchall():
-                    # 解析資料（與 get_user_info 相同的邏輯）
+                    # Parse data (same logic as get_user_info)
                     preferences = None
                     if row[4]:
                         try:
                             preferences = json.loads(row[4])
                         except json.JSONDecodeError:
                             pass
-                    
+
                     profile_data = None
                     if row[6]:
                         try:
                             profile_data = json.loads(row[6])
                         except json.JSONDecodeError:
                             pass
-                    
+
                     last_active = None
                     if row[3]:
                         try:
                             last_active = datetime.fromisoformat(row[3])
                         except (ValueError, TypeError):
                             pass
-                    
+
                     created_at = None
                     if row[5]:
                         try:
                             created_at = datetime.fromisoformat(row[5])
                         except (ValueError, TypeError):
                             pass
-                    
+
                     user_info = UserInfo(
                         user_id=row[0],
                         display_name=row[1] or "",
@@ -468,18 +426,18 @@ class SQLiteUserManager:
                         profile_data=profile_data
                     )
                     results.append(user_info)
-                
+
                 return results
-                
+
         except Exception as e:
-            await func.report_error(e, f"使用者搜尋失敗 (模式: {name_pattern})")
+            await func.report_error(e, f"Failed to search users (pattern: {name_pattern})")
             return []
-    
+
     async def get_user_statistics(self) -> Dict[str, Any]:
-        """取得使用者統計資訊
-        
+        """Get aggregated user statistics from the database.
+ 
         Returns:
-            Dict[str, Any]: 統計資訊
+            Dictionary with total_users, users_with_data, active_users_7d, active_users_30d and cache_size.
         """
         try:
             with self.db_manager.get_connection() as conn:
@@ -491,7 +449,7 @@ class SQLiteUserManager:
                         COUNT(CASE WHEN last_active > datetime('now', '-30 days') THEN 1 END) as active_users_30d
                     FROM users
                 """)
-                
+
                 row = cursor.fetchone()
                 return {
                     "total_users": row[0],
@@ -500,39 +458,39 @@ class SQLiteUserManager:
                     "active_users_30d": row[3],
                     "cache_size": len(self._user_cache)
                 }
-                
+
         except Exception as e:
-            await func.report_error(e, "使用者統計資訊檢索失敗")
+            await func.report_error(e, "Failed to retrieve user statistics")
             return {}
-    
+
     async def migrate_from_mongodb(self, mongodb_collection) -> int:
-        """從 MongoDB 遷移資料到 SQLite
-        
+        """Migrate user documents from a MongoDB collection into SQLite.
+ 
         Args:
-            mongodb_collection: MongoDB 集合物件
-            
+            mongodb_collection: A pymongo Collection-like object.
+ 
         Returns:
-            int: 成功遷移的使用者數量
+            Number of users successfully migrated.
         """
         try:
-            self.logger.info("開始從 MongoDB 遷移使用者資料...")
-            
-            # 取得所有 MongoDB 資料
+            self.logger.info("Starting migration of users from MongoDB...")
+ 
+            # load all MongoDB documents
             mongodb_users = list(mongodb_collection.find({}))
             total_users = len(mongodb_users)
-            
+ 
             if total_users == 0:
-                self.logger.info("MongoDB 中沒有使用者資料需要遷移")
+                self.logger.info("No users to migrate from MongoDB")
                 return 0
-            
+
             migrated_count = 0
             failed_count = 0
-            
+
             for user_doc in mongodb_users:
                 try:
                     user_id = user_doc.get('user_id')
                     user_data = user_doc.get('user_data')
-                    
+
                     if user_id and user_data:
                         success = await self.update_user_data(user_id, user_data)
                         if success:
@@ -540,108 +498,123 @@ class SQLiteUserManager:
                         else:
                             failed_count += 1
                     else:
-                        self.logger.warning(f"跳過無效的使用者記錄: {user_doc.get('_id')}")
+                        self.logger.warning(f"Skipping invalid user document: {user_doc.get('_id')}")
                         failed_count += 1
-                        
+
                 except Exception as e:
-                    await func.report_error(e, f"MongoDB 使用者遷移失敗 (ID: {user_doc.get('_id')})")
+                    await func.report_error(e, f"MongoDB user migration failed (ID: {user_doc.get('_id')})")
                     failed_count += 1
-            
-            self.logger.info(f"MongoDB 遷移完成: {migrated_count} 成功, {failed_count} 失敗, 總計 {total_users}")
+
+            self.logger.info(f"MongoDB migration completed: {migrated_count} succeeded, {failed_count} failed, total {total_users}")
             return migrated_count
-            
+
         except Exception as e:
-            await func.report_error(e, "MongoDB 使用者遷移失敗")
+            await func.report_error(e, "MongoDB user migration failed")
             return 0
-    
+
     def _update_cache(self, user_id: str, user_info: UserInfo):
-        """更新記憶體快取
-        
+        """Update in-memory cache
+
         Args:
-            user_id: 使用者 ID
-            user_info: 使用者資訊
+            user_id: User ID
+            user_info: User information
         """
         try:
-            # 檢查快取大小限制
+            # Check cache size limit
             if len(self._user_cache) >= self._cache_size_limit:
-                # 移除最舊的快取項目
+                # Remove oldest cache entry
                 oldest_key = next(iter(self._user_cache))
                 del self._user_cache[oldest_key]
-            
+
             self._user_cache[user_id] = user_info
-            
+
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "使用者快取更新失敗"))
-    
+            asyncio.create_task(func.report_error(e, "Failed to update user cache"))
+
     def clear_cache(self):
-        """清除記憶體快取"""
+        """Clear the in-memory user cache."""
         self._user_cache.clear()
-        self.logger.info("使用者快取已清除")
-    
+        self.logger.info("User cache cleared")
+
     async def cleanup_inactive_users(self, days: int = 365) -> int:
-        """清理非活躍使用者資料
-        
+        """Clean up inactive user data
+
         Args:
-            days: 非活躍天數閾值
-            
+            days: Inactive days threshold
+
         Returns:
-            int: 清理的使用者數量
+            int: Number of users cleaned up
         """
         try:
             with self.db_manager.get_connection() as conn:
-                # 查詢要清理的使用者
+                # Query users to be cleaned up
                 cursor = conn.execute("""
                     SELECT COUNT(*) FROM users 
                     WHERE last_active < datetime('now', '-{} days')
                     OR last_active IS NULL
                 """.format(days))
-                
+
                 count = cursor.fetchone()[0]
-                
+
                 if count > 0:
-                    # 刪除非活躍使用者
+                    # Delete inactive users
                     conn.execute("""
                         DELETE FROM users 
                         WHERE last_active < datetime('now', '-{} days')
                         OR last_active IS NULL
                     """.format(days))
-                    
+
                     conn.commit()
-                    self.logger.info(f"已清理 {count} 個非活躍使用者")
-                
-                # 清除快取
+                    self.logger.info(f"Cleaned up {count} inactive users")
+ 
+                # clear cache
                 self.clear_cache()
-                
+ 
                 return count
-                
+ 
         except Exception as e:
-            await func.report_error(e, "非活躍使用者清理失敗")
+            await func.report_error(e, "Failed to cleanup inactive users")
             return 0
 
 
-# 輔助函數
-def extract_participant_ids(message, conversation_history: List[Dict]) -> set:
-    """提取對話參與者 ID
-    
+# Helper function
+def extract_participant_ids(message, conversation_history: List[Any]) -> set:
+    """Extract participant IDs from a message and recent conversation history.
+ 
     Args:
-        message: Discord 訊息物件
-        conversation_history: 對話歷史
-        
+        message: Discord message object
+        conversation_history: list of recent messages or dicts representing messages
+ 
     Returns:
-        set: 參與者 ID 集合
+        set: set of participant ID strings
     """
-    participant_ids = {str(message.author.id)}
-    
-    # 從 @mentions 提取
-    if hasattr(message, 'mentions'):
+    participant_ids = set()
+ 
+    # current message author
+    if hasattr(message, "author") and getattr(message.author, "id", None) is not None:
+        participant_ids.add(str(message.author.id))
+ 
+    # mentions in the message
+    if hasattr(message, "mentions"):
         for mention in message.mentions:
-            participant_ids.add(str(mention.id))
-    
-    # 從近期對話歷史提取
-    for msg in conversation_history[-10:]:  # 最近10條訊息
-        if isinstance(msg, dict) and 'user_id' in msg:
-            participant_ids.add(str(msg['user_id']))
-        elif hasattr(msg, 'author'):
-            participant_ids.add(str(msg.author.id))
-    
+            # mention may be an object with `id` or a plain value
+            mention_id = getattr(mention, "id", None)
+            if mention_id is None:
+                try:
+                    mention_id = mention
+                except Exception:
+                    continue
+            participant_ids.add(str(mention_id))
+ 
+    # recent conversation history (handle both dicts and objects)
+    for msg in conversation_history[-10:]:
+        if isinstance(msg, dict):
+            if "user_id" in msg and msg["user_id"] is not None:
+                participant_ids.add(str(msg["user_id"]))
+            elif "author" in msg and hasattr(msg["author"], "id"):
+                participant_ids.add(str(msg["author"].id))
+        else:
+            if hasattr(msg, "author") and getattr(msg.author, "id", None) is not None:
+                participant_ids.add(str(msg.author.id))
+ 
     return participant_ids
