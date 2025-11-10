@@ -1,6 +1,7 @@
 import yaml
 import asyncio
 import logging
+import os
 from typing import Optional, List
 
 def _load_yaml_file(path: str) -> dict:
@@ -16,6 +17,32 @@ def _load_yaml_file(path: str) -> dict:
         except Exception:
             print(f"載入 YAML 檔案失敗 ({path}): {e}")
         return {}
+
+def _get_config_root() -> str:
+    """Read CONFIG_ROOT environment variable.
+
+    If CONFIG_ROOT is not set, report the issue via func.report_error and
+    fall back to 'config' to allow startup to continue.
+    """
+    try:
+        root = os.environ["CONFIG_ROOT"]
+        # Remove any trailing slashes for consistent joins
+        return root.rstrip("/\\")
+    except KeyError:
+        try:
+            from function import func
+            asyncio.create_task(
+                func.report_error(Exception("CONFIG_ROOT environment variable not set"), "addons/settings.py/_get_config_root")
+            )
+        except Exception:
+            logging.getLogger(__name__).warning("CONFIG_ROOT environment variable not set; defaulting to 'base_configs'")
+        return "base_configs"
+
+# Evaluate CONFIG_ROOT at module import time so the module-level config loaders
+# below use the configured root directory.
+CONFIG_ROOT = _get_config_root()
+logger = logging.getLogger(__name__)
+logger.debug(f"addons.settings CONFIG_ROOT={CONFIG_ROOT}")
 
 
 class BaseConfig:
@@ -190,61 +217,61 @@ class MemoryConfig:
         self.store_refresh_interval_seconds: int | None = data.get("store_refresh_interval_seconds", None)
         self.max_memory_items_per_user: int | None = data.get("max_memory_items_per_user", None)
 try:
-    base_config = BaseConfig("config/base.yaml")
+    base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")
 except Exception as e:
     try:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
         print(f"初始化 BaseConfig 時發生錯誤: {e}")
-    base_config = BaseConfig()
+    base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")
 
 try:
-    llm_config = LLMConfig("config/llm.yaml")
+    llm_config = LLMConfig(f"{CONFIG_ROOT}/llm.yaml")
 except Exception as e:
     try:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
         print(f"初始化 LLMConfig 時發生錯誤: {e}")
-    llm_config = LLMConfig()
+    llm_config = LLMConfig(f"{CONFIG_ROOT}/llm.yaml")
 
 try:
-    update_config = UpdateConfig("config/update.yaml")
+    update_config = UpdateConfig(f"{CONFIG_ROOT}/update.yaml")
 except Exception as e:
     try:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
         print(f"初始化 UpdateConfig 時發生錯誤: {e}")
-    update_config = UpdateConfig()
+    update_config = UpdateConfig(f"{CONFIG_ROOT}/update.yaml")
 try:
-    music_config = MusicConfig("config/music.yaml")
+    music_config = MusicConfig(f"{CONFIG_ROOT}/music.yaml")
 except Exception as e:
     try:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
         print(f"初始化 MusicConfig 時發生錯誤: {e}")
-    music_config = MusicConfig()
+    music_config = MusicConfig(f"{CONFIG_ROOT}/music.yaml")
 try:
-    prompt_config = PromptConfig("config/prompt")
+    prompt_config = PromptConfig(f"{CONFIG_ROOT}/prompt")
 except Exception as e:
     try:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
         print(f"初始化 PromptConfig 時發生錯誤: {e}")
-    prompt_config = PromptConfig()
+    prompt_config = PromptConfig(f"{CONFIG_ROOT}/prompt")
 try:
-    memory_config = MemoryConfig("config/memory.yaml")
+    memory_config = MemoryConfig(f"{CONFIG_ROOT}/memory.yaml")
 except Exception as e:
     try:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
         print(f"初始化 MemoryConfig 時發生錯誤: {e}")
-    memory_config = MemoryConfig()    
+    memory_config = MemoryConfig(f"{CONFIG_ROOT}/memory.yaml")
 __all__ = [
     "BaseConfig",
     "base_config",

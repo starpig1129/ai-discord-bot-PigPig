@@ -263,7 +263,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     })
             response = await asyncio.to_thread(
                 lambda: self.client.models.generate_content(
-                    model="gemini-2.0-flash-exp-image-generation",
+                    model="gemini-2.0-flash-preview-image-generation",
                     contents=content_parts,
                     config=types.GenerateContentConfig(
                     response_modalities=['Text', 'Image']

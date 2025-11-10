@@ -5,9 +5,6 @@
 .roo
 __pycache__/
 
-# 忽略應用程式的設定檔案
-settings.json
-
 # 忽略資料庫檔案與向量儲存
 data/channel_configs
 data/*.json
