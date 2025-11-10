@@ -170,12 +170,12 @@ class MemoryConfig:
         # provider values: base, openai, huggingface, ollama, google
         self.embedding_provider: str = data.get("embedding_provider", "google")
         # Embedding model defaults (generic)
-        self.embedding_model_name: str = data.get("embedding_model_name", "all-MiniLM-L6-v2")
-        self.embedding_dim: int = data.get("embedding_dim", 384)
+        self.embedding_model_name: str = data.get("embedding_model_name", "gemini-embedding-001")
+        self.embedding_dim: int = data.get("embedding_dim", 768)
 
         # Search tuning
         self.vector_search_k: int = data.get("vector_search_k", 5)
-        self.keyword_search_k: int = data.get("keyword_search_k", 3)
+        self.keyword_search_k: int = data.get("keyword_search_k", 5)
 
         # Batch sizes for fetch/process pipelines
         self.fetch_batch_size: int = data.get("fetch_batch_size", 100)

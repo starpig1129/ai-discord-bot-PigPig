@@ -6,7 +6,7 @@ user_data_path: data/memory/memory.db # Path to user data file
 vector_store_type: qdrant # options: qdrant, faiss, sqlite, in_memory
 qdrant_url: http://localhost:6333 # Qdrant HTTP endpoint
 qdrant_api_key: null # API key for Qdrant if needed, or null
-qdrant_collection_name: ephemeral_memory
+qdrant_collection_name: discord_bot_memory
 
 # Embedding provider selection
 # available providers: base, openai, huggingface, ollama, google

@@ -8,8 +8,10 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 
+from addons.tokens import tokens
 from function import func
 from addons.settings import memory_config, MemoryConfig
 from cogs.memory.interfaces.storage_interface import StorageInterface
@@ -134,6 +136,76 @@ class EpisodicMemoryService(commands.Cog):
         if processed_ids:
             await self.storage.mark_pending_messages_processed(processed_ids)
             log.info(f"Marked {len(processed_ids)} pending messages as processed.")
+
+    @app_commands.check(lambda interaction: interaction.user.id == tokens.bot_owner_id)
+    @app_commands.command(name="force_update_memory", description="Force update this channel's episodic memory.")
+    async def force_update_memory(self, interaction: discord.Interaction):
+        """Force update the memory for the current channel. Owner only."""
+        try:
+            # localization via LanguageManager if available
+            lang_manager = self.bot.get_cog("LanguageManager")
+            guild_id = str(interaction.guild.id) if interaction.guild else "0"
+            starting_text = (
+                lang_manager.translate(guild_id, "commands", "memory", "force_update", "starting")
+                if lang_manager
+                else "正在強制更新此頻道的記憶..."
+            )
+
+            # send initial ephemeral response
+            await interaction.response.send_message(starting_text, ephemeral=True)
+
+            channel = interaction.channel
+            if not channel or not isinstance(channel, discord.TextChannel):
+                not_channel_text = (
+                    lang_manager.translate(guild_id, "commands", "memory", "force_update", "not_text_channel")
+                    if lang_manager
+                    else "此指令必須在文字頻道中使用。"
+                )
+                await interaction.edit_original_response(content=not_channel_text)
+                return
+
+            # explicit limit to avoid unlimited fetches
+            limit = 200
+            messages = [msg async for msg in channel.history(limit=limit)]
+            if not messages:
+                no_messages_text = (
+                    lang_manager.translate(guild_id, "commands", "memory", "force_update", "no_messages")
+                    if lang_manager
+                    else "未找到可更新的訊息。"
+                )
+                await interaction.edit_original_response(content=no_messages_text)
+                return
+
+            # store messages batch
+            await self.storage.store_messages_batch(messages)
+
+            success_text = (
+                lang_manager.translate(guild_id, "commands", "memory", "force_update", "success", count=len(messages))
+                if lang_manager
+                else f"已更新 {len(messages)} 條訊息的記憶。"
+            )
+            await interaction.edit_original_response(content=success_text)
+
+        except Exception as e:
+            log.error("Error in force_update_memory: %s", e, exc_info=True)
+            await func.report_error(e, "force_update_memory_command")
+            # attempt to inform the user
+            try:
+                lang_manager = self.bot.get_cog("LanguageManager")
+                guild_id = str(interaction.guild.id) if interaction.guild else "0"
+                error_text = (
+                    lang_manager.translate(guild_id, "commands", "memory", "force_update", "error")
+                    if lang_manager
+                    else "強制更新記憶失敗，已記錄錯誤。"
+                )
+                # If original response exists, edit it; otherwise send a followup
+                try:
+                    await interaction.edit_original_response(content=error_text)
+                except Exception:
+                    await interaction.followup.send(error_text, ephemeral=True)
+            except Exception:
+                # swallow secondary errors to avoid crashing the command
+                pass
 
     @fetch_new_messages.before_loop
     async def before_fetch_loop(self):
