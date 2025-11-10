@@ -32,6 +32,7 @@ from langchain.agents.middleware import ModelCallLimitMiddleware
 
 from typing import Optional, Any, Union
 from .language_manager import LanguageManager
+from cogs.memory.users.manager import SQLiteUserManager
 
 from llm.model_manager import ModelManager
 from llm.utils.send_message import safe_edit_message
@@ -65,12 +66,12 @@ class UserDataCog(commands.Cog):
     特定記憶，例如偏好、暱稱或其他互動規則。
     """
 
-    def __init__(self, bot):
+    def __init__(self, bot, user_manager: Optional[SQLiteUserManager] = None):
         self.bot = bot
         self.lang_manager: Optional[LanguageManager] = None
         self.logger = logging.getLogger(__name__)
-        self.user_manager = None
-        self.db_manager = None
+        # user_manager will be injected by bot.py during startup; fallback to None
+        self.user_manager = user_manager
 
     memory_group = app_commands.Group(
         name="memory", 
@@ -107,10 +108,9 @@ class UserDataCog(commands.Cog):
     async def cog_load(self):
         """當 Cog 載入時初始化語言管理器和使用者管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
-        if not self.db_manager:
-            from cogs.memory.database import DatabaseManager
-            self.db_manager = DatabaseManager(memory_config.user_data_path, self.bot)
-            self.user_manager = self.db_manager.user_manager
+
+        if not self.user_manager:
+            self.user_manager = getattr(self.bot, 'user_manager', None)
 
     def _get_guild_id_from_context(self, context: Union[discord.Interaction, discord.Message]) -> str:
         """
@@ -487,5 +487,7 @@ Merge these intelligently and return complete user information."""
             return False
 
 async def setup(bot):
-    cog = UserDataCog(bot)
+    # Attempt to retrieve a user_manager from bot (will be injected by bot.py in new architecture)
+    user_manager = getattr(bot, 'user_manager', None)
+    cog = UserDataCog(bot, user_manager=user_manager)
     await bot.add_cog(cog)
