@@ -181,9 +181,12 @@ class UserDataCog(commands.Cog):
     async def _read_user_data(self, user_id: str, context: Union[discord.Interaction, discord.Message]) -> str:
         """
         Core logic: read and format user's stored data according to the new schema.
- 
+
         Returns combined information (procedural_memory, user_background, display_names)
         formatted into a single string for the translation placeholder `{data}`.
+
+        If the requested user_id does not exist in the database, fallback to the
+        author of the triggering message (when available).
         """
         guild_id = self._get_guild_id_from_context(context)
         try:
@@ -193,8 +196,36 @@ class UserDataCog(commands.Cog):
                     guild_id, "system", "userdata", "errors", "sqlite_not_available",
                     fallback_key="sqlite_not_available"
                 )
- 
+
+            # Attempt to read provided user_id first
             user_info = await user_mgr.get_user_info(user_id)
+
+            # If not found, fallback to message author (if context provides author)
+            if not user_info:
+                msg = context if isinstance(context, discord.Message) else getattr(context, "message", None)
+                # For Interaction, the triggering user is context.user; for Message use author
+                author_id = None
+                if isinstance(context, discord.Interaction) and getattr(context, "user", None):
+                    author_id = getattr(context.user, "id", None)
+                elif isinstance(context, discord.Message) and getattr(context, "author", None):
+                    author_id = getattr(context.author, "id", None)
+                elif getattr(context, "author", None):
+                    author_id = getattr(context, "author", "id")
+
+                if author_id:
+                    self.logger.info(
+                        "User not found in DB; falling back to message author",
+                        extra={"requested_user_id": user_id, "author_id": author_id}
+                    )
+                    try:
+                        user_info = await user_mgr.get_user_info(str(author_id))
+                        # update user_id variable for translation/context if fallback succeeded
+                        if user_info:
+                            user_id = str(author_id)
+                    except Exception as e:
+                        # Do not fail here; log and continue to return not found
+                        self.logger.warning(f"Fallback lookup for author_id {author_id} failed: {e}")
+
             if user_info:
                 parts = []
                 if getattr(user_info, "procedural_memory", None):
@@ -207,14 +238,14 @@ class UserDataCog(commands.Cog):
                     except Exception:
                         names = str(user_info.display_names)
                     parts.append(f"Display names: {names}")
- 
+
                 if parts:
                     data_str = "\n\n".join(parts)
                     return self._translate(
                         guild_id, "commands", "userdata", "responses", "data_found",
                         fallback_key="data_found", user_id=user_id, data=data_str
                     )
- 
+
             return self._translate(
                 guild_id, "commands", "userdata", "responses", "data_not_found",
                 fallback_key="data_not_found", user_id=user_id

@@ -109,30 +109,78 @@ class UserMemoryTools:
         @tool
         async def read_user_memory(user_id: int) -> str:
             """Reads the personal memory or preferences stored for a specific user.
-
+    
             Use this tool when you need to know if the user has previously asked
             you to remember something (e.g., their name, a specific interaction
             style, or other preferences).
-
+    
             Args:
                 user_id: The Discord user's ID.
-
+    
             Returns:
                 A string containing the stored memory. If no memory is found,
-                it returns a "not found" message.
+                it returns a "not found" message. If the requested user is not in
+                the DB, fallback to the message author when available.
             """
             cog = get_cog()
             if not cog:
                 return "Error: Personal memory system (UserDataCog) is not loaded."
-
+    
             try:
                 logger.info(
                     "Reading personal memory",
                     extra={"user_id": user_id}
                 )
-                # Call the internal method from UserDataCog
+    
+                # Determine effective user id. If the LLM provided an invalid value,
+                # default to the author of the triggering message (if available).
+                effective_id = None
+                try:
+                    # Accept ints and int-like strings
+                    effective_id = int(user_id)
+                except Exception:
+                    msg = getattr(runtime, "message", None)
+                    if msg and getattr(msg, "author", None):
+                        logger.warning(
+                            "read_user_memory: LLM provided invalid user_id; defaulting to message author",
+                            extra={"provided_user_id": user_id, "author_id": getattr(msg.author, "id", None)}
+                        )
+                        effective_id = msg.author.id
+                    else:
+                        # No message context: fall back to string form of provided id.
+                        logger.warning(
+                            "read_user_memory: invalid user_id and no message context; using raw value",
+                            extra={"user_id": user_id}
+                        )
+                        effective_id = user_id
+    
+                # If the provided id exists in DB use it; otherwise fallback to message author (if available).
+                try:
+                    user_mgr = getattr(cog, "user_manager", None)
+                    if user_mgr:
+                        exists = await user_mgr.get_user_info(str(effective_id))
+                        if not exists:
+                            msg = getattr(runtime, "message", None)
+                            author_id = None
+                            if msg and getattr(msg, "author", None):
+                                author_id = getattr(msg.author, "id", None)
+                            # If no author found, try interaction user on runtime.message if it's an Interaction
+                            if not author_id:
+                                maybe_interaction = getattr(runtime, "message", None)
+                                if isinstance(maybe_interaction, discord.Interaction) and getattr(maybe_interaction, "user", None):
+                                    author_id = getattr(maybe_interaction.user, "id", None)
+                            if author_id:
+                                logger.info(
+                                    "Requested user not in DB; falling back to message author",
+                                    extra={"requested_user_id": effective_id, "author_id": author_id}
+                                )
+                                effective_id = author_id
+                except Exception as e:
+                    logger.warning(f"read_user_memory: fallback existence check failed: {e}")
+    
+                # Ensure cog receives a string user_id (storage uses text keys).
                 return await cog._read_user_data(
-                    str(user_id),
+                    str(effective_id),
                     cast(
                         Union[discord.Interaction, discord.Message],
                         getattr(runtime, "message", None)
@@ -147,16 +195,16 @@ class UserMemoryTools:
         @tool
         async def save_user_memory(user_id: int, memory_to_save: str) -> str:
             """Saves or updates a personal memory or preference for a specific user.
-
+    
             Use this tool only when the user **explicitly asks** you to remember
             something (e.g., "My name is Bob," "Please call me Master,"
             "I am a Python developer"). This new information will be intelligently
             merged with any existing memory.
-
+    
             Args:
                 user_id: The Discord user's ID.
                 memory_to_save: The new piece of information to remember.
-
+    
             Returns:
                 A string confirming that the memory was successfully saved or updated,
                 or an error message if the operation failed.
@@ -167,35 +215,65 @@ class UserMemoryTools:
             
             if not memory_to_save or memory_to_save.strip() == "":
                 return "Error: 'memory_to_save' parameter cannot be empty."
-
+    
             try:
                 logger.info(
                     "Saving personal memory",
                     extra={"user_id": user_id}
                 )
-                
+    
+                # Determine effective user id. If the LLM provided an invalid value,
+                # default to the author of the triggering message (if available).
+                effective_id = None
+                try:
+                    effective_id = int(user_id)
+                except Exception:
+                    msg = getattr(runtime, "message", None)
+                    if msg and getattr(msg, "author", None):
+                        logger.warning(
+                            "save_user_memory: LLM provided invalid user_id; defaulting to message author",
+                            extra={"provided_user_id": user_id, "author_id": getattr(msg.author, "id", None)}
+                        )
+                        effective_id = msg.author.id
+                    else:
+                        logger.warning(
+                            "save_user_memory: invalid user_id and no message context; using raw value",
+                            extra={"user_id": user_id}
+                        )
+                        effective_id = user_id
+    
                 # Get the display_name for storage
                 bot = get_bot()
-                display_name = f"User_{user_id}"
+                display_name = f"User_{effective_id}"
                 if bot:
                     try:
-                        user = await bot.fetch_user(user_id)
-                        # discord.User has .display_name in certain contexts;
-                        # fallback to name/nick
-                        display_name = getattr(
-                            user,
-                            "display_name",
-                            getattr(user, "name", display_name)
-                        )
+                        # fetch_user expects an integer id when possible
+                        if isinstance(effective_id, int):
+                            fetched_user = await bot.fetch_user(effective_id)
+                        else:
+                            fetched_user = await bot.fetch_user(int(effective_id)) if str(effective_id).isdigit() else None
+                        if fetched_user:
+                            display_name = getattr(
+                                fetched_user,
+                                "display_name",
+                                getattr(fetched_user, "name", display_name)
+                            )
                     except Exception as fetch_err:
                         logger.warning(
-                            f"Failed to fetch display_name for user {user_id}: "
-                            f"{fetch_err}"
+                            f"Failed to fetch display_name for user {effective_id}: {fetch_err}",
+                            extra={"provided_user_id": user_id}
                         )
-
-                # Call the internal method from UserDataCog
+    
+                # Debug details about what will be saved
+                logger.debug(
+                    "save_user_memory inputs",
+                    extra={"user_id": effective_id, "display_name": display_name, "memory_length": len(memory_to_save)}
+                )
+    
+                # Call the internal method from UserDataCog with correct parameter order:
+                # (user_id: str, display_name: str, user_data: str, context)
                 return await cog._save_user_data(
-                    str(user_id),
+                    str(effective_id),
                     display_name,
                     memory_to_save,
                     cast(

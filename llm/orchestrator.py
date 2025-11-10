@@ -185,8 +185,8 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 system_prompt=message_system_prompt,
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore
             )
+            print(info_result)
             info_message = info_result["messages"]
-            print(info_message)
             
             message_result = ""
             streamer = message_agent.astream(
