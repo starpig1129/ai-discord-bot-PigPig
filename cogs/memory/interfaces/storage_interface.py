@@ -3,24 +3,24 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import discord
 
 if TYPE_CHECKING:
-    from ..user_manager import UserInfo
+    from ..users.manager import UserInfo
 
 
 class StorageInterface(ABC):
     """Abstract base interface for high-level storage operations."""
 
     @abstractmethod
-    async def get_user_info(self, user_id: str) -> Optional["UserInfo"]:
+    async def get_user_info(self, discord_id: str) -> Optional["UserInfo"]:
         """Retrieve user information by user_id."""
         raise NotImplementedError
 
     @abstractmethod
-    async def update_user_data(self, user_id: str, user_data: str, display_name: str) -> bool:
+    async def update_user_data(self, discord_id: str, procedural_memory: str, discord_name: str) -> bool:
         """Update user's data and display name."""
         raise NotImplementedError
 
     @abstractmethod
-    async def update_user_activity(self, user_id: str, display_name: str) -> bool:
+    async def update_user_activity(self, discord_id: str, discord_name: str) -> bool:
         """Update user's last activity and optionally display name."""
         raise NotImplementedError
 
