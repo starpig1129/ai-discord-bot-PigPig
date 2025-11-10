@@ -128,16 +128,24 @@ class PigPig(commands.Bot):
         # Memory subsystem (instantiate only when enabled)
         if getattr(memory_config, "enabled", True):
             # lazy import to avoid loading memory modules when disabled
-            from cogs.memory.database import DatabaseManager
+            from cogs.memory.db.sqlite_storage import SQLiteStorage
+            from cogs.memory.users.manager import SQLiteUserManager
+            from cogs.memory.vector.manager import VectorManager
             from cogs.memory.services.message_tracker import MessageTracker
-            from cogs.memory.vector_manager import VectorManager
+            from cogs.memory.services.episodic_memory_service import EpisodicMemoryService
 
-            self.db_manager = DatabaseManager(db_path=memory_config.user_data_path, bot=self)
-            # pass db_manager as storage if it implements StorageInterface
-            self.message_tracker = MessageTracker(self, self.db_manager, memory_config)
-            self.vector_manager = VectorManager(self, memory_config)
+            # Initialize in dependency order
+            self.storage = SQLiteStorage(db_path=memory_config.user_data_path, bot=self)
+            self.user_manager = SQLiteUserManager(storage=self.storage)
+            self.vector_manager = VectorManager(bot=self, settings=memory_config)
+            self.message_tracker = MessageTracker(bot=self, storage=self.storage, settings=memory_config)
+
+            # Backwards compatibility: some legacy cogs expect db_manager attribute
+            self.db_manager = self.storage
         else:
             # keep attributes for compatibility but do not initialize subsystems
+            self.storage = None
+            self.user_manager = None
             self.db_manager = None
             self.message_tracker = None
             self.vector_manager = None
@@ -373,13 +381,16 @@ class PigPig(commands.Bot):
 
         # Initialize core services
         self.orchestrator = Orchestrator()
-        # Provide running event loop to DB manager so thread-safe coroutine submission works.
-        try:
-            self.db_manager._loop = asyncio.get_running_loop()
-        except Exception:
-            # If this fails, leave as None; error-reporting will fallback to synchronous logging.
-            self.db_manager._loop = None
-        if getattr(memory_config, "enabled", True) and self.vector_manager:
+        # Provide running event loop to storage (for thread-safe coroutine submission) if supported.
+        if getattr(memory_config, "enabled", True) and getattr(self, "storage", None):
+            try:
+                self.storage._loop = asyncio.get_running_loop()
+            except Exception:
+                try:
+                    self.storage._loop = None
+                except Exception:
+                    pass
+        if getattr(memory_config, "enabled", True) and getattr(self, "vector_manager", None):
             await self.vector_manager.initialize()
     
         if base_config.ipc_server.get("enable", False):

@@ -10,7 +10,7 @@ qdrant_collection_name: ephemeral_memory
 
 # Embedding provider selection
 # available providers: base, openai, huggingface, ollama, google
-embedding_provider: base
+embedding_provider: google
 embedding_model_name: all-MiniLM-L6-v2
 embedding_dim: 384
 

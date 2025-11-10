@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ..interfaces.storage_interface import StorageInterface
-from ..user_manager import UserInfo
+from ..users.models import UserInfo
 from .connection import DatabaseConnection
 from .schema import create_tables
 from function import func

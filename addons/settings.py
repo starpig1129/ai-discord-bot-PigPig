@@ -168,7 +168,7 @@ class MemoryConfig:
 
         # Embedding provider selection and provider-specific settings.
         # provider values: base, openai, huggingface, ollama, google
-        self.embedding_provider: str = data.get("embedding_provider", "base")
+        self.embedding_provider: str = data.get("embedding_provider", "google")
         # Embedding model defaults (generic)
         self.embedding_model_name: str = data.get("embedding_model_name", "all-MiniLM-L6-v2")
         self.embedding_dim: int = data.get("embedding_dim", 384)
@@ -180,8 +180,6 @@ class MemoryConfig:
         # Batch sizes for fetch/process pipelines
         self.fetch_batch_size: int = data.get("fetch_batch_size", 100)
         self.process_batch_size: int = data.get("process_batch_size", 50)
-
-
 
         # Ollama provider options
         self.ollama_url: Optional[str] = data.get("ollama_url", "http://localhost:11434")
