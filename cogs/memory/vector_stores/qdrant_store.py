@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
@@ -45,9 +45,11 @@ class QdrantStore(VectorStoreInterface):
     - This class raises VectorOperationError / SearchError on qdrant or embedding failures.
     """
 
-    def __init__(self, settings: MemoryConfig, embedding_model: Embeddings) -> None:
+    def __init__(self, settings: MemoryConfig, embedding_model: Optional[Embeddings]) -> None:
         """
-        Initialize Qdrant client and store settings + embedding model.
+        Initialize Qdrant client and store settings + optional embedding model.
+        embedding_model may be None at construction time; methods that require
+        embeddings will raise a clear error until an embedding model is injected.
 
         Required settings (must exist on the Settings instance):
          - QDRANT_URL or QDRANT_HOST
@@ -112,22 +114,64 @@ class QdrantStore(VectorStoreInterface):
             # Create payload indexes for author_id and channel_id to accelerate filtering.
             # Using KEYWORD schema which supports efficient exact-match queries.
             try:
-                self.qdrant_client.create_payload_index(
-                    collection_name=self.collection_name,
-                    payload_key="author_id",
-                    field_schema=PayloadSchemaType.STRING,
-                )
+                # Adapt to different qdrant-client versions: attempt sensible schema choices
+                field_schema = getattr(PayloadSchemaType, "KEYWORD", None) \
+                    or getattr(PayloadSchemaType, "TEXT", None) \
+                    or getattr(PayloadSchemaType, "STRING", None)
+                if field_schema is not None:
+                    try:
+                        # prefer positional form if available
+                        self.qdrant_client.create_payload_index(
+                            self.collection_name,
+                            "author_id",
+                            field_schema,
+                        )
+                    except TypeError:
+                        # fallback to possible keyword args
+                        try:
+                            self.qdrant_client.create_payload_index(
+                                collection_name=self.collection_name,
+                                field_name="author_id",
+                                field_schema=field_schema,
+                            )
+                        except Exception:
+                            # best-effort; ignore failures but do not crash initialization
+                            pass
+                else:
+                    # older clients might accept just collection and field name
+                    try:
+                        self.qdrant_client.create_payload_index(self.collection_name, "author_id")
+                    except Exception:
+                        pass
             except Exception:
-                # Some qdrant server versions provide create_payload_index; if it errors,
-                # continue but report the error.
+                # best-effort indexing; continue on any error
                 pass
-
+     
             try:
-                self.qdrant_client.create_payload_index(
-                    collection_name=self.collection_name,
-                    payload_key="channel_id",
-                    field_schema=PayloadSchemaType.STRING,
-                )
+                field_schema = getattr(PayloadSchemaType, "KEYWORD", None) \
+                    or getattr(PayloadSchemaType, "TEXT", None) \
+                    or getattr(PayloadSchemaType, "STRING", None)
+                if field_schema is not None:
+                    try:
+                        self.qdrant_client.create_payload_index(
+                            self.collection_name,
+                            "channel_id",
+                            field_schema,
+                        )
+                    except TypeError:
+                        try:
+                            self.qdrant_client.create_payload_index(
+                                collection_name=self.collection_name,
+                                field_name="channel_id",
+                                field_schema=field_schema,
+                            )
+                        except Exception:
+                            pass
+                else:
+                    try:
+                        self.qdrant_client.create_payload_index(self.collection_name, "channel_id")
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
@@ -145,6 +189,12 @@ class QdrantStore(VectorStoreInterface):
         """
         if not memories:
             return
+
+        # Ensure embedding model is available before attempting vectorization
+        if self.embedding_model is None:
+            err = VectorOperationError("Embedding model not initialized for add_memories")
+            asyncio.create_task(func.report_error(err))
+            raise err
 
         try:
             # Extract the list of query_keys to embed
@@ -223,6 +273,12 @@ class QdrantStore(VectorStoreInterface):
         - Return list of MemoryFragment constructed from the payload.
         """
         try:
+            # Ensure embedding model is initialized
+            if self.embedding_model is None:
+                err = SearchError("Embedding model not initialized for vector search")
+                asyncio.create_task(func.report_error(err))
+                raise err
+
             # Embed the query_text
             loop = asyncio.get_event_loop()
             if hasattr(self.embedding_model, "embed_query"):

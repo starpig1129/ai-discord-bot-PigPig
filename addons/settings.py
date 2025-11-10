@@ -150,7 +150,7 @@ class PromptConfig:
             return ''
 
 class MemoryConfig:
-    """對應 config/memory.yaml 的設定物件"""
+    """Memory subsystem configuration object mapped from config/memory.yaml"""
 
     def __init__(self, path: str = "config/memory.yaml") -> None:
         self.path = path
@@ -159,17 +159,34 @@ class MemoryConfig:
         # Toggle to enable/disable memory subsystem
         self.enabled: bool = bool(data.get("enabled", True))
 
+        # Storage / vector store configuration
         self.user_data_path: str = data.get("user_data_path", "data/memory/memory.db")
         self.vector_store_type: str = data.get("vector_store_type", "qdrant")
         self.qdrant_url: str = data.get("qdrant_url", "http://localhost:6333")
         self.qdrant_api_key: Optional[str] = data.get("qdrant_api_key", None)
         self.qdrant_collection_name: str = data.get("qdrant_collection_name", "ephemeral_memory")
+
+        # Embedding provider selection and provider-specific settings.
+        # provider values: base, openai, huggingface, ollama, google
+        self.embedding_provider: str = data.get("embedding_provider", "base")
+        # Embedding model defaults (generic)
         self.embedding_model_name: str = data.get("embedding_model_name", "all-MiniLM-L6-v2")
         self.embedding_dim: int = data.get("embedding_dim", 384)
+
+        # Search tuning
         self.vector_search_k: int = data.get("vector_search_k", 5)
         self.keyword_search_k: int = data.get("keyword_search_k", 3)
+
+        # Batch sizes for fetch/process pipelines
         self.fetch_batch_size: int = data.get("fetch_batch_size", 100)
         self.process_batch_size: int = data.get("process_batch_size", 50)
+
+
+
+        # Ollama provider options
+        self.ollama_url: Optional[str] = data.get("ollama_url", "http://localhost:11434")
+        # Generic provider options bag for future extensions
+        self.provider_options: dict = data.get("provider_options", {})
 
         # Optional tuning parameters (present in YAML)
         self.store_refresh_interval_seconds: int | None = data.get("store_refresh_interval_seconds", None)
