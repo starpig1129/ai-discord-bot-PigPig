@@ -22,14 +22,13 @@ def create_tables(conn: sqlite3.Connection) -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
-            user_id TEXT PRIMARY KEY,
-            discord_id TEXT NOT NULL,
-            display_name TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
-            user_data TEXT,
-            preferences TEXT
-        )
+            discord_id TEXT PRIMARY KEY,
+            discord_name TEXT,
+            display_names TEXT, -- JSON array of nicknames
+            procedural_memory TEXT,
+            user_background TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
         """
     )
     # Table for storing user profiles (e.g., custom system prompts)

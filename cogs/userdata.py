@@ -180,14 +180,10 @@ class UserDataCog(commands.Cog):
 
     async def _read_user_data(self, user_id: str, context: Union[discord.Interaction, discord.Message]) -> str:
         """
-        核心邏輯：讀取並格式化使用者的儲存資料。
-
-        Args:
-            user_id: Discord 使用者 ID。
-            context: 用於翻譯的互動或訊息上下文。
-
-        Returns:
-            包含使用者資料或「未找到」訊息的格式化字串。
+        Core logic: read and format user's stored data according to the new schema.
+ 
+        Returns combined information (procedural_memory, user_background, display_names)
+        formatted into a single string for the translation placeholder `{data}`.
         """
         guild_id = self._get_guild_id_from_context(context)
         try:
@@ -197,20 +193,32 @@ class UserDataCog(commands.Cog):
                     guild_id, "system", "userdata", "errors", "sqlite_not_available",
                     fallback_key="sqlite_not_available"
                 )
-
+ 
             user_info = await user_mgr.get_user_info(user_id)
-            if user_info and user_info.user_data:
-                return self._translate(
-                    guild_id, "commands", "userdata", "responses", "data_found",
-                    fallback_key="data_found",
-                    user_id=user_id, data=user_info.user_data
-                )
-            else:
-                return self._translate(
-                    guild_id, "commands", "userdata", "responses", "data_not_found",
-                    fallback_key="data_not_found",
-                    user_id=user_id
-                )
+            if user_info:
+                parts = []
+                if getattr(user_info, "procedural_memory", None):
+                    parts.append(f"Procedural memory:\n{user_info.procedural_memory}")
+                if getattr(user_info, "user_background", None):
+                    parts.append(f"Background:\n{user_info.user_background}")
+                if getattr(user_info, "display_names", None):
+                    try:
+                        names = ", ".join(user_info.display_names)
+                    except Exception:
+                        names = str(user_info.display_names)
+                    parts.append(f"Display names: {names}")
+ 
+                if parts:
+                    data_str = "\n\n".join(parts)
+                    return self._translate(
+                        guild_id, "commands", "userdata", "responses", "data_found",
+                        fallback_key="data_found", user_id=user_id, data=data_str
+                    )
+ 
+            return self._translate(
+                guild_id, "commands", "userdata", "responses", "data_not_found",
+                fallback_key="data_not_found", user_id=user_id
+            )
         except Exception as e:
             try:
                 await func.report_error(e, f"讀取使用者資料失敗 (使用者: {user_id})")
@@ -223,16 +231,9 @@ class UserDataCog(commands.Cog):
 
     async def _save_user_data(self, user_id: str, display_name: str, user_data: str, context: Union[discord.Interaction, discord.Message]) -> str:
         """
-        核心邏輯：儲存使用者資料（包含 AI 智慧合併）。
-
-        Args:
-            user_id: Discord 使用者 ID。
-            display_name: 使用者的顯示名稱。
-            user_data: 要儲存的新資料字串。
-            context: 用於翻譯的互動或訊息上下文。
-
-        Returns:
-            操作結果的格式化字串（成功、失敗或錯誤）。
+        Core logic: save user data (includes AI-assisted merge).
+ 
+        The procedural memory field is used to store the user's free-form preferences.
         """
         guild_id = self._get_guild_id_from_context(context)
         try:
@@ -242,121 +243,99 @@ class UserDataCog(commands.Cog):
                     guild_id, "system", "userdata", "errors", "sqlite_not_available",
                     fallback_key="sqlite_not_available"
                 )
-
+ 
             user_info = await user_mgr.get_user_info(user_id)
-            
-            if user_info and user_info.user_data:
-                existing_data = user_info.user_data
-                system_prompt = prompt_config.get_system_prompt('user_data_agent')
-                
-                if not system_prompt:
-                    system_prompt = '''You are a professional user data management assistant.
+ 
+            # existing procedural memory (if any)
+            existing_data = None
+            if user_info and getattr(user_info, "procedural_memory", None):
+                existing_data = user_info.procedural_memory
+ 
+            system_prompt = prompt_config.get_system_prompt('user_data_agent')
+            if not system_prompt:
+                system_prompt = '''You are a professional user data management assistant.
 Intelligently merge existing user data with new data to return complete and accurate user information.
 If the new data conflicts with the old data (e.g., a changed preference), the new data should take precedence and overwrite the conflicting part.
 Maintain data integrity and consistency.
 Always respond in Traditional Chinese.'''
-                
+ 
+            try:
                 try:
-                    try:
-                        model, fallback = ModelManager().get_model("user_data_model")
-                    except ValueError as e:
-                        await func.report_error(e, "user_data_model not configured")
-                        raise RuntimeError(f"user_data_model 未正確配置: {e}") from e
-                    except Exception as e:
-                        await func.report_error(e, "ModelManager.get_model failed for user_data_model")
-                        raise RuntimeError(f"取得 user_data_model 失敗: {e}") from e
-                    
-                    agent = create_agent(model=model, tools=[],
-                                         system_prompt=system_prompt,
-                                         middleware=[
-                                             ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
-                                             fallback,
-                                         ])
-
-                    prompt_text = f"""Existing data: {json.dumps({'existing_data': existing_data}, ensure_ascii=False)}
-
-New data: {json.dumps({'new_data': user_data}, ensure_ascii=False)}
-
-Merge these intelligently and return complete user information."""
-                    
-                    response = await agent.ainvoke({"messages": [HumanMessage(content=prompt_text)]})
-                    
-                    if isinstance(response, dict) and "messages" in response and response["messages"]:
-                        new_data = response["messages"][-1].content
-                    else:
-                        new_data = str(response)
-                    
-                    if isinstance(new_data, (dict, list)):
-                        new_data = json.dumps(new_data, ensure_ascii=False)
-                    
+                    model, fallback = ModelManager().get_model("user_data_model")
+                except ValueError as e:
+                    await func.report_error(e, "user_data_model not configured")
+                    raise RuntimeError(f"user_data_model 未正確配置: {e}") from e
                 except Exception as e:
-                    try:
-                        await func.report_error(e, f"AI 處理使用者資料失敗 (使用者: {user_id})")
-                    except Exception:
-                        pass
-                    return self._translate(
-                        guild_id,
-                        "system", "userdata", "errors", "ai_processing_failed",
-                        fallback_key="ai_processing_failed",
-                        error=str(e)
-                    )
-                
-                # 更新
-                success = await user_mgr.update_user_data(user_id, new_data, display_name)
-                if success:
-                    return self._translate(
-                        guild_id,
-                        "commands", "userdata", "responses", "data_updated",
-                        fallback_key="data_updated",
-                        user_id=user_id,
-                        data=new_data
-                    )
+                    await func.report_error(e, "ModelManager.get_model failed for user_data_model")
+                    raise RuntimeError(f"取得 user_data_model 失敗: {e}") from e
+ 
+                agent = create_agent(model=model, tools=[],
+                                     system_prompt=system_prompt,
+                                     middleware=[
+                                         ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
+                                         fallback,
+                                     ])
+ 
+                prompt_text = f"""Existing data: {json.dumps({'existing_data': existing_data}, ensure_ascii=False)}
+ 
+New data: {json.dumps({'new_data': user_data}, ensure_ascii=False)}
+ 
+Merge these intelligently and return complete user information."""
+ 
+                response = await agent.ainvoke({"messages": [HumanMessage(content=prompt_text)]})
+ 
+                if isinstance(response, dict) and "messages" in response and response["messages"]:
+                    new_data = response["messages"][-1].content
                 else:
-                    try:
-                        await func.report_error(Exception("資料庫更新失敗"), f"更新使用者資料失敗 (使用者: {user_id})")
-                    except Exception:
-                        pass
-                    return self._translate(
-                        guild_id,
-                        "system", "userdata", "errors", "update_failed",
-                        fallback_key="update_failed",
-                        error="資料庫更新失敗"
-                    )
+                    new_data = str(response)
+ 
+                if isinstance(new_data, (dict, list)):
+                    new_data = json.dumps(new_data, ensure_ascii=False)
+ 
+            except Exception as e:
+                try:
+                    await func.report_error(e, f"AI 處理使用者資料失敗 (使用者: {user_id})")
+                except Exception:
+                    pass
+                return self._translate(
+                    guild_id,
+                    "system", "userdata", "errors", "ai_processing_failed",
+                    fallback_key="ai_processing_failed",
+                    error=str(e)
+                )
+ 
+            # persist to storage (procedural_memory)
+            success = await user_mgr.update_user_data(user_id, new_data, display_name)
+            if success:
+                return self._translate(
+                    guild_id,
+                    "commands", "userdata", "responses", "data_updated" if existing_data else "data_created",
+                    fallback_key="data_updated" if existing_data else "data_created",
+                    user_id=user_id,
+                    data=new_data
+                )
             else:
-                # 建立新資料
-                success = await user_mgr.update_user_data(user_id, user_data, display_name)
-                if success:
-                    return self._translate(
-                        guild_id,
-                        "commands", "userdata", "responses", "data_created",
-                        fallback_key="data_created",
-                        user_id=user_id,
-                        data=user_data
-                    )
-                else:
-                    try:
-                        await func.report_error(Exception("資料庫建立失敗"), f"建立使用者資料失敗 (使用者: {user_id})")
-                    except Exception:
-                        pass
-                    return self._translate(
-                        guild_id,
-                        "system", "userdata", "errors", "update_failed",
-                        fallback_key="update_failed",
-                        error="資料庫建立失敗"
-                    )
-                    
+                try:
+                    await func.report_error(Exception("資料庫更新失敗"), f"更新使用者資料失敗 (使用者: {user_id})")
+                except Exception:
+                    pass
+                return self._translate(
+                    guild_id,
+                    "system", "userdata", "errors", "update_failed",
+                    fallback_key="update_failed",
+                    error="資料庫操作失敗"
+                )
         except Exception as e:
             try:
-                await func.report_error(e, f"儲存使用者資料失敗 (使用者: {user_id})")
+                await func.report_error(e, f"更新使用者資料失敗 (使用者: {user_id})")
             except Exception:
                 pass
             return self._translate(
                 guild_id,
-                "system", "userdata", "errors", "update_failed",
-                fallback_key="update_failed",
+                "system", "userdata", "errors", "database_error",
+                fallback_key="database_error",
                 error=str(e)
             )
-
     async def manage_user_data(self, context: Union[discord.Interaction, discord.Message], user: Union[discord.User, discord.Member],
                                user_data: str = '', action: str = 'read',
                                message_to_edit: Optional[discord.Message] = None) -> str:
@@ -428,7 +407,7 @@ Merge these intelligently and return complete user information."""
             if user_id == "<@user_id>" or user_id is None:
                 user_id = str(message.author.id)
             else:
-                match = re.search(r'\d+', user_id)
+                match = re.search(r'\d+', str(user_id))
                 user_id = match.group() if match else str(message.author.id)
 
             try:
@@ -443,8 +422,12 @@ Merge these intelligently and return complete user information."""
                 message, user, user_data, action, message_to_edit
             )
             return result
-            
+
         except Exception as e:
+            try:
+                await func.report_error(e, f"manage_user_data_message error for user_id={user_id}")
+            except Exception:
+                pass
             return self._translate(
                 guild_id, "system", "userdata", "errors", "analysis_failed",
                 fallback_key="analysis_failed", error=str(e)

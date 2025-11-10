@@ -36,143 +36,188 @@ class SQLiteStorage(StorageInterface):
         self.db = DatabaseConnection(db_path, bot)
         self._user_cache: Dict[str, UserInfo] = {}
         self._cache_size_limit = 1000
+        self.logger = logger
         # Ensure schema exists
         try:
             with self.db.get_connection() as conn:
                 create_tables(conn)
         except Exception as e:
-            # Non-blocking report; raise so caller knows initialization failed.
-            asyncio.create_task(func.report_error(e, "Failed to create or verify DB tables"))
+            self.logger.error("Failed to create or verify DB tables: %s", e)
             raise
 
     # -----------------------
     # User-related operations
     # -----------------------
-    async def get_user_info(self, user_id: str) -> Optional[UserInfo]:
-        """Retrieve user info (combines users and user_profiles)."""
+    async def get_user_info(self, discord_id: str) -> Optional[UserInfo]:
+        """Retrieve a user's record from the new `users` schema.
+ 
+        The returned UserInfo matches cogs.memory.users.models.UserInfo.
+        """
         # Check cache first
-        if user_id in self._user_cache:
-            return self._user_cache[user_id]
-
+        if discord_id in self._user_cache:
+            return self._user_cache[discord_id]
+ 
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.execute(
                     """
-                    SELECT u.user_id, u.display_name AS display_name, u.created_at,
-                           up.profile_data
-                    FROM users u
-                    LEFT JOIN user_profiles up ON u.user_id = up.user_id
-                    WHERE u.user_id = ?
+                    SELECT discord_id, discord_name, display_names,
+                           procedural_memory, user_background, created_at
+                    FROM users
+                    WHERE discord_id = ?
                     """,
-                    (user_id,),
+                    (discord_id,),
                 )
                 row = cursor.fetchone()
                 if not row:
                     return None
-
-                profile_data = None
-                if row["profile_data"]:
+ 
+                # display_names is stored as JSON array (TEXT). Normalize to list.
+                display_names = []
+                if row["display_names"]:
                     try:
-                        profile_data = json.loads(row["profile_data"])
-                    except json.JSONDecodeError:
-                        logger.warning("Failed to decode profile_data for user %s", user_id)
-
+                        display_names = json.loads(row["display_names"])
+                        if not isinstance(display_names, list):
+                            display_names = [str(display_names)]
+                    except Exception:
+                        # If it isn't valid JSON, treat as a single legacy name
+                        display_names = [row["display_names"]]
+ 
                 created_at = None
                 if row["created_at"]:
                     try:
-                        created_at = datetime.fromtimestamp(float(row["created_at"]))
+                        # Try ISO format first, then timestamp fallback
+                        created_at = datetime.fromisoformat(row["created_at"])
                     except Exception:
-                        created_at = None
-
+                        try:
+                            created_at = datetime.fromtimestamp(float(row["created_at"]))
+                        except Exception:
+                            created_at = None
+ 
                 user_info = UserInfo(
-                    user_id=str(row["user_id"]),
-                    display_name=row["display_name"] or "",
-                    user_data=None,
-                    last_active=None,
-                    profile_data=profile_data,
-                    preferences=None,
+                    discord_id=str(row["discord_id"]),
+                    discord_name=row["discord_name"] or "",
+                    display_names=display_names,
+                    procedural_memory=row["procedural_memory"],
+                    user_background=row["user_background"],
                     created_at=created_at,
                 )
-
+ 
                 # update cache
-                self._update_cache(user_id, user_info)
+                self._update_cache(discord_id, user_info)
                 return user_info
         except Exception as e:
-            await func.report_error(e, f"get_user_info failed (user: {user_id})")
+            await func.report_error(e, f"get_user_info failed (user: {discord_id})")
             return None
 
-    async def update_user_data(self, user_id: str, user_data: str, display_name: str) -> bool:
-        """Insert or update a user's data and display name."""
+    async def update_user_data(self, discord_id: str, procedural_memory: str, discord_name: str) -> bool:
+        """Insert or update a user's procedural memory and names.
+ 
+        Behavior:
+          - procedural_memory is written to `procedural_memory` (overwrites existing).
+          - discord_name is written to `discord_name`.
+          - discord_name is appended to `display_names` if not already present.
+        """
         try:
             with self.db.get_connection() as conn:
-                cursor = conn.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
-                exists = cursor.fetchone() is not None
-
+                cursor = conn.execute("SELECT discord_id, display_names FROM users WHERE discord_id = ?", (discord_id,))
+                row = cursor.fetchone()
+                exists = row is not None
+ 
                 if exists:
+                    # load existing display_names and update if needed
+                    existing_display_names = []
+                    if row["display_names"]:
+                        try:
+                            existing_display_names = json.loads(row["display_names"])
+                        except Exception:
+                            existing_display_names = [row["display_names"]]
+ 
+                    if discord_name and discord_name not in existing_display_names:
+                        existing_display_names.append(discord_name)
+ 
                     conn.execute(
                         """
                         UPDATE users
-                        SET display_name = COALESCE(?, display_name),
-                            created_at = COALESCE(?, created_at)
-                        WHERE user_id = ?
+                        SET discord_name = COALESCE(?, discord_name),
+                            display_names = COALESCE(?, display_names),
+                            procedural_memory = COALESCE(?, procedural_memory)
+                        WHERE discord_id = ?
                         """,
-                        (display_name, None, user_id),
+                        (
+                            discord_name or None,
+                            json.dumps(existing_display_names, ensure_ascii=False),
+                            procedural_memory or None,
+                            discord_id,
+                        ),
                     )
                 else:
-                    now_ts = datetime.utcnow().timestamp()
+                    now_iso = datetime.utcnow().isoformat()
+                    display_names = [discord_name] if discord_name else []
                     conn.execute(
                         """
-                        INSERT INTO users (user_id, discord_id, display_name, created_at)
-                        VALUES (?, ?, ?, ?)
+                        INSERT INTO users (discord_id, discord_name, display_names, procedural_memory, created_at)
+                        VALUES (?, ?, ?, ?, ?)
                         """,
-                        (user_id, user_id, display_name, now_ts),
+                        (discord_id, discord_name or "", json.dumps(display_names, ensure_ascii=False), procedural_memory or None, now_iso),
                     )
                 conn.commit()
-
+ 
                 # invalidate cache
-                if user_id in self._user_cache:
-                    del self._user_cache[user_id]
+                if discord_id in self._user_cache:
+                    del self._user_cache[discord_id]
                 return True
         except sqlite3.IntegrityError as ie:
-            await func.report_error(ie, f"Integrity error updating user {user_id}")
+            await func.report_error(ie, f"Integrity error updating user {discord_id}")
             return False
         except Exception as e:
-            await func.report_error(e, f"update_user_data failed (user: {user_id})")
+            await func.report_error(e, f"update_user_data failed (user: {discord_id})")
             return False
 
-    async def update_user_activity(self, user_id: str, display_name: str) -> bool:
-        """Update user's activity timestamp and optionally display name."""
+    async def update_user_activity(self, discord_id: str, discord_name: str) -> bool:
+        """Update user's visible name and ensure display_names contains the provided name.
+ 
+        This is a lightweight upsert that will create the record if missing.
+        """
         try:
             with self.db.get_connection() as conn:
-                cursor = conn.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
-                exists = cursor.fetchone() is not None
-
-                now_ts = datetime.utcnow().timestamp()
-                if exists:
+                cursor = conn.execute("SELECT display_names FROM users WHERE discord_id = ?", (discord_id,))
+                row = cursor.fetchone()
+                if row:
+                    existing_display_names = []
+                    if row["display_names"]:
+                        try:
+                            existing_display_names = json.loads(row["display_names"])
+                        except Exception:
+                            existing_display_names = [row["display_names"]]
+                    if discord_name and discord_name not in existing_display_names:
+                        existing_display_names.append(discord_name)
                     conn.execute(
                         """
                         UPDATE users
-                        SET created_at = COALESCE(?, created_at),
-                            display_name = COALESCE(?, display_name)
-                        WHERE user_id = ?
+                        SET discord_name = COALESCE(?, discord_name),
+                            display_names = COALESCE(?, display_names)
+                        WHERE discord_id = ?
                         """,
-                        (now_ts, display_name, user_id),
+                        (discord_name or None, json.dumps(existing_display_names, ensure_ascii=False), discord_id),
                     )
                 else:
+                    now_iso = datetime.utcnow().isoformat()
+                    display_names = [discord_name] if discord_name else []
                     conn.execute(
                         """
-                        INSERT INTO users (user_id, discord_id, display_name, created_at)
+                        INSERT INTO users (discord_id, discord_name, display_names, created_at)
                         VALUES (?, ?, ?, ?)
                         """,
-                        (user_id, user_id, display_name, now_ts),
+                        (discord_id, discord_name or "", json.dumps(display_names, ensure_ascii=False), now_iso),
                     )
                 conn.commit()
-
-                if user_id in self._user_cache:
-                    del self._user_cache[user_id]
+ 
+                if discord_id in self._user_cache:
+                    del self._user_cache[discord_id]
                 return True
         except Exception as e:
-            await func.report_error(e, f"update_user_activity failed (user: {user_id})")
+            await func.report_error(e, f"update_user_activity failed (user: {discord_id})")
             return False
 
     # -----------------------

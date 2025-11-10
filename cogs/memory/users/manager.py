@@ -69,11 +69,14 @@ class SQLiteUserManager:
 
     async def update_user_data(self, user_id: str, user_data: str, display_name: Optional[str] = None,
                                preferences: Optional[Dict] = None) -> bool:
-        """Delegate update_user_data to storage and invalidate cache."""
+        """Delegate update_user_data to storage and invalidate cache.
+ 
+        Note: `user_data` is treated as procedural_memory in the new schema.
+        """
         try:
-            # storage API expects display_name; normalize to empty string if None
-            display = display_name or ""
-            success = await self.storage.update_user_data(user_id, user_data, display)
+            # storage API expects a procedural_memory string and a discord_name
+            discord_name = display_name or ""
+            success = await self.storage.update_user_data(user_id, user_data, discord_name)
             if success and user_id in self._user_cache:
                 del self._user_cache[user_id]
             return success
@@ -93,7 +96,10 @@ class SQLiteUserManager:
             return False
 
     async def search_users_by_display_name(self, name_pattern: str, limit: int = 10) -> List[UserInfo]:
-        """Attempt to use storage search; fall back to simple cache scan if unavailable."""
+        """Attempt to use storage search; fall back to simple cache scan if unavailable.
+ 
+        Fallback checks both `discord_name` and entries in `display_names`.
+        """
         try:
             if hasattr(self.storage, "search_users_by_display_name"):
                 return await getattr(self.storage, "search_users_by_display_name")(name_pattern, limit)
@@ -101,10 +107,17 @@ class SQLiteUserManager:
             results: List[UserInfo] = []
             pattern = name_pattern.lower()
             for ui in self._user_cache.values():
-                if pattern in (ui.display_name or "").lower():
-                    results.append(ui)
-                    if len(results) >= limit:
+                candidate_names = []
+                if getattr(ui, "discord_name", None):
+                    candidate_names.append(ui.discord_name)
+                if getattr(ui, "display_names", None):
+                    candidate_names.extend(ui.display_names)
+                for n in candidate_names:
+                    if n and pattern in n.lower():
+                        results.append(ui)
                         break
+                if len(results) >= limit:
+                    break
             return results
         except Exception as e:
             await func.report_error(e, f"Failed to search users (pattern: {name_pattern})")
