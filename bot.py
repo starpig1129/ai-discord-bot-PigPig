@@ -128,6 +128,8 @@ class PigPig(commands.Bot):
         # Memory subsystem (instantiate only when enabled)
         if getattr(memory_config, "enabled", True):
             # lazy import to avoid loading memory modules when disabled
+
+            import cogs.memory.embedding_providers  # noqa: F401
             from cogs.memory.db.sqlite_storage import SQLiteStorage
             from cogs.memory.users.manager import SQLiteUserManager
             from cogs.memory.vector.manager import VectorManager

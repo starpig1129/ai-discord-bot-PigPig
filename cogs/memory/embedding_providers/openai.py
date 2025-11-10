@@ -4,7 +4,7 @@ from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
-from ..vector_manager import register_embedding_provider
+from ..vector.manager import register_embedding_provider
 from addons.settings import MemoryConfig
 from addons.tokens import tokens
 from function import func

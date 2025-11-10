@@ -8,7 +8,7 @@ import logging
 from typing import List, Callable, Optional
 
 # Ensure decorator is importable for provider modules (they will call it)
-from ..vector_manager import register_embedding_provider  # noqa: F401
+from ..vector.manager import register_embedding_provider  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

@@ -4,7 +4,7 @@ import logging
 from langchain_core.embeddings import Embeddings
 from langchain_huggingface import HuggingFaceEmbeddings  # type: ignore
 
-from ..vector_manager import register_embedding_provider
+from ..vector.manager import register_embedding_provider
 from addons.settings import MemoryConfig
 from function import func
 

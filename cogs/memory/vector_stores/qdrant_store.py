@@ -31,7 +31,7 @@ from addons.tokens import tokens
 from function import func
 
 from cogs.memory.exceptions import VectorOperationError, SearchError
-from cogs.memory.vector_store_interface import MemoryFragment, VectorStoreInterface
+from cogs.memory.interfaces.vector_store_interface import MemoryFragment, VectorStoreInterface
 
 from langchain_core.embeddings import Embeddings
 
