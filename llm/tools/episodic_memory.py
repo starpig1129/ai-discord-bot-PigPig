@@ -6,7 +6,7 @@ from datetime import datetime
 from langchain.tools import tool
 
 from function import func
-from cogs.memory.vector_store_interface import MemoryFragment
+from cogs.memory.interfaces.vector_store_interface import MemoryFragment
 
 class EpisodicMemoryTools:
     """Container for episodic memory tools bound to a runtime.
@@ -118,5 +118,5 @@ class EpisodicMemoryTools:
                     # If reporting itself fails, swallow to avoid raising in tool
                     pass
                 return f"An error occurred while retrieving memories: {e}"
-
-        return [retrieve_episodic_memory]
+    
+        return [search_episodic_memory]
