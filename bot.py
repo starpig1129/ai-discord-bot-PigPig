@@ -129,10 +129,11 @@ class PigPig(commands.Bot):
         if getattr(memory_config, "enabled", True):
             # lazy import to avoid loading memory modules when disabled
             from cogs.memory.database import DatabaseManager
-            from cogs.memory.message_tracker import MessageTracker
+            from cogs.memory.services.message_tracker import MessageTracker
             from cogs.memory.vector_manager import VectorManager
 
             self.db_manager = DatabaseManager(db_path=memory_config.user_data_path, bot=self)
+            # pass db_manager as storage if it implements StorageInterface
             self.message_tracker = MessageTracker(self, self.db_manager, memory_config)
             self.vector_manager = VectorManager(self, memory_config)
         else:
