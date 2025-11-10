@@ -58,7 +58,7 @@ class SQLiteStorage(StorageInterface):
             with self.db.get_connection() as conn:
                 cursor = conn.execute(
                     """
-                    SELECT u.user_id, u.username AS display_name, u.created_at,
+                    SELECT u.user_id, u.display_name AS display_name, u.created_at,
                            up.profile_data
                     FROM users u
                     LEFT JOIN user_profiles up ON u.user_id = up.user_id
@@ -112,7 +112,7 @@ class SQLiteStorage(StorageInterface):
                     conn.execute(
                         """
                         UPDATE users
-                        SET username = COALESCE(?, username),
+                        SET display_name = COALESCE(?, display_name),
                             created_at = COALESCE(?, created_at)
                         WHERE user_id = ?
                         """,
@@ -122,10 +122,10 @@ class SQLiteStorage(StorageInterface):
                     now_ts = datetime.utcnow().timestamp()
                     conn.execute(
                         """
-                        INSERT INTO users (user_id, username, is_bot, created_at)
+                        INSERT INTO users (user_id, discord_id, display_name, created_at)
                         VALUES (?, ?, ?, ?)
                         """,
-                        (user_id, display_name, 0, now_ts),
+                        (user_id, user_id, display_name, now_ts),
                     )
                 conn.commit()
 
@@ -153,7 +153,7 @@ class SQLiteStorage(StorageInterface):
                         """
                         UPDATE users
                         SET created_at = COALESCE(?, created_at),
-                            username = COALESCE(?, username)
+                            display_name = COALESCE(?, display_name)
                         WHERE user_id = ?
                         """,
                         (now_ts, display_name, user_id),
@@ -161,10 +161,10 @@ class SQLiteStorage(StorageInterface):
                 else:
                     conn.execute(
                         """
-                        INSERT INTO users (user_id, username, is_bot, created_at)
+                        INSERT INTO users (user_id, discord_id, display_name, created_at)
                         VALUES (?, ?, ?, ?)
                         """,
-                        (user_id, display_name, 0, now_ts),
+                        (user_id, user_id, display_name, now_ts),
                     )
                 conn.commit()
 

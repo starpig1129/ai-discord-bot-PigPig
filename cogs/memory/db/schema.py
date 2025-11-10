@@ -22,10 +22,13 @@ def create_tables(conn: sqlite3.Connection) -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT NOT NULL,
-            is_bot INTEGER NOT NULL,
-            created_at REAL NOT NULL
+            user_id TEXT PRIMARY KEY,
+            discord_id TEXT NOT NULL,
+            display_name TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_active DATETIME DEFAULT CURRENT_TIMESTAMP,
+            user_data TEXT,
+            preferences TEXT
         )
         """
     )
