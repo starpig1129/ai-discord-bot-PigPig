@@ -370,6 +370,73 @@ class SQLiteStorage(StorageInterface):
         except Exception as e:
             await func.report_error(e, "mark_messages_vectorized failed")
 
+    async def archive_messages(self, message_ids: List[int]) -> None:
+        """Archive messages by moving them from `messages` into `messages_archive`.
+
+        Operation is performed inside a single transaction to ensure consistency:
+          1. Select rows for the provided message_ids from `messages`.
+          2. Insert those rows into `messages_archive` with an `archived_at` timestamp.
+          3. Delete the archived rows from `messages`.
+        """
+        if not message_ids:
+            return
+
+        try:
+            placeholders = ",".join("?" for _ in message_ids)
+            select_sql = f"SELECT message_id, channel_id, guild_id, user_id, content, timestamp, reactions FROM messages WHERE message_id IN ({placeholders})"
+            insert_sql = """
+            INSERT OR REPLACE INTO messages_archive
+            (message_id, channel_id, guild_id, user_id, content, timestamp, reactions, archived_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            delete_sql = f"DELETE FROM messages WHERE message_id IN ({placeholders})"
+
+            with self.db.get_connection() as conn:
+                cursor = conn.execute(select_sql, message_ids)
+                rows = cursor.fetchall()
+                if not rows:
+                    # Nothing to archive
+                    return
+
+                # Insert each row into archive with current UTC timestamp (seconds since epoch)
+                archived_at = datetime.utcnow().timestamp()
+                for r in rows:
+                    conn.execute(
+                        insert_sql,
+                        (
+                            r["message_id"],
+                            r["channel_id"],
+                            r["guild_id"],
+                            r["user_id"],
+                            r["content"],
+                            r["timestamp"],
+                            r["reactions"],
+                            archived_at,
+                        ),
+                    )
+
+                # Delete archived rows from primary table
+                conn.execute(delete_sql, message_ids)
+                conn.commit()
+        except Exception as e:
+            await func.report_error(e, "archive_messages failed")
+
+    async def delete_messages(self, message_ids: List[int]) -> None:
+        """Delete messages directly from the primary `messages` table.
+
+        This is used for data retention policies that require permanent deletion.
+        """
+        if not message_ids:
+            return
+        try:
+            placeholders = ",".join("?" for _ in message_ids)
+            delete_sql = f"DELETE FROM messages WHERE message_id IN ({placeholders})"
+            with self.db.get_connection() as conn:
+                conn.execute(delete_sql, message_ids)
+                conn.commit()
+        except Exception as e:
+            await func.report_error(e, "delete_messages failed")
+
     # -----------------------
     # Config storage
     # -----------------------

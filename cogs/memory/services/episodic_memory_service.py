@@ -248,12 +248,37 @@ class EpisodicMemoryService(commands.Cog):
             # store messages batch
             await self.storage.store_messages_batch(messages)
 
+            # Trigger vectorization and retention strategy for the stored messages.
+            vector_note = ""
+            try:
+                # import inside function to avoid circular imports
+                from cogs.memory.services.vectorization_service import VectorizationService
+
+                vector_manager = getattr(self.bot, "vector_manager", None)
+                vector_service = VectorizationService(bot=self.bot, storage=self.storage, vector_manager=vector_manager, settings=self.settings)
+
+                message_ids = [getattr(m, "id", None) for m in messages if getattr(m, "id", None) is not None]
+                await vector_service.process_unvectorized_messages(message_ids=message_ids)
+
+                vector_note = (
+                    lang_manager.translate(guild_id, "commands", "memory", "force_update", "post_vectorization", count=len(messages))
+                    if lang_manager
+                    else " 已完成儲存、向量化及歸檔/刪除作業。"
+                )
+            except Exception as e:
+                await func.report_error(e, "force_update_memory_vectorization")
+                vector_note = (
+                    lang_manager.translate(guild_id, "commands", "memory", "force_update", "post_vectorization_error", count=len(messages))
+                    if lang_manager
+                    else " 儲存完成，但向量化或歸檔/刪除時發生錯誤，已記錄。"
+                )
+
             success_text = (
                 lang_manager.translate(guild_id, "commands", "memory", "force_update", "success", count=len(messages))
                 if lang_manager
                 else f"已更新 {len(messages)} 條訊息的記憶。"
             )
-            await interaction.edit_original_response(content=success_text)
+            await interaction.edit_original_response(content=success_text + vector_note)
 
         except Exception as e:
             log.error("Error in force_update_memory: %s", e, exc_info=True)

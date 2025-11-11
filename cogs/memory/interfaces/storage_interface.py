@@ -55,6 +55,16 @@ class StorageInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def archive_messages(self, message_ids: List[int]) -> None:
+        """Move vectorized messages from the primary table to the archive table."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_messages(self, message_ids: List[int]) -> None:
+        """Delete messages from the primary messages table."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def get_config(self, key: str) -> Optional[str]:
         """Retrieve a configuration value by key."""
         raise NotImplementedError

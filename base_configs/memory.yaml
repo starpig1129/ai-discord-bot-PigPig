@@ -35,3 +35,11 @@ process_batch_size: 50
 # Optional tuning parameters
 store_refresh_interval_seconds: 300 # how often to refresh vector store connection
 max_memory_items_per_user: 1000 # cap per-user memory items, null for unlimited
+
+
+# Archival and Deletion Policy for vectorized messages
+# "none": Keep all messages in the primary table after vectorization.
+# "archive": Move vectorized messages to an archive table.
+# "delete": Permanently delete vectorized messages from the database.
+data_retention_policy: "none"
+archive_retention_days: 30 # Days to keep messages in the archive table before deletion. 0 for indefinite.

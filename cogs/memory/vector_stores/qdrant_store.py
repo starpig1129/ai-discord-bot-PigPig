@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+QDRANT_UUID_NAMESPACE = uuid.UUID('a1b2c3d4-e5f6-7890-1234-567890abcdef')
 from typing import Any, Dict, List, Optional, cast
 
 from qdrant_client import QdrantClient
@@ -217,8 +218,13 @@ class QdrantStore(VectorStoreInterface):
 
             points: List[PointStruct] = []
             for mem, vec in zip(memories, vectors):
-                # Generate stable id if available, otherwise uuid
-                point_id = getattr(mem, "id", None) or str(uuid.uuid4())
+                # Generate stable UUID-based point id derived from message id to ensure idempotent upserts.
+                message_id_str = str(getattr(mem, "id", ""))
+                if not message_id_str:
+                    # Fallback for safety, though mem.id should always be present
+                    point_id = str(uuid.uuid4())
+                else:
+                    point_id = str(uuid.uuid5(QDRANT_UUID_NAMESPACE, message_id_str))
 
                 # Merge summary + metadata into payload
                 payload: Dict[str, Any] = {"summary": mem.content}
