@@ -1,4 +1,6 @@
-from typing import List
+from typing import List, Any
+import re
+
 import discord
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from function import func
@@ -12,7 +14,7 @@ class ShortTermMemoryProvider:
     each Discord message to a LangChain HumanMessage or AIMessage.
     """
 
-    def __init__(self, limit: int = 10):
+    def __init__(self, bot: Any, limit: int = 10):
         """
         Initialize the provider.
 
@@ -22,6 +24,7 @@ class ShortTermMemoryProvider:
         if not isinstance(limit, int) or limit <= 0:
             raise ValueError("limit must be a positive integer")
         self.limit = limit
+        self.bot = bot
 
     async def get(self, message: discord.Message) -> List[BaseMessage]:
         """
@@ -37,7 +40,8 @@ class ShortTermMemoryProvider:
             for msg in history:
                 content_parts = []
                 if msg.content:
-                    content_parts.append(msg.content)
+                    cleaned_content = re.sub(rf'<@!?{self.bot.user.id}>', '', msg.content).strip()
+                    content_parts.append(cleaned_content)
 
                 # Include simple textualization for attachments
                 if msg.attachments:
@@ -57,7 +61,7 @@ class ShortTermMemoryProvider:
                     content_parts.append(f"[reply_to: {msg.reference.message_id}]")
 
                 # Prepend author info for clarity
-                author_prefix = f"[{msg.author.name} | ID:{msg.id} | {msg.created_at.isoformat()}]"
+                author_prefix = f"[{msg.author.name} | ID:{msg.id} | {msg.created_at.timestamp()}]"
                 combined = " ".join([author_prefix] + content_parts) if content_parts else author_prefix
 
                 if msg.author.bot:

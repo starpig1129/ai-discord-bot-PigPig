@@ -24,6 +24,14 @@ class MemoryFragment:
     - query_key: keyword-rich string used for vectorization
     - metadata: rich dict used for filtering and context
     - score: optional similarity score returned by search APIs
+
+    metadata keys:
+    - fragment_id: stable id for fragment (str)
+    - source_message_ids: list of origin message ids
+    - jump_url: link to the original message
+    - author_id, channel_id, guild_id: identifiers
+    - timestamp: numeric UNIX timestamp in seconds (float or int). Example: 1699721600.123
+    - reactions_json: serialized reactions
     """
     id: Optional[str] = None
     content: str = ""

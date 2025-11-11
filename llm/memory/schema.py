@@ -16,15 +16,15 @@ class ProceduralMemory:
 
 @dataclass
 class ShortTermMemory:
-    """Stores recent messages; each message is a mapping containing at least author_id, author, content, timestamp."""
+    """Stores recent messages; each message is a mapping containing at least author_id, author, content, timestamp (numeric UNIX seconds as float)."""
     messages: List[Dict[str, Any]] = field(default_factory=list)
-
+ 
 @dataclass
 class SystemContext:
     """Aggregated context used to build prompts for the LLM."""
     short_term_memory: ShortTermMemory
     procedural_memory: ProceduralMemory
     current_channel_name: str
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    timestamp: float = field(default_factory=lambda: datetime.utcnow().timestamp())
 
 __all__ = ["UserInfo", "ProceduralMemory", "ShortTermMemory", "SystemContext"]

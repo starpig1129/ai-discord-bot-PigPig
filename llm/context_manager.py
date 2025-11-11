@@ -76,8 +76,15 @@ class ContextManager:
             channel_name = getattr(message.channel, "name", str(getattr(message.channel, "id", "")))
         except Exception:
             channel_name = ""
-
-        timestamp = datetime.utcnow().isoformat() + "Z"
+ 
+        # Use message.created_at when available; fallback to current UTC timestamp (float seconds)
+        try:
+            if getattr(message, "created_at", None) is not None:
+                timestamp = message.created_at.timestamp()
+            else:
+                timestamp = datetime.utcnow().timestamp()
+        except Exception:
+            timestamp = datetime.utcnow().timestamp()
 
         try:
             procedural_str = self._format_context_for_prompt(procedural_memory, channel_name, timestamp)
@@ -129,11 +136,13 @@ class ContextManager:
 
         return list(ids)
 
-    def _format_context_for_prompt(self, procedural_memory: ProceduralMemory, channel_name: str, timestamp: str) -> str:
+    def _format_context_for_prompt(self, procedural_memory: ProceduralMemory, channel_name: str, timestamp: float) -> str:
         """Format procedural memory and current state into a single string.
-
+ 
         This method intentionally does NOT serialize short-term memory; callers
         receive STM as LangChain messages separately.
+        The `timestamp` parameter is a numeric UNIX timestamp (float seconds). If a
+        human-readable form is needed, callers should format it explicitly.
         """
         parts: List[str] = ["--- System Context ---"]
 

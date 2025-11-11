@@ -21,8 +21,37 @@ if TYPE_CHECKING:
     from bot import PigPig
 
 log = logging.getLogger(__name__)
+ 
+ 
+from datetime import datetime
+from typing import Any
+ 
+ 
+def _normalize_timestamp(ts: Any) -> float:
+    """Normalize various timestamp formats to numeric UNIX seconds (float).
 
-
+    Accepts:
+    - int/float: returned as float
+    - ISO8601 string: parsed via datetime.fromisoformat (Z replaced with +00:00)
+    - objects exposing .timestamp(): uses that value
+    Raises ValueError for unsupported formats.
+    """
+    if isinstance(ts, (int, float)):
+        return float(ts)
+    if isinstance(ts, str):
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return dt.timestamp()
+        except Exception:
+            raise ValueError("unsupported timestamp string format")
+    if hasattr(ts, "timestamp"):
+        try:
+            return float(ts.timestamp())
+        except Exception:
+            raise ValueError("failed to call .timestamp() on object")
+    raise ValueError("unsupported timestamp format")
+ 
+ 
 class EpisodicMemoryService(commands.Cog):
     """
     A background service responsible for the first stage of the ETL process

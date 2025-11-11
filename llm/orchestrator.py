@@ -57,7 +57,7 @@ class Orchestrator:
                 )
             )
 
-        short_term_provider = ShortTermMemoryProvider(limit=15)
+        short_term_provider = ShortTermMemoryProvider(bot=bot, limit=15)
         procedural_provider = ProceduralMemoryProvider(user_manager=user_manager)
 
         self.context_manager = ContextManager(
@@ -123,7 +123,6 @@ Focus on understanding what the user actually needs and prepare a clear analysis
         # Default fallbacks
         procedural_context_str: str = ""
         short_term_msgs: List[BaseMessage] = []
-        user_context = re.sub(rf'<@!?{bot.user.id}>', '', message.content).strip()
         # 1) Acquire contextual data from ContextManager with resilient error handling
         try:
             ctx = await self.context_manager.get_context(message)
@@ -176,7 +175,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             )
 
             # Inject short-term memory messages directly before current user input
-            messages_for_info_agent = list(short_term_msgs) + [HumanMessage(content=user_context)]
+            messages_for_info_agent = list(short_term_msgs)
             print("Info Agent Messages:\n", messages_for_info_agent)
             info_result = await info_agent.ainvoke({"messages": messages_for_info_agent})
         except Exception as e:
@@ -213,9 +212,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             # 1) info_message (analysis output)
             # 2) short_term memory (oldest->newest)
             # 3) current user input
-            messages_for_message_agent = list(info_message) + [
-                HumanMessage(content=user_context)
-            ]
+            messages_for_message_agent = list(info_message) + [short_term_msgs[-1]]
             print("Message Agent Messages:\n", messages_for_message_agent)
             streamer = message_agent.astream(
                 {"messages": messages_for_message_agent},
