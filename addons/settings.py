@@ -2,7 +2,10 @@ import yaml
 import asyncio
 import logging
 import os
-from typing import Optional, List
+from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def _load_yaml_file(path: str) -> dict:
     """安全讀取 YAML 檔案，失敗時使用 func.report_error 回報並回傳空 dict"""
@@ -25,7 +28,9 @@ def _get_config_root() -> str:
     fall back to 'config' to allow startup to continue.
     """
     try:
-        root = os.environ["CONFIG_ROOT"]
+        root = os.getenv("CONFIG_ROOT")
+        if root is None:
+            raise KeyError("CONFIG_ROOT environment variable not set")
         # Remove any trailing slashes for consistent joins
         return root.rstrip("/\\")
     except KeyError:
@@ -35,8 +40,8 @@ def _get_config_root() -> str:
                 func.report_error(Exception("CONFIG_ROOT environment variable not set"), "addons/settings.py/_get_config_root")
             )
         except Exception:
-            logging.getLogger(__name__).warning("CONFIG_ROOT environment variable not set; defaulting to 'base_configs'")
-        return "base_configs"
+            logging.getLogger(__name__).warning("CONFIG_ROOT environment variable not set; defaulting to './base_configs'")
+        return "./base_configs"
 
 # Evaluate CONFIG_ROOT at module import time so the module-level config loaders
 # below use the configured root directory.

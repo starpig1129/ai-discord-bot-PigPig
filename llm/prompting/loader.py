@@ -9,7 +9,7 @@ from function import func
 class PromptLoader:
     """YAML 提示配置載入器"""
     
-    def __init__(self, config_path: str = "./config/prompt/message_agent.yaml"):
+    def __init__(self, config_path: str = f'{prompt_config.path}/message_agent.yaml'):
         """
         初始化載入器
         

@@ -48,3 +48,5 @@ PHASE*_*.md
 data/cookies.txt
 
 qdrant_storage/
+
+configs/

@@ -7,10 +7,11 @@ from llm.prompting.cache import PromptCache
 from llm.prompting.builder import PromptBuilder
 from llm.utils.file_watcher import FileWatcher
 from function import func
+from addons.settings import prompt_config
 class PromptManager:
     """YAML 基礎的系統提示管理器"""
     
-    def __init__(self, config_path: str = r"config/prompt/message_agent.yaml"):
+    def __init__(self, config_path: str = f'{prompt_config.path}/message_agent.yaml'):
         """
         初始化提示管理器
         
@@ -384,7 +385,7 @@ from typing import Dict
 
 _prompt_manager_instances: Dict[str, PromptManager] = {}
 
-def get_prompt_manager(config_path: str = "./config/prompt/message_agent.yaml") -> PromptManager:
+def get_prompt_manager(config_path: str = f'{prompt_config.path}/message_agent.yaml') -> PromptManager:
     """
     取得指定 config_path 的 PromptManager 實例（若不存在則建立並快取）。
     這樣可以支援多個不同 agent 的配置檔案，而不會互相覆寫單一全域實例。
