@@ -41,7 +41,7 @@ class ShortTermMemoryProvider:
                 content_parts = []
                 if msg.content:
                     cleaned_content = re.sub(rf'<@!?{self.bot.user.id}>', '', msg.content).strip()
-                    content_parts.append(cleaned_content)
+                    content_parts.append(f":{cleaned_content}")
 
                 # Include simple textualization for attachments
                 if msg.attachments:
