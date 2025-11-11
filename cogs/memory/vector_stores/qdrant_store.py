@@ -85,7 +85,12 @@ class QdrantStore(VectorStoreInterface):
         try:
             # Initialize client
             # If api_key is None, QdrantClient will try unauthenticated connection.
-            self.qdrant_client = QdrantClient(url=qdrant_url, api_key=api_key)
+            # Increase timeout to accommodate longer upsert/search operations.
+            self.qdrant_client = QdrantClient(
+                url=qdrant_url,
+                api_key=api_key,
+                timeout=60,  # seconds
+            )
         except Exception as e:
             asyncio.create_task(func.report_error(e))
             raise VectorOperationError("Failed to initialize Qdrant client") from e
