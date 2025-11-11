@@ -106,6 +106,8 @@ class EpisodicMemoryService(commands.Cog):
 
         fetched_messages: list[discord.Message] = []
         processed_ids: list[int] = []
+        # Track consecutive server-side failures per channel for diagnostics.
+        channel_failures: dict[int, int] = defaultdict(int)
 
         for channel_id, message_ids in messages_by_channel.items():
             channel = self.bot.get_channel(channel_id)
@@ -115,19 +117,86 @@ class EpisodicMemoryService(commands.Cog):
                 continue
 
             for message_id in message_ids:
-                try:
-                    message = await channel.fetch_message(message_id)
-                    fetched_messages.append(message)
-                except discord.NotFound:
-                    log.warning(f"Message {message_id} not found in channel {channel_id}. It might have been deleted.")
-                except discord.Forbidden:
-                    log.error(f"Missing permissions to fetch message {message_id} in channel {channel_id}.")
-                except Exception as e:
-                    log.error(f"Failed to fetch message {message_id} due to an unexpected error: {e}", exc_info=True)
-                    await func.report_error(e, f"fetch_message_{message_id}")
-                finally:
-                    # Mark as processed regardless of success or failure to avoid retrying forever.
-                    processed_ids.append(message_id)
+                # Implement retry with exponential backoff for transient server errors.
+                max_retries = 3
+                base_delay = 1.0
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        log.debug(
+                            "Fetching message %s from channel %s (attempt %d/%d)",
+                            message_id,
+                            channel_id,
+                            attempt,
+                            max_retries,
+                        )
+                        message = await channel.fetch_message(message_id)
+                        fetched_messages.append(message)
+                        # Reset consecutive server failure counter on success.
+                        channel_failures[channel_id] = 0
+                        break
+                    except discord.NotFound:
+                        log.warning(
+                            "Message %s not found in channel %s. It might have been deleted.",
+                            message_id,
+                            channel_id,
+                        )
+                        break
+                    except discord.Forbidden:
+                        log.error(
+                            "Missing permissions to fetch message %s in channel %s.",
+                            message_id,
+                            channel_id,
+                        )
+                        break
+                    except discord.errors.DiscordServerError as e:
+                        # Server-side 5xx errors from Discord - retryable.
+                        channel_failures[channel_id] += 1
+                        log.warning(
+                            "Server error fetching message %s in channel %s (attempt %d/%d): %s",
+                            message_id,
+                            channel_id,
+                            attempt,
+                            max_retries,
+                            e,
+                        )
+                        if attempt == max_retries:
+                            log.error(
+                                "Max retries reached for message %s in channel %s. Reporting error.",
+                                message_id,
+                                channel_id,
+                            )
+                            await func.report_error(e, f"fetch_message_{message_id}")
+                        else:
+                            backoff = base_delay * (2 ** (attempt - 1))
+                            log.debug(
+                                "Backing off for %.1f seconds before retrying message %s",
+                                backoff,
+                                message_id,
+                            )
+                            await asyncio.sleep(backoff)
+                            continue
+                    except discord.HTTPException as e:
+                        # Non-server HTTP exceptions (likely 4xx) - do not retry.
+                        log.warning(
+                            "HTTP error fetching message %s in channel %s: %s",
+                            message_id,
+                            channel_id,
+                            e,
+                        )
+                        await func.report_error(e, f"fetch_message_{message_id}")
+                        break
+                    except Exception as e:
+                        # Unexpected exceptions - report and stop retrying this message.
+                        log.error(
+                            "Failed to fetch message %s due to unexpected error: %s",
+                            message_id,
+                            e,
+                            exc_info=True,
+                        )
+                        await func.report_error(e, f"fetch_message_{message_id}")
+                        break
+                # After attempts, mark as processed to avoid perpetual retries.
+                processed_ids.append(message_id)
 
         if fetched_messages:
             await self.storage.store_messages_batch(fetched_messages)
