@@ -33,7 +33,7 @@ class ShortTermMemoryProvider:
         The returned order is oldest -> newest.
         """
         try:
-            history = [msg async for msg in message.channel.history(limit=self.limit)][2:]  # Exclude the current and bot's own message
+            history = [msg async for msg in message.channel.history(limit=self.limit)][1:]  # Exclude the  bot's message
             history.reverse()
 
             result: List[BaseMessage] = []
