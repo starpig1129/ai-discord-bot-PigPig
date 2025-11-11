@@ -1,9 +1,10 @@
 from __future__ import annotations
 import asyncio
-from typing import Any
+from typing import Any, List
+import re
 
 from discord import Message
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, BaseMessage
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware, AgentMiddleware, hook_config
 
@@ -28,8 +29,14 @@ class DirectToolOutputMiddleware(AgentMiddleware):
 
 class Orchestrator:
     """
-    Simplified orchestrator per docs/plans/context_replan.md.
-    Context formatting moved to ContextManager.get_context().
+    Orchestrator updated to accept ContextManager's new return type.
+
+    ContextManager.get_context now returns Tuple[str, List[BaseMessage]]:
+      (procedural_context_str, short_term_msgs)
+
+    Short-term memory (short_term_msgs) is passed directly as LangChain
+    BaseMessage objects into agents' `messages` parameter to preserve
+    structure and avoid double-serialization.
     """
 
     def __init__(self, bot: Any):
@@ -43,10 +50,12 @@ class Orchestrator:
         user_manager = getattr(cog, "user_manager", None) if cog is not None else None
 
         if user_manager is None:
-            asyncio.create_task(func.report_error(
-                Exception("Missing user_manager on bot UserDataCog for Orchestrator"),
-                "Orchestrator.__init__"
-            ))
+            asyncio.create_task(
+                func.report_error(
+                    Exception("Missing user_manager on bot UserDataCog for Orchestrator"),
+                    "Orchestrator.__init__",
+                )
+            )
 
         short_term_provider = ShortTermMemoryProvider(limit=15)
         procedural_provider = ProceduralMemoryProvider(user_manager=user_manager)
@@ -61,12 +70,14 @@ class Orchestrator:
         Build system prompt for info_agent from settings with fallback.
         """
         try:
-            info_system_prompt = prompt_config.get_system_prompt('info_agent')
+            info_system_prompt = prompt_config.get_system_prompt("info_agent")
             if not info_system_prompt:
-                asyncio.create_task(func.report_error(
-                    Exception("info_agent system_prompt is empty"),
-                    "Orchestrator._build_info_agent_prompt"
-                ))
+                asyncio.create_task(
+                    func.report_error(
+                        Exception("info_agent system_prompt is empty"),
+                        "Orchestrator._build_info_agent_prompt",
+                    )
+                )
                 return self._get_info_agent_fallback_prompt(bot_id)
             return info_system_prompt
         except Exception as e:
@@ -96,13 +107,42 @@ Output Format:
 
 Focus on understanding what the user actually needs and prepare a clear analysis for the response generation phase."""
 
-    async def handle_message(self, bot: Any, message_edit: Message, message: Message, logger: Any) -> OrchestratorResponse:
+    async def handle_message(
+        self, bot: Any, message_edit: Message, message: Message, logger: Any
+    ) -> OrchestratorResponse:
+        """
+        Main entrypoint for handling an incoming Discord message.
 
+        This method adapts to ContextManager returning a tuple:
+        (procedural_context_str, short_term_msgs).
+
+        short_term_msgs (List[BaseMessage]) are injected directly into the
+        agents' messages lists (oldest -> newest), placed before the current
+        user input to preserve conversation order.
+        """
+        # Default fallbacks
+        procedural_context_str: str = ""
+        short_term_msgs: List[BaseMessage] = []
+        user_context = re.sub(rf'<@!?{bot.user.id}>', '', message.content).strip()
+        # 1) Acquire contextual data from ContextManager with resilient error handling
         try:
-            formatted_context = await self.context_manager.get_context(message)
+            ctx = await self.context_manager.get_context(message)
+            # Expect a tuple (procedural_str, short_term_msgs)
+            if isinstance(ctx, tuple) and len(ctx) == 2:
+                procedural_context_str, short_term_msgs = ctx  # type: ignore
+            else:
+                # unexpected return type; report and continue with fallbacks
+                asyncio.create_task(
+                    func.report_error(
+                        Exception(f"ContextManager.get_context returned unexpected type: {type(ctx)}"),
+                        "Orchestrator.handle_message",
+                    )
+                )
         except Exception as e:
-            await asyncio.create_task(func.report_error(e, "ContextManager.get_context failed in Orchestrator"))
-            formatted_context = ""
+            # Per design: report and continue with safe defaults
+            asyncio.create_task(func.report_error(e, "ContextManager.get_context failed in Orchestrator"))
+            procedural_context_str = ""
+            short_term_msgs = []
 
         try:
             user = getattr(message, "author", None)
@@ -116,6 +156,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             runtime_context = OrchestratorRequest(bot=bot, message=message, logger=logger)
             tool_list = get_tools(user, guid=guild, runtime=runtime_context)
 
+            # --- Info agent setup ---
             try:
                 info_model, fallback = self.model_manager.get_model("info_model")
             except Exception as e:
@@ -123,7 +164,8 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 raise RuntimeError(f"Failed to get info_model: {e}") from e
 
             info_system_prompt = self._build_info_agent_prompt(bot_id=bot.user.id, message=message)
-            full_info_prompt = f"{formatted_context}\n\n{info_system_prompt}"
+            # IMPORTANT: full_info_prompt should only include procedural_context_str (string) and system prompt.
+            full_info_prompt = f"{procedural_context_str}\n\n{info_system_prompt}"
             print("Info Agent Prompt:\n", full_info_prompt)
 
             info_agent = create_agent(
@@ -133,36 +175,51 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 middleware=[DirectToolOutputMiddleware(), fallback],
             )
 
-            info_result = await info_agent.ainvoke({"messages": [HumanMessage(content=message.content)]})
+            # Inject short-term memory messages directly before current user input
+            messages_for_info_agent = list(short_term_msgs) + [HumanMessage(content=user_context)]
+            print("Info Agent Messages:\n", messages_for_info_agent)
+            info_result = await info_agent.ainvoke({"messages": messages_for_info_agent})
         except Exception as e:
             await asyncio.create_task(func.report_error(e, "info_agent failed"))
             raise
 
         try:
+            # --- Message agent setup ---
+
             try:
                 message_model, fallback = self.model_manager.get_model("message_model")
             except Exception as e:
                 await func.report_error(e, "ModelManager.get_model failed for message_model")
                 raise RuntimeError(f"Failed to get message_model: {e}") from e
 
-            message_system_prompt = prompt_config.get_system_prompt('message_agent')
+            message_system_prompt = prompt_config.get_system_prompt("message_agent")
             if not message_system_prompt:
                 message_system_prompt = get_system_prompt(bot.user.id, message)
 
-            full_message_prompt = f"{formatted_context}\n\n{message_system_prompt}"
-
+            # full_message_prompt must only include procedural_context_str and system prompt
+            full_message_prompt = f"{procedural_context_str}\n\n{message_system_prompt}"
+            print("Message Agent Prompt:\n", full_message_prompt)
             message_agent = create_agent(
                 model=message_model,
                 tools=[],
                 system_prompt=full_message_prompt,
-                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]
+                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback],
             )
 
-            info_message = info_result["messages"]
+            # info_result["messages"] is expected to be a List[BaseMessage]
+            info_message: List[BaseMessage] = info_result.get("messages", [])  # type: ignore
 
+            # Compose messages for message_agent:
+            # 1) info_message (analysis output)
+            # 2) short_term memory (oldest->newest)
+            # 3) current user input
+            messages_for_message_agent = list(info_message) + [
+                HumanMessage(content=user_context)
+            ]
+            print("Message Agent Messages:\n", messages_for_message_agent)
             streamer = message_agent.astream(
-                {"messages": info_message + [HumanMessage(content=message.content)]},
-                stream_mode="messages"
+                {"messages": messages_for_message_agent},
+                stream_mode="messages",
             )
             message_result = await send_message(bot, message_edit, message, streamer)
 
@@ -172,7 +229,9 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
         resp = OrchestratorResponse.construct()
         resp.reply = message_result
-        resp.tool_calls = [{"tool": getattr(t, "name", repr(t)), "args": getattr(t, "args", None)} for t in tool_list]
+        resp.tool_calls = [
+            {"tool": getattr(t, "name", repr(t)), "args": getattr(t, "args", None)} for t in tool_list
+        ]
         return resp
 
 
