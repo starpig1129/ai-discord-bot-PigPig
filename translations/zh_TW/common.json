@@ -1,5 +1,16 @@
 {
     "commands": {
+        "memory": {
+            "name": "memory",
+            "description": "記憶體管理指令",
+            "force_update": {
+                "responses": {
+                    "starting": "開始強制更新記憶...",
+                    "post_vectorization": "向量化完成，正在更新索引...",
+                    "success": "強制更新完成"
+                }
+            }
+        },
         "help": {
             "name": "help",
             "description": "顯示所有指令"

@@ -1,5 +1,16 @@
 {
     "commands": {
+        "memory": {
+            "name": "memory",
+            "description": "Memory management commands",
+            "force_update": {
+                "responses": {
+                    "starting": "Starting forced memory update...",
+                    "post_vectorization": "Post-vectorization processing...",
+                    "success": "Force update completed"
+                }
+            }
+        },
         "help": {
             "name": "help",
             "description": "Show all commands"
