@@ -382,7 +382,7 @@ class PigPig(commands.Bot):
                     print(traceback.format_exc())
 
         # Initialize core services
-        self.orchestrator = Orchestrator()
+        self.orchestrator = Orchestrator(self)
         # Provide running event loop to storage (for thread-safe coroutine submission) if supported.
         if getattr(memory_config, "enabled", True) and getattr(self, "storage", None):
             try:

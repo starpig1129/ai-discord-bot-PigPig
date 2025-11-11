@@ -1,18 +1,12 @@
-"""Orchestrator: 使用 LangChain agent 處理來自 Discord 的訊息。
-
-此模組負責整合 ProviderManager、工具列表，並使用
-create_tool_calling_agent + AgentExecutor 執行 LLM 代理流程。
-"""
 from __future__ import annotations
-
 import asyncio
 from typing import Any
+import json
 
 from discord import Message
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from langchain.agents import create_agent
-from langchain.agents.middleware import ModelCallLimitMiddleware
-from langchain.agents.middleware import AgentMiddleware, hook_config
+from langchain.agents.middleware import ModelCallLimitMiddleware, AgentMiddleware, hook_config
 
 from llm.model_manager import ModelManager
 from llm.tools_factory import get_tools
@@ -22,22 +16,98 @@ from function import func
 from addons.settings import prompt_config
 from .prompting.system_prompt import get_system_prompt
 
+# New imports for context engineering
+from llm.context_manager import ContextManager
+from llm.memory.schema import SystemContext
+from llm.memory.short_term import ShortTermMemoryProvider
+from llm.memory.episodic import EpisodicMemoryProvider
+from llm.memory.procedural import ProceduralMemoryProvider
+from cogs.memory.interfaces.vector_store_interface import VectorStoreInterface
+from cogs.memory.users.manager import SQLiteUserManager
+
 
 class DirectToolOutputMiddleware(AgentMiddleware):
     @hook_config(can_jump_to=["end"])
     def after_tools(self, state, runtime):
-        # 工具執行後直接結束，不再調用 LLM
         return {"jump_to": "end"}
 
 class Orchestrator:
-    """核心 Orchestrator，將 Discord 訊息路由到 LangChain Agent 並回傳結果。
-
-    使用者的錯誤與異常會透過 `func.report_error` 記錄，確保錯誤可追蹤。
+    """
+    The core orchestrator that routes Discord messages to a LangChain Agent and returns the result.
+    It now integrates a ContextManager to provide rich context to the LLM.
     """
 
-    def __init__(self) -> None:
-        """初始化 ModelManager。"""
+    def __init__(self, bot: Any):
+        """
+        Initializes the ModelManager and the new ContextManager.
+        Dependencies for memory providers are injected from the bot instance.
+        """
         self.model_manager = ModelManager()
+        
+        # --- New: Initialize ContextManager and its providers ---
+        # These dependencies are expected to be available on the bot object
+        vector_store: VectorStoreInterface = getattr(bot, 'vector_store', None)
+        user_manager: SQLiteUserManager = getattr(bot, 'user_manager', None)
+
+        if not vector_store or not user_manager:
+            # In a real scenario, you might want to handle this more gracefully
+            # For now, we'll log a warning. The providers will fail if they are used.
+            asyncio.create_task(func.report_error(
+                Exception("Missing vector_store or user_manager on bot object for Orchestrator"),
+                "Orchestrator.__init__"
+            ))
+
+        short_term_provider = ShortTermMemoryProvider(limit=15)
+        episodic_provider = EpisodicMemoryProvider(vector_store=vector_store)
+        procedural_provider = ProceduralMemoryProvider(user_manager=user_manager)
+
+        self.context_manager = ContextManager(
+            short_term_provider=short_term_provider,
+            episodic_provider=episodic_provider,
+            procedural_provider=procedural_provider,
+        )
+        # --- End of new section ---
+
+    def _format_context_for_prompt(self, context: SystemContext) -> str:
+        """
+        Formats the SystemContext object into a structured string for the LLM prompt.
+        """
+        if not context:
+            return ""
+
+        parts = ["--- System Context ---"]
+
+        # 1. Procedural Memory
+        if context.procedural_memory and context.procedural_memory.user_info:
+            user_info = context.procedural_memory.user_info
+            proc_mem_parts = []
+            if user_info.user_background:
+                proc_mem_parts.append(f"User Background: {user_info.user_background}")
+            if user_info.procedural_memory:
+                proc_mem_parts.append(f"User Preferences: {user_info.procedural_memory}")
+            if proc_mem_parts:
+                parts.append("## Procedural Memory (User Info)\n" + "\n".join(proc_mem_parts))
+
+        # 2. Episodic Memory
+        if context.episodic_memory and context.episodic_memory.fragments:
+            frag_strs = [f"- {frag.content} (source: {frag.metadata.get('jump_url')})" for frag in context.episodic_memory.fragments]
+            parts.append("## Episodic Memory (Relevant Events)\n" + "\n".join(frag_strs))
+
+        # 3. Short-Term Memory
+        if context.short_term_memory and context.short_term_memory.messages:
+            msg_strs = [
+                f"[{msg['timestamp']}] {msg['author']}: {msg['content']}" 
+                for msg in context.short_term_memory.messages
+            ]
+            parts.append("## Short-Term Memory (Recent Conversation)\n" + "\n".join(msg_strs))
+        
+        # 4. Current State
+        parts.append(f"## Current State\n- Channel: #{context.current_channel_name}\n- Timestamp: {context.timestamp}")
+
+        parts.append("--- End of System Context ---")
+        
+        return "\n\n".join(parts)
+
 
     def _build_info_agent_prompt(
         self, bot_id: int, message: Message
@@ -52,18 +122,14 @@ class Orchestrator:
             完整的系統提示詞
         """
         try:
-            # 從 addons/settings 取得 info_agent system_prompt
             info_system_prompt = prompt_config.get_system_prompt('info_agent')
-            
             if not info_system_prompt:
                 asyncio.create_task(func.report_error(
-                    Exception("info_agent system_prompt 為空"),
+                    Exception("info_agent system_prompt is empty"),
                     "building info_agent prompt"
                 ))
                 return self._get_info_agent_fallback_prompt(bot_id)
-            
             return info_system_prompt
-            
         except Exception as e:
             asyncio.create_task(func.report_error(e, "building info_agent prompt"))
             return self._get_info_agent_fallback_prompt(bot_id)
@@ -102,21 +168,14 @@ Focus on understanding what the user actually needs and prepare a clear analysis
     async def handle_message(
         self, bot: Any, message_edit: Message, message: Message, logger: Any
     ) -> OrchestratorResponse:
-        """處理傳入的 Discord 訊息並回傳 OrchestratorResponse。
-
-        流程：
-        2. 取得該使用者可用的 tools
-        3. 建立 ChatPromptTemplate、agent 與 AgentExecutor
-        4. 非同步執行 agent 並解析回傳結果
-
-        Args:
-            message: 來自 Discord 的 Message 物件
-
-        Returns:
-            OrchestratorResponse: 包含回覆文字與 (可選) 工具呼叫紀錄
-        """
+        
         try:
-            # 驗證 message.author 與 guild
+            system_context = await self.context_manager.build_context(message)
+            formatted_context = self._format_context_for_prompt(system_context)
+        except Exception as e:
+            await asyncio.create_task(func.report_error(e, "ContextManager failed in Orchestrator"))
+            formatted_context = "" # Fallback to no context on error
+        try:
             user = getattr(message, "author", None)
             if user is None:
                 raise ValueError("Discord message.author has no id")
@@ -129,77 +188,70 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 bot=bot, message=message, logger=logger
             )
             tool_list = get_tools(user, guid=guild, runtime=runtime_context)
+            
             try:
                 info_model, fallback = self.model_manager.get_model("info_model")
-            except ValueError as e:
-                await asyncio.create_task(func.report_error(e, "info_model not configured"))
-                raise RuntimeError(f"info_model 未正確配置: {e}") from e
             except Exception as e:
-                await asyncio.create_task(func.report_error(e, "ModelManager.get_model failed for info_model"))
-                raise RuntimeError(f"取得 info_model 失敗: {e}") from e
+                await func.report_error(e, "ModelManager.get_model failed for info_model")
+                raise RuntimeError(f"Failed to get info_model: {e}") from e
 
-            # 從 config/prompt/info_agent.yaml 載入 info_agent 系統提示詞
+            # --- Modified: Inject context into prompt ---
             info_system_prompt = self._build_info_agent_prompt(
                 bot_id=bot.user.id,
                 message=message
             )
+            full_info_prompt = f"{formatted_context}\n\n{info_system_prompt}"
+            # --- End of modification ---
+
             info_agent = create_agent(
                 model=info_model,
                 tools=tool_list,
-                system_prompt=info_system_prompt,
+                system_prompt=full_info_prompt, # Use the combined prompt
                 middleware=[
                     DirectToolOutputMiddleware(),
                     fallback,
-                ],  # type: ignore
+                ],
             )
 
             info_result = await info_agent.ainvoke(
                 {"messages": [HumanMessage(content=message.content)]},
             )
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "info_agent failed"))
+            await asyncio.create_task(func.report_error(e, "info_agent failed"))
             raise
 
         try:
             try:
                 message_model, fallback = self.model_manager.get_model("message_model")
-            except ValueError as e:
-                await asyncio.create_task(func.report_error(e, "message_model not configured"))
-                raise RuntimeError(f"message_model 未正確配置: {e}") from e
             except Exception as e:
-                await asyncio.create_task(func.report_error(e, "ModelManager.get_model failed for message_model"))
-                raise RuntimeError(f"取得 message_model 失敗: {e}") from e
+                await func.report_error(e, "ModelManager.get_model failed for message_model")
+                raise RuntimeError(f"Failed to get message_model: {e}") from e
             
-            # 從 addons/settings 載入 message_agent 系統提示詞
+            # --- Modified: Inject context into prompt ---
             message_system_prompt = prompt_config.get_system_prompt('message_agent')
             if not message_system_prompt:
-                asyncio.create_task(func.report_error(
-                    Exception("message_agent system_prompt 為空"),
-                    "building message_agent prompt"
-                ))
                 message_system_prompt = get_system_prompt(bot.user.id, message)
+            
+            full_message_prompt = f"{formatted_context}\n\n{message_system_prompt}"
+            # --- End of modification ---
             
             message_agent = create_agent(
                 model=message_model,
                 tools=[],
-                system_prompt=message_system_prompt,
-                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]  # type: ignore
+                system_prompt=full_message_prompt, # Use the combined prompt
+                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback]
             )
-            print(info_result)
+            
             info_message = info_result["messages"]
             
-            message_result = ""
             streamer = message_agent.astream(
                 {"messages": info_message + [HumanMessage(content=message.content)]},
                 stream_mode="messages"
             )
-            # 傳入 bot 以避免模組層級依賴 main.bot
             message_result = await send_message(bot, message_edit, message, streamer)
 
-
         except Exception as e:
-            # 非同步回報錯誤並重新拋出以便上層處理
-            asyncio.create_task(func.report_error(e, "message_agent failed"))
+            await asyncio.create_task(func.report_error(e, "message_agent failed"))
             raise
 
         resp = OrchestratorResponse.construct()
