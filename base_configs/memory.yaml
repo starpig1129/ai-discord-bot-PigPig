@@ -12,7 +12,7 @@ qdrant_collection_name: discord_bot_memory
 # available providers: base, openai, huggingface, ollama, google
 embedding_provider: google
 embedding_model_name: gemini-embedding-001
-embedding_dim: 768
+embedding_dim: 3072
 
 ollama_url: http://localhost:11434
 
