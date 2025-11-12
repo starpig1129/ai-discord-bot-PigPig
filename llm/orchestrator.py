@@ -210,7 +210,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             # 1) info_message (analysis output)
             # 2) short_term memory (oldest->newest)
             # 3) current user input
-            messages_for_message_agent = list(info_message) + [short_term_msgs[-1]]
+            messages_for_message_agent = list(info_message)
             print("Message Agent Messages:\n", messages_for_message_agent)
             streamer = message_agent.astream(
                 {"messages": messages_for_message_agent},
