@@ -39,35 +39,59 @@ class ShortTermMemoryProvider:
             result: List[BaseMessage] = []
             for msg in history:
                 content_parts = []
-                if msg.content:
-                    cleaned_content = re.sub(rf'<@!?{self.bot.user.id}>', '', msg.content).strip()
-                    content_parts.append(f":{cleaned_content}")
+                content_suffix = ''
 
-                # Include simple textualization for attachments
-                if msg.attachments:
-                    attach_info = ", ".join(a.filename or "attachment" for a in msg.attachments)
-                    content_parts.append(f"[attachments: {attach_info}]")
-
-                # Include embed count if present
+                author_prefix = f"[{msg.author.name} | ID:{msg.id} | UNIX time:{msg.created_at.timestamp()}]"
+                                # Include embed count if present
                 if msg.embeds:
-                    content_parts.append(f"[embeds: {len(msg.embeds)}]")
+                    content_suffix += f"[embeds: {len(msg.embeds)}]"
 
                 # Include reactions
                 if msg.reactions:
                     reactions_info = ", ".join(str(r.emoji) for r in msg.reactions)
-                    content_parts.append(f"[reactions: {reactions_info}]")
+                    content_suffix += f"[reactions: {reactions_info}]"
                 # Include reference info if it's a reply
                 if msg.reference:
-                    content_parts.append(f"[reply_to: {msg.reference.message_id}]")
-
-                # Prepend author info for clarity
-                author_prefix = f"[{msg.author.name} | ID:{msg.id} | UNIX time:{msg.created_at.timestamp()}]"
-                combined = " ".join([author_prefix] + content_parts) if content_parts else author_prefix
-
-                if msg.author.bot:
-                    result.append(AIMessage(content=combined))
+                    content_suffix += f"[reply_to: {msg.reference.message_id}]"
+                if msg.content:
+                    cleaned_content = re.sub(rf'<@!?{self.bot.user.id}>', '', msg.content).strip()
+                    content_parts.append({"type": "text", "text": f"{author_prefix} {cleaned_content} {content_suffix}"})
                 else:
-                    result.append(HumanMessage(content=combined))
+                    content_parts.append({"type": "text", "text": f"{author_prefix} {content_suffix}"})
+
+                if msg.attachments:
+                    for attachment in msg.attachments:
+                        if attachment.content_type:
+                            if attachment.content_type.startswith('image/'):
+                                content_parts.append({
+                                    "type": "image",
+                                    "url": attachment.url,
+                                    "mime_type": attachment.content_type
+                                })
+                            elif attachment.content_type.startswith('video/'):
+                                content_parts.append({
+                                    "type": "video",
+                                    "url": attachment.url,
+                                    "mime_type": attachment.content_type
+                                })
+                            elif attachment.content_type == 'application/pdf':
+                                content_parts.append({
+                                    "type": "file",
+                                    "url": attachment.url,
+                                    "mime_type": "application/pdf"
+                                })
+                            elif attachment.content_type.startswith('audio/'):
+                                content_parts.append({
+                                    "type": "audio",
+                                    "url": attachment.url,
+                                    "mime_type": attachment.content_type
+                                })
+
+                # 創建消息（使用列表格式的 content）
+                if msg.author.bot:
+                    result.append(AIMessage(content=content_parts))
+                else:
+                    result.append(HumanMessage(content=content_parts))
 
             return result
         except Exception as e:

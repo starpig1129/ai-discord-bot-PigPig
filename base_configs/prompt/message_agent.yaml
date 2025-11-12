@@ -141,7 +141,7 @@ input_parsing:
     ## Input Understanding
     
     ### Message Format
-    - Short-term memory messages follow this structure: `<author_name> |(<author_id>)|(UNIX_timestamp): <message_content>`
+    - Short-term memory messages follow this structure: `<author_name> |(<message_id>)|(UNIX_timestamp): <message_content> [other_metadata]`
     - Parse this format to understand who said what and when
     
     ### Ignore Patterns
