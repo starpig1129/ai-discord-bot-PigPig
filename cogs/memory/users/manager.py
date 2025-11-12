@@ -1,7 +1,9 @@
 """User manager depending on StorageInterface."""
 import logging
 import asyncio
+import json
 from typing import Dict, List, Optional, Any
+from pydantic import BaseModel
 
 from cogs.memory.interfaces.storage_interface import StorageInterface
 from cogs.memory.users.models import UserInfo
@@ -59,7 +61,7 @@ class SQLiteUserManager:
                     if isinstance(row, Exception):
                         await func.report_error(row, f"get_user_info failed for {uid}")
                         continue
-                    if row:
+                    if isinstance(row, UserInfo):
                         result[uid] = row
                         if use_cache:
                             self._update_cache(uid, row)
@@ -67,16 +69,26 @@ class SQLiteUserManager:
                 await func.report_error(e, "Failed to retrieve multiple users")
         return result
 
-    async def update_user_data(self, user_id: str, user_data: str, display_name: Optional[str] = None,
-                               preferences: Optional[Dict] = None) -> bool:
-        """Delegate update_user_data to storage and invalidate cache.
- 
-        Note: `user_data` is treated as procedural_memory in the new schema.
-        """
+    async def update_user_data(self, user_id: str, user_data: Any, display_name: Optional[str] = None) -> bool:
+        """Extracts fields from user_data and delegates to storage."""
         try:
-            # storage API expects a procedural_memory string and a discord_name
-            discord_name = display_name or ""
-            success = await self.storage.update_user_data(user_id, user_data, discord_name)
+            # user_data is expected to be a UserDataResponse object
+            procedural_memory = user_data.procedural_memory
+            user_background = user_data.user_background
+            display_names = user_data.display_names
+
+            # Ensure display_name from context is included
+            if display_name and display_name not in display_names:
+                display_names.append(display_name)
+
+            success = await self.storage.update_user_data(
+                discord_id=user_id,
+                discord_name=display_name or "",
+                procedural_memory=procedural_memory,
+                user_background=user_background,
+                display_names=display_names
+            )
+
             if success and user_id in self._user_cache:
                 del self._user_cache[user_id]
             return success

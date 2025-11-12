@@ -110,59 +110,72 @@ class SQLiteStorage(StorageInterface):
             await func.report_error(e, f"get_user_info failed (user: {discord_id})")
             return None
 
-    async def update_user_data(self, discord_id: str, procedural_memory: str, discord_name: str) -> bool:
+    async def update_user_data(
+        self,
+        discord_id: str,
+        discord_name: str,
+        procedural_memory: Optional[str] = None,
+        user_background: Optional[str] = None,
+        display_names: Optional[List[str]] = None,
+    ) -> bool:
         """Insert or update a user's procedural memory and names.
- 
-        Behavior:
-          - procedural_memory is written to `procedural_memory` (overwrites existing).
-          - discord_name is written to `discord_name`.
-          - discord_name is appended to `display_names` if not already present.
         """
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.execute("SELECT discord_id, display_names FROM users WHERE discord_id = ?", (discord_id,))
                 row = cursor.fetchone()
                 exists = row is not None
- 
+
+                # Merge display_names
+                existing_display_names = []
+                if row and row["display_names"]:
+                    try:
+                        existing_display_names = json.loads(row["display_names"])
+                    except Exception:
+                        existing_display_names = [row["display_names"]]
+                
+                new_display_names = set(existing_display_names)
+                if display_names:
+                    new_display_names.update(display_names)
+                if discord_name:
+                    new_display_names.add(discord_name)
+
                 if exists:
-                    # load existing display_names and update if needed
-                    existing_display_names = []
-                    if row["display_names"]:
-                        try:
-                            existing_display_names = json.loads(row["display_names"])
-                        except Exception:
-                            existing_display_names = [row["display_names"]]
- 
-                    if discord_name and discord_name not in existing_display_names:
-                        existing_display_names.append(discord_name)
- 
                     conn.execute(
                         """
                         UPDATE users
                         SET discord_name = COALESCE(?, discord_name),
                             display_names = COALESCE(?, display_names),
-                            procedural_memory = COALESCE(?, procedural_memory)
+                            procedural_memory = COALESCE(?, procedural_memory),
+                            user_background = COALESCE(?, user_background)
                         WHERE discord_id = ?
                         """,
                         (
                             discord_name or None,
-                            json.dumps(existing_display_names, ensure_ascii=False),
+                            json.dumps(list(new_display_names), ensure_ascii=False),
                             procedural_memory or None,
+                            user_background or None,
                             discord_id,
                         ),
                     )
                 else:
                     now_iso = datetime.utcnow().isoformat()
-                    display_names = [discord_name] if discord_name else []
                     conn.execute(
                         """
-                        INSERT INTO users (discord_id, discord_name, display_names, procedural_memory, created_at)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO users (discord_id, discord_name, display_names, procedural_memory, user_background, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
                         """,
-                        (discord_id, discord_name or "", json.dumps(display_names, ensure_ascii=False), procedural_memory or None, now_iso),
+                        (
+                            discord_id,
+                            discord_name or "",
+                            json.dumps(list(new_display_names), ensure_ascii=False),
+                            procedural_memory or None,
+                            user_background or None,
+                            now_iso,
+                        ),
                     )
                 conn.commit()
- 
+
                 # invalidate cache
                 if discord_id in self._user_cache:
                     del self._user_cache[discord_id]

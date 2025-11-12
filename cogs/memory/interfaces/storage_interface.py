@@ -15,7 +15,14 @@ class StorageInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def update_user_data(self, discord_id: str, procedural_memory: str, discord_name: str) -> bool:
+    async def update_user_data(
+        self,
+        discord_id: str,
+        discord_name: str,
+        procedural_memory: Optional[str] = None,
+        user_background: Optional[str] = None,
+        display_names: Optional[List[str]] = None,
+    ) -> bool:
         """Update user's data and display name."""
         raise NotImplementedError
 
