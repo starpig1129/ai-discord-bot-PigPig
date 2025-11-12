@@ -125,19 +125,19 @@ class PromptBuilder:
     def apply_language_replacements(self, prompt: str, lang: str, lang_manager) -> str:
         """
         套用語言替換（與現有翻譯系統整合）
-        
+
         Args:
             prompt: 原始提示
             lang: 語言代碼
             lang_manager: 語言管理器實例
-            
+
         Returns:
             套用語言替換後的提示
         """
         try:
-            # 取得語言設定翻譯
-            language_settings = lang_manager.translations[lang]["common"]["system"]["chat_bot"]["language"]
-            
+            # 取得語言設定翻譯（修正路徑以匹配 translations 結構）
+            language_settings = lang_manager.translations[lang]["system"]["chat_bot"]["language"]
+
             # 執行替換
             modified_prompt = prompt.replace(
                 "Always answer in Traditional Chinese",
@@ -149,10 +149,10 @@ class PromptBuilder:
                 "使用 [標題](<URL>) 格式",
                 language_settings["references"]
             )
-            
+
             self.logger.debug(f"Applied language replacements for: {lang}")
             return modified_prompt
-            
+
         except (KeyError, TypeError, AttributeError) as e:
             # 如果翻譯失敗，記錄警告但返回原始提示
             self.logger.warning(f"Language replacement failed for {lang}: {e}")
