@@ -165,7 +165,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             info_system_prompt = self._build_info_agent_prompt(bot_id=bot.user.id, message=message)
             # IMPORTANT: full_info_prompt should only include procedural_context_str (string) and system prompt.
             full_info_prompt = f"{procedural_context_str}\n\n{info_system_prompt}"
-            print("Info Agent Prompt:\n", full_info_prompt)
+            #print("Info Agent Prompt:\n", full_info_prompt)
 
             info_agent = create_agent(
                 model=info_model,
@@ -176,7 +176,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
             # Inject short-term memory messages directly before current user input
             messages_for_info_agent = list(short_term_msgs)
-            print("Info Agent Messages:\n", messages_for_info_agent)
+            #print("Info Agent Messages:\n", messages_for_info_agent)
             info_result = await info_agent.ainvoke({"messages": messages_for_info_agent})
         except Exception as e:
             await asyncio.create_task(func.report_error(e, "info_agent failed"))
@@ -195,7 +195,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
             # full_message_prompt must only include procedural_context_str and system prompt
             full_message_prompt = f"{procedural_context_str}\n\n{message_system_prompt}"
-            print("Message Agent Prompt:\n", full_message_prompt)
+            #print("Message Agent Prompt:\n", full_message_prompt)
             message_agent = create_agent(
                 model=message_model,
                 tools=[],
@@ -211,7 +211,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             # 2) short_term memory (oldest->newest)
             # 3) current user input
             messages_for_message_agent = list(info_message)
-            print("Message Agent Messages:\n", messages_for_message_agent)
+            #print("Message Agent Messages:\n", messages_for_message_agent)
             streamer = message_agent.astream(
                 {"messages": messages_for_message_agent},
                 stream_mode="messages",
