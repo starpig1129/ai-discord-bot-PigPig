@@ -447,10 +447,29 @@ class UserDataCog(commands.Cog):
                 )
 
             user_info = await self.user_manager.get_user_info(user_id)
-
-            # Get existing procedural memory
+ 
+            # Get existing procedural memory; if the user has no record, initialize one first.
             existing_data = user_info
-
+            if not user_info:
+                try:
+                    # Create a minimal user record so downstream logic (and DB constraints) have a row to work with.
+                    created = await self.user_manager.update_user_activity(user_id, display_name)
+                    if created:
+                        self.logger.info("Initialized user record for %s", user_id)
+                        # Attempt to fetch the freshly created record for the AI merge step.
+                        try:
+                            existing_data = await self.user_manager.get_user_info(user_id)
+                        except Exception as e:
+                            self.logger.warning("Re-fetch after init failed for %s: %s", user_id, e)
+                    else:
+                        self.logger.warning("Initialization of user record returned False for %s", user_id)
+                except Exception as e:
+                    self.logger.error("Failed to initialize user record for %s: %s", user_id, e)
+                    try:
+                        await func.report_error(e, f"Failed to initialize user record (user: {user_id})")
+                    except Exception:
+                        pass
+ 
             # Invoke AI agent to merge data
             try:
                 merged_data = await self._invoke_ai_merge_agent(

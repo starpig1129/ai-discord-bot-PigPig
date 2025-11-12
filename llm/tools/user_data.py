@@ -242,16 +242,49 @@ class UserMemoryTools:
                         )
                         effective_id = user_id
     
-                # Get the display_name for storage
+                # Get the display_name for storage. Prefer cache (get_user) and fall back to fetch_user.
                 bot = get_bot()
                 display_name = f"User_{effective_id}"
                 if bot:
                     try:
-                        # fetch_user expects an integer id when possible
-                        if isinstance(effective_id, int):
-                            fetched_user = await bot.fetch_user(effective_id)
-                        else:
-                            fetched_user = await bot.fetch_user(int(effective_id)) if str(effective_id).isdigit() else None
+                        fetched_user = None
+                        # try convert to integer id when possible
+                        try:
+                            int_id = int(effective_id)
+                        except Exception:
+                            int_id = None
+                        if int_id is not None:
+                            # prefer cache to avoid unnecessary API calls
+                            fetched_user = bot.get_user(int_id)
+                            if not fetched_user:
+                                try:
+                                    fetched_user = await bot.fetch_user(int_id)
+                                except discord.NotFound:
+                                    # user does not exist / was deleted - not an exception to escalate
+                                    logger.warning(
+                                        "fetch_user: unknown user %s",
+                                        int_id,
+                                        extra={"provided_user_id": user_id}
+                                    )
+                                    fetched_user = None
+                                except discord.HTTPException as he:
+                                    # transient HTTP error - report and continue with fallback
+                                    logger.warning(
+                                        "fetch_user HTTP error for %s: %s",
+                                        int_id,
+                                        he,
+                                        extra={"provided_user_id": user_id}
+                                    )
+                                    await func.report_error(he, f"Failed to fetch user {int_id}")
+                                except Exception as e:
+                                    # unexpected error - log and report
+                                    logger.exception(
+                                        "Unexpected error fetching user %s: %s",
+                                        int_id,
+                                        e
+                                    )
+                                    await func.report_error(e, f"Failed to fetch user {int_id}")
+                        # If we obtained a user object, prefer its display_name/name
                         if fetched_user:
                             display_name = getattr(
                                 fetched_user,
@@ -259,10 +292,17 @@ class UserMemoryTools:
                                 getattr(fetched_user, "name", display_name)
                             )
                     except Exception as fetch_err:
+                        # Ensure any unexpected outer errors are at least warned; report for observability.
                         logger.warning(
-                            f"Failed to fetch display_name for user {effective_id}: {fetch_err}",
+                            "Failed to fetch display_name for user %s: %s",
+                            effective_id,
+                            fetch_err,
                             extra={"provided_user_id": user_id}
                         )
+                        try:
+                            await func.report_error(fetch_err, f"Failed to fetch display_name for user {effective_id}")
+                        except Exception:
+                            pass
     
                 # Debug details about what will be saved
                 logger.debug(
