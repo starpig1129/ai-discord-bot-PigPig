@@ -71,22 +71,20 @@ class InternetSearchTools:
         async def internet_search(
             query: str,
             search_type: Literal[
-                "general", "image", "youtube", "url", "eat"
+                "general", "youtube", "eat"
             ] = "general",
         ) -> str:
             """Performs an internet search based on the specified type.
 
             This tool supports multiple search types including general web search,
-            image search, YouTube video search, URL content extraction, and
-            specialized EAT (Expertise, Authoritativeness, Trustworthiness) search.
+            YouTube video search, and specialized EAT (Expertise, Authoritativeness,
+            Trustworthiness) search.
 
             Args:
-                query: The search query string or URL to process.
+                query: The search query string to process.
                 search_type: The type of search to perform. Options are:
                     - "general": Standard web search (default)
-                    - "image": Image search
                     - "youtube": YouTube video search
-                    - "url": Extract and analyze content from a specific URL
                     - "eat": Specialized search for authoritative content
 
             Returns:

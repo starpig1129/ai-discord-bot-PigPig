@@ -22,9 +22,6 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import aiohttp
-import re
-import requests
 import time
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -35,9 +32,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from youtube_search import YoutubeSearch
 import random
 import os
-import cv2
-import glob
-from skimage.metrics import structural_similarity as ssim
 
 from cogs.eat.db.db import DB
 from cogs.eat.embeds import eatEmbed
@@ -102,9 +96,7 @@ class InternetSearchCog(commands.Cog):
 
         search_functions = {
             "general": self.google_search,
-            "image": self.send_img,
             "youtube": self.youtube_search,
-            "url": self.fetch_page_content,
             "eat": self.eat_search
         }
         
@@ -183,90 +175,6 @@ class InternetSearchCog(commands.Cog):
             raise RuntimeError("Google blocked the request (CAPTCHA triggered)")
         return search
 
-    async def send_img(self, ctx, query, message_to_edit):
-        print('Image search:', query)
-        guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
-
-        url = f"https://www.google.com.hk/search?q={query}&tbm=isch"
-        chrome_options = self.get_chrome_options()
-        
-        try:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(install_driver)
-                driver_path = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: future.result(timeout=10)
-                )
-                service = Service(driver_path)
-        except (concurrent.futures.TimeoutError, Exception) as e:
-            print(f"ChromeDriverManager timed out or failed: {e}, falling back to local driver")
-            await func.report_error(e, f"send_img ChromeDriverManager: {e}")
-            chrome_driver_path = './chromedriverlinux64/chromedriver'
-            service = Service(executable_path=chrome_driver_path)
-
-        try:
-            with webdriver.Chrome(options=chrome_options, service=service) as driver:
-                driver.get(url)
-                driver.maximize_window()
-                time.sleep(2)
-
-                image_elements = driver.find_elements(By.CLASS_NAME, 'ob5Hkd')
-                chosen_element = self.choose_random_element(image_elements)
-                chosen_element.click()
-
-                time.sleep(2)
-                smail_pic_elements = driver.find_elements(By.CLASS_NAME, 'sFlh5c.pT0Scc')
-                goto_url_elements = driver.find_elements(By.CLASS_NAME, 'umNKYc')
-
-                if len(smail_pic_elements) > 1 and len(goto_url_elements) > 1:
-                    smail_pic = smail_pic_elements[1]
-                    goto_url_elements[1].click()
-                elif len(smail_pic_elements) > 0 and len(goto_url_elements) > 0:
-                    smail_pic = smail_pic_elements[0]
-                    goto_url_elements[0].click()
-                else:
-                    error_message = self.lang_manager.translate(
-                        guild_id,
-                        "commands",
-                        "internet_search",
-                        "errors",
-                        "image_element_not_found"
-                    ) if self.lang_manager else "無法找到圖片元素或跳轉URL元素"
-                    raise Exception(error_message)
-
-                src = smail_pic.get_attribute('src')
-                self.save_image('./gpt/img/need.jpg', src)
-
-                time.sleep(1)
-                driver.switch_to.window(driver.window_handles[-1])
-
-                all_img = driver.find_elements(By.TAG_NAME, 'img')
-                for idx, img in enumerate(all_img):
-                    try:
-                        img_url = img.get_attribute('src')
-                        self.save_image(f'./gpt/img/image_{idx}.jpg', img_url)
-                    except:
-                        pass
-        
-                await self.process_images(ctx, message_to_edit)
-        
-        except Exception as e:
-            print(f"Image download failed: {e}")
-            await func.report_error(e, f"send_img: {e}")
-            error_message = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "internet_search",
-                "errors",
-                "image_download_failed"
-            ) if self.lang_manager else "圖片下載失敗"
-            try:
-                await self.send_error_message(ctx, message_to_edit, error_message)
-            except discord.errors.NotFound:
-                import logging
-                logging.getLogger(__name__).info("send_error_message: 臨時訊息不存在，略過錯誤訊息編輯。")
-    
-            return None
 
     @staticmethod
     def get_chrome_options():
@@ -280,50 +188,6 @@ class InternetSearchCog(commands.Cog):
         chrome_options.add_experimental_option('useAutomationExtension', False)
         return chrome_options
 
-    @staticmethod
-    def choose_random_element(elements):
-        base_weight = 1.5
-        weights = [base_weight ** i for i in range(len(elements))]
-        total_weight = sum(weights)
-        probabilities = [weight / total_weight for weight in weights]
-        return random.choices(elements, weights=probabilities)[0]
-
-    @staticmethod
-    def save_image(filename, url):
-        with open(filename, 'wb') as f:
-            f.write(requests.get(url).content)
-
-    async def process_images(self, ctx, message_to_edit):
-        need = cv2.imread('./gpt/img/need.jpg', cv2.IMREAD_GRAYSCALE)
-        directory = './gpt/img/'
-        jpg_files = glob.glob(os.path.join(directory, '*.jpg'))
-
-        similarity_dict = {}
-        for jpg_file in jpg_files:
-            if "need" not in jpg_file:
-                img2 = cv2.imread(jpg_file, cv2.IMREAD_GRAYSCALE)
-                try:
-                    img2 = cv2.resize(img2, (need.shape[1], need.shape[0]))
-                    ssim_value, _ = ssim(need, img2, full=True)
-                    similarity_dict[jpg_file] = ssim_value
-                except:
-                    pass
-
-        max_file = max(similarity_dict, key=similarity_dict.get)
-        with open(max_file, 'rb') as file:
-            picture = discord.File(file, filename='./gpt/image.jpg')
-            if isinstance(ctx, discord.Interaction):
-                await ctx.followup.send(file=picture)
-            else:
-                try:
-                    await message_to_edit.edit(file=picture)
-                except discord.errors.NotFound:
-                    import logging
-                    logging.getLogger(__name__).info("process_images: 臨時訊息不存在，略過圖片訊息編輯。")
-
-        for file in os.listdir(directory):
-            if file.endswith('.jpg'):
-                os.remove(os.path.join(directory, file))
 
     @staticmethod
     async def send_error_message(ctx, message_to_edit, content):
@@ -373,63 +237,6 @@ class InternetSearchCog(commands.Cog):
                 error=str(e)
             )
 
-    async def fetch_page_content(self, ctx, query=None, message_to_edit=None):
-        guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
-        url_regex = r'(https?://\S+)'
-        if isinstance(ctx, discord.Interaction):
-            content = ctx.data.get('options', [{}])[0].get('value', '')
-        else:
-            content = ctx.content
-        urls = re.findall(url_regex, content)
-        if not urls:
-            return self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "internet_search",
-                "errors",
-                "no_valid_url"
-            ) if self.lang_manager else "未找到有效的URL"
-        
-        all_texts = []
-        error_messages = []
-        
-        async with aiohttp.ClientSession() as session:
-            for url in urls:
-                try:
-                    async with session.get(url, timeout=10) as response:
-                        if response.status == 200:
-                            html = await response.text()
-                            soup = BeautifulSoup(html, 'html.parser')
-                            body_content = soup.body
-                            if body_content:
-                                for element in body_content(['header', 'footer', 'nav', 'aside', 'form', 'button', 'script', 'style']):
-                                    element.decompose()
-                                text = body_content.get_text(separator='\n', strip=True)
-                                all_texts.append(text)
-                            else:
-                                error_messages.append(f"Failed to find body content in {url}")
-                        else:
-                            error_messages.append(f"Failed to fetch page content from {url}, status code: {response.status}")
-                except Exception as e:
-                    await func.report_error(e, f"fetch_page_content for {url}: {e}")
-                    error_messages.append(f"Error while fetching {url}: {str(e)}")
-        
-        combined_text = "\n\n".join(all_texts)
-        combined_errors = "\n".join(error_messages)
-        
-        result = combined_text if combined_text else (
-            self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "internet_search",
-                "errors",
-                "no_valid_content"
-            ) if self.lang_manager else "未能抓取到任何有效内容"
-        )
-        if combined_errors:
-            result += f"\n\nErrors:\n{combined_errors}"
-        
-        return result
 
     async def eat_search(self, ctx, keyword: str = "_", message_to_edit: discord.Message = None):
         guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
