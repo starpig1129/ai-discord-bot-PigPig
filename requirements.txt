@@ -1,64 +1,42 @@
-discord
-aiohttp==3.9.5
-python-dotenv==1.0.1
-pymongo==4.7.3
-motor==3.4.0
-pydantic==2.7.4
-torch
-torchaudio
-torchvision
-pillow==10.2.0
-numpy==1.26.4
-opencv-python==4.10.0.84
-langchain==0.2.5
-langchain-community==0.2.5
-langchain-core==0.2.9
-bitsandbytes==0.43.1
-diffusers==0.34.0
-triton
-huggingface-hub==0.30.0
-transformers>=4.52.0
-safetensors==0.4.3
-scikit-image==0.24.0
-scipy==1.13.1
-tqdm==4.66.2
-requests==2.32.3
-beautifulsoup4==4.12.3
-selenium==4.22.0
-decord
-pdf2image
-opencc
-google-genai
-langchain_huggingface
-sentencepiece==0.2.0
-vector-quantize-pytorch==1.18.5
-vocos==0.1.0
-accelerate==1.2.1
-timm==0.9.10
-soundfile==0.12.1
-librosa==0.9.0
-webdriver-manager
-openai
-moviepy==1.0.3
-tiktoken
-anthropic
-pytz
-yt_dlp
-youtube_search
-PyNaCl
-humanize
-dateparser
-# ============================================================================
-# Memory System Dependencies (智能頻道記憶系統)
-# ============================================================================
-# 向量搜尋和語義理解功能
-pynvml
-faiss-cpu>=1.7.4              # CPU 版本向量索引（記憶系統核心）
-# faiss-gpu>=1.7.0            # GPU 版本（可選，需要 CUDA）
-sentence-transformers>=2.2.2  # 語義嵌入模型（語義搜尋）
-psutil>=5.9.8                 # 系統硬體檢測（記憶系統監控）
-scikit-learn>=1.0.0           # 機器學習工具（相似度計算）
+# Core Dependencies
+aiohttp==3.13.2
+beautifulsoup4==4.14.2
+dateparser==1.2.2
+decord==0.6.0
+discord.py==2.6.4
+numpy==2.2.6
+OpenCC==1.1.9
+opencv-python==4.12.0.88
+pdf2image==1.17.0
+Pillow==12.0.0
+pydantic==2.12.4
+python-dotenv==1.2.1
+pytz==2025.2
+PyYAML==6.0.3
+Requests==2.32.5
+selenium==4.38.0
+setuptools
+scikit-image==0.25.2
+SQLAlchemy==2.0.44
+sympy==1.14.0
+webdriver-manager==4.0.2
+Whoosh==2.7.4
+youtube-search==2.1.2
+yt-dlp==2025.11.12
 
-# Note: 記憶系統已整合至主要依賴項目
-# GPU 用戶可選擇安裝: pip install faiss-gpu
-# Apple Silicon 用戶建議: pip install torch torchvision torchaudio
+# LangChain
+langchain==1.0.5
+langchain-core==1.0.4
+langchain-google-genai==3.0.2
+langchain-huggingface==1.0.1
+langchain-ollama==1.0.0
+langchain-openai==1.0.2
+
+# Vector Database
+qdrant-client==1.15.1
+
+# PyTorch
+torch==2.9.0
+torchaudio==2.9.0
+torchvision==0.24.0
+```
