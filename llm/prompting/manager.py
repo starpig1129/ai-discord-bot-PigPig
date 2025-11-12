@@ -186,7 +186,15 @@ class PromptManager:
                 if lang_manager := bot.get_cog("LanguageManager"):
                     guild_id = str(message.guild.id)
                     lang = lang_manager.get_server_lang(guild_id)
-                    prompt = self.builder.apply_language_replacements(prompt, lang, lang_manager)
+
+                    # Prefer YAML-provided mappings so replacement targets are driven by config
+                    try:
+                        config = self.loader.load_yaml_config()
+                        mappings = config.get('language_replacements', {}).get('mappings', {})
+                    except Exception:
+                        mappings = {}
+
+                    prompt = self.builder.apply_language_replacements(prompt, lang, lang_manager, mappings)
             except Exception as e:
                 asyncio.create_task(func.report_error(e, "language replacement"))
         

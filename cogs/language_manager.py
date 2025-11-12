@@ -94,11 +94,29 @@ class LanguageManager(commands.Cog):
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-            
+
             config['language'] = lang
-            
+
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=4)
+
+            # Invalidate cached system prompts so language change takes effect immediately
+            try:
+                from llm.prompting import manager as prompt_manager_module
+                pm_instances = getattr(prompt_manager_module, "_prompt_manager_instances", {})
+                for pm in pm_instances.values():
+                    try:
+                        keys = pm.cache.get_cache_keys(prefix="system_prompt_")
+                        for key in keys:
+                            pm.cache.invalidate(key)
+                        pm.logger.info(f"Cleared system_prompt cache due to language change for guild {guild_id}")
+                    except Exception as inner_e:
+                        import asyncio as _asyncio
+                        _asyncio.create_task(func.report_error(inner_e, "clearing prompt cache after language change"))
+            except Exception:
+                # Non-fatal: if prompting subsystem isn't available, ignore
+                pass
+
             return True
         except Exception as e:
             import asyncio

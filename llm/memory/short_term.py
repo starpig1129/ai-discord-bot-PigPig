@@ -61,7 +61,7 @@ class ShortTermMemoryProvider:
                     content_parts.append(f"[reply_to: {msg.reference.message_id}]")
 
                 # Prepend author info for clarity
-                author_prefix = f"[{msg.author.name} | ID:{msg.id} | {msg.created_at.timestamp()}]"
+                author_prefix = f"[{msg.author.name} | ID:{msg.id} | UNIX time:{msg.created_at.timestamp()}]"
                 combined = " ".join([author_prefix] + content_parts) if content_parts else author_prefix
 
                 if msg.author.bot:

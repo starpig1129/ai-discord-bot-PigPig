@@ -191,9 +191,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 await func.report_error(e, "ModelManager.get_model failed for message_model")
                 raise RuntimeError(f"Failed to get message_model: {e}") from e
 
-            message_system_prompt = prompt_config.get_system_prompt("message_agent")
-            if not message_system_prompt:
-                message_system_prompt = get_system_prompt(bot.user.id, message)
+            message_system_prompt = get_system_prompt(bot.user.id, message)
 
             # full_message_prompt must only include procedural_context_str and system prompt
             full_message_prompt = f"{procedural_context_str}\n\n{message_system_prompt}"

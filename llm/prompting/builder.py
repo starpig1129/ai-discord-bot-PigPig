@@ -9,15 +9,19 @@ class PromptBuilder:
         """初始化建構器"""
         self.logger = logging.getLogger(__name__)
         
-        # 模組標題映射
+        # Module title mapping — align keys with YAML module names
         self.module_titles = {
-            "base": "",  # 基礎模組不需要標題
-            "personality": "1. Personality and Expression (表達風格)",
-            "answering_principles": "2. Answering Principles",
-            "language": "3. Language Requirements (語言要求)",
-            "professionalism": "4. Professionalism",
-            "interaction": "5. Interaction",
-            "formatting": "6. Discord Markdown Formatting"
+            "base": "",
+            "identity": "Identity and Role",
+            "response_principles": "Response Principles",
+            "language": "Language Requirements (語言要求)",
+            "output_format": "Output Format Rules",
+            "input_parsing": "Input Parsing",
+            "memory_system": "Memory System",
+            "information_handling": "Information Handling",
+            "error_handling": "Error Handling",
+            "interaction": "Interaction",
+            "professional_personality": "Professional Personality"
         }
     
     def build_system_prompt(self, config: dict, modules: List[str]) -> str:
@@ -122,40 +126,87 @@ class PromptBuilder:
         """
         return self.module_titles.get(module_name, f"{module_name.title()}")
     
-    def apply_language_replacements(self, prompt: str, lang: str, lang_manager) -> str:
+    def apply_language_replacements(self, prompt: str, lang: str, lang_manager, mappings: Optional[dict] = None) -> str:
         """
-        套用語言替換（與現有翻譯系統整合）
+        Resolve explicit language placeholders and apply language mappings.
+
+        Strategy:
+        - Resolve placeholders of the form {{lang.<path>}} using LanguageManager translations.
+        - Also handle single-brace forms {lang.<path>} which may appear after Python .format processing.
+        - If mappings (YAML) are provided, apply them deterministically (exact replace) after placeholder resolution.
+        - Keep behavior safe: any resolution error is reported via func.report_error and the original prompt is returned.
 
         Args:
-            prompt: 原始提示
-            lang: 語言代碼
-            lang_manager: 語言管理器實例
+            prompt: original prompt text
+            lang: language code (e.g., "zh_TW")
+            lang_manager: LanguageManager instance
+            mappings: optional dict mapping source strings to translation paths
+                      (e.g. {"Always answer in Traditional Chinese": "system.chat_bot.language.answer_in"})
 
         Returns:
-            套用語言替換後的提示
+            prompt with replacements applied
         """
         try:
-            # 取得語言設定翻譯（修正路徑以匹配 translations 結構）
-            language_settings = lang_manager.translations[lang]["system"]["chat_bot"]["language"]
+            import re
 
-            # 執行替換
-            modified_prompt = prompt.replace(
-                "Always answer in Traditional Chinese",
-                language_settings["answer_in"]
-            ).replace(
-                "Appropriately use Chinese idioms or playful expressions",
-                language_settings["style"]
-            ).replace(
-                "使用 [標題](<URL>) 格式",
-                language_settings["references"]
-            )
+            # translations are stored under 'common' category in LanguageManager
+            translations_root = lang_manager.translations.get(lang, {}).get('common', {})
 
-            self.logger.debug(f"Applied language replacements for: {lang}")
-            return modified_prompt
+            def resolve_path(path: str) -> Optional[str]:
+                """Resolve dotted path against translations_root, return string or None."""
+                value = translations_root
+                for part in path.split('.'):
+                    if not isinstance(value, dict):
+                        return None
+                    value = value.get(part)
+                    if value is None:
+                        return None
+                return value if isinstance(value, str) else None
 
-        except (KeyError, TypeError, AttributeError) as e:
-            # 如果翻譯失敗，記錄警告但返回原始提示
-            self.logger.warning(f"Language replacement failed for {lang}: {e}")
+            # Replacement function used by both placeholder patterns
+            def placeholder_repl_path(path: str) -> str:
+                resolved = resolve_path(path)
+                if resolved:
+                    return resolved
+                if not path.startswith("system."):
+                    resolved = resolve_path("system." + path)
+                    if resolved:
+                        return resolved
+                # If cannot resolve, return empty string to avoid leaving raw placeholders
+                return ""
+
+            # 1) Replace double-brace placeholders like {{lang.system.chat_bot.language.answer_in}}
+            double_brace_pattern = re.compile(r"\{\{\s*lang\.([^\}]+)\s*\}\}")
+            new_prompt = double_brace_pattern.sub(lambda m: placeholder_repl_path(m.group(1).strip()), prompt)
+
+            # 2) Replace single-brace placeholders like {lang.system.chat_bot.language.answer_in}
+            #    (these may appear after .format() has processed double braces)
+            single_brace_pattern = re.compile(r"\{\s*lang\.([^\}]+)\s*\}")
+            new_prompt = single_brace_pattern.sub(lambda m: placeholder_repl_path(m.group(1).strip()), new_prompt)
+
+            # 3) If YAML mappings provided, perform deterministic exact replacements using resolved values
+            if mappings:
+                for src, path in mappings.items():
+                    try:
+                        # prefer exact dotted path resolution; allow both with and without leading 'system.'
+                        value = resolve_path(path) or (resolve_path("system." + path) if not path.startswith("system.") else None)
+                        if isinstance(value, str) and value:
+                            if src in new_prompt:
+                                new_prompt = new_prompt.replace(src, value)
+                    except Exception:
+                        # continue on individual mapping failure
+                        continue
+
+            # 4) Return the processed prompt (if nothing changed, original content remains)
+            if new_prompt != prompt:
+                self.logger.debug(f"Applied language placeholder replacements for lang={lang}")
+            else:
+                self.logger.debug(f"No language placeholders found for lang={lang}")
+
+            return new_prompt
+
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "applying language replacements"))
             return prompt
     
     def format_with_variables(self, prompt: str, variables: dict) -> str:

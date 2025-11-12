@@ -96,35 +96,40 @@ class PromptLoader:
     
     def get_cached_config(self) -> Optional[Dict[str, Any]]:
         """
-        獲取快取的配置（不重新載入檔案）
-        
-        Returns:
-            快取的配置字典，如果未載入則返回 None
+        Get the cached configuration.
+
+        This will attempt to detect whether the underlying YAML file has been
+        modified and reload it if necessary to avoid returning stale data.
         """
+        try:
+            # If the file on disk has changed since last load, reload it.
+            self.reload_if_changed()
+        except Exception:
+            # Non-fatal: return whatever is currently cached and report via logger if needed
+            self.logger.warning("Failed to check for config changes when getting cached config")
         return self._cached_config
-    
+
     def is_config_loaded(self) -> bool:
         """
-        檢查配置是否已載入
-        
-        Returns:
-            bool: 配置是否已載入
+        Check whether a configuration has been loaded into the cache.
         """
         return self._cached_config is not None
-    
+
     def get_config_section(self, section_name: str) -> Optional[Dict[str, Any]]:
         """
-        獲取配置的特定區段
-        
-        Args:
-            section_name: 區段名稱
-            
-        Returns:
-            指定區段的配置，如果不存在則返回 None
+        Retrieve a specific section from the configuration.
+
+        If the configuration has not been loaded yet, load it. If it has been
+        loaded, attempt to reload if the file changed to ensure latest values.
         """
-        if self._cached_config is None:
-            self.load_yaml_config()
-            
+        try:
+            if self._cached_config is None:
+                self.load_yaml_config()
+            else:
+                # Ensure cached config is up-to-date before returning a section
+                self.reload_if_changed()
+        except Exception:
+            self.logger.warning("Failed to ensure latest config before returning section")
         return self._cached_config.get(section_name) if self._cached_config else None
     
     def validate_config_structure(self, config: Dict[str, Any]) -> bool:
