@@ -212,7 +212,7 @@ async def _process_token_stream(
     async def process_item(token, metadata):
         nonlocal responses, responsesall, message_result, current_message
         
-        print(token,end='',flush=True)
+        
         # 提取文字 token
         if hasattr(token, "content") and token.content:
             token_str = str(token.content)
