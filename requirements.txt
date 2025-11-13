@@ -31,6 +31,7 @@ langchain-google-genai==3.0.2
 langchain-huggingface==1.0.1
 langchain-ollama==1.0.0
 langchain-openai==1.0.2
+langchain-qdrant==1.1.0
 
 # Vector Database
 qdrant-client==1.15.1
@@ -39,4 +40,3 @@ qdrant-client==1.15.1
 torch==2.9.0
 torchaudio==2.9.0
 torchvision==0.24.0
-```
