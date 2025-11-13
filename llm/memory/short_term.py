@@ -39,25 +39,24 @@ class ShortTermMemoryProvider:
             result: List[BaseMessage] = []
             for msg in history:
                 content_parts = []
-                content_suffix = ''
+                content_suffix = []
 
-                author_prefix = f"[{msg.author.name} | ID:{msg.id} | UNIX time:{msg.created_at.timestamp()}]"
+                content_prefix = f"{msg.author.name} | UserID:{msg.author.id} | MessageID:{msg.id}"
                                 # Include embed count if present
-                if msg.embeds:
-                    content_suffix += f"[embeds: {len(msg.embeds)}]"
 
                 # Include reactions
                 if msg.reactions:
                     reactions_info = ", ".join(str(r.emoji) for r in msg.reactions)
-                    content_suffix += f"[reactions: {reactions_info}]"
+                    content_suffix.append(f"reactions: {reactions_info}")
                 # Include reference info if it's a reply
                 if msg.reference:
-                    content_suffix += f"[reply_to: {msg.reference.message_id}]"
+                    content_suffix.append(f"reply_to: {msg.reference.message_id}")
+                content_suffix.append(f"timestamp: {msg.created_at.timestamp()}")
                 if msg.content:
                     cleaned_content = re.sub(rf'<@!?{self.bot.user.id}>', '', msg.content).strip()
-                    content_parts.append({"type": "text", "text": f"{author_prefix} {cleaned_content} {content_suffix}"})
+                    content_parts.append({"type": "text", "text": f"[{content_prefix}] {cleaned_content} [{' | '.join(content_suffix)}]"})
                 else:
-                    content_parts.append({"type": "text", "text": f"{author_prefix} {content_suffix}"})
+                    content_parts.append({"type": "text", "text": f"[{content_prefix}] { ' | '.join(content_suffix)}"})
 
                 if msg.attachments:
                     for attachment in msg.attachments:

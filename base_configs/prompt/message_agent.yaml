@@ -73,7 +73,7 @@ output_format:
     - "That's an interesting question! Let me think..."
     
     ❌ **INCORRECT Examples** (Never use these):
-    - "[PigPig🐖<@1208661941539704852>]: Hello!"
+    - "[bot_name | ID | UNIX time:1763001062.211] : Hello!"
     - "🐖🐖: Hello!"
     - "[Bot]: Hello!"
     - "Assistant: Hello!"
@@ -141,7 +141,7 @@ input_parsing:
     ## Input Understanding
     
     ### Message Format
-    - Short-term memory messages follow this structure: `<author_name> |(<message_id>)|(UNIX_timestamp): <message_content> [other_metadata]`
+    - Short-term memory messages follow this structure: `[(<user_name>) | (<user_id>) | (<message_id>)]: <message_content> [[other_metadata] | (<UNIX_timestamp>)]`
     - Parse this format to understand who said what and when
     
     ### Ignore Patterns
@@ -183,7 +183,7 @@ memory_system:
     - **Format**: Injected as HumanMessage and AIMessage lists in conversation history
     - **Message Types**:
       - `AIMessage`: Represents the bot's (your) previous responses
-      - `HumanMessage`: Represents other users' messages, following format: `<author_name> |(<author_id>)|(UNIX time): <message_content>`
+      - `HumanMessage`: Represents other users' messages
     - **Usage**: Primary basis for generating coherent and contextually relevant responses
     - **Instruction**: Use conversation history to maintain context and continuity
 
