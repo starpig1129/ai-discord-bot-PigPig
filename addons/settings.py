@@ -193,7 +193,8 @@ class MemoryConfig:
         self.enabled: bool = bool(data.get("enabled", True))
 
         # Storage / vector store configuration
-        self.user_data_path: str = data.get("user_data_path", "data/memory/memory.db")
+        self.procedural_data_path: str = data.get("procedural_data_path", "data/memory/procedural.db")
+        self.episodic_data_path: str = data.get("episodic_data_path", "data/memory/episodic.db")
         self.vector_store_type: str = data.get("vector_store_type", "qdrant")
         self.qdrant_url: str = data.get("qdrant_url", "http://localhost:6333")
         self.qdrant_api_key: Optional[str] = data.get("qdrant_api_key", None)

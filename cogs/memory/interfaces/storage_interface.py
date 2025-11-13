@@ -6,12 +6,11 @@ if TYPE_CHECKING:
     from ..users.manager import UserInfo
 
 
-class StorageInterface(ABC):
-    """Abstract base interface for high-level storage operations."""
+class ProceduralStorageInterface(ABC):
+    """Interface for procedural (user) storage operations."""
 
     @abstractmethod
     async def get_user_info(self, discord_id: str) -> Optional["UserInfo"]:
-        """Retrieve user information by user_id."""
         raise NotImplementedError
 
     @abstractmethod
@@ -23,13 +22,23 @@ class StorageInterface(ABC):
         user_background: Optional[str] = None,
         display_names: Optional[List[str]] = None,
     ) -> bool:
-        """Update user's data and display name."""
         raise NotImplementedError
 
     @abstractmethod
     async def update_user_activity(self, discord_id: str, discord_name: str) -> bool:
-        """Update user's last activity and optionally display name."""
         raise NotImplementedError
+
+    @abstractmethod
+    async def get_config(self, key: str) -> Optional[str]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def set_config(self, key: str, value: str) -> None:
+        raise NotImplementedError
+
+
+class EpisodicStorageInterface(ABC):
+    """Interface for episodic (message) storage operations."""
 
     @abstractmethod
     async def add_pending_message(self, message: discord.Message) -> None:
@@ -71,12 +80,7 @@ class StorageInterface(ABC):
         """Delete messages from the primary messages table."""
         raise NotImplementedError
 
-    @abstractmethod
-    async def get_config(self, key: str) -> Optional[str]:
-        """Retrieve a configuration value by key."""
-        raise NotImplementedError
 
-    @abstractmethod
-    async def set_config(self, key: str, value: str) -> None:
-        """Set a configuration value by key."""
-        raise NotImplementedError
+class StorageInterface(ProceduralStorageInterface, EpisodicStorageInterface):
+    """Combined interface kept for backward compatibility."""
+    pass

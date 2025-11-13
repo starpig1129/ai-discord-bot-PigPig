@@ -130,20 +130,24 @@ class PigPig(commands.Bot):
             # lazy import to avoid loading memory modules when disabled
 
             import cogs.memory.embedding_providers  # noqa: F401
-            from cogs.memory.db.sqlite_storage import SQLiteStorage
+            from cogs.memory.db.procedural_storage import ProceduralStorage
+            from cogs.memory.db.episodic_storage import EpisodicStorage
+            from cogs.memory.db.connection import DatabaseConnection
             from cogs.memory.users.manager import SQLiteUserManager
             from cogs.memory.vector.manager import VectorManager
             from cogs.memory.services.message_tracker import MessageTracker
-            from cogs.memory.services.episodic_memory_service import EpisodicMemoryService
 
-            # Initialize in dependency order
-            self.storage = SQLiteStorage(db_path=memory_config.user_data_path, bot=self)
-            self.user_manager = SQLiteUserManager(storage=self.storage)
+            # Initialize in dependency order (split responsibilities)
+            db_conn_procedural = DatabaseConnection(memory_config.procedural_data_path, bot=self)
+            db_conn_episodic = DatabaseConnection(memory_config.episodic_data_path, bot=self)
+            # assign storages explicitly
+            self.procedural_storage = ProceduralStorage(db_conn_procedural)
+            self.episodic_storage = EpisodicStorage(db_conn_episodic)
+ 
+            # Initialize managers/services with the appropriate storage
+            self.user_manager = SQLiteUserManager(storage=self.procedural_storage)
             self.vector_manager = VectorManager(bot=self, settings=memory_config)
-            self.message_tracker = MessageTracker(bot=self, storage=self.storage, settings=memory_config)
-
-            # Backwards compatibility: some legacy cogs expect db_manager attribute
-            self.db_manager = self.storage
+            self.message_tracker = MessageTracker(bot=self, storage=self.episodic_storage, settings=memory_config)
         else:
             # keep attributes for compatibility but do not initialize subsystems
             self.storage = None
