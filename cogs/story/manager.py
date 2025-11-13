@@ -2,14 +2,16 @@ import discord
 from discord.ext import commands
 import logging
 import random
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, cast
 import aiohttp
 import json
 from pydantic import ValidationError
+import re
+from function import func
 
 from llm.model_manager import ModelManager
 from langchain.agents import create_agent
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 
 from .database import StoryDB, CharacterDB
 from .models import StoryInstance, StoryWorld, StoryCharacter, PlayerRelationship, Event, Location, GMActionPlan, RelationshipUpdate, CharacterAction
@@ -43,7 +45,7 @@ class StoryManager:
         self.character_db = CharacterDB()
         self.prompt_engine = StoryPromptEngine(self.bot, self.system_prompt_manager)
         self.state_manager = StoryStateManager(bot)
-        self.language_manager: LanguageManager = self.bot.get_cog("LanguageManager")
+        self.language_manager: LanguageManager = cast(LanguageManager, self.bot.get_cog("LanguageManager"))
         self.interventions: Dict[int, str] = {}
 
     def _get_db(self, guild_id: int) -> StoryDB:
@@ -71,8 +73,10 @@ class StoryManager:
         Opens a modal for the user to provide an OOC intervention.
         """
         # Ensure the story is active in the current channel
-        db = self._get_db(interaction.guild_id)
-        story_instance = db.get_story_instance(interaction.channel_id)
+        assert interaction.guild_id is not None, "interaction.guild_id must not be None"
+        assert interaction.channel_id is not None, "interaction.channel_id must not be None"
+        db = self._get_db(cast(int, interaction.guild_id))
+        story_instance = db.get_story_instance(cast(int, interaction.channel_id))
         if not story_instance or not story_instance.is_active:
             await interaction.response.send_message(
                 "❌ 此頻道沒有正在進行的故事，無法進行干預。",
@@ -238,8 +242,11 @@ class StoryManager:
             self.logger.warning("StoryManager not initialized, skipping message.")
             return
 
-        guild_id = message.guild.id
-        channel_id = message.channel.id
+        assert message.guild is not None, "message.guild must not be None"
+        guild_id = cast(int, message.guild.id)
+        channel_id = cast(int, message.channel.id)
+        assert self.bot.user is not None, "bot.user must not be None"
+        bot_user_id = cast(int, self.bot.user.id)
         db = self._get_db(guild_id)
 
         story_instance = db.get_story_instance(channel_id)
@@ -254,7 +261,7 @@ class StoryManager:
         characters = [char for char_id in story_instance.active_character_ids if (char := self.character_db.get_character(char_id))]
         self.logger.info(f"V5 Orchestrator: Processing message in c:{channel_id} w:{world.world_name}")
 
-        async with message.channel.typing():
+        async with cast(discord.TextChannel, message.channel).typing():
             try:
                 # --- Step 1: Call GM Agent for a structured plan ---
                 # Check for and retrieve any pending intervention for this channel
@@ -294,22 +301,41 @@ class StoryManager:
                                      response_format=GMActionPlan,
                                      middleware=[fallback])
                 message_list = [HumanMessage(content=message.content)] + gm_dialogue_history
-                response = await agent.ainvoke({
-                    "messages": message_list,
-                })
-                
-                gm_plan = None
+                response = await agent.ainvoke(cast(Any, {"messages": message_list}))
 
-                gm_plan = response.get("structured_response")
+                # Deterministic parsing: agent MUST return a dict containing 'structured_response' or 'output' (dict or JSON string).
+                try:
+                    if not isinstance(response, dict):
+                        raise Exception("Agent response must be a dict with 'structured_response' or 'output'")
+
+                    resp_payload = response.get("structured_response") or response.get("output") or response.get("result")
+                    if resp_payload is None:
+                        raise Exception("Agent response missing 'structured_response' / 'output' / 'result' field")
+
+                    if isinstance(resp_payload, str):
+                        gm_plan = GMActionPlan.model_validate_json(resp_payload)
+                    else:
+                        gm_plan = GMActionPlan.model_validate(resp_payload)
+                except Exception as e:
+                    self.logger.error("Failed to parse GMActionPlan from agent response: %s", e)
+                    try:
+                        await func.report_error(e, "story.gm_action_parse_failed")
+                    except Exception:
+                        self.logger.exception("func.report_error failed when reporting gm_action_parse_failed")
+                    raise
 
                 # --- Step 3: Execute the plan (NARRATE or DIALOGUE) ---
                 event_text_for_log = ""
+                # Use deterministic baseline state; overwrite in DIALOGUE branch when provided by GM plan.
+                latest_location = story_instance.current_location
+                latest_date = story_instance.current_date
+                latest_time = story_instance.current_time
 
                 if gm_plan.action_type == "NARRATE":
                     self.logger.info(f"GM Action: NARRATE. Event: {gm_plan.event_title}")
                     if gm_plan.narration_content:
                         await self._send_story_response(
-                            channel=message.channel,
+                            channel=cast(discord.TextChannel, message.channel),
                             character=None,
                             story_instance=story_instance, # Use pre-update instance for state display
                             content=gm_plan.narration_content,
@@ -329,49 +355,76 @@ class StoryManager:
                         full_event_text = []
                         
                         # Initialize the authoritative state from the GM's plan. This will be updated by each actor.
+                        assert gm_plan.state_update is not None, "GMActionPlan.state_update required for DIALOGUE"
+                        assert gm_plan.dialogue_context is not None, "GMActionPlan.dialogue_context required for DIALOGUE"
                         latest_location = gm_plan.state_update.location
                         latest_date = gm_plan.state_update.date
                         latest_time = gm_plan.state_update.time
 
                         for dialogue_ctx in gm_plan.dialogue_context:
                             speaker_name = dialogue_ctx.speaker_name
-                            speaking_character = next((c for c in characters if c.name == speaker_name), None)
-
+                            speaking_character = None
+    
+                            # 1) Try to match by mention (e.g. <@12345>) -> match by character.user_id
+                            mention_match = re.search(r"<@!?(\\d+)>", speaker_name or "")
+                            if mention_match:
+                                try:
+                                    mention_id = int(mention_match.group(1))
+                                    speaking_character = next((c for c in characters if c.user_id == mention_id), None)
+                                    if speaking_character:
+                                        self.logger.info("Matched speaker by mention -> %s (user_id=%s)", speaking_character.name, mention_id)
+                                except Exception as _e:
+                                    self.logger.debug("Invalid mention id parsing for speaker_name=%s: %s", speaker_name, _e)
+    
+                            # 2) Exact name match
                             if not speaking_character:
-                                self.logger.warning(f"Character '{speaker_name}' not found for dialogue. Attempting to substitute a random character.")
+                                speaking_character = next((c for c in characters if c.name == speaker_name), None)
+    
+                            # 3) Case-insensitive or fuzzy-ish contains match
+                            if not speaking_character and speaker_name:
+                                lower = speaker_name.lower()
+                                speaking_character = next((c for c in characters if lower in (c.name or "").lower()), None)
+    
+                            # 4) Fallback to a random active character (per user's preference)
+                            if not speaking_character:
+                                self.logger.warning("Character '%s' not found for dialogue. Substituting with a random character from the story.", speaker_name)
                                 if characters:
                                     speaking_character = random.choice(characters)
-                                    self.logger.info(f"Substituted with random character: '{speaking_character.name}'")
+                                    self.logger.info("Substituted with random character: '%s'", speaking_character.name)
                                 else:
                                     self.logger.error("No available characters to substitute.")
                                     await self._send_story_response(
-                                        channel=message.channel,
+                                        channel=cast(discord.TextChannel, message.channel),
                                         character=None,
                                         story_instance=story_instance,
                                         content=f"({speaker_name} 想要說話，但現場沒有其他人可以代勞...)"
                                     )
                                     continue
-
+    
                             # Fetch recent conversation history
-                            history_messages = [msg async for msg in message.channel.history(limit=20)]
+                            history_messages = [msg async for msg in cast(discord.TextChannel, message.channel).history(limit=20)]
                             history_messages.reverse()
-                            
+    
                             dialogue_history = []
                             if story_instance.summaries:
                                 for summary in story_instance.summaries[-5:]:
                                     dialogue_history.append({"role": "user", "content": f"[Contextual Summary: {summary}]"})
-
+    
                             for msg in history_messages:
                                 content = msg.content
                                 role = "user"
-                                if msg.author.id == self.bot.user.id and msg.embeds:
+                                author = cast(discord.abc.User, msg.author)
+                                # Deterministic: ensure author.id is present and use a concrete int for comparisons
+                                assert getattr(author, "id", None) is not None, "message author id must not be None"
+                                author_id = cast(int, author.id)
+                                if author_id == bot_user_id and msg.embeds:
                                     content = msg.embeds[0].description or ""
                                     role = "assistant"
-                                elif msg.author.id != self.bot.user.id:
+                                elif author_id != bot_user_id:
                                     role = "user"
                                 if content.strip():
                                     dialogue_history.append({"role": role, "content": content})
-
+    
                             # Pass the most up-to-date world state to the character prompt
                             char_system_prompt, char_user_prompt = await self.prompt_engine.build_character_prompt(
                                 character=speaking_character,
@@ -381,37 +434,65 @@ class StoryManager:
                                 date=latest_date,
                                 time=latest_time
                             )
-
+    
                             # Call character model via ModelManager + LangChain create_agent
                             story_character_model, fallback = ModelManager().get_model("story_character_model")
-                            agent = create_agent(story_character_model, tools=[], 
+                            agent = create_agent(story_character_model, tools=[],
                                                  system_prompt=char_system_prompt, response_format=CharacterAction, middleware=[fallback])
-                            response = await agent.ainvoke({
-                                "messages": dialogue_history + [HumanMessage(content=char_user_prompt)],
-                            })
+    
+                            # Call character agent (single try; deterministic handling)
+                            try:
+                                response = await agent.ainvoke(cast(Any, {"messages": dialogue_history + [HumanMessage(content=char_user_prompt)]}))
+                                self.logger.debug("Character agent raw response (speaker=%s): %r", speaker_name, response)
+                            except Exception as e:
+                                self.logger.error("Character agent invocation failed for speaker=%s: %s", speaker_name, e, exc_info=True)
+                                try:
+                                    await func.report_error(e, f"story.character_agent_invoke_failed speaker={speaker_name}")
+                                except Exception:
+                                    self.logger.exception("func.report_error failed when reporting character_agent_invoke failure")
+                                continue
+    
                             character_action = None
                             try:
-                                output = response.get("output") if isinstance(response, dict) else str(response)
-                                character_action = CharacterAction.model_validate_json(output)
+                                # Deterministic parsing: agent must return structured_response/output as dict or JSON string.
+                                if isinstance(response, dict):
+                                    payload = response.get("structured_response") or response.get("output") or response.get("result") or response
+                                else:
+                                    payload = response
+
+                                if isinstance(payload, str):
+                                    character_action = CharacterAction.model_validate_json(payload)
+                                elif isinstance(payload, dict):
+                                    character_action = CharacterAction.model_validate(payload)
+                                elif hasattr(payload, "model_dump"):
+                                    character_action = CharacterAction.model_validate(payload.model_dump())
+                                elif hasattr(payload, "dict"):
+                                    character_action = CharacterAction.model_validate(payload.dict())
+                                else:
+                                    raise Exception(f"Unsupported CharacterAction payload type: {type(payload)}")
                             except Exception as e:
-                                self.logger.warning(f"Failed to parse character action for {speaker_name}: {e}")
-                            
+                                self.logger.warning("Failed to parse character action for %s: %s", speaker_name, e)
+                                try:
+                                    await func.report_error(e, f"story.character_action_parse_failed speaker={speaker_name}")
+                                except Exception:
+                                    self.logger.exception("func.report_error failed when reporting character action parse failure")
+    
                             if character_action:
                                 await self._send_story_response(
-                                    channel=message.channel,
+                                    channel=cast(discord.TextChannel, message.channel),
                                     character=speaking_character,
                                     story_instance=story_instance,
                                     content=character_action,
                                 )
                                 event_text = f"{character_action.action or ''} {character_action.dialogue} {character_action.thought or ''}".strip()
                                 full_event_text.append(f"{speaker_name}: {event_text}")
-                                
+    
                                 # The actor's action now becomes the new authoritative state for the next actor.
                                 latest_location = character_action.location
                                 latest_date = character_action.date
                                 latest_time = character_action.time
                             else:
-                                self.logger.warning(f"Failed to generate action for character '{speaker_name}'.")
+                                self.logger.warning("Failed to generate action for character '%s'.", speaker_name)
 
                         event_text_for_log = "\n".join(full_event_text) if full_event_text else f"({gm_plan.event_summary})"
 
@@ -422,7 +503,7 @@ class StoryManager:
                 story_instance.current_time = latest_time
                 self.logger.info(f"State updated by actor's final action: Loc={story_instance.current_location}, Date={story_instance.current_date}, Time={story_instance.current_time}")
                 
-                await self._update_relationships(db, story_instance.channel_id, gm_plan.relationships_update)
+                await self._update_relationships(db, story_instance.channel_id, gm_plan.relationships_update or [])
                 
                 updated_instance = story_instance
                 
@@ -457,18 +538,25 @@ class StoryManager:
         self.logger.info(f"Generating summary for story in channel {channel.id}")
         try:
             # Fetch last 30 messages for context
-            history_messages = [msg async for msg in channel.history(limit=30)]
+            assert isinstance(channel, discord.TextChannel), "channel must be a TextChannel for history access"
+            history_messages = [msg async for msg in cast(discord.TextChannel, channel).history(limit=30)]
             history_messages.reverse()
+            assert self.bot.user is not None, "bot.user must not be None"
+            bot_user_id = cast(int, self.bot.user.id)
 
             # Format history into the required List[Dict[str, str]] format
             dialogue_history = []
             for msg in history_messages:
                 content = msg.content
                 role = "user"
-                if msg.author.id == self.bot.user.id and msg.embeds:
+                author = cast(discord.abc.User, msg.author)
+                # Deterministic: ensure author.id is present and use a concrete int for comparisons
+                assert getattr(author, "id", None) is not None, "message author id must not be None"
+                author_id = cast(int, author.id)
+                if author_id == bot_user_id and msg.embeds:
                     content = msg.embeds[0].description or ""
                     role = "assistant"
-                elif msg.author.id != self.bot.user.id:
+                elif author_id != bot_user_id:
                     role = "user"
                 
                 if content.strip():
@@ -493,12 +581,10 @@ class StoryManager:
             # Call summary model via ModelManager + LangChain create_agent
             story_summary_model, fallback = ModelManager().get_model("story_summary_model")
             agent = create_agent(story_summary_model, tools=[], system_prompt=summary_system_prompt, middleware=[fallback])
-            response = await agent.ainvoke({
-                "messages": [HumanMessage(content=summary_inst), dialogue_history],
-            })
+            response = await agent.ainvoke(cast(Any, {"messages": [HumanMessage(content=summary_inst), dialogue_history]}))
             summary_text = ""
-            if isinstance(response, dict) and "output" in response:
-                summary_text = str(response["output"]).strip()
+            if isinstance(response, dict) and ("structured_response" in response or "output" in response):
+                summary_text = str(response.get("structured_response") or response.get("output")).strip()
             else:
                 summary_text = str(response).strip()
 
@@ -553,12 +639,10 @@ class StoryManager:
             # Call outline model via ModelManager + LangChain create_agent
             story_outline_model, fallback = ModelManager().get_model("story_outline_model")
             agent = create_agent(story_outline_model, tools=[], system_prompt=outline_system_prompt, middleware=[fallback])
-            response = await agent.ainvoke({
-                "messages": [outline_inst, dialogue_history],
-            })
+            response = await agent.ainvoke(cast(Any, {"messages": [outline_inst, dialogue_history]}))
             outline_text = ""
-            if isinstance(response, dict) and "output" in response:
-                outline_text = str(response["output"]).strip()
+            if isinstance(response, dict) and ("structured_response" in response or "output" in response):
+                outline_text = str(response.get("structured_response") or response.get("output")).strip()
             else:
                 outline_text = str(response).strip()
 
@@ -586,7 +670,9 @@ class StoryManager:
         Handles the logic of starting a new story, creating the instance,
         and generating the first scene.
         """
-        db = self._get_db(interaction.guild_id)
+        assert interaction.guild_id is not None, "interaction.guild_id must not be None"
+        assert interaction.channel_id is not None, "interaction.channel_id must not be None"
+        db = self._get_db(cast(int, interaction.guild_id))
         world = db.get_world(world_name)
         if not world:
             self.logger.error(f"FATAL: Could not find world '{world_name}' during story start.")
@@ -597,8 +683,8 @@ class StoryManager:
             # This is the standard path with a narrator
             self.logger.info(f"Starting story '{world_name}' with narrator.")
             story_instance = StoryInstance(
-                channel_id=interaction.channel_id,
-                guild_id=interaction.guild_id,
+                channel_id=cast(int, interaction.channel_id),
+                guild_id=cast(int, interaction.guild_id),
                 world_name=world_name,
                 current_date=initial_date,
                 current_time=initial_time,
@@ -635,8 +721,8 @@ class StoryManager:
 
             self.logger.info("Preparing to create StoryInstance...")
             story_instance = StoryInstance(
-                channel_id=interaction.channel_id,
-                guild_id=interaction.guild_id,
+                channel_id=cast(int, interaction.channel_id),
+                guild_id=cast(int, interaction.guild_id),
                 world_name=world_name,
                 current_date=initial_date,
                 current_time=initial_time,
@@ -661,10 +747,12 @@ class StoryManager:
         Generates the introductory scene for a new story using the v5 architecture.
         """
         self.logger.info(f"V5: Generating first scene for story in channel {interaction.channel_id}")
-        db = self._get_db(interaction.guild.id)
+        assert interaction.guild is not None, "interaction.guild must not be None"
+        db = self._get_db(cast(int, interaction.guild.id))
         world = db.get_world(story_instance.world_name)
-        
-        async with interaction.channel.typing():
+        assert world is not None, "world must be found for story start"
+
+        async with cast(discord.TextChannel, interaction.channel).typing():
             try:
                 # --- Step 1: Build the prompt for the GM to start the story ---
                 characters = self.character_db.get_characters_by_ids(story_instance.active_character_ids)
@@ -675,30 +763,50 @@ class StoryManager:
                 story_gm_model, fallback = ModelManager().get_model("story_gm_model")
                 agent = create_agent(story_gm_model, tools=[], system_prompt=gm_prompt, response_format=GMActionPlan, middleware=[fallback])
                 message_list = [HumanMessage("You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.")]
-                response = await agent.ainvoke({
-                    "messages": message_list,
-                })
-                
-                gm_plan = None
+                response = await agent.ainvoke(cast(Any, {"messages": message_list}))
 
-                gm_plan = response.get("structured_response")
+                gm_plan = None
+                try:
+                    resp_payload = None
+                    if isinstance(response, dict):
+                        resp_payload = response.get("structured_response") or response.get("output") or response.get("result") or response
+                    else:
+                        resp_payload = response
+
+                    if isinstance(resp_payload, str):
+                        gm_plan = GMActionPlan.model_validate_json(resp_payload)
+                    elif isinstance(resp_payload, dict):
+                        gm_plan = GMActionPlan.model_validate(resp_payload)
+                    elif hasattr(resp_payload, "model_dump"):
+                        gm_plan = GMActionPlan.model_validate(resp_payload.model_dump())
+                    elif hasattr(resp_payload, "dict"):
+                        gm_plan = GMActionPlan.model_validate(resp_payload.dict())
+                    else:
+                        raise Exception(f"Unsupported GMActionPlan payload type: {type(resp_payload)}")
+                except Exception as e:
+                    self.logger.error("Failed to parse GMActionPlan from agent response (first scene): %s", e)
+                    try:
+                        await func.report_error(e, "story.gm_action_parse_failed_first_scene")
+                    except Exception:
+                        self.logger.exception("func.report_error failed when reporting gm_action_parse_failed_first_scene")
+                    raise
 
                 # --- Step 3: Update World State & Relationships (if any) ---
                 updated_instance = await self.state_manager.update_state_from_gm_plan(story_instance, gm_plan)
-                await self._update_relationships(db, updated_instance.channel_id, gm_plan.relationships_update)
-
+                await self._update_relationships(db, updated_instance.channel_id, gm_plan.relationships_update or [])
+ 
                 # --- Step 4: Record the opening event ---
-                await self._record_event(db, world, updated_instance, gm_plan, gm_plan.narration_content)
+                await self._record_event(db, world, updated_instance, gm_plan, gm_plan.narration_content or "")
                 
                 # Save the final state of the instance
                 db.save_story_instance(updated_instance)
-
+ 
                 # --- Step 5: Send the opening narration to the channel ---
                 await self._send_story_response(
-                    channel=interaction.channel,
+                    channel=cast(discord.TextChannel, interaction.channel),
                     character=None,  # Narrator speaks first
                     story_instance=updated_instance,
-                    content=gm_plan.narration_content,
+                    content=gm_plan.narration_content or "",
                 )
 
                 # --- Step 6: Finalize the public "Story Started" message ---
