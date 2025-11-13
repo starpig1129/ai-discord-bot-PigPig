@@ -9,6 +9,7 @@ channel-level system prompts, and basic message reply functionality.
 
 import asyncio
 import logging
+import time
 from typing import Any, List, Optional, Union, Tuple, AsyncIterator, Iterator
 
 import discord
@@ -25,7 +26,7 @@ _ALLOWED_MENTIONS = discord.AllowedMentions(
     replied_user=True
 )
 
-_BUFFER_SIZE = 20  # Stream buffer size for message updates
+_UPDATE_INTERVAL = 0.5  # Update message rate limit
 _HARD_LIMIT = 2000  # Hard limit for Discord message length
 _MAX_RETRIES = 3  # Maximum number of retry attempts
 
@@ -190,9 +191,10 @@ async def _process_token_stream(
     current_message: discord.Message,
     channel: discord.abc.Messageable,
     message: discord.Message,
-    lang_manager
+    lang_manager,
+    update_interval: float = _UPDATE_INTERVAL
 ) -> Tuple[str, discord.Message]:
-    """Processes token stream and updates Discord messages.
+    """Processes token stream and updates Discord messages based on time interval.
     
     Args:
         streamer: Token stream (async or sync iterator).
@@ -201,58 +203,78 @@ async def _process_token_stream(
         channel: Discord channel for sending messages.
         message: Original Discord message for context.
         lang_manager: Language manager for translations.
+        update_interval: Time interval (seconds) between message updates.
         
     Returns:
         Tuple of (full message result, final Discord message).
     """
-    responses = ''  # Small buffer for incoming tokens
-    responsesall = ''  # Accumulated text for current message block
-    message_result = ''  # Full result as returned to caller
+    message_result = ''  # Full accumulated result
+    current_block = ''  # Current message block content
+    last_update_time = time.time()  # Track last update time
+    pending_content = ''  # Content waiting to be sent
     
-    async def process_item(token, metadata):
-        nonlocal responses, responsesall, message_result, current_message
+    async def should_update() -> bool:
+        """Check if enough time has passed since last update."""
+        return time.time() - last_update_time >= update_interval
+    
+    async def update_message():
+        """Update Discord message with current content."""
+        nonlocal last_update_time, pending_content, current_block, current_message
         
+        if not pending_content:
+            return
         
-        # 提取文字 token
-        if hasattr(token, "content") and token.content:
-            token_str = str(token.content)
-            responses += token_str
-            message_result += token_str
-            
-            # 達到緩衝區大小時更新
-            if len(responses) >= _BUFFER_SIZE:
-                responsesall += responses
-                converted = (converter.convert(responsesall) 
-                            if converter else responsesall)
-                
-                # 處理訊息長度限制
-                if len(converted) > _HARD_LIMIT:
-                    processing_msg = _get_processing_message(
-                        message, lang_manager, 'continuation'
-                    )
-                    current_message = await _safe_send_message(
-                        channel, processing_msg
-                    )
-                    responsesall = ''
-                    converted = ''
-
-                if converted and (len(converted) != 0) <= _HARD_LIMIT:
-                    await safe_edit_message(current_message, converted)
-                
-                responses = ''  # 清空緩衝區
-                await asyncio.sleep(0)
+        current_block += pending_content
+        converted = (converter.convert(current_block) 
+                    if converter else current_block)
+        
+        # Check if message exceeds Discord limit
+        if len(converted) > _HARD_LIMIT:
+            # Send continuation message
+            processing_msg = _get_processing_message(
+                message, lang_manager, 'continuation'
+            )
+            current_message = await _safe_send_message(
+                channel, processing_msg
+            )
+            current_block = pending_content  # Start new block with pending content
+            converted = (converter.convert(current_block) 
+                        if converter else current_block)
+        
+        # Update the message
+        if converted:
+            await safe_edit_message(current_message, converted)
+        
+        pending_content = ''
+        last_update_time = time.time()
     
-
-    async for token, metadata in streamer:
-        await process_item(token, metadata)
+    try:
+        async for token, metadata in streamer:
+            # Extract text token
+            if hasattr(token, "content") and token.content:
+                token_str = str(token.content)
+                message_result += token_str
+                pending_content += token_str
+                
+                # Update message if enough time has passed
+                if await should_update():
+                    await update_message()
+        
+        # Send any remaining content
+        if pending_content:
+            await update_message()
+        
+        return message_result, current_message
     
-    # Handle remaining buffered tokens
-    if responses:
-        responsesall += responses
-        converted = (converter.convert(responsesall) 
-                            if converter else responsesall)
-        await safe_edit_message(current_message, converted)
-    return responsesall,current_message
+    except Exception as exc:
+        _logger.error('Error in token stream processing: %s', exc)
+        # Try to send any accumulated content before raising
+        if pending_content:
+            try:
+                await update_message()
+            except Exception as update_exc:
+                _logger.error('Failed to send final update: %s', update_exc)
+        raise
 
 
 async def send_message(
@@ -260,18 +282,20 @@ async def send_message(
     message_to_edit: Optional[discord.Message],
     message: discord.Message,
     streamer: AsyncIterator,
+    update_interval: float = _UPDATE_INTERVAL
 ) -> str:
-    """Consumes a token stream and updates Discord messages with buffering.
+    """Consumes a token stream and updates Discord messages with time-based updates.
     
-    This function is compatible with both synchronous and asynchronous iterables
-    returned by agent.stream(...). It accumulates tokens in a small buffer and
-    periodically edits the current Discord message. When the message grows beyond
-    a hard limit, it creates a new continuation message.
+    This function processes tokens from the stream and updates Discord messages
+    at regular intervals to avoid rate limiting. When the message grows beyond
+    the Discord character limit, it creates a new continuation message.
     
     Args:
+        bot: Discord bot instance.
         message_to_edit: Optional existing message to edit. If None, creates new.
         message: Original Discord message for context and channel information.
         streamer: Token stream iterator (async or sync).
+        update_interval: Time interval (seconds) between message updates.
         
     Returns:
         Full message result string.
@@ -302,17 +326,18 @@ async def send_message(
         current_message = await _safe_send_message(channel, processing_message)
     
     try:
-        # Process token stream
-        responsesall, current_message = await _process_token_stream(
+        # Process token stream with time-based updates
+        message_result, current_message = await _process_token_stream(
             streamer,
             converter,
             current_message,
             channel,
             message,
-            lang_manager
+            lang_manager,
+            update_interval
         )
 
-        return responsesall
+        return message_result
 
     except Exception as exc:
         await func.report_error(exc, 'Error generating GPT response')
