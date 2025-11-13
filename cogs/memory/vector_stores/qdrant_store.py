@@ -46,7 +46,32 @@ class QdrantStore(VectorStoreInterface):
 
         try:
             self.client = QdrantClient(url=qdrant_url, api_key=api_key, timeout=60)
-            
+            # Log basic connection info (do not log api_key)
+            logger.debug(
+                "Qdrant client initialized (url=%s, collection=%s, embedding_dim=%d)",
+                qdrant_url,
+                self.collection_name,
+                self.embedding_dim,
+            )
+
+            try:
+                exists = self.client.collection_exists(self.collection_name)
+                logger.debug("Qdrant collection exists=%s for %s", exists, self.collection_name)
+                if not exists:
+                    logger.info("Creating Qdrant collection: %s", self.collection_name)
+                    self.client.create_collection(
+                        collection_name=self.collection_name,
+                        vectors_config=VectorParams(
+                            size=self.embedding_dim,
+                            distance=Distance.COSINE
+                        ),
+                    )
+                    logger.info("Created Qdrant collection: %s", self.collection_name)
+            except Exception as e:
+                logger.exception("Failed while ensuring Qdrant collection exists")
+                asyncio.create_task(self._report_error(e))
+                raise VectorOperationError("Failed to ensure Qdrant collection") from e
+
             # Initialize LangChain QdrantVectorStore
             self.vector_store = QdrantVectorStore(
                 client=self.client,
@@ -58,19 +83,23 @@ class QdrantStore(VectorStoreInterface):
             raise VectorOperationError("Failed to initialize Qdrant") from e
 
     async def ensure_storage(self) -> None:
-        """Ensure collection exists with proper configuration."""
+        """Ensure payload indexes exist.
+
+        Collection creation is handled in __init__ to avoid langchain-qdrant
+        raising 404 when the collection is missing during QdrantVectorStore init.
+        """
         try:
+            # Ensure collection exists before creating indexes; if not, log and return.
             if not self.client.collection_exists(self.collection_name):
-                self.client.create_collection(
-                    collection_name=self.collection_name,
-                    vectors_config=VectorParams(
-                        size=self.embedding_dim,
-                        distance=Distance.COSINE
-                    ),
+                logger.warning(
+                    "ensure_storage: collection %s does not exist; skipping index creation",
+                    self.collection_name,
                 )
-            
-            # Create payload indexes for filtering
+                return
+
+            # Create payload indexes for filtering (idempotent)
             from qdrant_client.models import PayloadSchemaType
+
             try:
                 self.client.create_payload_index(
                     collection_name=self.collection_name,
@@ -83,7 +112,7 @@ class QdrantStore(VectorStoreInterface):
                     field_schema=PayloadSchemaType.KEYWORD,
                 )
             except Exception:
-                pass  # Indexes may already exist
+                logger.debug("Payload indexes may already exist for collection %s", self.collection_name)
         except Exception as e:
             asyncio.create_task(self._report_error(e))
             raise VectorOperationError("Failed to ensure storage") from e
