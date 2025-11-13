@@ -2,7 +2,8 @@
 # enabled: whether to enable the memory / episodic memory subsystem.
 # If false, all memory-related components will not be instantiated or initialized.
 enabled: true
-user_data_path: data/memory/memory.db # Path to user data file
+procedural_data_path: data/memory/procedural.db # Path to procedural data file
+episodic_data_path: data/memory/episodic.db # Path to episodic memory file
 vector_store_type: qdrant # options: qdrant, faiss, sqlite, in_memory
 qdrant_url: http://localhost:6333 # Qdrant HTTP endpoint
 qdrant_api_key: null # API key for Qdrant if needed, or null
