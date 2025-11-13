@@ -34,6 +34,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from youtube_search import YoutubeSearch
 import random
 import os
+import json
 
 from addons.settings import llm_config
 from cogs.eat.db.db import DB
@@ -76,15 +77,46 @@ class InternetSearchCog(commands.Cog):
             app_commands.Choice(name="eat", value="eat"),
         ]
     )
-    async def search_command(self, interaction: discord.Interaction,type: app_commands.Choice[str] = 'general', query: str = ''):
+    async def search_command(self, interaction: discord.Interaction, type: app_commands.Choice[str] = 'general', query: str = ''):
         """Slash command wrapper for internet_search.
-
+    
         Delegates to internet_search and returns the textual result if available.
+        Ensures Discord message length limits are respected by splitting long
+        markdown outputs into multiple followups.
         """
         await interaction.response.defer(thinking=True)
         selected_type = type.value if type else "general"
         guild_id = str(interaction.guild_id) if interaction.guild_id is not None else None
-
+    
+        def _split_markdown(md: str, limit: int = 1900) -> list:
+            """Split markdown text into chunks not exceeding `limit` chars.
+    
+            Splits on line boundaries to avoid breaking markdown formatting.
+            """
+            if not md:
+                return []
+            lines = md.splitlines(keepends=True)
+            chunks = []
+            cur = ""
+            for ln in lines:
+                if len(cur) + len(ln) > limit:
+                    if cur:
+                        chunks.append(cur)
+                    # If single line itself is longer than limit, hard-split it
+                    if len(ln) > limit:
+                        start = 0
+                        while start < len(ln):
+                            chunks.append(ln[start:start + limit])
+                            start += limit
+                        cur = ""
+                    else:
+                        cur = ln
+                else:
+                    cur += ln
+            if cur:
+                chunks.append(cur)
+            return chunks
+    
         try:
             result = await self.internet_search(
                 ctx=interaction,
@@ -93,8 +125,25 @@ class InternetSearchCog(commands.Cog):
                 message_to_edit=None,
                 guild_id=guild_id,
             )
+    
             if isinstance(result, str):
-                await interaction.followup.send(content=result)
+                # Respect Discord's 2000-char limit by splitting into followups
+                chunks = _split_markdown(result, limit=1900)
+                try:
+                    if not chunks:
+                        await interaction.followup.send(content=result[:1900])
+                    else:
+                        for chunk in chunks:
+                            await interaction.followup.send(content=chunk)
+                except Exception as send_err:
+                    # Report and attempt a concise fallback message
+                    await func.report_error(send_err, f"search_command send followup failed: {send_err}")
+                    try:
+                        short = (result[:1900] + "...") if len(result) > 1900 else result
+                        await interaction.followup.send(content=short)
+                    except Exception:
+                        # Give up silently to avoid raising further in the command handler
+                        pass
             else:
                 # Cog handled messaging (embed/view). Send a minimal localized confirmation if available.
                 try:
@@ -106,8 +155,12 @@ class InternetSearchCog(commands.Cog):
                         "search_complete",
                         query=query
                     ) if self.lang_manager else f"Search for '{query}' completed."
+                    # Trim confirmation if unexpectedly long
+                    if len(confirmation) > 1900:
+                        confirmation = confirmation[:1897] + "..."
                     await interaction.followup.send(content=confirmation)
-                except Exception:
+                except Exception as notify_err:
+                    await func.report_error(notify_err, f"search_command confirmation send failed: {notify_err}")
                     # Silently ignore notification failures to avoid interrupting flow
                     pass
         except Exception as e:
@@ -181,36 +234,19 @@ class InternetSearchCog(commands.Cog):
                 type=search_type
             )
             return error_message
-    def add_citations(self, response):
-        text = response.text
-        supports = response.candidates[0].grounding_metadata.grounding_supports
-        chunks = response.candidates[0].grounding_metadata.grounding_chunks
-
-        # Sort supports by end_index in descending order to avoid shifting issues when inserting.
-        sorted_supports = sorted(supports, key=lambda s: s.segment.end_index, reverse=True)
-
-        for support in sorted_supports:
-            end_index = support.segment.end_index
-            if support.grounding_chunk_indices:
-                # Create citation string like [1](link1)[2](link2)
-                citation_links = []
-                for i in support.grounding_chunk_indices:
-                    if i < len(chunks):
-                        uri = chunks[i].web.uri
-                        citation_links.append(f"[{i + 1}]({uri})")
-
-                citation_string = ", ".join(citation_links)
-                text = text[:end_index] + citation_string + text[end_index:]
-
-        return text
 
     async def google_search(self, ctx, query, message_to_edit=None):
-        """Perform a web search using Gemini grounding. Fall back to legacy Selenium scraping on error.
+        """Perform a web search using Gemini grounding, with a structured-system prompt.
 
-        This implementation attempts to call the Google GenAI (Gemini) client to perform
-        a grounding-enabled web search and return a synthesized answer. If the environment
-        does not provide an API key or the Gemini call fails, it reports the error via
-        func.report_error and falls back to the original Selenium-based scraping logic.
+        Behaviour:
+        - If a Gemini/Google API key is available the cog will call the Gemini grounding
+        search agent and instruct it (via a system prompt) to return a structured JSON
+        response containing a concise answer and a list of sources.
+        - If the Gemini call fails for any reason, the function falls back to the
+        original Selenium scraping implementation so the bot remains functional.
+
+        The agent is also instructed to prefer recent, authoritative sources and to
+        include inline grounding citations which will be post-processed by add_citations.
         """
 
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -225,31 +261,109 @@ class InternetSearchCog(commands.Cog):
             google_search=types.GoogleSearch()
         )
 
-        config = types.GenerateContentConfig(
-            tools=[grounding_tool]
+        # System prompt to instruct Gemini grounding agent to behave as a structured web
+        system_prompt = (
+            "You are a web research agent. Perform a grounding-enabled web search for the user's "
+            "query and synthesize a concise, accurate answer. Prefer official and recent sources. "
+            "Return the final output directly in Discord markdown format with these sections:\n\n"
+            "**Answer:** One short paragraph.\n\n"
+            "**Highlights:** Bullet list of up to 5 concise points.\n\n"
         )
+
+        # Combine system prompt and user query into a single contents payload so the agent
+        # understands both the instruction and the search target.
+        contents = f"{system_prompt}\n\nUser query: {query}"
+
+        config = types.GenerateContentConfig(
+            tools=[grounding_tool, {"url_context": {}}]
+        )
+
         try:
             def call_gemini():
                 try:
+                    # Use generate_content with the composed prompt
                     return client.models.generate_content(
                         model=llm_config.google_search_agent,
-                        contents=query,
+                        contents=contents,
                         config=config
                     )
                 except Exception as inner:
                     raise
 
             response = await asyncio.to_thread(call_gemini)
-            text_output = self.add_citations(response)
-            if text_output:
-                return str(text_output)
 
-            # If no usable text found, treat as failure and fallback
-            raise RuntimeError("Failed to extract text from Gemini grounding response")
+            if not response:
+                raise RuntimeError("Failed to extract text from Gemini grounding response")
+
+            # Extract the main text content
+            result_text = str(response.text)
+            
+            # Extract grounding metadata and append sources
+            sources_text = self._extract_sources_from_grounding(response)
+            if sources_text:
+                result_text += f"\n\n{sources_text}"
+            
+            return result_text
+
         except Exception as e:
             await func.report_error(e, f"google_search gemini grounding: {e}")
             # Fallback: run legacy scraping to ensure the bot still returns useful results
             return await self._legacy_google_search(ctx, query, message_to_edit)
+
+
+    def _extract_sources_from_grounding(self, response):
+        """Extract source URLs and titles from Gemini grounding metadata.
+        
+        Args:
+            response: The Gemini API response object
+            
+        Returns:
+            A formatted markdown string with sources, or empty string if no sources found
+        """
+        try:
+            # Navigate through the response structure to find grounding metadata
+            if not hasattr(response, 'candidates') or not response.candidates:
+                return ""
+            
+            candidate = response.candidates[0]
+            
+            # Check if grounding_metadata exists
+            if not hasattr(candidate, 'grounding_metadata'):
+                return ""
+            
+            grounding_metadata = candidate.grounding_metadata
+            
+            # Extract grounding chunks (sources)
+            if not hasattr(grounding_metadata, 'grounding_chunks') or not grounding_metadata.grounding_chunks:
+                return ""
+            
+            sources = []
+            seen_urls = set()  # To avoid duplicate sources
+            
+            for chunk in grounding_metadata.grounding_chunks:
+                if hasattr(chunk, 'web') and chunk.web:
+                    uri = getattr(chunk.web, 'uri', None)
+                    title = getattr(chunk.web, 'title', None)
+                    
+                    if uri and uri not in seen_urls:
+                        seen_urls.add(uri)
+                        # Format: [title](url) or just [url](url) if no title
+                        display_text = title if title else uri
+                        sources.append(f"- [{display_text}]({uri})")
+            
+            if not sources:
+                return ""
+            
+            # Format sources section
+            sources_section = "**Sources:**\n" + "\n".join(sources)
+            return sources_section
+            
+        except Exception as e:
+            # Log the error but don't fail the entire search
+            print(f"Warning: Failed to extract sources from grounding metadata: {e}")
+            asyncio.create_task(func.report_error(e, f"google_search grounding metadata extraction: {e}"))
+            return ""
+
 
     async def _legacy_google_search(self, ctx, query, message_to_edit=None):
         """Original Selenium-based Google scraping preserved as a fallback."""

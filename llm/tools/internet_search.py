@@ -75,69 +75,78 @@ class InternetSearchTools:
             search_type: Literal[
                 "general", "youtube", "eat"
             ] = "general",
+            search_instructions: str = ""
         ) -> str:
             """Performs an internet search and records Gemini grounding usage.
-
-            Behaviour:
-            - Detects whether a Gemini API key exists in the environment.
-            - Logs the preferred provider (gemini vs selenium fallback).
-            - Delegates the actual search to InternetSearchCog.internet_search.
-            - Measures duration and reports errors via func.report_error.
-
+    
+            Guidance for model callers:
+            - This tool will invoke a grounding-enabled search agent (Gemini) when an API key
+              is available. The model may therefore provide *search instructions* to influence
+              the agent behaviour (for example: "prefer official sources", "only use sources
+              from the last 2 years", "return output as JSON with keys answer/sources/highlights").
+            - If you supply structured search instructions, pass them via the 'search_instructions'
+              parameter. The tool will prepend those instructions to the user's query when
+              delegating to the cog.
+    
             Args:
                 query: The search query string to process.
                 search_type: The type of search to perform.
-
+                search_instructions: Optional short instructions for the grounding agent.
+    
             Returns:
-                A string result from the cog or a confirmation message.
+                A string result from the cog or a confirmation message. When possible the
+                returned string is prefixed with provider and duration metadata for observability.
             """
             logger = getattr(runtime, "logger", _logger)
-            logger.info("Tool 'internet_search' called", extra={"query": query, "search_type": search_type})
-
+            logger.info("Tool 'internet_search' called", extra={"query": query, "search_type": search_type, "search_instructions": bool(search_instructions)})
+    
             # Determine preferred provider based on environment
             gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
             preferred_provider = "gemini" if gemini_key else "selenium"
             logger.debug("Preferred search provider determined", extra={"preferred_provider": preferred_provider})
-
+    
             # Retrieve bot instance from runtime
             bot = getattr(runtime, "bot", None)
             if not bot:
                 logger.error("Bot instance not available in runtime.")
                 return "Error: Bot instance not available."
-
+    
             # Retrieve InternetSearchCog
             cog = bot.get_cog("InternetSearchCog")
             if not cog:
                 msg = "Error: InternetSearchCog not found."
                 logger.error(msg)
                 return msg
-
+    
             # Extract message and guild information
             message = getattr(runtime, "message", None)
             message_to_edit = getattr(runtime, "message_to_edit", None)
             guild_id = None
             if message and getattr(message, "guild", None):
                 guild_id = str(message.guild.id)
-
+    
+            # If the higher-level model provided search instructions, prepend them to the query
+            query_to_pass = f"{search_instructions}\n\n{query}" if search_instructions else query
+    
             start_ts = time.time()
             try:
-                # Pass through to the cog which now prefers Gemini grounding internally.
+                # Pass through to the cog which prefers Gemini grounding internally.
                 result = await cog.internet_search(
                     ctx=message,
-                    query=query,
+                    query=query_to_pass,
                     search_type=search_type,
                     message_to_edit=message_to_edit,
                     guild_id=guild_id,
                 )
-
+    
                 duration = time.time() - start_ts
                 used_provider = preferred_provider  # best-effort; cog makes final decision
                 logger.info("Internet search finished", extra={"query": query, "search_type": search_type, "duration_s": duration, "used_provider": used_provider})
-
+    
                 if isinstance(result, str):
                     # Attach metadata about provider to the returned string for observability
                     return f"[provider={used_provider} duration={duration:.2f}s] {result}"
-
+    
                 # If cog handled messaging (embeds, views), return confirmation
                 logger.info("Internet search completed and handled by cog", extra={"query": query, "search_type": search_type})
                 return f"[provider={used_provider} duration={duration:.2f}s] Search for '{query}' ({search_type}) completed successfully."
