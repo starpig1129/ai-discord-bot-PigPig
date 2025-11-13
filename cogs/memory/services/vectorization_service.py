@@ -100,7 +100,7 @@ class VectorizationService:
                     "timestamp": float(row.get("timestamp")) if row.get("timestamp") is not None else None,
                     "reactions_json": json.dumps(row.get("reactions")) if row.get("reactions") is not None else None,
                 }
-
+ 
                 # Build jump_url when guild/channel/message ids exist
                 try:
                     if metadata["guild_id"] is not None and metadata["channel_id"] is not None:
@@ -109,7 +109,66 @@ class VectorizationService:
                         )
                 except Exception:
                     metadata["jump_url"] = None
-
+ 
+                # Diagnostic logging: record original row keys and prepared metadata shape/contents
+                try:
+                    required_meta_keys = [
+                        "fragment_id",
+                        "source_message_ids",
+                        "jump_url",
+                        "author_id",
+                        "channel_id",
+                        "guild_id",
+                        "timestamp",
+                        "reactions_json",
+                    ]
+                    # keys present in the raw row (limit to first 50 for safety)
+                    raw_row_keys = list(row.keys())[:50] if isinstance(row, dict) else None
+                    # which of the expected columns are missing from the raw row
+                    expected_row_columns = ["content", "user_id", "channel_id", "guild_id", "timestamp", "reactions"]
+                    missing_row_columns = [k for k in expected_row_columns if not (isinstance(row, dict) and k in row)]
+                    # which required metadata keys are missing or have None value
+                    missing_meta_keys = [k for k in required_meta_keys if k not in metadata]
+                    none_meta_keys = [k for k, v in metadata.items() if k in required_meta_keys and v is None]
+ 
+                    logger.debug(
+                        "Vectorization prepare fragment mid=%s raw_row_keys=%s missing_row_columns=%s prepared_metadata_keys=%s missing_required_meta_keys=%s none_valued_meta_keys=%s",
+                        mid,
+                        raw_row_keys,
+                        missing_row_columns,
+                        list(metadata.keys()),
+                        missing_meta_keys,
+                        none_meta_keys,
+                    )
+                except Exception:
+                    # Keep diagnostics non-fatal
+                    logger.exception("Failed to emit diagnostic logs for vectorization metadata preparation")
+ 
+                # Normalization: ensure required metadata keys are present and not None to avoid Qdrant
+                # stripping None fields. We intentionally normalize only the minimal set to preserve
+                # original semantics while making payloads robust.
+                try:
+                    for k in required_meta_keys:
+                        if k not in metadata or metadata.get(k) is None:
+                            if k == "source_message_ids":
+                                metadata[k] = [mid]
+                            elif k == "fragment_id":
+                                metadata[k] = f"msg-{mid}"
+                            elif k == "timestamp":
+                                # preserve numeric type where possible; fall back to 0.0
+                                try:
+                                    metadata[k] = float(row.get("timestamp")) if row.get("timestamp") is not None else 0.0
+                                except Exception:
+                                    metadata[k] = 0.0
+                            else:
+                                # Use empty string for textual fields (jump_url, author_id, channel_id, guild_id, reactions_json)
+                                metadata[k] = ""
+                    # Log what normalization did (non-sensitive, structural only)
+                    logger.debug("Vectorization normalized metadata for mid=%s normalized_keys=%s", mid,
+                                 {k: metadata.get(k) for k in required_meta_keys})
+                except Exception:
+                    logger.exception("Failed normalizing metadata for mid=%s", mid)
+ 
                 frag = MemoryFragment(
                     id=str(mid),
                     content=content,

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+import logging
+logger = logging.getLogger(__name__)
 QDRANT_UUID_NAMESPACE = uuid.UUID('a1b2c3d4-e5f6-7890-1234-567890abcdef')
 from typing import Any, Dict, List, Optional, cast
 
@@ -230,7 +232,7 @@ class QdrantStore(VectorStoreInterface):
                     point_id = str(uuid.uuid4())
                 else:
                     point_id = str(uuid.uuid5(QDRANT_UUID_NAMESPACE, message_id_str))
-
+ 
                 # Merge summary + metadata into payload
                 payload: Dict[str, Any] = {"summary": mem.content}
                 # Guarantee metadata is a dict
@@ -240,13 +242,41 @@ class QdrantStore(VectorStoreInterface):
                 else:
                     # If metadata is not a dict, store it under 'metadata' key
                     payload["metadata"] = metadata
-
+ 
                 # include author_id/channel_id top-level if present (helps filtering & indexing)
                 if "author_id" in payload:
                     payload["author_id"] = str(payload["author_id"])
                 if "channel_id" in payload:
                     payload["channel_id"] = str(payload["channel_id"])
-
+ 
+                # Diagnostic: log payload key presence and any required keys missing or None values
+                try:
+                    required = [
+                        'fragment_id',
+                        'source_message_ids',
+                        'jump_url',
+                        'author_id',
+                        'channel_id',
+                        'guild_id',
+                        'timestamp',
+                        'reactions_json'
+                    ]
+                    # inspect payload keys and identify missing/None-valued keys
+                    payload_keys = list(payload.keys())
+                    missing_keys = [k for k in required if k not in payload]
+                    none_valued = [k for k, v in payload.items() if k in required and v is None]
+                    # log only first 20 items to avoid excessive logs during batch upserts
+                    logger.debug(
+                        "Prepared point id=%s payload_keys=%s missing_required_keys=%s none_valued_required_keys=%s",
+                        point_id,
+                        payload_keys[:20],
+                        missing_keys,
+                        none_valued,
+                    )
+                except Exception:
+                    # Keep diagnostics non-fatal; do not interfere with upload path
+                    logger.exception("Failed while computing diagnostics for payload before upsert")
+ 
                 point = PointStruct(id=point_id, vector=vec, payload=payload)
                 points.append(point)
 
@@ -417,7 +447,7 @@ class QdrantStore(VectorStoreInterface):
                     collection_name=self.collection_name,
                     limit=k,
                     offset=0,
-                    filter=q_filter,
+                    scroll_filter=q_filter,
                     with_payload=True,
                 )
     

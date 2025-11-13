@@ -58,9 +58,15 @@ class MemoryFragment:
         missing = [k for k in required_keys if k not in self.metadata]
         if missing:
             # Do not raise here to preserve compatibility with stores that omit fields.
-            # Emit a warning to aid debugging.
+            # Emit a more detailed warning to aid debugging: include fragment id and metadata type/keys.
             import logging
-            logging.getLogger(__name__).warning("MemoryFragment metadata missing keys: %s", missing)
+            logging.getLogger(__name__).warning(
+                "MemoryFragment id=%s metadata_type=%s metadata_keys=%s missing_required_keys=%s",
+                getattr(self, "id", None),
+                type(self.metadata).__name__,
+                list(self.metadata.keys()) if isinstance(self.metadata, dict) else None,
+                missing,
+            )
 
 
 class VectorStoreInterface(ABC):
