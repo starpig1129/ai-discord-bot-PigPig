@@ -249,7 +249,9 @@ async def _process_token_stream(
     # Handle remaining buffered tokens
     if responses:
         responsesall += responses
-    
+        converted = (converter.convert(responsesall) 
+                            if converter else responsesall)
+        await safe_edit_message(current_message, converted)
     return responsesall,current_message
 
 
