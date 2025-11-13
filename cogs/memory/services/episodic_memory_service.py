@@ -311,6 +311,10 @@ class EpisodicMemoryService(commands.Cog):
 
 async def setup(bot: commands.Bot):
     """The setup function for the cog."""
-    # Provide episodic_storage from bot when available; fall back to legacy db_manager if present.
-    storage = getattr(bot, "episodic_storage", None) or getattr(bot, "db_manager", None)
+    # Deterministically require bot.episodic_storage; do not fall back to db_manager.
+    storage = getattr(bot, "episodic_storage", None)
+    if storage is None:
+        log.error("bot.episodic_storage is missing when loading EpisodicMemoryService.")
+        await func.report_error(RuntimeError("EpisodicStorage missing"), "episodic_memory_service_setup")
+        raise RuntimeError("EpisodicStorage missing. Ensure bot.episodic_storage is initialized before loading this cog.")
     await bot.add_cog(EpisodicMemoryService(bot, storage))

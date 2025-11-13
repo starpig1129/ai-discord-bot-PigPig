@@ -12,8 +12,8 @@ from typing import Dict, Optional, Union
 
 from function import func
 from ..exceptions import DatabaseError
+from . import schema
 from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from bot import PigPig
 
@@ -82,12 +82,34 @@ class DatabaseConnection:
                     conn.execute("PRAGMA journal_mode = WAL")
                     conn.execute("PRAGMA synchronous = NORMAL")
 
+                    try:
+                        self.logger.debug("Attempting to create/verify DB schema for %s", str(self.db_path))
+                        schema.create_tables(conn)
+                        try:
+                            conn.commit()
+                        except Exception as commit_exc:
+                            # Some SQLite builds or PRAGMA combinations may make commit unnecessary;
+                            # log at debug level and continue.
+                            self.logger.debug("Commit after schema.create_tables failed or unnecessary: %s", commit_exc)
+                        try:
+                            tables = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+                            self.logger.info("DB schema verified for %s; tables: %s", str(self.db_path), tables)
+                        except Exception as list_exc:
+                            self.logger.debug("Unable to list tables after schema creation: %s", list_exc)
+                    except Exception as se:
+                        # Log and report, but allow connection to be used so errors surface later.
+                        self.logger.warning("Failed to create or verify DB schema: %s", se)
+                        try:
+                            self._report_error_threadsafe(se, "Failed to create DB schema")
+                        except Exception:
+                            self.logger.exception("Failed to report schema creation error thread-safe")
+    
                     self._connections[thread_id] = conn
                 except Exception as e:
                     self.logger.debug("DB except: no loop=%s thread=%s", self._loop is None, threading.get_ident())
                     self._report_error_threadsafe(e, "Failed to create database connection")
                     raise DatabaseError(f"Failed to create database connection: {e}")
-
+    
             conn = self._connections[thread_id]
 
         try:
