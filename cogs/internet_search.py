@@ -20,8 +20,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import discord
-from discord.ext import commands
 from discord import app_commands
+from discord.ext import commands
+from google import genai
+from google.genai import types
 import time
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -33,6 +35,7 @@ from youtube_search import YoutubeSearch
 import random
 import os
 
+from addons.settings import llm_config
 from cogs.eat.db.db import DB
 from cogs.eat.embeds import eatEmbed
 from cogs.eat.providers.googlemap_crawler import GoogleMapCrawler
@@ -61,7 +64,60 @@ class InternetSearchCog(commands.Cog):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    async def internet_search(self, ctx, query: str, search_type: str = "general", message_to_edit: discord.Message = None, guild_id: str = None):
+    @app_commands.command(
+        name="search",
+        description="Search the web using Gemini grounding (preferred) or fallback to legacy scraping"
+    )
+    @app_commands.describe(type="Search type (general, youtube, eat)")
+    @app_commands.choices(
+        type=[
+            app_commands.Choice(name="general", value="general"),
+            app_commands.Choice(name="youtube", value="youtube"),
+            app_commands.Choice(name="eat", value="eat"),
+        ]
+    )
+    async def search_command(self, interaction: discord.Interaction,type: app_commands.Choice[str] = 'general', query: str = ''):
+        """Slash command wrapper for internet_search.
+
+        Delegates to internet_search and returns the textual result if available.
+        """
+        await interaction.response.defer(thinking=True)
+        selected_type = type.value if type else "general"
+        guild_id = str(interaction.guild_id) if interaction.guild_id is not None else None
+
+        try:
+            result = await self.internet_search(
+                ctx=interaction,
+                query=query,
+                search_type=selected_type,
+                message_to_edit=None,
+                guild_id=guild_id,
+            )
+            if isinstance(result, str):
+                await interaction.followup.send(content=result)
+            else:
+                # Cog handled messaging (embed/view). Send a minimal localized confirmation if available.
+                try:
+                    confirmation = self.lang_manager.translate(
+                        guild_id,
+                        "commands",
+                        "internet_search",
+                        "responses",
+                        "search_complete",
+                        query=query
+                    ) if self.lang_manager else f"Search for '{query}' completed."
+                    await interaction.followup.send(content=confirmation)
+                except Exception:
+                    # Silently ignore notification failures to avoid interrupting flow
+                    pass
+        except Exception as e:
+            await func.report_error(e, f"search_command: {e}")
+            try:
+                await interaction.followup.send(content=f"Search failed: {e}")
+            except Exception:
+                pass
+
+    async def internet_search(self, ctx, query: str, search_type: str = "general", message_to_edit: Optional[discord.Message] = None, guild_id: str = ''):
         if message_to_edit:
             searching_message = self.lang_manager.translate(
                 guild_id,
@@ -125,8 +181,78 @@ class InternetSearchCog(commands.Cog):
                 type=search_type
             )
             return error_message
+    def add_citations(self, response):
+        text = response.text
+        supports = response.candidates[0].grounding_metadata.grounding_supports
+        chunks = response.candidates[0].grounding_metadata.grounding_chunks
+
+        # Sort supports by end_index in descending order to avoid shifting issues when inserting.
+        sorted_supports = sorted(supports, key=lambda s: s.segment.end_index, reverse=True)
+
+        for support in sorted_supports:
+            end_index = support.segment.end_index
+            if support.grounding_chunk_indices:
+                # Create citation string like [1](link1)[2](link2)
+                citation_links = []
+                for i in support.grounding_chunk_indices:
+                    if i < len(chunks):
+                        uri = chunks[i].web.uri
+                        citation_links.append(f"[{i + 1}]({uri})")
+
+                citation_string = ", ".join(citation_links)
+                text = text[:end_index] + citation_string + text[end_index:]
+
+        return text
 
     async def google_search(self, ctx, query, message_to_edit=None):
+        """Perform a web search using Gemini grounding. Fall back to legacy Selenium scraping on error.
+
+        This implementation attempts to call the Google GenAI (Gemini) client to perform
+        a grounding-enabled web search and return a synthesized answer. If the environment
+        does not provide an API key or the Gemini call fails, it reports the error via
+        func.report_error and falls back to the original Selenium-based scraping logic.
+        """
+
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            err = RuntimeError("Gemini API key not found in environment (GEMINI_API_KEY or GOOGLE_API_KEY)")
+            await func.report_error(err, "google_search: missing Gemini API key")
+            # Fallback to legacy scraping to preserve functionality
+            return await self._legacy_google_search(ctx, query, message_to_edit)
+
+        client = genai.Client(api_key=api_key)
+        grounding_tool = types.Tool(
+            google_search=types.GoogleSearch()
+        )
+
+        config = types.GenerateContentConfig(
+            tools=[grounding_tool]
+        )
+        try:
+            def call_gemini():
+                try:
+                    return client.models.generate_content(
+                        model=llm_config.google_search_agent,
+                        contents=query,
+                        config=config
+                    )
+                except Exception as inner:
+                    raise
+
+            response = await asyncio.to_thread(call_gemini)
+            text_output = self.add_citations(response)
+            if text_output:
+                return str(text_output)
+
+            # If no usable text found, treat as failure and fallback
+            raise RuntimeError("Failed to extract text from Gemini grounding response")
+        except Exception as e:
+            await func.report_error(e, f"google_search gemini grounding: {e}")
+            # Fallback: run legacy scraping to ensure the bot still returns useful results
+            return await self._legacy_google_search(ctx, query, message_to_edit)
+
+    async def _legacy_google_search(self, ctx, query, message_to_edit=None):
+        """Original Selenium-based Google scraping preserved as a fallback."""
         guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
         chrome_options = self.get_chrome_options()
 
@@ -134,7 +260,7 @@ class InternetSearchCog(commands.Cog):
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(install_driver)
                 driver_path = await asyncio.get_event_loop().run_in_executor(
-                    None, 
+                    None,
                     lambda: future.result(timeout=10)
                 )
                 service = Service(driver_path)
@@ -143,7 +269,7 @@ class InternetSearchCog(commands.Cog):
             await func.report_error(e, f"google_search ChromeDriverManager: {e}")
             chrome_driver_path = './chromedriverlinux64/chromedriver'
             service = Service(executable_path=chrome_driver_path)
-        
+
         with webdriver.Chrome(options=chrome_options, service=service) as driver:
             # Disable automation detection
             driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
@@ -153,7 +279,7 @@ class InternetSearchCog(commands.Cog):
                     });
                 '''
             })
-            
+
             url = f"https://www.google.com/search?q={query}"
             driver.get(url)
             time.sleep(random.uniform(1.5, 3.5))  # Human-like delay
@@ -168,7 +294,7 @@ class InternetSearchCog(commands.Cog):
             snippet = result.select_one('.VwiC3b').text if result.select_one('.VwiC3b') else 'No Snippet'
             link = result.select_one('a')['href'] if result.select_one('a') else 'No Link'
             search_results_with_links.append(f"{title}\n{snippet}\n{link}")
-        
+
         search = "\n\n".join(search_results_with_links)
         # Check for CAPTCHA
         if "Our systems have detected unusual traffic" in html:

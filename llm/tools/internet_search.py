@@ -27,6 +27,8 @@ of internet searches using the InternetSearchCog.
 """
 
 import logging
+import os
+import time
 from typing import Literal, TYPE_CHECKING
 
 from langchain_core.tools import tool
@@ -43,17 +45,17 @@ _logger = logging.getLogger(__name__)
 
 class InternetSearchTools:
     """Container class for internet search tools.
-    
+
     This class holds the runtime context and provides factory methods
     to create tool instances bound to that context.
-    
+
     Attributes:
         runtime: The orchestrator request containing bot, message, and logger.
     """
 
     def __init__(self, runtime: "OrchestratorRequest"):
         """Initializes InternetSearchTools with runtime context.
-        
+
         Args:
             runtime: The orchestrator request object containing necessary context.
         """
@@ -61,7 +63,7 @@ class InternetSearchTools:
 
     def get_tools(self) -> list:
         """Returns a list of LangChain tools bound to this runtime.
-        
+
         Returns:
             A list containing the internet_search tool with runtime context.
         """
@@ -74,28 +76,28 @@ class InternetSearchTools:
                 "general", "youtube", "eat"
             ] = "general",
         ) -> str:
-            """Performs an internet search based on the specified type.
+            """Performs an internet search and records Gemini grounding usage.
 
-            This tool supports multiple search types including general web search,
-            YouTube video search, and specialized EAT (Expertise, Authoritativeness,
-            Trustworthiness) search.
+            Behaviour:
+            - Detects whether a Gemini API key exists in the environment.
+            - Logs the preferred provider (gemini vs selenium fallback).
+            - Delegates the actual search to InternetSearchCog.internet_search.
+            - Measures duration and reports errors via func.report_error.
 
             Args:
                 query: The search query string to process.
-                search_type: The type of search to perform. Options are:
-                    - "general": Standard web search (default)
-                    - "youtube": YouTube video search
-                    - "eat": Specialized search for authoritative content
+                search_type: The type of search to perform.
 
             Returns:
-                A string containing the search results, a success confirmation
-                message, or an error description if the search failed.
+                A string result from the cog or a confirmation message.
             """
             logger = getattr(runtime, "logger", _logger)
-            logger.info(
-                "Tool 'internet_search' called",
-                extra={"query": query, "search_type": search_type}
-            )
+            logger.info("Tool 'internet_search' called", extra={"query": query, "search_type": search_type})
+
+            # Determine preferred provider based on environment
+            gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            preferred_provider = "gemini" if gemini_key else "selenium"
+            logger.debug("Preferred search provider determined", extra={"preferred_provider": preferred_provider})
 
             # Retrieve bot instance from runtime
             bot = getattr(runtime, "bot", None)
@@ -117,8 +119,9 @@ class InternetSearchTools:
             if message and getattr(message, "guild", None):
                 guild_id = str(message.guild.id)
 
+            start_ts = time.time()
             try:
-                # Delegate to InternetSearchCog which handles all search type details
+                # Pass through to the cog which now prefers Gemini grounding internally.
                 result = await cog.internet_search(
                     ctx=message,
                     query=query,
@@ -126,25 +129,22 @@ class InternetSearchTools:
                     message_to_edit=message_to_edit,
                     guild_id=guild_id,
                 )
-                
-                if isinstance(result, str):
-                    return result
 
-                # If cog directly sends messages (e.g., images or embeds),
-                # return confirmation message
-                logger.info(
-                    "Internet search completed and handled by cog",
-                    extra={"query": query, "search_type": search_type}
-                )
-                return (
-                    f"Search for '{query}' ({search_type}) "
-                    f"completed successfully."
-                )
+                duration = time.time() - start_ts
+                used_provider = preferred_provider  # best-effort; cog makes final decision
+                logger.info("Internet search finished", extra={"query": query, "search_type": search_type, "duration_s": duration, "used_provider": used_provider})
+
+                if isinstance(result, str):
+                    # Attach metadata about provider to the returned string for observability
+                    return f"[provider={used_provider} duration={duration:.2f}s] {result}"
+
+                # If cog handled messaging (embeds, views), return confirmation
+                logger.info("Internet search completed and handled by cog", extra={"query": query, "search_type": search_type})
+                return f"[provider={used_provider} duration={duration:.2f}s] Search for '{query}' ({search_type}) completed successfully."
             except Exception as e:  # pragma: no cover - external IO
-                await func.report_error(
-                    e,
-                    f"Internet search for '{query}' of type '{search_type}' failed"
-                )
+                duration = time.time() - start_ts
+                await func.report_error(e, f"Internet search for '{query}' of type '{search_type}' failed after {duration:.2f}s")
+                logger.exception("Internet search tool failed", exc_info=e)
                 return f"An unexpected error occurred during the search: {e}"
 
         return [internet_search]

@@ -70,6 +70,7 @@ class LLMConfig:
         self.path = path
         self.data: dict = _load_yaml_file(path)
         self.model_priorities: list = self.data.get("model_priorities", [])
+        self.google_search_agent: str = self.data.get("google_search_agent", "gemini-2.0-flash")
 
 
 class UpdateConfig:
