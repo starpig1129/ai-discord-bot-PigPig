@@ -128,13 +128,14 @@ class EatWhatView(discord.ui.View):
             await interaction.response.send_message("🍽️ AI 美食評論家正在分析中...", ephemeral=True)
             message_to_edit = await interaction.followup.send("📝 準備撰寫專業評論...", ephemeral=True)
             
-            review_model = ModelManager().get_model("review_model")
+            review_model, fallback = ModelManager().get_model("review_model")
             if review_model is None:
                 raise RuntimeError("review_model not available")
             review_agent = create_agent(
                 model=review_model,
                 tools=[],
-                system_prompt=system_prompt
+                system_prompt=system_prompt,
+                middleware=[fallback],
             )
             messages = dialogue_history + [
                 HumanMessage(content="Based on the provided restaurant information, write a professional and witty food review.")

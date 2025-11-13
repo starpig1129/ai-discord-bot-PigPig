@@ -287,14 +287,15 @@ class StoryManager:
                         ))
 
                 # Call GM agent via ModelManager + LangChain create_agent
-                story_gm_model = ModelManager().get_model("story_gm_model")
+                story_gm_model, fallback = ModelManager().get_model("story_gm_model")
                 agent = create_agent(story_gm_model, 
                                      tools=[], 
                                      system_prompt=gm_prompt, 
-                                     response_format=GMActionPlan)
-                message = [HumanMessage(content=message.content)] + gm_dialogue_history
+                                     response_format=GMActionPlan,
+                                     middleware=[fallback])
+                message_list = [HumanMessage(content=message.content)] + gm_dialogue_history
                 response = await agent.ainvoke({
-                    "messages": message,
+                    "messages": message_list,
                 })
                 
                 gm_plan = None
@@ -382,9 +383,9 @@ class StoryManager:
                             )
 
                             # Call character model via ModelManager + LangChain create_agent
-                            story_character_model = ModelManager().get_model("story_character_model")
+                            story_character_model, fallback = ModelManager().get_model("story_character_model")
                             agent = create_agent(story_character_model, tools=[], 
-                                                 system_prompt=char_system_prompt, response_format=CharacterAction)
+                                                 system_prompt=char_system_prompt, response_format=CharacterAction, middleware=[fallback])
                             response = await agent.ainvoke({
                                 "messages": dialogue_history + [HumanMessage(content=char_user_prompt)],
                             })
@@ -490,8 +491,8 @@ class StoryManager:
             summary_inst = "Please provide a concise, one-paragraph summary of the preceding conversation."
 
             # Call summary model via ModelManager + LangChain create_agent
-            story_summary_model = ModelManager().get_model("story_summary_model")
-            agent = create_agent(story_summary_model, tools=[], system_prompt=summary_system_prompt)
+            story_summary_model, fallback = ModelManager().get_model("story_summary_model")
+            agent = create_agent(story_summary_model, tools=[], system_prompt=summary_system_prompt, middleware=[fallback])
             response = await agent.ainvoke({
                 "messages": [HumanMessage(content=summary_inst), dialogue_history],
             })
@@ -550,8 +551,8 @@ class StoryManager:
 
         try:
             # Call outline model via ModelManager + LangChain create_agent
-            story_outline_model = ModelManager().get_model("story_outline_model")
-            agent = create_agent(story_outline_model, tools=[], system_prompt=outline_system_prompt)
+            story_outline_model, fallback = ModelManager().get_model("story_outline_model")
+            agent = create_agent(story_outline_model, tools=[], system_prompt=outline_system_prompt, middleware=[fallback])
             response = await agent.ainvoke({
                 "messages": [outline_inst, dialogue_history],
             })
@@ -671,11 +672,11 @@ class StoryManager:
                 
                 # --- Step 2: Call GM Model for a structured plan ---
                 # Call GM model for initial scene via ModelManager + LangChain create_agent
-                story_gm_model = ModelManager().get_model("story_gm_model")
-                agent = create_agent(story_gm_model, tools=[], system_prompt=gm_prompt, response_format=GMActionPlan)
-                message = [HumanMessage("You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.")]
+                story_gm_model, fallback = ModelManager().get_model("story_gm_model")
+                agent = create_agent(story_gm_model, tools=[], system_prompt=gm_prompt, response_format=GMActionPlan, middleware=[fallback])
+                message_list = [HumanMessage("You are a helpful storytelling assistant. Your output MUST be a single, valid JSON object that conforms to the requested schema.")]
                 response = await agent.ainvoke({
-                    "messages": message,
+                    "messages": message_list,
                 })
                 
                 gm_plan = None

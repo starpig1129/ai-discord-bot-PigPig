@@ -7,7 +7,7 @@ from typing import Optional
 from .story.manager import StoryManager
 from .story.ui import UIManager
 from .system_prompt.manager import SystemPromptManager
-
+from function import func
 
 class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
     """
