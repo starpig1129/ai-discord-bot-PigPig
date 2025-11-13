@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord import app_commands
@@ -29,18 +29,19 @@ class EpisodicMemoryService(commands.Cog):
     based on pending messages tracked by the MessageTracker.
     """
 
-    def __init__(self, bot: "PigPig", storage: "StorageInterface" = None):
+    def __init__(self, bot: "PigPig | commands.Bot", storage: "StorageInterface"):
         """
         Args:
-            bot (PigPig): The bot instance.
+            bot (PigPig | commands.Bot): The bot instance.
             storage (StorageInterface): Storage backend implementing StorageInterface.
-                                       If None, will fall back to bot.db_manager for backward compatibility.
+                                       If None, will fall back to bot.episodic_storage for compatibility.
         """
-        self.bot: "PigPig" = bot
-        # Accept a StorageInterface; allow fallback to bot.db_manager for compatibility.
-        self.storage: StorageInterface = storage if storage is not None else getattr(bot, "db_manager", None)
+        # Keep runtime typing flexible to accept either the concrete PigPig bot or a generic commands.Bot
+        self.bot = bot  # type: ignore[assignment]
+        # Accept a StorageInterface; allow fallback to bot.episodic_storage for compatibility.
+        self.storage: StorageInterface = storage
         self.settings: MemoryConfig = memory_config
-        self.message_tracker: MessageTracker = getattr(self.bot, "message_tracker", None)
+        self.message_tracker: MessageTracker = bot.message_tracker  # type: ignore[assignment]
         self.is_processing = False
 
     async def cog_load(self) -> None:
@@ -256,7 +257,8 @@ class EpisodicMemoryService(commands.Cog):
                 vector_manager = getattr(self.bot, "vector_manager", None)
                 vector_service = VectorizationService(bot=self.bot, storage=self.storage, vector_manager=vector_manager, settings=self.settings)
 
-                message_ids = [getattr(m, "id", None) for m in messages if getattr(m, "id", None) is not None]
+                # Ensure we pass a clean list[int] to the vectorization service
+                message_ids = [int(getattr(m, "id")) for m in messages if getattr(m, "id", None) is not None]
                 await vector_service.process_unvectorized_messages(message_ids=message_ids)
 
                 vector_note = (
@@ -309,6 +311,6 @@ class EpisodicMemoryService(commands.Cog):
 
 async def setup(bot: commands.Bot):
     """The setup function for the cog."""
-    # Attempt to provide bot.db_manager as storage for backward compatibility.
-    storage = getattr(bot, "db_manager", None)
+    # Provide episodic_storage from bot when available; fall back to legacy db_manager if present.
+    storage = getattr(bot, "episodic_storage", None) or getattr(bot, "db_manager", None)
     await bot.add_cog(EpisodicMemoryService(bot, storage))
