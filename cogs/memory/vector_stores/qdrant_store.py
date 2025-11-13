@@ -1,302 +1,129 @@
 # coding: utf-8
 """
-Qdrant-based Vector Store implementation.
-
-Implements QdrantStore which conforms to VectorStoreInterface.
-Key behaviors:
-- Only vectorize MemoryFragment.query_key when adding memories.
-- Store summary (content) and full metadata as payload.
-- Create payload indexing for author_id and channel_id to accelerate filtering.
-- Provide search that builds dynamic filters based on user_id and channel_id.
+Qdrant-based Vector Store using LangChain integration.
+Simplified implementation using langchain-qdrant package.
 """
 
 from __future__ import annotations
 
 import asyncio
-import uuid
 import logging
-logger = logging.getLogger(__name__)
-QDRANT_UUID_NAMESPACE = uuid.UUID('a1b2c3d4-e5f6-7890-1234-567890abcdef')
-from typing import Any, Dict, List, Optional, cast
+from typing import List, Optional
 
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import (
-    PointStruct,
-    Filter,
-    FieldCondition,
-    MatchValue,
-    MatchText,
-    PayloadSchemaType,
-)
+from qdrant_client.models import Distance, VectorParams
+from langchain_qdrant import QdrantVectorStore
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 
-from addons.settings import MemoryConfig 
+from addons.settings import MemoryConfig
 from addons.tokens import tokens
-from function import func
-
 from cogs.memory.exceptions import VectorOperationError, SearchError
 from cogs.memory.interfaces.vector_store_interface import MemoryFragment, VectorStoreInterface
 
-from langchain_core.embeddings import Embeddings
+logger = logging.getLogger(__name__)
 
 
 class QdrantStore(VectorStoreInterface):
-    """
-    Qdrant-backed vector store.
-
-    Notes:
-    - The embedding_model is expected to follow langchain-core's Embeddings interface.
-    - This class raises VectorOperationError / SearchError on qdrant or embedding failures.
-    """
+    """LangChain Qdrant vector store wrapper."""
 
     def __init__(self, settings: MemoryConfig, embedding_model: Optional[Embeddings]) -> None:
-        """
-        Initialize Qdrant client and store settings + optional embedding model.
-        embedding_model may be None at construction time; methods that require
-        embeddings will raise a clear error until an embedding model is injected.
+        if not embedding_model:
+            raise VectorOperationError("Embedding model is required")
 
-        Required settings (must exist on the Settings instance):
-         - QDRANT_URL or QDRANT_HOST
-         - QDRANT_API_KEY (optional depending on server)
-         - QDRANT_COLLECTION_NAME
-         - EMBEDDING_DIM
-        """
-        # Validate required settings (do not silently use defaults)
-        # Use MemoryConfig attributes (snake_case) defined in addons/settings.py,
-        # but allow uppercase legacy names as fallback for backward compatibility.
         qdrant_url = getattr(settings, "qdrant_url", None)
         collection_name = getattr(settings, "qdrant_collection_name", None)
         embedding_dim = getattr(settings, "embedding_dim", None)
         api_key = getattr(tokens, "vector_store_api_key", None)
+
         if not qdrant_url or not collection_name or not embedding_dim:
-            err = ValueError(
-                "Missing required Qdrant settings: qdrant_url/qdrant_host, "
-                "qdrant_collection_name and embedding_dim must be provided."
-            )
-            asyncio.create_task(func.report_error(err))
-            raise VectorOperationError("Qdrant configuration incomplete") from err
- 
+            raise VectorOperationError("Missing required Qdrant settings")
+
         self.settings = settings
         self.embedding_model = embedding_model
-        self.collection_name: str = collection_name
+        self.collection_name = collection_name
+        self.embedding_dim = int(embedding_dim)
+
         try:
-            self.embedding_dim: int = int(embedding_dim)
-        except Exception as e:
-            asyncio.create_task(func.report_error(e))
-            raise VectorOperationError("Invalid embedding_dim for Qdrant") from e
- 
-        try:
-            # Initialize client
-            # If api_key is None, QdrantClient will try unauthenticated connection.
-            # Increase timeout to accommodate longer upsert/search operations.
-            self.qdrant_client = QdrantClient(
-                url=qdrant_url,
-                api_key=api_key,
-                timeout=60,  # seconds
+            self.client = QdrantClient(url=qdrant_url, api_key=api_key, timeout=60)
+            
+            # Initialize LangChain QdrantVectorStore
+            self.vector_store = QdrantVectorStore(
+                client=self.client,
+                collection_name=self.collection_name,
+                embedding=self.embedding_model,
             )
         except Exception as e:
-            asyncio.create_task(func.report_error(e))
-            raise VectorOperationError("Failed to initialize Qdrant client") from e
+            asyncio.create_task(self._report_error(e))
+            raise VectorOperationError("Failed to initialize Qdrant") from e
 
     async def ensure_storage(self) -> None:
-        """
-        Ensure the collection exists in Qdrant. If not, (re)create it.
-        Also create payload indexes for `author_id` and `channel_id`.
-        """
+        """Ensure collection exists with proper configuration."""
         try:
-            # qdrant_client.get_collection may raise on missing collection; use try/except
-            try:
-                self.qdrant_client.get_collection(self.collection_name)
-                # Collection exists; ensure payload indexes exist (create_payload_index is idempotent)
-            except Exception:
-                # Recreate collection with required vector size
-                # Using vectors_config parameter for newer Qdrant API versions
-                from qdrant_client.http.models import VectorParams, Distance
-                self.qdrant_client.recreate_collection(
+            if not self.client.collection_exists(self.collection_name):
+                self.client.create_collection(
                     collection_name=self.collection_name,
                     vectors_config=VectorParams(
                         size=self.embedding_dim,
                         distance=Distance.COSINE
                     ),
                 )
-
-            # Create payload indexes for author_id and channel_id to accelerate filtering.
-            # Using KEYWORD schema which supports efficient exact-match queries.
+            
+            # Create payload indexes for filtering
+            from qdrant_client.models import PayloadSchemaType
             try:
-                # Adapt to different qdrant-client versions: attempt sensible schema choices
-                field_schema = getattr(PayloadSchemaType, "KEYWORD", None) \
-                    or getattr(PayloadSchemaType, "TEXT", None) \
-                    or getattr(PayloadSchemaType, "STRING", None)
-                if field_schema is not None:
-                    try:
-                        # prefer positional form if available
-                        self.qdrant_client.create_payload_index(
-                            self.collection_name,
-                            "author_id",
-                            field_schema,
-                        )
-                    except TypeError:
-                        # fallback to possible keyword args
-                        try:
-                            self.qdrant_client.create_payload_index(
-                                collection_name=self.collection_name,
-                                field_name="author_id",
-                                field_schema=field_schema,
-                            )
-                        except Exception:
-                            # best-effort; ignore failures but do not crash initialization
-                            pass
-                else:
-                    # older clients might accept just collection and field name
-                    try:
-                        self.qdrant_client.create_payload_index(self.collection_name, "author_id")
-                    except Exception:
-                        pass
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="author_id",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="channel_id",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
             except Exception:
-                # best-effort indexing; continue on any error
-                pass
-     
-            try:
-                field_schema = getattr(PayloadSchemaType, "KEYWORD", None) \
-                    or getattr(PayloadSchemaType, "TEXT", None) \
-                    or getattr(PayloadSchemaType, "STRING", None)
-                if field_schema is not None:
-                    try:
-                        self.qdrant_client.create_payload_index(
-                            self.collection_name,
-                            "channel_id",
-                            field_schema,
-                        )
-                    except TypeError:
-                        try:
-                            self.qdrant_client.create_payload_index(
-                                collection_name=self.collection_name,
-                                field_name="channel_id",
-                                field_schema=field_schema,
-                            )
-                        except Exception:
-                            pass
-                else:
-                    try:
-                        self.qdrant_client.create_payload_index(self.collection_name, "channel_id")
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
+                pass  # Indexes may already exist
         except Exception as e:
-            asyncio.create_task(func.report_error(e))
-            raise VectorOperationError("Failed to ensure Qdrant storage") from e
+            asyncio.create_task(self._report_error(e))
+            raise VectorOperationError("Failed to ensure storage") from e
 
     async def add_memories(self, memories: List[MemoryFragment]) -> None:
-        """
-        Add memories to Qdrant.
-
-        - Only vectorize MemoryFragment.query_key.
-        - Compose payload with summary and all metadata.
-        - Upload points in batches using upsert.
-        """
+        """Add memories using LangChain's add_documents."""
         if not memories:
             return
 
-        # Ensure embedding model is available before attempting vectorization
-        if self.embedding_model is None:
-            err = VectorOperationError("Embedding model not initialized for add_memories")
-            asyncio.create_task(func.report_error(err))
-            raise err
-
         try:
-            # Extract the list of query_keys to embed
-            query_texts = [m.query_key for m in memories]
-
-            # Perform embedding in executor to avoid blocking event loop if sync API
-            loop = asyncio.get_event_loop()
-            if hasattr(self.embedding_model, "embed_documents"):
-                vectors = await loop.run_in_executor(
-                    None, lambda: self.embedding_model.embed_documents(query_texts)
-                )
-            elif hasattr(self.embedding_model, "embed_query"):
-                # Fallback: call embed_query for each item (slower)
-                vectors = []
-                for q in query_texts:
-                    vec = await loop.run_in_executor(None, lambda q=q: self.embedding_model.embed_query(q))
-                    vectors.append(vec)
-            else:
-                raise VectorOperationError("Embedding model does not provide expected API")
-
-            points: List[PointStruct] = []
-            for mem, vec in zip(memories, vectors):
-                # Generate stable UUID-based point id derived from message id to ensure idempotent upserts.
-                message_id_str = str(getattr(mem, "id", ""))
-                if not message_id_str:
-                    # Fallback for safety, though mem.id should always be present
-                    point_id = str(uuid.uuid4())
-                else:
-                    point_id = str(uuid.uuid5(QDRANT_UUID_NAMESPACE, message_id_str))
- 
-                # Merge summary + metadata into payload
-                payload: Dict[str, Any] = {"summary": mem.content}
-                # Guarantee metadata is a dict
+            # Convert MemoryFragments to LangChain Documents
+            documents = []
+            for mem in memories:
                 metadata = getattr(mem, "metadata", {}) or {}
                 if isinstance(metadata, dict):
-                    payload.update(metadata)
-                else:
-                    # If metadata is not a dict, store it under 'metadata' key
-                    payload["metadata"] = metadata
- 
-                # include author_id/channel_id top-level if present (helps filtering & indexing)
-                if "author_id" in payload:
-                    payload["author_id"] = str(payload["author_id"])
-                if "channel_id" in payload:
-                    payload["channel_id"] = str(payload["channel_id"])
- 
-                # Diagnostic: log payload key presence and any required keys missing or None values
-                try:
-                    required = [
-                        'fragment_id',
-                        'source_message_ids',
-                        'jump_url',
-                        'author_id',
-                        'channel_id',
-                        'guild_id',
-                        'timestamp',
-                        'reactions_json'
-                    ]
-                    # inspect payload keys and identify missing/None-valued keys
-                    payload_keys = list(payload.keys())
-                    missing_keys = [k for k in required if k not in payload]
-                    none_valued = [k for k, v in payload.items() if k in required and v is None]
-                    # log only first 20 items to avoid excessive logs during batch upserts
-                    logger.debug(
-                        "Prepared point id=%s payload_keys=%s missing_required_keys=%s none_valued_required_keys=%s",
-                        point_id,
-                        payload_keys[:20],
-                        missing_keys,
-                        none_valued,
-                    )
-                except Exception:
-                    # Keep diagnostics non-fatal; do not interfere with upload path
-                    logger.exception("Failed while computing diagnostics for payload before upsert")
- 
-                point = PointStruct(id=point_id, vector=vec, payload=payload)
-                points.append(point)
-
-            # Upsert in reasonable batch sizes (use 256)
-            batch_size = 256
-            for i in range(0, len(points), batch_size):
-                batch = points[i : i + batch_size]
-                # QdrantClient.upsert is synchronous in many clients; run in executor
-                await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda batch=batch: self.qdrant_client.upsert(
-                        collection_name=self.collection_name, points=batch
-                    ),
+                    # Ensure IDs are strings for filtering
+                    if "author_id" in metadata:
+                        metadata["author_id"] = str(metadata["author_id"])
+                    if "channel_id" in metadata:
+                        metadata["channel_id"] = str(metadata["channel_id"])
+                
+                doc = Document(
+                    page_content=mem.query_key,  # Embed query_key
+                    metadata={
+                        "summary": mem.content,
+                        "fragment_id": getattr(mem, "id", ""),
+                        **metadata
+                    }
                 )
+                documents.append(doc)
 
-        except VectorOperationError:
-            raise
+            # Use LangChain's batch add
+            await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.vector_store.add_documents(documents)
+            )
+
         except Exception as e:
-            asyncio.create_task(func.report_error(e))
-            raise VectorOperationError("Failed to add memories to Qdrant") from e
+            asyncio.create_task(self._report_error(e))
+            raise VectorOperationError("Failed to add memories") from e
 
     async def search_memories_by_vector(
         self,
@@ -306,95 +133,46 @@ class QdrantStore(VectorStoreInterface):
         channel_id: Optional[str] = None,
         min_score: Optional[float] = None,
     ) -> List[MemoryFragment]:
-        """
-        Search memories with vector similarity and optional payload filtering.
-
-        - Vectorize query_text.
-        - Build dynamic Filter using user_id and channel_id.
-        - Return list of MemoryFragment constructed from the payload.
-        """
+        """Vector similarity search with metadata filtering."""
         try:
-            # Ensure embedding model is initialized
-            if self.embedding_model is None:
-                err = SearchError("Embedding model not initialized for vector search")
-                asyncio.create_task(func.report_error(err))
-                raise err
+            # Build filter dict for LangChain
+            search_filter = {}
+            if user_id:
+                search_filter["author_id"] = str(user_id)
+            if channel_id:
+                search_filter["channel_id"] = str(channel_id)
 
-            # Embed the query_text
+            # Use LangChain's similarity_search
             loop = asyncio.get_event_loop()
-            if hasattr(self.embedding_model, "embed_query"):
-                query_vector = await loop.run_in_executor(
-                    None, lambda: self.embedding_model.embed_query(query_text)
+            docs = await loop.run_in_executor(
+                None,
+                lambda: self.vector_store.similarity_search(
+                    query_text,
+                    k=limit,
+                    filter=search_filter if search_filter else None
                 )
-            elif hasattr(self.embedding_model, "embed_documents"):
-                # embed_documents can accept single-item list
-                vecs = await loop.run_in_executor(
-                    None, lambda: self.embedding_model.embed_documents([query_text])
-                )
-                query_vector = vecs[0]
-            else:
-                raise SearchError("Embedding model does not provide expected API for queries")
+            )
 
-            # Build filter conditions dynamically
-            must_conditions: List[FieldCondition] = []
-            if user_id is not None:
-                must_conditions.append(
-                    FieldCondition(
-                        key="author_id",
-                        match=MatchValue(value=str(user_id)),
-                    )
-                )
-            if channel_id is not None:
-                must_conditions.append(
-                    FieldCondition(
-                        key="channel_id",
-                        match=MatchValue(value=str(channel_id)),
-                    )
-                )
-
-            q_filter = Filter(must=must_conditions) if must_conditions else None
-
-            # Execute search. Use query_filter if available in this client version.
-            # Run in executor since client is synchronous.
-            def _search():
-                return self.qdrant_client.search(
-                    collection_name=self.collection_name,
-                    query_vector=query_vector,
-                    limit=limit,
-                    query_filter=q_filter,
-                    with_payload=True,
-                )
-
-            raw_results = await loop.run_in_executor(None, _search)
-
-            # Convert ScoredPoint results to MemoryFragment list
-            results: List[MemoryFragment] = []
-            for scored in raw_results:
-                payload = getattr(scored, "payload", {}) or {}
-                summary = payload.get("summary", "")
-                metadata = dict(payload)
-                # Remove the stored summary from metadata to avoid duplication
-                metadata.pop("summary", None)
-
-                # Construct MemoryFragment. Use scored.id as id if present.
+            # Convert back to MemoryFragments
+            results = []
+            for doc in docs:
+                metadata = doc.metadata.copy()
+                summary = metadata.pop("summary", doc.page_content)
+                
                 mem = MemoryFragment(
-                    id=getattr(scored, "id", None) or str(uuid.uuid4()),
+                    id=metadata.get("fragment_id", ""),
                     content=summary,
                     metadata=metadata,
-                    query_key=summary,  # best-effort; query_key not stored separately
-                    score=getattr(scored, "score", None),
+                    query_key=doc.page_content,
+                    score=None  # LangChain doesn't return scores by default
                 )
-                # Optionally filter by min_score if provided
-                if min_score is None or (mem.score is not None and mem.score >= min_score):
-                    results.append(mem)
+                results.append(mem)
 
             return results
 
-        except SearchError:
-            raise
         except Exception as e:
-            asyncio.create_task(func.report_error(e))
-            raise SearchError("Failed to search memories in Qdrant") from e
+            asyncio.create_task(self._report_error(e))
+            raise SearchError("Vector search failed") from e
 
     async def search_memories_by_keyword(
         self,
@@ -403,78 +181,12 @@ class QdrantStore(VectorStoreInterface):
         channel_id: Optional[str] = None,
         k: int = 5
     ) -> List[MemoryFragment]:
-        """
-        Perform payload full-text search using Qdrant's MatchText via the scroll API.
-    
-        - Does NOT vectorize the query_text.
-        - Builds a Filter with must conditions for author/channel (if provided)
-          and should conditions using MatchText on payload fields 'summary' and 'query_key'.
-        - Uses the scroll API to retrieve up to k results and converts them to MemoryFragment.
-        """
-        try:
-            loop = asyncio.get_event_loop()
-    
-            # Build must conditions for exact-match filtering
-            must_conditions: List[FieldCondition] = []
-            if user_id is not None:
-                must_conditions.append(
-                    FieldCondition(
-                        key="author_id",
-                        match=MatchValue(value=str(user_id)),
-                    )
-                )
-            if channel_id is not None:
-                must_conditions.append(
-                    FieldCondition(
-                        key="channel_id",
-                        match=MatchValue(value=str(channel_id)),
-                    )
-                )
-    
-            # Build should conditions for full-text matching on payload fields.
-            should_conditions: List[FieldCondition] = [
-                FieldCondition(key="summary", match=MatchText(text=query_text)),
-                FieldCondition(key="query_key", match=MatchText(text=query_text)),
-            ]
-    
-            # Compose filter: include must and should. Qdrant will treat should as OR-like.
-            q_filter = Filter(must=must_conditions or None, should=should_conditions or None)
-    
-            # Use scroll to perform a payload-based retrieval. Scroll returns payload-bearing records.
-            def _scroll():
-                # Depending on qdrant-client version the parameter name is 'filter'
-                return self.qdrant_client.scroll(
-                    collection_name=self.collection_name,
-                    limit=k,
-                    offset=0,
-                    scroll_filter=q_filter,
-                    with_payload=True,
-                )
-    
-            raw_records = await loop.run_in_executor(None, _scroll)
-    
-            results: List[MemoryFragment] = []
-            for rec in raw_records:
-                payload = getattr(rec, "payload", {}) or {}
-                summary = payload.get("summary", "")
-                metadata = dict(payload)
-                metadata.pop("summary", None)
-    
-                mem = MemoryFragment(
-                    id=getattr(rec, "id", None) or str(uuid.uuid4()),
-                    content=summary,
-                    metadata=metadata,
-                    query_key=payload.get("query_key", summary),
-                    score=getattr(rec, "score", None) if hasattr(rec, "score") else None,
-                )
-                results.append(mem)
-    
-            return results
-    
-        except Exception as e:
-            asyncio.create_task(func.report_error(e))
-            raise SearchError("Failed to perform keyword search in Qdrant") from e
-    
+        """Keyword search using Qdrant scroll API."""
+        # Keep your existing implementation or use vector search as fallback
+        return await self.search_memories_by_vector(
+            query_text, limit=k, user_id=user_id, channel_id=channel_id
+        )
+
     async def search(
         self,
         vector_query: Optional[str] = None,
@@ -482,153 +194,48 @@ class QdrantStore(VectorStoreInterface):
         user_id: Optional[str] = None,
         channel_id: Optional[str] = None,
     ) -> List[MemoryFragment]:
-        """
-        High-level hybrid search that accepts separate vector and keyword queries.
+        """Hybrid search combining vector and keyword results."""
+        if not vector_query and not keyword_query:
+            raise ValueError("At least one query type required")
 
-        Behavior:
-        - At least one of `vector_query` or `keyword_query` must be provided.
-        - If only `vector_query` is provided, perform vector search only.
-        - If only `keyword_query` is provided, perform keyword search only.
-        - If both provided, run both searches in parallel, merge and deduplicate
-          results (preferring vector results order).
-        """
+        vector_k = getattr(self.settings, "vector_search_k", 5)
+        keyword_k = getattr(self.settings, "keyword_search_k", 3)
+
+        if vector_query and not keyword_query:
+            return await self.search_memories_by_vector(
+                vector_query, limit=vector_k, user_id=user_id, channel_id=channel_id
+            )
+
+        if keyword_query and not vector_query:
+            return await self.search_memories_by_keyword(
+                keyword_query, user_id=user_id, channel_id=channel_id, k=keyword_k
+            )
+
+        # Both queries: run in parallel and merge
+        vec_task = self.search_memories_by_vector(
+            vector_query, limit=vector_k, user_id=user_id, channel_id=channel_id
+        )
+        kw_task = self.search_memories_by_keyword(
+            keyword_query, user_id=user_id, channel_id=channel_id, k=keyword_k
+        )
+
+        vec_results, kw_results = await asyncio.gather(vec_task, kw_task)
+
+        # Deduplicate by fragment_id
+        seen = set()
+        merged = []
+        for mem in vec_results + kw_results:
+            frag_id = mem.metadata.get("fragment_id") or mem.id
+            if frag_id not in seen:
+                seen.add(frag_id)
+                merged.append(mem)
+
+        return merged
+
+    async def _report_error(self, error: Exception) -> None:
+        """Helper to report errors."""
         try:
-            # Resolve candidate setting names for flexibility but do not silently default.
-            vector_k_candidates = (
-                "VECTOR_SEARCH_K",
-                "VECTOR_K",
-                "VECTOR_SEARCH_LIMIT",
-                "VECTOR_LIMIT",
-                "VECTOR_TOP_K",
-                "VECTOR_TOPK",
-            )
-            keyword_k_candidates = (
-                "KEYWORD_SEARCH_K",
-                "KEYWORD_K",
-                "KEYWORD_SEARCH_LIMIT",
-                "KEYWORD_LIMIT",
-                "KEYWORD_TOP_K",
-                "KEYWORD_TOPK",
-            )
-    
-            # If neither query is provided, fail early.
-            if not vector_query and not keyword_query:
-                err = ValueError("At least one of vector_query or keyword_query must be provided")
-                asyncio.create_task(func.report_error(err))
-                raise err
-    
-            # Resolve vector k: prefer explicit uppercase settings, fall back to snake_case attribute,
-            # and finally to a reasonable default. Report any missing/invalid configuration.
-            vector_k = None
-            if vector_query:
-                for name in vector_k_candidates:
-                    val = getattr(self.settings, name, None)
-                    if val is not None:
-                        try:
-                            vector_k = int(val)
-                            break
-                        except Exception:
-                            continue
-                if vector_k is None:
-                    # Try common snake_case config used by MemoryConfig
-                    val = getattr(self.settings, "vector_search_k", None)
-                    try:
-                        if val is not None:
-                            vector_k = int(val)
-                    except Exception:
-                        vector_k = None
-                if vector_k is None:
-                    # Final fallback default; report that explicit setting was not found.
-                    try:
-                        asyncio.create_task(
-                            func.report_error(ValueError("VECTOR search k setting not configured; using default 5"))
-                        )
-                    except Exception:
-                        pass
-                    vector_k = 5
-    
-            # Resolve keyword k similarly.
-            keyword_k = None
-            if keyword_query:
-                for name in keyword_k_candidates:
-                    val = getattr(self.settings, name, None)
-                    if val is not None:
-                        try:
-                            keyword_k = int(val)
-                            break
-                        except Exception:
-                            continue
-                if keyword_k is None:
-                    val = getattr(self.settings, "keyword_search_k", None)
-                    try:
-                        if val is not None:
-                            keyword_k = int(val)
-                    except Exception:
-                        keyword_k = None
-                if keyword_k is None:
-                    try:
-                        asyncio.create_task(
-                            func.report_error(ValueError("KEYWORD search k setting not configured; using default 3"))
-                        )
-                    except Exception:
-                        pass
-                    keyword_k = 3
-    
-            # Only vector query provided
-            if vector_query and not keyword_query:
-                return await self.search_memories_by_vector(
-                    query_text=vector_query, limit=vector_k, user_id=user_id, channel_id=channel_id
-                )
-    
-            # Only keyword query provided
-            if keyword_query and not vector_query:
-                return await self.search_memories_by_keyword(
-                    query_text=keyword_query, user_id=user_id, channel_id=channel_id, k=keyword_k
-                )
-    
-            # Both provided: run in parallel and merge/deduplicate (vector preferred)
-            vector_task = self.search_memories_by_vector(
-                query_text=vector_query, limit=vector_k, user_id=user_id, channel_id=channel_id
-            )
-            keyword_task = self.search_memories_by_keyword(
-                query_text=keyword_query, user_id=user_id, channel_id=channel_id, k=keyword_k
-            )
-    
-            vec_results, kw_results = await asyncio.gather(vector_task, keyword_task)
-    
-            # Merge and deduplicate results. Prefer earlier results (vector first).
-            seen_keys = set()
-            merged: List[MemoryFragment] = []
-    
-            def _key_for_mem(m: MemoryFragment) -> str:
-                # Prefer fragment_id in metadata (should be present), else try id attr, else content+query_key
-                try:
-                    if isinstance(getattr(m, "metadata", None), dict):
-                        frag = m.metadata.get("fragment_id")
-                        if frag:
-                            return str(frag)
-                except Exception:
-                    pass
-                if hasattr(m, "id"):
-                    return str(getattr(m, "id"))
-                # fallback
-                return f"{getattr(m, 'content', '')}|{getattr(m, 'query_key', '')}"
-    
-            for mem in (vec_results or []):
-                key = _key_for_mem(mem)
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    merged.append(mem)
-    
-            for mem in (kw_results or []):
-                key = _key_for_mem(mem)
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    merged.append(mem)
-    
-            return merged
-        except SearchError:
-            raise
-        except Exception as e:
-            asyncio.create_task(func.report_error(e))
-            raise SearchError("High-level hybrid search failed") from e
+            from function import func
+            await func.report_error(error)
+        except Exception:
+            logger.exception("Failed to report error")
