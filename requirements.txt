@@ -23,6 +23,7 @@ webdriver-manager==4.0.2
 Whoosh==2.7.4
 youtube-search==2.1.2
 yt-dlp==2025.11.12
+PyNaCl==1.6.1
 
 # LangChain
 langchain==1.0.5
