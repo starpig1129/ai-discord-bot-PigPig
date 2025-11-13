@@ -121,9 +121,40 @@ class CharacterAction(BaseModel):
     Represents a character's action, combining dialogue, physical action, and internal thought.
     This structure is used for the AI's structured output.
     """
-    action: Optional[str] = Field(default=None, description="The character's action,body language or facial expressions.")
+    action: Optional[str] = Field(default=None, description="The character's action, body language, or facial expressions.")
     dialogue: str = Field(description="Words spoken by the character.")
     thought: Optional[str] = Field(default=None, description="The inner thoughts or feelings of the character, visible to the player.")
     location: str = Field(description="The specific location where the character is performing this action.")
     date: str = Field(description="The date when the character is performing this action.")
     time: str = Field(description="The time when the character is performing this action.")
+    
+class StorySummary(BaseModel):
+    """Structured output for a story summary"""
+    summary: str
+    key_events: List[str] = []
+    character_developments: List[str] = []
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "summary": "玩家們在酒館中遇到了神秘商人...",
+                "key_events": ["與商人對話", "接受任務"],
+                "character_developments": ["主角變得更加謹慎"]
+            }
+        }
+
+
+class StoryOutline(BaseModel):
+    """Structured output for a story outline"""
+    outline: str
+    major_plot_points: List[str] = []
+    character_arcs: Dict[str, str] = {}
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "outline": "冒險者們踏上尋找失落神器的旅程...",
+                "major_plot_points": ["發現線索", "遭遇敵人", "獲得神器"],
+                "character_arcs": {"主角": "從懦弱到勇敢"}
+            }
+        }
