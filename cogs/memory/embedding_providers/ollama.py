@@ -31,7 +31,7 @@ def ollama_provider(settings: MemoryConfig) -> Embeddings:
         # The constructor signature can vary; pass model_name and optional host if available.
         ollama_host = getattr(settings, "ollama_url", None)
         if ollama_host:
-            return OllamaEmbeddings(model=model_name, host=ollama_host)  # type: ignore
+            return OllamaEmbeddings(model=model_name, base_url=ollama_host)  # type: ignore
         return OllamaEmbeddings(model=model_name)  # type: ignore
 
     except Exception as e:
