@@ -206,12 +206,14 @@ async def _process_token_stream(
         update_interval: Time interval (seconds) between message updates.
         
     Returns:
-        Tuple of (full message result, final Discord message).
+        Tuple of (full message result with markers, final Discord message).
     """
-    message_result = ''  # Full accumulated result
-    current_block = ''  # Current message block content
+    message_result = ''  # Full accumulated result (including ALL tokens and markers)
+    display_content = ''  # Filtered content for Discord (only between markers)
+    current_block = ''  # Current message block content for Discord
     last_update_time = time.time()  # Track last update time
-    pending_content = ''  # Content waiting to be sent
+    pending_content = ''  # Content waiting to be sent to Discord
+    is_capturing = False  # Flag to track if we're between <som> and <eom>
     
     async def should_update() -> bool:
         """Check if enough time has passed since last update."""
@@ -248,17 +250,59 @@ async def _process_token_stream(
         pending_content = ''
         last_update_time = time.time()
     
+    def extract_display_content(token_str: str) -> str:
+        """Extract content that should be displayed on Discord.
+        
+        Args:
+            token_str: Current token string.
+            
+        Returns:
+            Content to display (empty if outside markers or contains only markers).
+        """
+        nonlocal is_capturing
+        
+        display_str = token_str
+        
+        # Check for start marker
+        if '<som>' in display_str:
+            is_capturing = True
+            # Remove everything before and including <som>
+            display_str = display_str.split('<som>', 1)[-1]
+        
+        # Check for end marker
+        if '<eom>' in display_str:
+            # Only capture content before <eom>
+            display_str = display_str.split('<eom>', 1)[0]
+            result = display_str if is_capturing else ''
+            is_capturing = False
+            return result
+        
+        # Return content only if we're capturing
+        return display_str if is_capturing else ''
+    
     try:
         async for token, metadata in streamer:
             # Extract text token
             if hasattr(token, "content") and token.content:
                 token_str = str(token.content)
-                message_result += token_str
-                pending_content += token_str
                 
-                # Update message if enough time has passed
-                if await should_update():
-                    await update_message()
+                # Always accumulate to message_result (complete output)
+                message_result += token_str
+                
+                # Extract display content (filtered for Discord)
+                display_str = extract_display_content(token_str)
+                
+                if display_str:
+                    display_content += display_str
+                    pending_content += display_str
+                    
+                    # Update message if enough time has passed
+                    if await should_update():
+                        await update_message()
+                
+                # Stop processing if we've passed <eom>
+                if not is_capturing and '<eom>' in token_str:
+                    break
         
         # Send any remaining content
         if pending_content:
@@ -275,6 +319,7 @@ async def _process_token_stream(
             except Exception as update_exc:
                 _logger.error('Failed to send final update: %s', update_exc)
         raise
+
 
 
 async def send_message(

@@ -69,8 +69,8 @@ output_format:
     **IMPORTANT**: Output your response content directly without any identity prefixes or format markers.
     
     ✅ **CORRECT Examples**:
-    - "Hello! How can I help you?"
-    - "That's an interesting question! Let me think..."
+    - "<som> Hello! How can I help you <eom>?"
+    - "<som> That's an interesting question! Let me think... <eom>"
     
     ❌ **INCORRECT Examples** (Never use these):
     - "[bot_name | ID | UNIX time:1763001062.211] : Hello!"
@@ -141,7 +141,7 @@ input_parsing:
     ## Input Understanding
     
     ### Message Format
-    - Short-term memory messages follow this structure: `[(<user_name>) | (<user_id>) | (<message_id>)]: <message_content> [[other_metadata] | (<UNIX_timestamp>)]`
+    - Short-term memory messages follow this structure: `[(<user_name>) | (<user_id>) | (<message_id>)]: <som> <message_content> <eom> [[other_metadata] | (<UNIX_timestamp>)]`
     - Parse this format to understand who said what and when
     
     ### Ignore Patterns

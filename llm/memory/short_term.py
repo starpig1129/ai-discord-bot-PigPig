@@ -54,9 +54,9 @@ class ShortTermMemoryProvider:
                 content_suffix.append(f"timestamp: {msg.created_at.timestamp()}")
                 if msg.content:
                     cleaned_content = re.sub(rf'<@!?{self.bot.user.id}>', '', msg.content).strip()
-                    content_parts.append({"type": "text", "text": f"[{content_prefix}] {cleaned_content} [{' | '.join(content_suffix)}]"})
+                    content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> {cleaned_content} <eom> [{' | '.join(content_suffix)}]"})
                 else:
-                    content_parts.append({"type": "text", "text": f"[{content_prefix}] { ' | '.join(content_suffix)}"})
+                    content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> <eom>  [{ ' | '.join(content_suffix)}]"})
 
                 if msg.attachments:
                     for attachment in msg.attachments:
