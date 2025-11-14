@@ -404,9 +404,6 @@ class EventSummarizationService:
             messages_text = json.dumps(message_data, ensure_ascii=False, indent=2)
             return (
                 f"Process the following conversation history:\n\n{messages_text}\n\n"
-                "Extract significant events into a structured JSON list of MemoryFragmentList objects. "
-                "Each object must contain exactly two keys: 'summary' and 'query_key'. "
-                "Return ONLY the JSON list without additional text."
             )
         except Exception as e:
             log.error(f"Error getting user prompt: {e}", exc_info=True)

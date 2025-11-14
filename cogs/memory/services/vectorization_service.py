@@ -103,6 +103,7 @@ class VectorizationService:
                 # Create metadata from EventSummary
                 metadata = {
                     "fragment_id": f"event-{event_summary.metadata.start_message_id}",
+                    "keywords": event_summary.query_keywords,
                     "source_message_ids": [event_summary.metadata.start_message_id, event_summary.metadata.end_message_id],
                     "jump_url": f"https://discord.com/channels/{event_summary.metadata.guild_id}/{event_summary.metadata.channel_id}/{event_summary.metadata.start_message_id}",
                     "author_ids": [str(uid) for uid in event_summary.metadata.user_ids],

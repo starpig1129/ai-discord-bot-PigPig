@@ -49,10 +49,11 @@ class MemoryFragment:
             'fragment_id',
             'source_message_ids',
             'jump_url',
-            'author_id',
+            'author_ids',
             'channel_id',
             'guild_id',
-            'timestamp',
+            'start_timestamp',
+            'end_timestamp',
             'reactions_json'
         ]
         missing = [k for k in required_keys if k not in self.metadata]

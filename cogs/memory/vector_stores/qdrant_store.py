@@ -11,7 +11,7 @@ import logging
 from typing import List, Optional
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.models import Distance, VectorParams, FieldCondition, MatchAny, Filter
 from langchain_qdrant import QdrantVectorStore
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -103,12 +103,17 @@ class QdrantStore(VectorStoreInterface):
             try:
                 self.client.create_payload_index(
                     collection_name=self.collection_name,
-                    field_name="author_id",
+                    field_name="author_ids",
                     field_schema=PayloadSchemaType.KEYWORD,
                 )
                 self.client.create_payload_index(
                     collection_name=self.collection_name,
                     field_name="channel_id",
+                    field_schema=PayloadSchemaType.KEYWORD,
+                )
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name="keywords",
                     field_schema=PayloadSchemaType.KEYWORD,
                 )
             except Exception:
@@ -210,11 +215,81 @@ class QdrantStore(VectorStoreInterface):
         channel_id: Optional[str] = None,
         k: int = 5
     ) -> List[MemoryFragment]:
-        """Keyword search using Qdrant scroll API."""
-        # Keep your existing implementation or use vector search as fallback
-        return await self.search_memories_by_vector(
-            query_text, limit=k, user_id=user_id, channel_id=channel_id
-        )
+        """Keyword search using Qdrant scroll API with payload filtering."""
+        try:
+            # Parse query keywords
+            keywords = [kw.strip().lower() for kw in query_text.split() if kw.strip()]
+            
+            # Build filter conditions
+            filter_conditions = []
+            
+            # Add keyword condition using MatchAny for keywords field
+            if keywords:
+                keyword_condition = FieldCondition(
+                    key="keywords",
+                    match=MatchAny(any=keywords)
+                )
+                filter_conditions.append(keyword_condition)
+            
+            # Add user_id filter if provided
+            if user_id:
+                user_condition = FieldCondition(
+                    key="author_ids",
+                    match=MatchAny(any=[str(user_id)])
+                )
+                filter_conditions.append(user_condition)
+            
+            # Add channel_id filter if provided
+            if channel_id:
+                channel_condition = FieldCondition(
+                    key="channel_id",
+                    match=MatchAny(any=[str(channel_id)])
+                )
+                filter_conditions.append(channel_condition)
+            
+            # Create filter with all conditions
+            if filter_conditions:
+                search_filter = Filter(must=filter_conditions)
+            else:
+                search_filter = None
+            
+            # Execute scroll search with filter
+            loop = asyncio.get_event_loop()
+            scroll_results = await loop.run_in_executor(
+                None,
+                lambda: self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=k,
+                    filter=search_filter,
+                    with_payload=True,
+                    with_vectors=False
+                )
+            )
+            
+            # Convert Qdrant results to MemoryFragments
+            results = []
+            for point in scroll_results[0]:  # scroll returns (points, next_page_offset)
+                payload = point.payload or {}
+                
+                # Extract metadata
+                metadata = payload.copy()
+                
+                # Create MemoryFragment
+                mem = MemoryFragment(
+                    id=metadata.get("fragment_id", str(point.id)),
+                    content=metadata.get("summary", ""),
+                    metadata=metadata,
+                    query_key=metadata.get("query_key", ""),
+                    score=None  # Scroll API doesn't return scores
+                )
+                results.append(mem)
+            
+            logger.debug(f"Keyword search returned {len(results)} results for query: {query_text}")
+            return results
+            
+        except Exception as e:
+            asyncio.create_task(self._report_error(e))
+            raise SearchError("Keyword search failed") from e
 
     async def search(
         self,
