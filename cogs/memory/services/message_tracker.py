@@ -9,6 +9,7 @@ from function import func
 from addons.settings import MemoryConfig
 
 from cogs.memory.interfaces.storage_interface import StorageInterface
+from cogs.memory.services.event_summarization_service import EventSummarizationService, EventSummary
 
 if TYPE_CHECKING:
     from bot import PigPig as Bot
@@ -134,6 +135,23 @@ class MessageTracker:
             all_messages.extend(messages)
             
             logger.info(f"Retrieved {len(all_messages)} messages for processing in channel {channel.id}")
+            
+            # Initialize EventSummarizationService
+            summarization_service = EventSummarizationService(self.bot, self.settings)
+            
+            # Call event summarization
+            messages_to_process = all_messages
+            event_summaries = await summarization_service.summarize_events(messages_to_process)
+            
+            # Check if event summaries is empty
+            if not event_summaries:
+                logger.info(f"No events summarized from {len(messages_to_process)} messages in channel {channel.id}")
+                return
+            
+            # Log successful retrieval of event summaries
+            logger.info(f"Successfully retrieved {len(event_summaries)} event summaries from channel {channel.id}")
+            
+            # TODO: Implement saving event_summaries to vector database logic here
             
         except Exception as e:
             await func.report_error(e, f"Failed to process memory for channel {channel.id}")
