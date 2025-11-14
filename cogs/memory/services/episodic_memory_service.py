@@ -253,25 +253,24 @@ class EpisodicMemoryService(commands.Cog):
             try:
                 # import inside function to avoid circular imports
                 from cogs.memory.services.vectorization_service import VectorizationService
-
+    
                 vector_manager = getattr(self.bot, "vector_manager", None)
                 vector_service = VectorizationService(bot=self.bot, storage=self.storage, vector_manager=vector_manager, settings=self.settings)
-
-                # Ensure we pass a clean list[int] to the vectorization service
-                message_ids = [int(getattr(m, "id")) for m in messages if getattr(m, "id", None) is not None]
-                await vector_service.process_unvectorized_messages(message_ids=message_ids)
+    
+                # Pass discord.Message objects directly to the vectorization service
+                await vector_service.process_unvectorized_messages(messages=messages)
 
                 vector_note = (
                     lang_manager.translate(guild_id, "commands", "memory", "force_update", "post_vectorization", count=len(messages))
                     if lang_manager
-                    else " 已完成儲存、向量化及歸檔/刪除作業。"
+                    else "已完成訊息的儲存、事件總結及向量化處理。"
                 )
             except Exception as e:
                 await func.report_error(e, "force_update_memory_vectorization")
                 vector_note = (
                     lang_manager.translate(guild_id, "commands", "memory", "force_update", "post_vectorization_error", count=len(messages))
                     if lang_manager
-                    else " 儲存完成，但向量化或歸檔/刪除時發生錯誤，已記錄。"
+                    else "訊息儲存完成，但在事件總結或向量化過程中發生錯誤。"
                 )
 
             success_text = (
