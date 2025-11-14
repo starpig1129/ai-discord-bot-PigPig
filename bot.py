@@ -396,6 +396,8 @@ class PigPig(commands.Bot):
                     self.storage._loop = None
                 except Exception:
                     pass
+        if getattr(memory_config, "enabled", True) and getattr(self, "episodic_storage", None):
+            await self.episodic_storage.initialize_channel_memory_state()
         if getattr(memory_config, "enabled", True) and getattr(self, "vector_manager", None):
             await self.vector_manager.initialize()
     
