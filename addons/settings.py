@@ -223,6 +223,10 @@ class MemoryConfig:
         # Optional tuning parameters (present in YAML)
         self.store_refresh_interval_seconds: int | None = data.get("store_refresh_interval_seconds", None)
         self.max_memory_items_per_user: int | None = data.get("max_memory_items_per_user", None)
+
+        # Message threshold for triggering memory processing
+        self.message_threshold: int = data.get("message_threshold", 100)
+
 try:
     base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")
 except Exception as e:
