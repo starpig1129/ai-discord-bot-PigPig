@@ -38,47 +38,7 @@ class ProceduralStorageInterface(ABC):
 
 
 class EpisodicStorageInterface(ABC):
-    """Interface for episodic (message) storage operations."""
-
-    @abstractmethod
-    async def add_pending_message(self, message: discord.Message) -> None:
-        """Add a message to the pending queue for processing."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_pending_messages(self, limit: int) -> List[Dict[str, Any]]:
-        """Retrieve a batch of pending messages."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def mark_pending_messages_processed(self, pending_ids: List[int]) -> None:
-        """Mark pending messages (by pending record ids) as processed."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def store_messages_batch(self, messages: List[discord.Message]) -> None:
-        """Store a batch of full message objects for later vectorization."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def get_unprocessed_messages(self, limit: int) -> List[Dict[str, Any]]:
-        """Retrieve a batch of messages that have not yet been vectorized."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def mark_messages_vectorized(self, message_ids: List[int]) -> None:
-        """Mark a batch of messages as vectorized."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def archive_messages(self, message_ids: List[int]) -> None:
-        """Move vectorized messages from the primary table to the archive table."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def delete_messages(self, message_ids: List[int]) -> None:
-        """Delete messages from the primary messages table."""
-        raise NotImplementedError
+    """Interface for episodic (channel memory state) storage operations."""
 
     @abstractmethod
     async def initialize_channel_memory_state(self) -> None:
