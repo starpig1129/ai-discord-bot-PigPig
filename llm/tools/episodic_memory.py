@@ -86,7 +86,14 @@ class EpisodicMemoryTools:
                 formatted: List[str] = []
                 for frag in fragments:
                     meta = frag.metadata or {}
-                    author = meta.get("author", meta.get("author_id", "Unknown"))
+                    
+                    # Handle both single author and multiple user_ids
+                    user_ids = meta.get("user_ids")
+                    if user_ids and isinstance(user_ids, list):
+                        author = f"Users: {', '.join(map(str, user_ids))}"
+                    else:
+                        author = meta.get("author", meta.get("author_id", "Unknown"))
+                    
                     timestamp = meta.get("timestamp")
                     if isinstance(timestamp, (int, float)):
                         try:
