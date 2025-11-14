@@ -211,18 +211,10 @@ class MemoryConfig:
         self.vector_search_k: int = data.get("vector_search_k", 5)
         self.keyword_search_k: int = data.get("keyword_search_k", 5)
 
-        # Batch sizes for fetch/process pipelines
-        self.fetch_batch_size: int = data.get("fetch_batch_size", 100)
-        self.process_batch_size: int = data.get("process_batch_size", 50)
-
         # Ollama provider options
         self.ollama_url: Optional[str] = data.get("ollama_url", "http://localhost:11434")
         # Generic provider options bag for future extensions
         self.provider_options: dict = data.get("provider_options", {})
-
-        # Optional tuning parameters (present in YAML)
-        self.store_refresh_interval_seconds: int | None = data.get("store_refresh_interval_seconds", None)
-        self.max_memory_items_per_user: int | None = data.get("max_memory_items_per_user", None)
 
         # Message threshold for triggering memory processing
         self.message_threshold: int = data.get("message_threshold", 100)
