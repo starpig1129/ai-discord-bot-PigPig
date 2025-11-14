@@ -61,10 +61,6 @@ class MessageTracker:
             return
 
         try:
-            # Add message to pending list
-            await self.storage.add_pending_message(message)
-            self._pending_message_count += 1
-            
             # Update channel memory state
             channel_id = message.channel.id
             channel_state = await self.storage.get_channel_memory_state(channel_id)
