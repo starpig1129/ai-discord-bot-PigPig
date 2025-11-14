@@ -5,9 +5,9 @@
             "description": "記憶體管理指令",
             "force_update": {
                 "responses": {
-                    "starting": "開始強制更新記憶...",
-                    "post_vectorization": "向量化完成，正在更新索引...",
-                    "success": "強制更新完成"
+                    "starting": "正在強制更新此頻道的記憶...",
+                    "post_vectorization_error": "訊息儲存完成，但在事件總結或向量化過程中發生錯誤。",
+                    "success": "已更新 {count} 條訊息的記憶。"
                 }
             }
         },

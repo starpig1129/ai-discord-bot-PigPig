@@ -315,10 +315,10 @@ class EventSummarizationService:
         try:
             # Get the model and fallback middleware
             try:
-                primary_model, fallback_mw = self.model_manager.get_model("episodic_memory")
+                primary_model, fallback_mw = self.model_manager.get_model("episodic_memory_agent")
                 log.debug(f"Using model: {primary_model}")
             except ValueError as e:
-                log.error(f"Failed to get model for episodic_memory: {e}")
+                log.error(f"Failed to get model for episodic_memory_agent: {e}")
                 return None
             
             # Prepare the system and user prompts

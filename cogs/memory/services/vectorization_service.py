@@ -73,7 +73,11 @@ class VectorizationService:
             logger.debug(f"Failed to get message objects: {e}")
             return []
 
-    async def process_unvectorized_messages(self, message_ids: Optional[List[int]] = None) -> None:
+    async def process_unvectorized_messages(
+        self,
+        message_ids: Optional[List[int]] = None,
+        messages: Optional[List[discord.Message]] = None
+    ) -> None:
         """
         Main entrypoint for processing unvectorized messages using EventSummarizationService.
 
@@ -81,6 +85,9 @@ class VectorizationService:
             message_ids: Optional list of message_id integers to restrict processing to.
                          If omitted, a batch of unprocessed messages will be retrieved
                          from storage.
+            messages: Optional list of discord.Message objects provided directly by caller.
+                      When present, these messages are used instead of querying the storage
+                      backend for message objects.
         """
         try:
             if not self.storage:
@@ -89,18 +96,23 @@ class VectorizationService:
             if not self.vector_manager:
                 raise ValueError("vector_manager dependency is required for VectorizationService")
 
-            # Try to get discord.Message objects for event summarization
-            discord_messages = await self._get_unprocessed_message_objects(message_ids)
-            
+            # If caller provided discord.Message objects directly, use them.
+            if messages is not None:
+                discord_messages = messages
+                logger.debug(f"process_unvectorized_messages: received {len(discord_messages)} messages from caller")
+            else:
+                # Try to get discord.Message objects for event summarization from storage backend
+                discord_messages = await self._get_unprocessed_message_objects(message_ids)
+
             if discord_messages:
                 # Use EventSummarizationService to process messages
                 logger.info(f"Processing {len(discord_messages)} messages with EventSummarizationService")
                 event_summaries = await self.event_summarization_service.summarize_events(discord_messages)
-                
+
                 if not event_summaries:
                     logger.debug("No event summaries generated from messages")
                     return
-                
+
                 # Convert EventSummary objects to MemoryFragment objects
                 fragments = await self._convert_event_summaries_to_fragments(event_summaries)
                 # Collect all message IDs for the range covered by each event
@@ -113,7 +125,7 @@ class VectorizationService:
                         message_id_list.extend(range(start_id, end_id + 1))
                     else:
                         message_id_list.extend(range(end_id, start_id + 1))
-                
+
             else:
                 # Fallback to original row-based processing if discord.Message objects not available
                 logger.debug("Using fallback row-based processing")
