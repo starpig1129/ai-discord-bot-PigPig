@@ -315,10 +315,10 @@ class EventSummarizationService:
         try:
             # Get the model and fallback middleware
             try:
-                primary_model, fallback_mw = self.model_manager.get_model("episodic_memory_agent")
+                primary_model, fallback_mw = self.model_manager.get_model("episodic_memory_model")
                 log.debug(f"Using model: {primary_model}")
             except ValueError as e:
-                log.error(f"Failed to get model for episodic_memory_agent: {e}")
+                log.error(f"Failed to get model for episodic_memory_model: {e}")
                 return None
             
             # Prepare the system and user prompts
@@ -379,7 +379,7 @@ class EventSummarizationService:
     def _get_system_prompt(self) -> str:
         """Get the system prompt from the episodic memory extractor template."""
         try:
-            return prompt_config.get_system_prompt("episodic_memory_extractor")
+            return prompt_config.get_system_prompt("episodic_memory_agent")
         except Exception as e:
             asyncio.create_task(func.report_error(e, "EventSummarizationService/_get_system_prompt"))
             # Fallback system prompt
