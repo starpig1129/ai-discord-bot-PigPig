@@ -169,21 +169,41 @@ class QdrantStore(VectorStoreInterface):
     ) -> List[MemoryFragment]:
         """Vector similarity search with metadata filtering."""
         try:
-            # Build filter dict for LangChain
-            search_filter = {}
+            # Build Qdrant filter for vector search
+            
+            
+            filter_conditions = []
+            
+            # Add user_id filter if provided
             if user_id:
-                search_filter["author_id"] = str(user_id)
+                user_condition = FieldCondition(
+                    key="author_ids",
+                    match=MatchAny(any=[str(user_id)])
+                )
+                filter_conditions.append(user_condition)
+            
+            # Add channel_id filter if provided
             if channel_id:
-                search_filter["channel_id"] = str(channel_id)
+                channel_condition = FieldCondition(
+                    key="channel_id",
+                    match=MatchAny(any=[str(channel_id)])
+                )
+                filter_conditions.append(channel_condition)
+            
+            # Create filter with all conditions
+            if filter_conditions:
+                search_filter = Filter(must=filter_conditions)
+            else:
+                search_filter = None
 
-            # Use LangChain's similarity_search
+            # Use LangChain's similarity_search with Qdrant filter
             loop = asyncio.get_event_loop()
             docs = await loop.run_in_executor(
                 None,
                 lambda: self.vector_store.similarity_search(
                     query_text,
                     k=limit,
-                    filter=search_filter if search_filter else None
+                    filter=search_filter
                 )
             )
 
@@ -215,7 +235,7 @@ class QdrantStore(VectorStoreInterface):
         channel_id: Optional[str] = None,
         k: int = 5
     ) -> List[MemoryFragment]:
-        """Keyword search using Qdrant scroll API with payload filtering."""
+        """Keyword search using Qdrant query API with payload filtering."""
         try:
             # Parse query keywords
             keywords = [kw.strip().lower() for kw in query_text.split() if kw.strip()]
@@ -253,14 +273,15 @@ class QdrantStore(VectorStoreInterface):
             else:
                 search_filter = None
             
-            # Execute scroll search with filter
+            # Execute query search with filter (use query_points instead of scroll for filtering)
             loop = asyncio.get_event_loop()
-            scroll_results = await loop.run_in_executor(
+            query_results = await loop.run_in_executor(
                 None,
-                lambda: self.client.scroll(
+                lambda: self.client.query_points(
                     collection_name=self.collection_name,
+                    query=[0.0] * self.embedding_dim,  # Zero vector for filtering only
                     limit=k,
-                    filter=search_filter,
+                    query_filter=search_filter,
                     with_payload=True,
                     with_vectors=False
                 )
@@ -268,7 +289,7 @@ class QdrantStore(VectorStoreInterface):
             
             # Convert Qdrant results to MemoryFragments
             results = []
-            for point in scroll_results[0]:  # scroll returns (points, next_page_offset)
+            for point in query_results.points:
                 payload = point.payload or {}
                 
                 # Extract metadata
@@ -280,7 +301,7 @@ class QdrantStore(VectorStoreInterface):
                     content=metadata.get("summary", ""),
                     metadata=metadata,
                     query_key=metadata.get("query_key", ""),
-                    score=None  # Scroll API doesn't return scores
+                    score=point.score if hasattr(point, 'score') else None
                 )
                 results.append(mem)
             
@@ -316,19 +337,27 @@ class QdrantStore(VectorStoreInterface):
             )
 
         # Both queries: run in parallel and merge
-        vec_task = self.search_memories_by_vector(
-            vector_query, limit=vector_k, user_id=user_id, channel_id=channel_id
-        )
-        kw_task = self.search_memories_by_keyword(
-            keyword_query, user_id=user_id, channel_id=channel_id, k=keyword_k
-        )
+        tasks = []
+        if vector_query:
+            tasks.append(self.search_memories_by_vector(
+                vector_query, limit=vector_k, user_id=user_id, channel_id=channel_id
+            ))
+        if keyword_query:
+            tasks.append(self.search_memories_by_keyword(
+                keyword_query, user_id=user_id, channel_id=channel_id, k=keyword_k
+            ))
 
-        vec_results, kw_results = await asyncio.gather(vec_task, kw_task)
+        results = await asyncio.gather(*tasks)
+        
+        # Flatten results
+        all_results = []
+        for result_set in results:
+            all_results.extend(result_set)
 
         # Deduplicate by fragment_id
         seen = set()
         merged = []
-        for mem in vec_results + kw_results:
+        for mem in all_results:
             frag_id = mem.metadata.get("fragment_id") or mem.id
             if frag_id not in seen:
                 seen.add(frag_id)
