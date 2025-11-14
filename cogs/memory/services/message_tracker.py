@@ -10,6 +10,7 @@ from addons.settings import MemoryConfig
 
 from cogs.memory.interfaces.storage_interface import StorageInterface
 from cogs.memory.services.event_summarization_service import EventSummarizationService, EventSummary
+from cogs.memory.services.vectorization_service import VectorizationService
 
 if TYPE_CHECKING:
     from bot import PigPig as Bot
@@ -151,7 +152,20 @@ class MessageTracker:
             # Log successful retrieval of event summaries
             logger.info(f"Successfully retrieved {len(event_summaries)} event summaries from channel {channel.id}")
             
-            # TODO: Implement saving event_summaries to vector database logic here
+            # Initialize VectorizationService
+            vector_manager = getattr(self.bot, "vector_manager", None)
+            vectorization_service = VectorizationService(
+                bot=self.bot,
+                storage=self.storage,
+                vector_manager=vector_manager,
+                settings=self.settings
+            )
+            
+            # Process event summaries through VectorizationService
+            await vectorization_service.process_event_summaries(event_summaries)
+            
+            # Log successful submission of event summaries to VectorizationService
+            logger.info(f"Successfully submitted {len(event_summaries)} event summaries from channel {channel.id} to vectorization service")
             
         except Exception as e:
             await func.report_error(e, f"Failed to process memory for channel {channel.id}")
