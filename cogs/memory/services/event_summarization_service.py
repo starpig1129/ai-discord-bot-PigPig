@@ -6,15 +6,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, cast, TypeVar, Type
-from datetime import datetime, timezone
+from datetime import timezone
 
 import discord
-from google import genai
-from google.genai import types
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 
@@ -42,16 +39,54 @@ class EventMetadata:
 
 
 class MemoryFragment(BaseModel):
-    """Pydantic model for LLM response format."""
-    query_key: str
-    query_keywords: List[str]
-    query_value: str
-    start_message_id: int
-    end_message_id: int
+    """Represents a single, distinct memory extracted from a conversation.
+
+    Attributes:
+        query_key: A concise, objective, and human-readable summary of a specific
+            event, decision, or piece of information from the conversation.
+        query_keywords: A list of machine-optimized keywords for efficient
+            database searching and retrieval.
+        query_value: The detailed content of the memory, suitable for being
+            returned as a search result.
+        start_message_id: The ID of the first message in the conversation that
+            is part of this memory.
+        end_message_id: The ID of the last message in the conversation that is
+            part of this memory.
+    """
+    query_key: str = Field(
+        ...,
+        description=(
+            "A concise, objective, and human-readable summary of a specific event, "
+            "decision, or piece of information from the conversation."
+        ),
+    )
+    query_keywords: List[str] = Field(
+        ...,
+        description="A list of machine-optimized keywords for efficient database searching and retrieval.",
+    )
+    query_value: str = Field(
+        ...,
+        description="The detailed content of the memory, suitable for being returned as a search result.",
+    )
+    start_message_id: int = Field(
+        ...,
+        description="The ID of the first message in the conversation that is part of this memory.",
+    )
+    end_message_id: int = Field(
+        ...,
+        description="The ID of the last message in the conversation that is part of this memory.",
+    )
 
 class MemoryFragmentList(BaseModel):
-    """Pydantic model for a list of MemoryFragments."""
-    fragments: List[MemoryFragment]
+    """A list of MemoryFragment objects, representing all significant events extracted from a conversation.
+
+    Attributes:
+        fragments: A list of memory fragments extracted from the conversation.
+    """
+    fragments: List[MemoryFragment] = Field(
+        ...,
+        description="A list of memory fragments extracted from the conversation.",
+    )
 @dataclass
 class EventSummary:
     """Structured output for an event summary."""
@@ -316,7 +351,21 @@ class EventSummarizationService:
             )
             
             if memory_fragment:
-                log.debug(f"Successfully extracted memory fragment: {memory_fragment.query_value[:50]}...")
+                # Log a concise preview: number of fragments and first fragment content preview if available.
+                try:
+                    first_preview = (
+                        memory_fragment.fragments[0].query_value[:50]
+                        if getattr(memory_fragment, "fragments", None)
+                        and len(memory_fragment.fragments) > 0
+                        else ""
+                    )
+                    log.debug(
+                        f"Successfully extracted {len(memory_fragment.fragments)} memory fragment(s); preview: {first_preview}..."
+                    )
+                except Exception:
+                    log.debug(
+                        "Successfully extracted memory fragment(s); unable to generate preview"
+                    )
             else:
                 log.warning("Failed to extract memory fragment from LLM response")
             
