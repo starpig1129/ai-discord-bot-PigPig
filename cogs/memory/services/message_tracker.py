@@ -167,6 +167,16 @@ class MessageTracker:
             # Log successful submission of event summaries to VectorizationService
             logger.info(f"Successfully submitted {len(event_summaries)} event summaries from channel {channel.id} to vectorization service")
             
+            # Update channel memory state for next processing cycle
+            await self.storage.update_channel_memory_state(
+                channel_id=channel.id,
+                message_count=0,
+                start_message_id=messages_to_process[-1].id
+            )
+            
+            # Log successful update of channel memory state
+            logger.info(f"Successfully updated memory state for channel {channel.id}, new start_message_id: {messages_to_process[-1].id}")
+            
         except Exception as e:
             await func.report_error(e, f"Failed to process memory for channel {channel.id}")
 
