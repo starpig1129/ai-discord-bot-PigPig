@@ -19,7 +19,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 
 from function import func
-from addons.settings import memory_config, MemoryConfig, llm_config, prompt_config
+from addons.settings import MemoryConfig, prompt_config
 from llm.model_manager import ModelManager
 
 log = logging.getLogger(__name__)
