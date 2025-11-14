@@ -33,7 +33,7 @@ class MessageTracker:
     async def track_message(self, message: discord.Message):
         """
         Tracks a message, adding it to the pending list if it's not from a bot
-        and not in an excluded channel.
+        and not in an excluded channel. Also updates channel memory state.
 
         Args:
             message (discord.Message): The message to track.
@@ -42,8 +42,22 @@ class MessageTracker:
             return
 
         try:
+            # Add message to pending list
             await self.storage.add_pending_message(message)
             self._pending_message_count += 1
+            
+            # Update channel memory state
+            channel_id = message.channel.id
+            channel_state = await self.storage.get_channel_memory_state(channel_id)
+            
+            if channel_state is None:
+                # Initialize new channel state
+                await self.storage.update_channel_memory_state(channel_id, 1, message.id)
+            else:
+                # Update existing channel state
+                new_message_count = channel_state['message_count'] + 1
+                await self.storage.update_channel_memory_state(channel_id, new_message_count, channel_state['start_message_id'])
+                
         except Exception as e:
             await func.report_error(e, f"Failed to track message {message.id}")
 

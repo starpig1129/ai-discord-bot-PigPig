@@ -80,6 +80,34 @@ class EpisodicStorageInterface(ABC):
         """Delete messages from the primary messages table."""
         raise NotImplementedError
 
+    @abstractmethod
+    async def initialize_channel_memory_state(self) -> None:
+        """Initialize the channel_memory_state table in the database."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_channel_memory_state(self, channel_id: int) -> Optional[Dict[str, int]]:
+        """Get the memory state for a specific channel.
+        
+        Args:
+            channel_id (int): The channel ID to get state for.
+            
+        Returns:
+            Optional[Dict[str, int]]: Dictionary with 'message_count' and 'start_message_id', or None if not found.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def update_channel_memory_state(self, channel_id: int, message_count: int, start_message_id: int) -> None:
+        """Update the memory state for a specific channel.
+        
+        Args:
+            channel_id (int): The channel ID to update state for.
+            message_count (int): The new message count.
+            start_message_id (int): The start message ID.
+        """
+        raise NotImplementedError
+
 
 class StorageInterface(ProceduralStorageInterface, EpisodicStorageInterface):
     """Combined interface kept for backward compatibility."""
