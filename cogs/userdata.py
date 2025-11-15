@@ -391,9 +391,8 @@ class UserDataCog(commands.Cog):
             tools=[],
             system_prompt=system_prompt,
             response_format=UserDataResponse,
-            middleware=cast(Any, [
+            middleware=cast(Any, [fallback,
                 ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
-                fallback,
             ]),
         )
 

@@ -171,7 +171,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 model=info_model,
                 tools=tool_list,
                 system_prompt=full_info_prompt,
-                middleware=[DirectToolOutputMiddleware(), fallback],
+                middleware=[fallback,DirectToolOutputMiddleware()],
             )
 
             # Inject short-term memory messages directly before current user input
@@ -213,7 +213,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 model=message_model,
                 tools=[],
                 system_prompt=full_message_prompt,
-                middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback],
+                middleware=[fallback, ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
             )
 
             # Use the analysis from info_agent for message generation

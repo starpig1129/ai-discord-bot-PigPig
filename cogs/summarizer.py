@@ -126,8 +126,9 @@ class SummarizerCog(commands.Cog):
                 tools=[],
                 system_prompt=system_prompt,
                 middleware=[
-                                ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
-                                fallback,
+                            fallback,
+                            ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
+                                
                             ]
             )
 
