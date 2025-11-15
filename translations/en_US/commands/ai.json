@@ -1,0 +1,18 @@
+{
+    "cot_ai": {
+        "name": "cot_ai",
+        "description": "Use Chain of Thought reasoning (may take longer)",
+        "options": {
+            "prompt": "Prompt to process"
+        },
+        "responses": {
+            "processing": "Processing your request...",
+            "error": "Error: {error}",
+            "thinking": "🤔 Thinking...",
+            "step_header": "**Step {step}:**",
+            "final_answer": "**Final Answer:**",
+            "thinking_time": "Thinking time: {time}",
+            "total_time": "Total thinking time: {time}"
+        }
+    }
+}

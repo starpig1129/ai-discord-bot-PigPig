@@ -1,0 +1,13 @@
+{
+    "memory": {
+        "name": "memory",
+        "description": "内存管理命令",
+        "force_update": {
+            "responses": {
+                "starting": "开始强制更新记忆...",
+                "post_vectorization": "向量化完成，正在更新索引...",
+                "success": "强制更新完成"
+            }
+        }
+    }
+}

@@ -1,0 +1,24 @@
+{
+    "userdata": {
+        "name": "userdata",
+        "description": "Manage user data",
+        "options": {
+            "action": "Choose action (read/save)",
+            "user": "Target user",
+            "user_data": "User data to save"
+        },
+        "choices": {
+            "read": "Read",
+            "save": "Save"
+        },
+        "responses": {
+            "searching": "Searching user data...",
+            "updating": "Updating data...",
+            "data_found": "User <@{user_id}> data: {data}",
+            "data_not_found": "User <@{user_id}> data not found.",
+            "data_updated": "Updated user <@{user_id}> data: {data}",
+            "data_created": "Created data for user <@{user_id}>: {data}",
+            "invalid_action": "Invalid action. Please use 'read' or 'save'."
+        }
+    }
+}

@@ -1,0 +1,17 @@
+{
+    "calculate": {
+        "name": "calculate",
+        "description": "数学式を計算",
+        "options": {
+            "expression": "計算する数学式"
+        },
+        "responses": {
+            "processing": "計算中...",
+            "result": "計算結果: {expression} = {result}",
+            "error_too_long": "エラー：式が長すぎます、短くして再試行してください。",
+            "error_undefined_function": "エラー：式に未定義の関数が含まれています。",
+            "error_unsupported_elements": "エラー：式にサポートされていない要素が含まれています。",
+            "error_general": "計算エラー：式を解析または計算できません。"
+        }
+    }
+}

@@ -1,0 +1,24 @@
+{
+    "generate_image": {
+        "name": "generate_image",
+        "description": "生成或编辑图片",
+        "options": {
+            "prompt": "用于生成或编辑图片的提示文字"
+        },
+        "responses": {
+            "image_generated": "已生成图片",
+            "gemini_error": "Gemini API 错误：{error}",
+            "all_methods_failed": "所有图片生成方式都失败了，请稍后再试。",
+            "general_error": "生成图片时发生错误：{error}",
+            "local_model_processing": "使用本地模型生成中...",
+            "local_model_complete": "本地模型完成生成！"
+        },
+        "errors": {
+            "generation_error": "图片生成过程出现错误：{error}",
+            "local_model_error": "本地模型生成错误：{error}",
+            "image_processing_error": "图片处理错误：{error}",
+            "api_error": "API 请求错误：{error}",
+            "gemini_generation_error": "Gemini API 生成错误：{error}"
+        }
+    }
+}

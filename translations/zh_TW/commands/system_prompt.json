@@ -1,0 +1,216 @@
+{
+    "system_prompt": {
+        "name": "system_prompt",
+        "description": "系統提示管理 - 統一管理介面",
+        "ui": {
+            "main_menu": {
+                "title": "🤖 系統提示管理",
+                "description": "歡迎使用統一系統提示管理介面！請選擇要執行的功能：",
+                "main_functions_title": "🔧 主要功能",
+                "main_functions_description": "• **設定提示** - 設定頻道或伺服器系統提示\n• **查看配置** - 查看當前系統提示配置\n• **模組編輯** - 編輯特定 YAML 模組\n• **複製提示** - 複製系統提示到其他頻道\n• **移除提示** - 移除已設定的系統提示\n• **重置設定** - 重置系統提示配置",
+                "usage_title": "📋 使用說明",
+                "usage_description": "點擊下方按鈕來執行對應功能。\n系統支援三層繼承機制：YAML 基礎 → 伺服器預設 → 頻道特定",
+                "footer": "提示：所有操作都會進行權限檢查，確保安全性"
+            },
+            "buttons": {
+                "set_prompt": "設定提示",
+                "view_config": "查看配置",
+                "module_edit": "模組編輯",
+                "copy_prompt": "複製提示",
+                "remove_prompt": "移除提示",
+                "reset_config": "重置設定",
+                "back_to_main": "返回主選單",
+                "channel_specific": "頻道特定",
+                "server_default": "伺服器預設",
+                "channel_module": "頻道模組",
+                "server_module": "伺服器模組",
+                "current_channel": "當前頻道",
+                "show_inheritance": "顯示繼承",
+                "remove_channel_prompt": "移除頻道提示",
+                "remove_server_prompt": "移除伺服器提示",
+                "reset_current_channel": "重置當前頻道",
+                "reset_server_default": "重置伺服器預設",
+                "reset_all_settings": "重置全部設定",
+                "execute_copy": "執行複製",
+                "confirm": "確認",
+                "confirm_remove": "確認移除",
+                "confirm_reset": "確認重置",
+                "confirm_copy": "確認複製",
+                "cancel": "取消",
+                "edit": "編輯",
+                "preview": "預覽"
+            },
+            "menus": {
+                "set_prompt_title": "⚙️ 設定系統提示",
+                "set_prompt_description": "請選擇要設定的範圍",
+                "view_options_title": "👁️ 查看系統提示配置",
+                "view_options_description": "請選擇查看選項",
+                "module_edit_title": "📦 模組化編輯",
+                "module_edit_description": "請選擇要編輯的模組和範圍",
+                "module_scope_title": "📦 編輯{scope}模組",
+                "module_scope_description": "請選擇要編輯的模組",
+                "copy_prompt_title": "📋 複製系統提示",
+                "copy_prompt_description": "請選擇來源和目標頻道",
+                "remove_prompt_title": "🗑️ 移除系統提示",
+                "remove_prompt_description": "請選擇要移除的範圍",
+                "reset_config_title": "🔄 重置系統提示",
+                "reset_config_description": "請選擇要重置的範圍"
+            },
+            "modals": {
+                "system_prompt": {
+                    "title": "設定系統提示",
+                    "title_channel": "設定頻道 #{channel} 系統提示",
+                    "title_server": "設定伺服器預設系統提示",
+                    "title_edit": "編輯系統提示",
+                    "prompt_label": "系統提示內容",
+                    "prompt_placeholder": "請輸入系統提示內容..."
+                },
+                "module_prompt": {
+                    "title": "設定模組: {module}",
+                    "prompt_label": "{module} 模組內容",
+                    "prompt_placeholder": "請輸入 {module} 模組的內容..."
+                }
+            },
+            "selectors": {
+                "channel_placeholder": "選擇頻道",
+                "from_channel_placeholder": "選擇來源頻道",
+                "to_channel_placeholder": "選擇目標頻道",
+                "module_placeholder": "選擇要編輯的模組",
+                "module_description": "編輯 {module} 模組"
+            },
+            "embeds": {
+                "system_prompt_title": "🤖 系統提示設定",
+                "preview_title": "🔍 系統提示預覽",
+                "modules_title": "📦 可用模組列表"
+            }
+        },
+        "messages": {
+            "success": {
+                "set": "✅ 系統提示設定成功",
+                "set_description": "已成功設定{scope}的系統提示",
+                "remove": "✅ 移除成功",
+                "remove_description": "已成功移除{scope}的系統提示",
+                "copy": "✅ 複製成功",
+                "copy_description": "已成功將 #{from_channel} 的系統提示複製到 #{to_channel}",
+                "reset": "✅ 重置成功",
+                "reset_description": "已成功重置{scope}系統提示設定",
+                "operation_confirmed": "✅ 操作已確認",
+                "operation_cancelled": "❌ 操作已取消"
+            },
+            "info": {
+                "scope_channel": "頻道 #{channel}",
+                "scope_server": "伺服器預設",
+                "scope_all": "所有",
+                "content_length": "內容長度",
+                "created_by": "設定者",
+                "source": "來源",
+                "source_yaml": "YAML 基礎提示",
+                "source_server": "伺服器預設 + YAML",
+                "source_channel": "頻道特定 + 伺服器預設 + YAML",
+                "source_cache": "快取",
+                "prompt_length": "{length} 字元",
+                "language": "語言",
+                "channel": "頻道",
+                "inheritance_title": "繼承層級",
+                "inheritance_yaml": "🔹 YAML 基礎提示",
+                "inheritance_server": "🔸 伺服器預設提示",
+                "inheritance_channel": "🔸 頻道特定提示",
+                "inheritance_none": "僅 YAML 基礎",
+                "modules_description": "以下是可以覆蓋的 YAML 系統提示模組：",
+                "modules_usage": "在設定系統提示時，可以使用模組覆蓋功能來自訂特定模組的內容",
+                "modules_none": "暫無可用模組",
+                "preview_content": "內容",
+                "preview_source": "來源",
+                "preview_length": "長度"
+            },
+            "confirm": {
+                "remove_channel": "確定要移除頻道 #{channel} 的系統提示嗎？",
+                "remove_server": "確定要移除伺服器預設系統提示嗎？",
+                "reset_channel": "確定要重置頻道 #{channel} 的系統提示嗎？",
+                "reset_server": "確定要重置伺服器預設系統提示嗎？",
+                "reset_all": "確定要重置所有系統提示設定嗎？\n⚠️ 此操作無法復原！",
+                "copy_simple": "複製 #{from_channel} 的系統提示到 #{to_channel}",
+                "copy_overwrite": "複製 #{from_channel} 的系統提示到 #{to_channel}\n⚠️ 目標頻道已有系統提示，將會被覆蓋",
+                "title_remove": "⚠️ 確認移除",
+                "title_reset": "⚠️ 確認重置",
+                "title_copy": "🔄 確認複製"
+            },
+            "validation": {
+                "prompt_empty": "❌ 系統提示內容不能為空",
+                "prompt_too_long": "❌ 系統提示過長（最大 4000 字元），當前 {length} 字元",
+                "same_channel": "❌ 來源頻道和目標頻道不能相同",
+                "module_empty": "❌ {module} 模組內容不能為空"
+            }
+        },
+        "errors": {
+            "permission_denied": "您沒有權限執行此操作",
+            "channel_permission_denied": "您沒有權限管理此頻道的系統提示",
+            "server_permission_denied": "您沒有權限管理伺服器級別的系統提示",
+            "prompt_not_found": "未找到系統提示",
+            "channel_not_found": "找不到指定的頻道",
+            "validation_failed": "驗證失敗：{error}",
+            "operation_failed": "操作失敗：{error}",
+            "system_error": "系統錯誤，請稍後再試",
+            "timeout": "操作超時，請重試",
+            "modal_error": "處理請求時發生錯誤: {error}",
+            "unknown_error": "發生未知錯誤，請稍後再試",
+            "modules_unavailable": "無法取得模組列表: {error}"
+        },
+        "modules": {
+            "descriptions": {
+                "base": "定義 AI 的基本身份和核心指令，包括機器人名稱、創建者信息等基礎設定",
+                "personality": "設定 AI 的個性特徵和表達風格，包括幽默感、禮貌程度、語言風格等",
+                "answering_principles": "規定 AI 回答問題的基本原則，如優先級處理、資訊來源標註等",
+                "language": "設定 AI 的語言偏好和表達方式，包括主要語言、風格元素、回應長度等",
+                "professionalism": "定義 AI 在專業話題上的表現標準，平衡幽默性與專業性",
+                "interaction": "設定 AI 的互動模式，包括對話風格、專注度管理等",
+                "formatting": "規定 Discord 環境下的格式化規則，包括 Markdown 語法、提及格式等",
+                "professional_personality": "整合專業性與個性化設定，創造既專業又有個性的 AI 表現方式"
+            },
+            "select_descriptions": {
+                "base": "基本身份和核心指令",
+                "personality": "個性特徵和表達風格",
+                "answering_principles": "回答問題的基本原則",
+                "language": "語言偏好和表達方式",
+                "professionalism": "專業話題的表現標準",
+                "interaction": "互動模式和對話風格",
+                "formatting": "Discord 格式化規則",
+                "professional_personality": "專業個性化設定"
+            },
+            "modules_select_descriptions": {
+                "base": "基本身份和核心指令",
+                "personality": "個性特徵和表達風格",
+                "answering_principles": "回答問題的基本原則",
+                "language": "語言偏好和表達方式",
+                "professionalism": "專業話題的表現標準",
+                "interaction": "互動模式和對話風格",
+                "formatting": "Discord 格式化規則",
+                "professional_personality": "專業個性化設定"
+            },
+            "help": {
+                "title": "📦 模組說明",
+                "description": "以下模組可以個別編輯來自訂 AI 的行為：",
+                "usage_tip": "💡 提示：編輯模組時會顯示預設內容作為參考",
+                "inheritance_note": "⚠️ 注意：模組編輯會覆蓋對應的 YAML 模組內容"
+            }
+        },
+        "user_experience": {
+            "default_content": {
+                "loaded": "✅ 已載入預設內容作為編輯基礎",
+                "loading_failed": "⚠️ 載入預設內容失敗，將從空白開始",
+                "effective_prompt_loaded": "📝 已載入當前有效的完整系統提示",
+                "module_default_loaded": "📦 已載入 {module} 模組的預設內容"
+            },
+            "editing": {
+                "based_on_current": "基於當前有效的系統提示進行編輯...",
+                "based_on_default": "基於 {module} 模組的預設內容進行編輯...",
+                "from_scratch": "請輸入新的內容..."
+            },
+            "guidance": {
+                "first_time_edit": "🎯 首次編輯提示：您可以基於預設內容進行修改",
+                "module_explanation": "💭 此模組負責：{description}",
+                "inheritance_info": "🔗 此設定將影響：{scope}"
+            }
+        }
+    }
+}

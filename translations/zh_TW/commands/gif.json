@@ -1,0 +1,13 @@
+{
+    "search_gif": {
+        "name": "search_gif",
+        "description": "搜尋 GIF",
+        "options": {
+            "query": "搜尋關鍵字"
+        },
+        "responses": {
+            "not_found": "找不到相關的 GIF。",
+            "searching": "正在搜尋 GIF..."
+        }
+    }
+}

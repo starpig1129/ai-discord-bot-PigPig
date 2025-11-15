@@ -1,0 +1,17 @@
+{
+    "calculate": {
+        "name": "calculate",
+        "description": "计算数学表达式",
+        "options": {
+            "expression": "要计算的数学表达式"
+        },
+        "responses": {
+            "processing": "计算中...",
+            "result": "计算结果: {expression} = {result}",
+            "error_too_long": "错误：表达式过长，请缩短后再试。",
+            "error_undefined_function": "错误：表达式包含未定义的函数。",
+            "error_unsupported_elements": "错误：表达式包含不支持的元素。",
+            "error_general": "计算错误：无法解析或计算该表达式。"
+        }
+    }
+}

@@ -1,0 +1,52 @@
+{
+    "mode": {
+        "name": "mode",
+        "description": "再生モードを設定",
+        "choices": {
+            "no_loop": "ループなし",
+            "loop_queue": "キューループ",
+            "loop_single": "シングルループ"
+        },
+        "responses": {
+            "success": "再生モードを{mode}に設定しました"
+        }
+    },
+    "shuffle": {
+        "name": "shuffle",
+        "description": "シャッフルを切り替え",
+        "responses": {
+            "enabled": "有効",
+            "disabled": "無効",
+            "success": "シャッフルを{status}にしました"
+        }
+    },
+    "play": {
+        "name": "play",
+        "description": "動画を再生（URLまたはキーワード）またはUIをリフレッシュ",
+        "options": {
+            "query": "動画URL、検索キーワード、またはUIリフレッシュのため空白"
+        },
+        "errors": {
+            "no_voice_channel": "まずボイスチャンネルに参加してください！",
+            "playlist_download_failed": "プレイリストダウンロードエラー：{error}",
+            "queue_full_title": "プレイリスト満杯",
+            "queue_full_desc": "新しい曲を追加する前に現在の曲が終了するのを待ってください",
+            "video_info_failed": "動画情報取得エラー：{error}",
+            "no_results": "関連動画が見つかりません",
+            "playback_error": "音楽再生エラー",
+            "attempting_next": "次の曲を再生しようとしています...",
+            "playback_failed_title": "再生失敗",
+            "playback_failed_desc": "/playを使用して再再生してください",
+            "nothing_playing": "現在曲を再生していません。"
+        },
+        "responses": {
+            "playlist_added": "プレイリストに{count}曲を追加（合計{total}曲）",
+            "song_added": "プレイリストに追加：{title}",
+            "select_song": "再生する曲を選択してください：",
+            "search_results_title": "YouTube検索結果",
+            "queue_finished": "プレイリスト終了！",
+            "refreshed_ui": "再生UIをリフレッシュしました。",
+            "recovering_state": "異常な再生状態を検知、回復を試行中..."
+        }
+    }
+}

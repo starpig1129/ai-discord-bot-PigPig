@@ -1,0 +1,17 @@
+{
+    "calculate": {
+        "name": "calculate",
+        "description": "Calculate mathematical expression",
+        "options": {
+            "expression": "Mathematical expression to calculate"
+        },
+        "responses": {
+            "processing": "Calculating...",
+            "result": "Calculation result: {expression} = {result}",
+            "error_too_long": "Error: Expression too long, please shorten and try again.",
+            "error_undefined_function": "Error: Expression contains undefined function.",
+            "error_unsupported_elements": "Error: Expression contains unsupported elements.",
+            "error_general": "Calculation error: Unable to parse or calculate the expression."
+        }
+    }
+}

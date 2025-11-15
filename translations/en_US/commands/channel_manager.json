@@ -1,0 +1,45 @@
+{
+    "set_channel_mode": {
+        "name": "set_channel_mode",
+        "description": "Set channel response mode",
+        "choices": {
+            "unrestricted": "Unrestricted",
+            "whitelist": "Whitelist",
+            "blacklist": "Blacklist"
+        },
+        "responses": {
+            "success": "Channel response mode set to: {mode}"
+        }
+    },
+    "add_channel": {
+        "name": "add_channel",
+        "description": "Add channel to whitelist or blacklist",
+        "choices": {
+            "whitelist": "Whitelist",
+            "blacklist": "Blacklist"
+        },
+        "responses": {
+            "success": "Added channel {channel} to {list_type}",
+            "already_exists": "Channel {channel} already exists in {list_type}"
+        }
+    },
+    "remove_channel": {
+        "name": "remove_channel",
+        "description": "Remove channel from whitelist or blacklist",
+        "choices": {
+            "whitelist": "Whitelist",
+            "blacklist": "Blacklist"
+        },
+        "responses": {
+            "success": "Removed channel {channel} from {list_type}",
+            "not_found": "Channel {channel} not found in {list_type}"
+        }
+    },
+    "auto_response": {
+        "name": "auto_response",
+        "description": "Set channel auto response",
+        "responses": {
+            "success": "Set channel {channel} auto response to: {enabled}"
+        }
+    }
+}

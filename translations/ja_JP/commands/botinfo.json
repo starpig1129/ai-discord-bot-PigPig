@@ -1,0 +1,35 @@
+{
+    "botinfo": {
+        "name": "botinfo",
+        "description": "ボットの詳細情報を表示",
+        "title": "🤖 ボット情報概要",
+        "fields": {
+            "basic_stats": {
+                "name": "📊 基本統計",
+                "servers": "サーバー数",
+                "users": "ユーザー数",
+                "text_channels": "テキストチャンネル",
+                "voice_channels": "ボイスチャンネル",
+                "loaded_cogs": "ロードされたCogs"
+            },
+            "performance": {
+                "name": "⚡ パフォーマンス監視",
+                "latency": "ネットワーク遅延",
+                "memory_usage": "メモリ使用量",
+                "uptime": "稼働時間"
+            },
+            "cogs": {
+                "name": "🔧 機能モジュール",
+                "commands": "コマンド",
+                "no_cogs": "ロードされたモジュールなし"
+            }
+        },
+        "status": {
+            "online": "🟢 オンライン",
+            "idle": "🟡 アイドル",
+            "dnd": "🔴 邪魔しないで",
+            "offline": "⚫ オフライン",
+            "unknown": "❓ 不明"
+        }
+    }
+}

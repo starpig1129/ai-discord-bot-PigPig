@@ -1,0 +1,39 @@
+{
+    "internet_search": {
+        "name": "internet_search",
+        "description": "Perform internet search",
+        "options": {
+            "query": "Search query",
+            "search_type": "Search type"
+        },
+        "choices": {
+            "general": "General search",
+            "image": "Image search",
+            "youtube": "YouTube search",
+            "url": "URL content",
+            "eat": "What to eat"
+        },
+        "responses": {
+            "searching": "Searching...",
+            "processing": "Processing search results...",
+            "completed": "Search completed",
+            "unknown_type": "Unknown search type: {type}",
+            "no_videos_found": "No related videos found, please try other keywords.",
+            "youtube_result": "YouTube search result:\nTitle: {title}\nChannel: {channel}\nViews: {views}\nLink: {url}",
+            "search_failed": "Search failed, please try other keywords. Error: {error}"
+        },
+        "errors": {
+            "search_failed": "Search failed: {error}",
+            "no_valid_url": "No valid URL found",
+            "no_valid_content": "No valid content retrieved",
+            "processing_error": "Error processing search results: {error}",
+            "network_error": "Network connection error: {error}",
+            "timeout_error": "Search request timeout",
+            "invalid_query": "Invalid search query",
+            "image_download_failed": "Image download failed",
+            "image_element_not_found": "Image element or redirect URL not found",
+            "eat_no_food": "No such food",
+            "eat_system_error": "Originally wanted to recommend {keyword}, but sorry system error QQ: {error}"
+        }
+    }
+}

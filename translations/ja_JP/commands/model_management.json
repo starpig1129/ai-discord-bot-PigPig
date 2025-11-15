@@ -1,0 +1,19 @@
+{
+    "model_management": {
+        "name": "model_management",
+        "description": "AIモデルを管理（開発者専用）",
+        "choices": {
+            "action": {
+                "unload": "モデルをアンロード",
+                "load": "モデルをロード"
+            }
+        },
+        "responses": {
+            "model_unloaded": "モデルをアンロードしました。",
+            "model_loaded": "モデルをロードしました。",
+            "operation_completed": "操作完了。",
+            "error": "操作実行エラー：{error}",
+            "model_already_unloaded": "モデルは既にアンロードされているかロードされていません。"
+        }
+    }
+}

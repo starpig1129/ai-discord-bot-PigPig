@@ -1,0 +1,13 @@
+{
+    "search_gif": {
+        "name": "search_gif",
+        "description": "Search GIF",
+        "options": {
+            "query": "Search query"
+        },
+        "responses": {
+            "not_found": "No related GIF found.",
+            "searching": "Searching GIF..."
+        }
+    }
+}

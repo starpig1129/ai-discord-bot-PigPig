@@ -1,0 +1,35 @@
+{
+    "remind": {
+        "name": "remind",
+        "description": "設置一個提醒",
+        "options": {
+            "time": "提醒時間（例如：10分鐘後，或 2023年12月31日20:00:00）",
+            "message": "提醒內容",
+            "user": "要提醒的用戶（可選，默認為自己）"
+        },
+        "responses": {
+            "received": "收到提醒",
+            "invalid_format": "無效的時間格式。請使用 '10分鐘後' 或 '2023年12月31日20:00:00' 格式。",
+            "future_time_required": "提醒時間必須在將來。",
+            "confirm_setup": "已設置提醒：將在 {duration} 後提醒 {user} {message}",
+            "reminder_message": "{user} 提醒：{message}",
+            "reminder_sent": "提醒已發送給 {user}",
+            "error_setting": "設置提醒時發生錯誤：{error}"
+        },
+        "time_units": {
+            "years": "年",
+            "months": "月",
+            "weeks": "週",
+            "days": "天",
+            "hours": "小時",
+            "minutes": "分鐘",
+            "seconds": "秒"
+        },
+        "time_patterns": {
+            "seconds_later": "{value}秒後",
+            "minutes_later": "{value}分鐘後",
+            "hours_later": "{value}小時後",
+            "days_later": "{value}天後"
+        }
+    }
+}

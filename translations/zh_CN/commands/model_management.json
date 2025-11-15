@@ -1,0 +1,19 @@
+{
+    "model_management": {
+        "name": "model_management",
+        "description": "管理AI模型（开发者专用）",
+        "choices": {
+            "action": {
+                "unload": "卸载模型",
+                "load": "加载模型"
+            }
+        },
+        "responses": {
+            "model_unloaded": "模型已卸载。",
+            "model_loaded": "模型已加载。",
+            "operation_completed": "操作已完成。",
+            "error": "执行操作时发生错误：{error}",
+            "model_already_unloaded": "模型已经卸载或尚未加载。"
+        }
+    }
+}

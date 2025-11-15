@@ -1,0 +1,13 @@
+{
+    "memory": {
+        "name": "memory",
+        "description": "メモリ管理コマンド",
+        "force_update": {
+            "responses": {
+                "starting": "強制メモリ更新を開始します...",
+                "post_vectorization": "ベクトル化後の処理中...",
+                "success": "強制更新が完了しました"
+            }
+        }
+    }
+}

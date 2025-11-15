@@ -1,0 +1,19 @@
+{
+    "model_management": {
+        "name": "model_management",
+        "description": "Manage AI models (developer only)",
+        "choices": {
+            "action": {
+                "unload": "Unload model",
+                "load": "Load model"
+            }
+        },
+        "responses": {
+            "model_unloaded": "Model unloaded.",
+            "model_loaded": "Model loaded.",
+            "operation_completed": "Operation completed.",
+            "error": "Error executing operation: {error}",
+            "model_already_unloaded": "Model already unloaded or not loaded."
+        }
+    }
+}

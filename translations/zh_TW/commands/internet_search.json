@@ -1,0 +1,39 @@
+{
+    "internet_search": {
+        "name": "internet_search",
+        "description": "進行網路搜索",
+        "options": {
+            "query": "搜索關鍵字",
+            "search_type": "搜索類型"
+        },
+        "choices": {
+            "general": "一般搜索",
+            "image": "圖片搜索",
+            "youtube": "YouTube搜索",
+            "url": "網址內容",
+            "eat": "吃什麼"
+        },
+        "responses": {
+            "searching": "正在搜尋中...",
+            "processing": "正在處理搜尋結果...",
+            "completed": "搜尋完成",
+            "unknown_type": "未知的搜索類型：{type}",
+            "no_videos_found": "未找到相關影片，請嘗試其他關鍵詞。",
+            "youtube_result": "YouTube搜尋結果：\n標題：{title}\n發布者：{channel}\n觀看次數：{views}\n連結：{url}",
+            "search_failed": "搜尋失敗，請嘗試其他關鍵詞。錯誤：{error}"
+        },
+        "errors": {
+            "search_failed": "搜尋失敗：{error}",
+            "no_valid_url": "未找到有效的URL",
+            "no_valid_content": "未能抓取到任何有效內容",
+            "processing_error": "處理搜尋結果時發生錯誤：{error}",
+            "network_error": "網路連接錯誤：{error}",
+            "timeout_error": "搜尋請求超時",
+            "invalid_query": "無效的搜尋查詢",
+            "image_download_failed": "圖片下載失敗",
+            "image_element_not_found": "無法找到圖片元素或跳轉URL元素",
+            "eat_no_food": "沒有這種食物喔",
+            "eat_system_error": "原本想推薦你吃 {keyword}，但很抱歉系統出錯了QQ: {error}"
+        }
+    }
+}

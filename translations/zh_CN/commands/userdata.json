@@ -1,0 +1,24 @@
+{
+    "userdata": {
+        "name": "userdata",
+        "description": "管理用户数据",
+        "options": {
+            "action": "选择动作（读取/保存）",
+            "user": "目标用户",
+            "user_data": "要保存的用户数据"
+        },
+        "choices": {
+            "read": "读取",
+            "save": "保存"
+        },
+        "responses": {
+            "searching": "查询用户资料中...",
+            "updating": "资料更新中...",
+            "data_found": "用户 <@{user_id}> 的资料：{data}",
+            "data_not_found": "找不到用户 <@{user_id}> 的资料。",
+            "data_updated": "已更新用户 <@{user_id}> 的资料：{data}",
+            "data_created": "已为用户 <@{user_id}> 创建资料：{data}",
+            "invalid_action": "无效的操作。请使用 '读取' 或 '保存'。"
+        }
+    }
+}

@@ -1,0 +1,18 @@
+{
+    "cot_ai": {
+        "name": "cot_ai",
+        "description": "使用 Chain of Thought 推理（可能需要較長時間）",
+        "options": {
+            "prompt": "要處理的提示詞"
+        },
+        "responses": {
+            "processing": "正在處理您的請求...",
+            "error": "錯誤：{error}",
+            "thinking": "🤔 思考中...",
+            "step_header": "**步驟 {step}：**",
+            "final_answer": "**最終答案：**",
+            "thinking_time": "思考時間：{time}",
+            "total_time": "總思考時間：{time}"
+        }
+    }
+}
