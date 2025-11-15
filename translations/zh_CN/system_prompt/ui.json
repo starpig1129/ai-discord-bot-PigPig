@@ -1,0 +1,42 @@
+{
+  "commands": {
+    "system_prompt": {
+      "ui": {
+        "modals": {
+          "system_prompt": {
+            "title": "设置系统提示",
+            "title_channel": "设置频道 #{channel} 系统提示",
+            "title_server": "设置服务器默认系统提示",
+            "title_edit": "编辑系统提示",
+            "prompt_label": "系统提示内容",
+            "prompt_placeholder": "请输入系统提示内容..."
+          },
+          "module_prompt": {
+            "title": "设置模块: {module}",
+            "prompt_label": "{module} 模块内容",
+            "prompt_placeholder": "请输入 {module} 模块的内容..."
+          }
+        },
+        "buttons": {
+          "confirm": "确认",
+          "confirm_remove": "确认移除",
+          "confirm_reset": "确认重置",
+          "confirm_copy": "确认复制",
+          "cancel": "取消",
+          "edit": "编辑",
+          "preview": "预览"
+        },
+        "selectors": {
+          "channel_placeholder": "选择频道",
+          "module_placeholder": "选择要覆盖的模块",
+          "module_description": "覆盖 {module} 模块"
+        },
+        "embeds": {
+          "system_prompt_title": "🤖 系统提示设置",
+          "preview_title": "🔍 系统提示预览",
+          "modules_title": "📦 可用模块列表"
+        }
+      }
+    }
+  }
+}

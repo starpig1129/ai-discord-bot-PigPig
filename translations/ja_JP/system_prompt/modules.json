@@ -1,0 +1,64 @@
+{
+  "commands": {
+    "system_prompt": {
+      "modules": {
+        "descriptions": {
+          "base": "AIの基本アイデンティティとコア指示を定義、ボット名、作成者情報などの基礎設定を含む",
+          "personality": "AIの個性特徴と表現スタイルを設定、ユーモア、礼儀、言語スタイルなどを含む",
+          "answering_principles": "AIの質問回答基本原則を規定、優先処理、情報ソース注記などを含む",
+          "language": "AIの言語嗜好と表現を設定、主言語、スタイル要素、応答長などを含む",
+          "professionalism": "AIの専門トピックでのパフォーマンス基準を定義、ユーモアと専門性のバランス",
+          "interaction": "AIのインタラクションモードを設定、会話スタイル、集中度管理などを含む",
+          "formatting": "Discord環境でのフォーマット規則を規定、Markdown構文、言及フォーマットなどを含む",
+          "professional_personality": "専門性と個性化設定を統合、専門的で個性的なAIパフォーマンスを作成"
+        },
+        "select_descriptions": {
+          "base": "基本アイデンティティとコア指示",
+          "personality": "個性特徴と表現スタイル",
+          "answering_principles": "質問回答の基本原則",
+          "language": "言語嗜好と表現",
+          "professionalism": "専門トピックのパフォーマンス基準",
+          "interaction": "インタラクションモードと会話スタイル",
+          "formatting": "Discordフォーマット規則",
+          "professional_personality": "専門個性化設定"
+        },
+        "modules_select_descriptions": {
+          "base": "基本アイデンティティとコア指示",
+          "personality": "個性特徴と表現スタイル",
+          "answering_principles": "質問回答の基本原則",
+          "language": "言語嗜好と表現",
+          "professionalism": "専門トピックのパフォーマンス基準",
+          "interaction": "インタラクションモードと会話スタイル",
+          "formatting": "Discordフォーマット規則",
+          "professional_personality": "専門個性化設定"
+        },
+        "help": {
+          "title": "📦 モジュール説明",
+          "description": "以下のモジュールは個別に編集してAIの動作をカスタマイズできます：",
+          "usage_tip": "💡 ヒント：モジュール編集時はデフォルト内容が参考として表示されます",
+          "inheritance_note": "⚠️ 注意：モジュール編集は対応するYAMLモジュール内容をオーバーライドします"
+        }
+      }
+    }
+  },
+  "modules_select_descriptions": {
+    "identity": "AIのアイデンティティ、役割、核心特性を定義",
+    "response_principles": "応答の基本原則とスタイルガイドラインを設定",
+    "output_format": "出力形式と構造要件を規定",
+    "input_parsing": "ユーザー入力の解析と理解方法を定義",
+    "memory_system": "メモリシステムの動作と使用方法を設定",
+    "information_handling": "情報処理と引用のルールを設定",
+    "error_handling": "エラー処理と例外状況への対応方法を定義",
+    "reminders": "リマインダー機能の動作と形式を設定"
+  },
+  "descriptions": {
+    "identity": "アイデンティティモジュールは、AIアシスタントの基本特性、役割定位、インタラクションスタイルを定義します。これには名前、性格特徴、専門分野などの核心属性が含まれます。",
+    "response_principles": "応答原則モジュールは、AIの応答の基本準則を設定し、トーン、詳細度、専門性などの要件を含みます。",
+    "output_format": "出力形式モジュールは、Markdown、コードブロック、リストなどの形式ルールを使用した応答の構造化要件を規定します。",
+    "input_parsing": "入力解析モジュールは、テキスト、コマンド、マルチメディアなど、ユーザーのさまざまな入力形式を理解し処理する方法を定義します。",
+    "memory_system": "メモリシステムモジュールは、短期記憶と長期記憶の戦略を含む、AIが会話記憶を使用および管理する方法を設定します。",
+    "information_handling": "情報処理モジュールは、正確性と追跡可能性を確保するために、情報の処理、引用、提示方法を設定します。",
+    "error_handling": "エラー処理モジュールは、エラーや例外状況に遭遇したときの対応戦略とユーザーコミュニケーション方法を定義します。",
+    "reminders": "リマインダーモジュールは、形式、タイミング、永続化方法を含むリマインダー機能の動作を設定します。"
+  }
+}

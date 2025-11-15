@@ -1,0 +1,12 @@
+{
+  "commands": {
+    "help": {
+      "name": "help",
+      "description": "显示所有指令"
+    }
+  },
+  "general": {
+    "help_title": "指令帮助",
+    "help_description": "显示所有可用指令的详细信息"
+  }
+}

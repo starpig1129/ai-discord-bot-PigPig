@@ -1,0 +1,96 @@
+{
+  "commands": {
+    "system_prompt": {
+      "messages": {
+        "success": {
+          "set": "✅ 系統提示設定成功",
+          "set_description": "已成功設定{scope}的系統提示",
+          "remove": "✅ 移除成功",
+          "remove_description": "已成功移除{scope}的系統提示",
+          "copy": "✅ 複製成功",
+          "copy_description": "已成功將 #{from_channel} 的系統提示複製到 #{to_channel}",
+          "reset": "✅ 重置成功",
+          "reset_description": "已成功重置{scope}系統提示設定",
+          "operation_confirmed": "✅ 操作已確認",
+          "operation_cancelled": "❌ 操作已取消"
+        },
+        "info": {
+          "scope_channel": "頻道 #{channel}",
+          "scope_server": "伺服器預設",
+          "scope_all": "所有",
+          "content_length": "內容長度",
+          "created_by": "設定者",
+          "source": "來源",
+          "source_yaml": "YAML 基礎提示",
+          "source_server": "伺服器預設 + YAML",
+          "source_channel": "頻道特定 + 伺服器預設 + YAML",
+          "source_cache": "快取",
+          "prompt_length": "{length} 字元",
+          "language": "語言",
+          "channel": "頻道",
+          "inheritance_title": "繼承層級",
+          "inheritance_yaml": "🔹 YAML 基礎提示",
+          "inheritance_server": "🔸 伺服器預設提示",
+          "inheritance_channel": "🔸 頻道特定提示",
+          "inheritance_none": "僅 YAML 基礎",
+          "modules_description": "以下是可以覆蓋的 YAML 系統提示模組：",
+          "modules_usage": "在設定系統提示時，可以使用模組覆蓋功能來自訂特定模組的內容",
+          "modules_none": "暫無可用模組",
+          "preview_content": "內容",
+          "preview_source": "來源",
+          "preview_length": "長度"
+        },
+        "confirm": {
+          "remove_channel": "確定要移除頻道 #{channel} 的系統提示嗎？",
+          "remove_server": "確定要移除伺服器預設系統提示嗎？",
+          "reset_channel": "確定要重置頻道 #{channel} 的系統提示嗎？",
+          "reset_server": "確定要重置伺服器預設系統提示嗎？",
+          "reset_all": "確定要重置所有系統提示設定嗎？\n⚠️ 此操作無法復原！",
+          "copy_simple": "複製 #{from_channel} 的系統提示到 #{to_channel}",
+          "copy_overwrite": "複製 #{from_channel} 的系統提示到 #{to_channel}\n⚠️ 目標頻道已有系統提示，將會被覆蓋",
+          "title_remove": "⚠️ 確認移除",
+          "title_reset": "⚠️ 確認重置",
+          "title_copy": "🔄 確認複製"
+        },
+        "validation": {
+          "prompt_empty": "❌ 系統提示內容不能為空",
+          "prompt_too_long": "❌ 系統提示過長（最大 4000 字元），當前 {length} 字元",
+          "same_channel": "❌ 來源頻道和目標頻道不能相同",
+          "module_empty": "❌ {module} 模組內容不能為空"
+        }
+      },
+      "errors": {
+        "permission_denied": "您沒有權限執行此操作",
+        "channel_permission_denied": "您沒有權限管理此頻道的系統提示",
+        "server_permission_denied": "您沒有權限管理伺服器級別的系統提示",
+        "prompt_not_found": "未找到系統提示",
+        "channel_not_found": "找不到指定的頻道",
+        "validation_failed": "驗證失敗：{error}",
+        "operation_failed": "操作失敗：{error}",
+        "system_error": "系統錯誤，請稍後再試",
+        "timeout": "操作超時，請重試",
+        "modal_error": "處理請求時發生錯誤: {error}",
+        "unknown_error": "發生未知錯誤，請稍後再試",
+        "modules_unavailable": "無法取得模組列表: {error}"
+      },
+      "user_experience": {
+        "default_content": {
+          "loaded": "✅ 已載入預設內容作為編輯基礎",
+          "loading_failed": "⚠️ 載入預設內容失敗，將從空白開始",
+          "effective_prompt_loaded": "📝 已載入當前有效的完整系統提示",
+          "module_default_loaded": "📦 已載入 {module} 模組的預設內容"
+        },
+        "editing": {
+          "based_on_current": "基於當前有效的系統提示進行編輯...",
+          "based_on_default": "基於 {module} 模組的預設內容進行編輯...",
+          "from_scratch": "請輸入新的內容..."
+        },
+        "guidance": {
+          "first_time_edit": "🎯 首次編輯提示：您可以基於預設內容進行修改",
+          "module_explanation": "💭 此模組負責：{description}",
+          "inheritance_info": "🔗 此設定將影響：{scope}"
+        }
+      }
+    }
+  }
+}

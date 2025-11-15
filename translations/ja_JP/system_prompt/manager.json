@@ -1,0 +1,96 @@
+{
+  "commands": {
+    "system_prompt": {
+      "messages": {
+        "success": {
+          "set": "✅ システムプロンプト設定成功",
+          "set_description": "{scope}のシステムプロンプトを正常に設定しました",
+          "remove": "✅ 削除成功",
+          "remove_description": "{scope}のシステムプロンプトを正常に削除しました",
+          "copy": "✅ コピー成功",
+          "copy_description": "#{from_channel}から#{to_channel}にシステムプロンプトを正常にコピーしました",
+          "reset": "✅ リセット成功",
+          "reset_description": "{scope}システムプロンプト設定を正常にリセットしました",
+          "operation_confirmed": "✅ 操作確認済み",
+          "operation_cancelled": "❌ 操作キャンセル"
+        },
+        "info": {
+          "scope_channel": "チャンネル #{channel}",
+          "scope_server": "サーバーデフォルト",
+          "scope_all": "すべて",
+          "content_length": "内容長",
+          "created_by": "作成者",
+          "source": "ソース",
+          "source_yaml": "YAMLベースプロンプト",
+          "source_server": "サーバーデフォルト + YAML",
+          "source_channel": "チャンネル特定 + サーバーデフォルト + YAML",
+          "source_cache": "キャッシュ",
+          "prompt_length": "{length}文字",
+          "language": "言語",
+          "channel": "チャンネル",
+          "inheritance_title": "継承階層",
+          "inheritance_yaml": "🔹 YAMLベースプロンプト",
+          "inheritance_server": "🔸 サーバーデフォルトプロンプト",
+          "inheritance_channel": "🔸 チャンネル特定プロンプト",
+          "inheritance_none": "YAMLベースのみ",
+          "modules_description": "以下はオーバーライド可能なYAMLシステムプロンプトモジュール：",
+          "modules_usage": "システムプロンプト設定時にモジュールオーバーライド機能を使用して特定モジュールをカスタマイズできます",
+          "modules_none": "利用可能なモジュールなし",
+          "preview_content": "内容",
+          "preview_source": "ソース",
+          "preview_length": "長さ"
+        },
+        "confirm": {
+          "remove_channel": "チャンネル #{channel} のシステムプロンプトを削除しますか？",
+          "remove_server": "サーバーデフォルトシステムプロンプトを削除しますか？",
+          "reset_channel": "チャンネル #{channel} のシステムプロンプトをリセットしますか？",
+          "reset_server": "サーバーデフォルトシステムプロンプトをリセットしますか？",
+          "reset_all": "すべてのシステムプロンプト設定をリセットしますか？\n⚠️ この操作は元に戻せません！",
+          "copy_simple": "#{from_channel}から#{to_channel}にシステムプロンプトをコピー",
+          "copy_overwrite": "#{from_channel}から#{to_channel}にシステムプロンプトをコピー\n⚠️ ターゲットチャンネルに既にシステムプロンプトがあり、上書きされます",
+          "title_remove": "⚠️ 削除確認",
+          "title_reset": "⚠️ リセット確認",
+          "title_copy": "🔄 コピー確認"
+        },
+        "validation": {
+          "prompt_empty": "❌ システムプロンプト内容を空にできません",
+          "prompt_too_long": "❌ システムプロンプトが長すぎます（最大4000文字）、現在{length}文字",
+          "same_channel": "❌ ソースチャンネルとターゲットチャンネルは同じにできません",
+          "module_empty": "❌ {module}モジュール内容を空にできません"
+        }
+      },
+      "errors": {
+        "permission_denied": "この操作を実行する権限がありません",
+        "channel_permission_denied": "このチャンネルのシステムプロンプトを管理する権限がありません",
+        "server_permission_denied": "サーバーレベルのシステムプロンプトを管理する権限がありません",
+        "prompt_not_found": "システムプロンプトが見つかりません",
+        "channel_not_found": "指定されたチャンネルが見つかりません",
+        "validation_failed": "検証失敗：{error}",
+        "operation_failed": "操作失敗：{error}",
+        "system_error": "システムエラー、後で再試行してください",
+        "timeout": "操作タイムアウト、再試行してください",
+        "modal_error": "リクエスト処理エラー: {error}",
+        "unknown_error": "未知のエラーが発生しました、後で再試行してください",
+        "modules_unavailable": "モジュールリストを取得できません: {error}"
+      },
+      "user_experience": {
+        "default_content": {
+          "loaded": "✅ 編集ベースとしてデフォルト内容をロードしました",
+          "loading_failed": "⚠️ デフォルト内容のロードに失敗、空白から開始します",
+          "effective_prompt_loaded": "📝 現在の有効な完全システムプロンプトをロードしました",
+          "module_default_loaded": "📦 {module}モジュールのデフォルト内容をロードしました"
+        },
+        "editing": {
+          "based_on_current": "現在の有効なシステムプロンプトに基づいて編集中...",
+          "based_on_default": "{module}モジュールのデフォルト内容に基づいて編集中...",
+          "from_scratch": "新しい内容を入力してください..."
+        },
+        "guidance": {
+          "first_time_edit": "🎯 初回編集ヒント：デフォルト内容に基づいて修正できます",
+          "module_explanation": "💭 このモジュールは{description}を担当します",
+          "inheritance_info": "🔗 この設定は{scope}に影響します"
+        }
+      }
+    }
+  }
+}

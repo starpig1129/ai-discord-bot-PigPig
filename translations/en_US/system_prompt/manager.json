@@ -1,0 +1,96 @@
+{
+  "commands": {
+    "system_prompt": {
+      "messages": {
+        "success": {
+          "set": "✅ System prompt set successfully",
+          "set_description": "Successfully set {scope} system prompt",
+          "remove": "✅ Removal successful",
+          "remove_description": "Successfully removed {scope} system prompt",
+          "copy": "✅ Copy successful",
+          "copy_description": "Successfully copied system prompt from #{from_channel} to #{to_channel}",
+          "reset": "✅ Reset successful",
+          "reset_description": "Successfully reset {scope} system prompt settings",
+          "operation_confirmed": "✅ Operation confirmed",
+          "operation_cancelled": "❌ Operation cancelled"
+        },
+        "info": {
+          "scope_channel": "Channel #{channel}",
+          "scope_server": "Server default",
+          "scope_all": "All",
+          "content_length": "Content length",
+          "created_by": "Created by",
+          "source": "Source",
+          "source_yaml": "YAML base prompt",
+          "source_server": "Server default + YAML",
+          "source_channel": "Channel specific + Server default + YAML",
+          "source_cache": "Cache",
+          "prompt_length": "{length} characters",
+          "language": "Language",
+          "channel": "Channel",
+          "inheritance_title": "Inheritance Hierarchy",
+          "inheritance_yaml": "🔹 YAML Base Prompt",
+          "inheritance_server": "🔸 Server Default Prompt",
+          "inheritance_channel": "🔸 Channel Specific Prompt",
+          "inheritance_none": "YAML Base Only",
+          "modules_description": "The following are YAML system prompt modules that can be overridden:",
+          "modules_usage": "When setting system prompts, you can use module override functionality to customize specific modules",
+          "modules_none": "No available modules",
+          "preview_content": "Content",
+          "preview_source": "Source",
+          "preview_length": "Length"
+        },
+        "confirm": {
+          "remove_channel": "Are you sure to remove system prompt for channel #{channel}?",
+          "remove_server": "Are you sure to remove server default system prompt?",
+          "reset_channel": "Are you sure to reset system prompt for channel #{channel}?",
+          "reset_server": "Are you sure to reset server default system prompt?",
+          "reset_all": "Are you sure to reset all system prompt settings?\n⚠️ This operation cannot be undone!",
+          "copy_simple": "Copy system prompt from #{from_channel} to #{to_channel}",
+          "copy_overwrite": "Copy system prompt from #{from_channel} to #{to_channel}\n⚠️ Target channel already has system prompt, will be overwritten",
+          "title_remove": "⚠️ Confirm Removal",
+          "title_reset": "⚠️ Confirm Reset",
+          "title_copy": "🔄 Confirm Copy"
+        },
+        "validation": {
+          "prompt_empty": "❌ System prompt content cannot be empty",
+          "prompt_too_long": "❌ System prompt too long (max 4000 characters), current {length} characters",
+          "same_channel": "❌ Source and target channels cannot be the same",
+          "module_empty": "❌ {module} module content cannot be empty"
+        }
+      },
+      "errors": {
+        "permission_denied": "You do not have permission to perform this operation",
+        "channel_permission_denied": "You do not have permission to manage this channel's system prompt",
+        "server_permission_denied": "You do not have permission to manage server-level system prompt",
+        "prompt_not_found": "System prompt not found",
+        "channel_not_found": "Specified channel not found",
+        "validation_failed": "Validation failed: {error}",
+        "operation_failed": "Operation failed: {error}",
+        "system_error": "System error, please try again later",
+        "timeout": "Operation timeout, please retry",
+        "modal_error": "Error processing request: {error}",
+        "unknown_error": "Unknown error occurred, please try again later",
+        "modules_unavailable": "Unable to retrieve module list: {error}"
+      },
+      "user_experience": {
+        "default_content": {
+          "loaded": "✅ Loaded default content as editing base",
+          "loading_failed": "⚠️ Failed to load default content, starting from blank",
+          "effective_prompt_loaded": "📝 Loaded current effective full system prompt",
+          "module_default_loaded": "📦 Loaded default content for {module} module"
+        },
+        "editing": {
+          "based_on_current": "Editing based on current effective system prompt...",
+          "based_on_default": "Editing based on default content for {module} module...",
+          "from_scratch": "Please enter new content..."
+        },
+        "guidance": {
+          "first_time_edit": "🎯 First time editing tip: You can modify based on default content",
+          "module_explanation": "💭 This module is responsible for: {description}",
+          "inheritance_info": "🔗 This setting will affect: {scope}"
+        }
+      }
+    }
+  }
+}

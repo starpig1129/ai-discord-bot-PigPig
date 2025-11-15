@@ -1,0 +1,88 @@
+{
+  "commands": {
+    "system_prompt": {
+      "ui": {
+        "main_menu": {
+          "title": "🤖 System Prompt Management",
+          "description": "Welcome to the unified system prompt management interface! Please select the function to execute:",
+          "main_functions_title": "🔧 Main Functions",
+          "main_functions_description": "• **Set Prompt** - Set channel or server system prompt\n• **View Config** - View current system prompt configuration\n• **Module Edit** - Edit specific YAML module\n• **Copy Prompt** - Copy system prompt to other channels\n• **Remove Prompt** - Remove set system prompt\n• **Reset Config** - Reset system prompt configuration",
+          "usage_title": "📋 Usage Instructions",
+          "usage_description": "Click the buttons below to execute the corresponding function.\nSystem supports three-layer inheritance: YAML base → Server default → Channel specific",
+          "footer": "Note: All operations will perform permission checks for security"
+        },
+        "buttons": {
+          "set_prompt": "Set Prompt",
+          "view_config": "View Config",
+          "module_edit": "Module Edit",
+          "copy_prompt": "Copy Prompt",
+          "remove_prompt": "Remove Prompt",
+          "reset_config": "Reset Config",
+          "back_to_main": "Back to Main",
+          "channel_specific": "Channel Specific",
+          "server_default": "Server Default",
+          "channel_module": "Channel Module",
+          "server_module": "Server Module",
+          "current_channel": "Current Channel",
+          "show_inheritance": "Show Inheritance",
+          "remove_channel_prompt": "Remove Channel Prompt",
+          "remove_server_prompt": "Remove Server Prompt",
+          "reset_current_channel": "Reset Current Channel",
+          "reset_server_default": "Reset Server Default",
+          "reset_all_settings": "Reset All Settings",
+          "execute_copy": "Execute Copy",
+          "confirm": "Confirm",
+          "confirm_remove": "Confirm Remove",
+          "confirm_reset": "Confirm Reset",
+          "confirm_copy": "Confirm Copy",
+          "cancel": "Cancel",
+          "edit": "Edit",
+          "preview": "Preview"
+        },
+        "menus": {
+          "set_prompt_title": "⚙️ Set System Prompt",
+          "set_prompt_description": "Please select the scope to set",
+          "view_options_title": "👁️ View System Prompt Configuration",
+          "view_options_description": "Please select view options",
+          "module_edit_title": "📦 Module Editing",
+          "module_edit_description": "Please select module and scope to edit",
+          "module_scope_title": "📦 Edit {scope} Module",
+          "module_scope_description": "Please select module to edit",
+          "copy_prompt_title": "📋 Copy System Prompt",
+          "copy_prompt_description": "Please select source and target channels",
+          "remove_prompt_title": "🗑️ Remove System Prompt",
+          "remove_prompt_description": "Please select scope to remove",
+          "reset_config_title": "🔄 Reset System Prompt",
+          "reset_config_description": "Please select scope to reset"
+        },
+        "modals": {
+          "system_prompt": {
+            "title": "Set System Prompt",
+            "title_channel": "Set Channel #{channel} System Prompt",
+            "title_server": "Set Server Default System Prompt",
+            "title_edit": "Edit System Prompt",
+            "prompt_label": "System Prompt Content",
+            "prompt_placeholder": "Please enter system prompt content..."
+          },
+          "module_prompt": {
+            "title": "Set Module: {module}",
+            "prompt_label": "{module} Module Content",
+            "prompt_placeholder": "Please enter {module} module content..."
+          }
+        },
+        "selectors": {
+          "channel_placeholder": "Select Channel",
+          "from_channel_placeholder": "Select Source Channel",
+          "to_channel_placeholder": "Select Target Channel",
+          "module_placeholder": "Select Module to Edit",
+          "module_description": "Edit {module} Module"
+        },
+        "embeds": {
+          "system_prompt_title": "🤖 System Prompt Settings",
+          "preview_title": "🔍 System Prompt Preview",
+          "modules_title": "📦 Available Modules List"
+        }
+      }
+    }
+  }
+}

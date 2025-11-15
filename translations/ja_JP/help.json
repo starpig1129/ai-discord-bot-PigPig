@@ -1,0 +1,12 @@
+{
+  "commands": {
+    "help": {
+      "name": "help",
+      "description": "すべてのコマンドを表示"
+    }
+  },
+  "general": {
+    "help_title": "コマンドヘルプ",
+    "help_description": "利用可能なすべてのコマンドの詳細情報を表示"
+  }
+}
