@@ -4,11 +4,62 @@ from discord import app_commands
 import json
 import os
 import logging
-from typing import Optional, Dict, Any
+import asyncio
+from functools import lru_cache
+from typing import Optional, Dict, Any, List, Set, Tuple
+from pathlib import Path
 from function import func
 
+class TranslationCache:
+    """Multi-layer cache for translations with LRU eviction"""
+    
+    def __init__(self, max_size: int = 1000):
+        self._cache: Dict[str, str] = {}
+        self._max_size = max_size
+        self._access_times: Dict[str, float] = {}
+        self._access_counts: Dict[str, int] = {}
+    
+    def get(self, key: str) -> Optional[str]:
+        """Get cached translation with LRU tracking"""
+        if key in self._cache:
+            import time
+            self._access_times[key] = time.time()
+            self._access_counts[key] = self._access_counts.get(key, 0) + 1
+            return self._cache[key]
+        return None
+    
+    def put(self, key: str, value: str):
+        """Store translation in cache with LRU eviction"""
+        if len(self._cache) >= self._max_size:
+            self._evict_lru()
+        
+        self._cache[key] = value
+        import time
+        self._access_times[key] = time.time()
+        self._access_counts[key] = self._access_counts.get(key, 0) + 1
+    
+    def _evict_lru(self):
+        """Evict least recently used item"""
+        if not self._cache:
+            return
+        
+        lru_key = min(self._access_times.keys(), key=lambda k: self._access_times[k])
+        del self._cache[lru_key]
+        del self._access_times[lru_key]
+        self._access_counts.pop(lru_key, None)
+    
+    def clear(self):
+        """Clear all cached items"""
+        self._cache.clear()
+        self._access_times.clear()
+        self._access_counts.clear()
+    
+    def size(self) -> int:
+        """Get current cache size"""
+        return len(self._cache)
+
 class LanguageManager(commands.Cog):
-    """Language Management System"""
+    """Language Management System with modular translation support"""
     
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -18,41 +69,298 @@ class LanguageManager(commands.Cog):
         
         self.logger = logging.getLogger(__name__)
         self.default_lang = "zh_TW"  # 預設使用繁體中文
-        # 語言選項將在翻譯載入後初始化
+        
+        # 新的資料結構：lang -> file_key -> path -> value
+        self.translations: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        
+        # 檔案索引：lang -> path_pattern -> file_key
+        self.file_index: Dict[str, Dict[str, str]] = {}
+        
+        # 快取系統：翻譯結果快取
+        self._translation_cache = TranslationCache(max_size=1000)
+        
+        # 載入策略
+        self._lazy_loading_enabled = True
+        self._loaded_files: Set[Tuple[str, str]] = set()  # (lang, file_key)
+        self._pending_loads: Set[Tuple[str, str]] = set()  # files waiting to be loaded
+        
+        # 語言選項
         self.supported_languages = {}
-        self.translations: Dict[str, Dict[str, Dict[str, str]]] = {}
+        
+        # 載入翻譯並初始化
         self._load_translations()
-        # 在翻譯載入後初始化語言選項
         self.supported_languages = self._get_supported_languages()
 
     def _load_translations(self):
-        """載入所有語言翻譯"""
-        # 直接使用硬編碼的語言代碼列表進行初始化
+        """載入所有語言翻譯，支援新的模組化結構"""
         lang_codes = ["zh_TW", "zh_CN", "en_US", "ja_JP"]
+        
+        # 階段 1：載入通用檔案（快速啟動）
+        self._load_common_files(lang_codes)
+        
+        # 階段 2：建立檔案索引
         for lang_code in lang_codes:
-            self.translations[lang_code] = {}
-            lang_dir = os.path.join("translations", lang_code)
+            self._build_file_index(lang_code)
+        
+        # 階段 3：排程延遲載入（如果啟用）
+        if self._lazy_loading_enabled:
+            self._schedule_lazy_loading()
+    
+    def _load_common_files(self, lang_codes: List[str]):
+        """載入通用檔案，提供快速啟動"""
+        for lang_code in lang_codes:
+            if lang_code not in self.translations:
+                self.translations[lang_code] = {}
             
-            if not os.path.exists(lang_dir):
-                # 在初始化階段使用備用訊息
-                self.logger.warning(f"找不到語言目錄：{lang_dir}")
-                continue
-                
-            for file in os.listdir(lang_dir):
+            # 嘗試載入 common.json（向後相容性）
+            common_file = os.path.join("translations", lang_code, "common.json")
+            if os.path.exists(common_file):
+                try:
+                    with open(common_file, 'r', encoding='utf-8') as f:
+                        translations = json.load(f)
+                        self.translations[lang_code]["common"] = translations
+                    self.logger.debug(f"Loaded common translations for {lang_code}")
+                except Exception as e:
+                    asyncio.create_task(func.report_error(e, f"loading common translation file {common_file}"))
+            else:
+                # 如果沒有新的 common.json，嘗試舊的格式
+                self._load_legacy_common_file(lang_code)
+    
+    def _load_legacy_common_file(self, lang_code: str):
+        """載入舊格式的翻譯檔案（向後相容性）"""
+        legacy_file = os.path.join("translations", f"{lang_code}.json")
+        if os.path.exists(legacy_file):
+            try:
+                with open(legacy_file, 'r', encoding='utf-8') as f:
+                    translations = json.load(f)
+                self.translations[lang_code]["common"] = translations
+                self.logger.info(f"Loaded legacy translation file for {lang_code}")
+            except Exception as e:
+                asyncio.create_task(func.report_error(e, f"loading legacy translation file {legacy_file}"))
+    
+    def _build_file_index(self, lang_code: str) -> Dict[str, str]:
+        """建立檔案索引，快速映射路徑到檔案"""
+        if lang_code not in self.file_index:
+            self.file_index[lang_code] = {}
+        
+        lang_dir = os.path.join("translations", lang_code)
+        if not os.path.exists(lang_dir):
+            return {}
+        
+        # 遞迴掃描所有 JSON 檔案
+        for root, dirs, files in os.walk(lang_dir):
+            for file in files:
                 if not file.endswith('.json'):
                     continue
-                    
-                try:
-                    file_path = os.path.join(lang_dir, file)
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        translations = json.load(f)
-                        
-                    category = file[:-5]  # 移除 .json 後綴
-                    self.translations[lang_code][category] = translations
-                        
-                except Exception as e:
-                    import asyncio
-                    asyncio.create_task(func.report_error(e, f"loading translation file {file_path}"))
+                
+                file_path = os.path.join(root, file)
+                relative_path = os.path.relpath(file_path, lang_dir)
+                
+                # 轉換路徑格式：path/to/file.json -> path/to/file
+                file_key = relative_path[:-5]  # 移除 .json
+                
+                # 建立路徑映射
+                path_parts = file_key.split(os.sep)
+                
+                # 為每個路徑層級建立索引
+                for i in range(1, len(path_parts) + 1):
+                    partial_key = "/".join(path_parts[:i])
+                    self.file_index[lang_code][partial_key] = file_key
+                
+                # 特殊處理：直接檔名映射
+                self.file_index[lang_code][file_key] = file_key
+                
+                self.logger.debug(f"Indexed translation file: {lang_code}/{file_key}")
+        
+        return self.file_index[lang_code]
+    
+    def _schedule_lazy_loading(self):
+        """排程延遲載入"""
+        asyncio.create_task(self._lazy_load_worker())
+    
+    async def _lazy_load_worker(self):
+        """背景工作程序：按需載入翻譯檔案"""
+        while True:
+            try:
+                # 檢查待載入佇列
+                pending_files = list(self._pending_loads.copy())
+                
+                for lang, file_key in pending_files:
+                    if (lang, file_key) not in self._loaded_files:
+                        await self._load_translation_file_async(lang, file_key)
+                        self._loaded_files.add((lang, file_key))
+                        self._pending_loads.discard((lang, file_key))
+                
+                await asyncio.sleep(0.5)  # 每500ms檢查一次
+            except Exception as e:
+                self.logger.error(f"Error in lazy loading worker: {e}")
+                await asyncio.sleep(1)  # 錯誤時延長等待時間
+
+    def _resolve_translation_file(self, lang: str, *path_parts) -> Optional[str]:
+        """Resolve translation key path to file path
+        
+        Args:
+            lang: Language code
+            *path_parts: Translation key path parts
+            
+        Returns:
+            File path or None if not found
+        """
+        if not path_parts:
+            return None
+        
+        # 移除 commands 前綴（如果存在）
+        if len(path_parts) > 0 and path_parts[0] == "commands":
+            path_parts = path_parts[1:]
+        
+        if not path_parts:
+            return None
+        
+        # 檢查檔案索引
+        if lang not in self.file_index:
+            return None
+        
+        file_index = self.file_index[lang]
+        
+        # 嘗試完整路徑匹配
+        full_path = "/".join(path_parts)
+        
+        # 向後相容性：直接檢查是否是檔案鍵
+        if full_path in file_index:
+            return file_index[full_path]
+        
+        # 嘗試部分路徑匹配
+        for i in range(len(path_parts), 0, -1):
+            partial_path = "/".join(path_parts[:i])
+            if partial_path in file_index:
+                return file_index[partial_path]
+        
+        return None
+    
+    def _load_translation_file(self, lang: str, file_path: str) -> Dict[str, Any]:
+        """Load a single translation file with caching
+        
+        Args:
+            lang: Language code
+            file_path: Relative path to translation file
+            
+        Returns:
+            Translation dictionary
+        """
+        full_path = os.path.join("translations", lang, f"{file_path}.json")
+        
+        if not os.path.exists(full_path):
+            self.logger.warning(f"Translation file not found: {full_path}")
+            return {}
+        
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                translations = json.load(f)
+            
+            # 更新資料結構
+            if lang not in self.translations:
+                self.translations[lang] = {}
+            
+            self.translations[lang][file_path] = translations
+            
+            self.logger.debug(f"Loaded translation file: {lang}/{file_path}")
+            return translations
+            
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, f"loading translation file {full_path}"))
+            return {}
+    
+    async def _load_translation_file_async(self, lang: str, file_path: str) -> Dict[str, Any]:
+        """Asynchronously load a translation file"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._load_translation_file, lang, file_path)
+    
+    def _request_file_load(self, lang: str, file_path: str):
+        """請求載入翻譯檔案（延遲載入）"""
+        if (lang, file_path) not in self._loaded_files:
+            self._pending_loads.add((lang, file_path))
+    
+    def _traverse_path(self, data: Dict[str, Any], path_parts: List[str]) -> Any:
+        """Traverse nested dictionary using path parts"""
+        result = data
+        for part in path_parts:
+            if isinstance(result, dict) and part in result:
+                result = result[part]
+            else:
+                return None
+        return result
+    
+    def _find_translation_with_fallback(self, lang: str, path_parts: List[str]) -> str:
+        """Find translation with multi-layer fallback mechanism
+        
+        Args:
+            lang: Language code
+            path_parts: Path parts to the translation key
+            
+        Returns:
+            Translated string or fallback value
+        """
+        if not path_parts:
+            return "TRANSLATION_NOT_FOUND"
+        
+        # 1. 嘗試精確匹配
+        result = self._exact_match_search(lang, path_parts)
+        if result:
+            return result
+        
+        # 2. 嘗試部分匹配
+        result = self._partial_match_search(lang, path_parts)
+        if result:
+            return result
+        
+        # 3. 向 common.json 回退
+        result = self._common_fallback_search(lang, path_parts)
+        if result:
+            return result
+        
+        # 4. 返回備用值
+        return path_parts[-1] if path_parts else "TRANSLATION_NOT_FOUND"
+    
+    def _exact_match_search(self, lang: str, path_parts: List[str]) -> Optional[str]:
+        """嘗試在對應檔案中進行精確匹配"""
+        file_path = self._resolve_translation_file(lang, *path_parts)
+        
+        if file_path and file_path in self.translations.get(lang, {}):
+            translation_data = self.translations[lang][file_path]
+            result = self._traverse_path(translation_data, path_parts)
+            if isinstance(result, str):
+                return result
+        
+        return None
+    
+    def _partial_match_search(self, lang: str, path_parts: List[str]) -> Optional[str]:
+        """嘗試部分路徑匹配"""
+        if lang not in self.translations:
+            return None
+        
+        # 從最長路徑開始嘗試
+        for i in range(len(path_parts) - 1, 0, -1):
+            current_path = path_parts[:i]
+            remaining_path = path_parts[i:]
+            
+            file_path = self._resolve_translation_file(lang, *current_path)
+            if file_path and file_path in self.translations[lang]:
+                translation_data = self.translations[lang][file_path]
+                result = self._traverse_path(translation_data, remaining_path)
+                if isinstance(result, str):
+                    return result
+        
+        return None
+    
+    def _common_fallback_search(self, lang: str, path_parts: List[str]) -> Optional[str]:
+        """向 common.json 回退搜尋"""
+        if lang in self.translations and "common" in self.translations[lang]:
+            translation_data = self.translations[lang]["common"]
+            result = self._traverse_path(translation_data, path_parts)
+            if isinstance(result, str):
+                return result
+        
+        return None
 
     def _get_supported_languages(self) -> Dict[str, str]:
         """獲取支援的語言列表，使用翻譯系統或備用硬編碼選項"""
@@ -124,73 +432,116 @@ class LanguageManager(commands.Cog):
             return False
 
     def translate(self, guild_id: str, *args, **kwargs) -> str:
-        """翻譯指定的文字
-
+        """翻譯指定的文字，模組化翻譯檔案結構
+        
+        Maintains backward compatibility while implementing new features:
+        - Multi-layer cache system
+        - Lazy loading of translation files
+        - Path resolution with fallback mechanism
+        
         Args:
-            guild_id: 伺服器ID
-            *args: 翻譯路徑，可以是多個部分（例如："commands", "play", "errors", "queue_full"）
-            **kwargs: 格式化參數
-
+            guild_id: Server ID
+            *args: Translation path, can be multiple parts (e.g., "commands", "play", "errors", "queue_full")
+            **kwargs: Formatting parameters
+            
         Returns:
-            str: 翻譯後的文字
+            str: Translated text
         """
         try:
             # 處理初始化期間的特殊情況
             if not hasattr(self, 'translations') or not self.translations:
-                # 如果翻譯還未載入，返回最後一個參數作為備用
                 return args[-1] if args else "LOADING..."
-                
+            
             lang = self.get_server_lang(str(guild_id))
-            translations = self.translations.get(lang, {}).get('common', {})
             
-            self.logger.debug(f"Translating with lang={lang}, args={args}, kwargs={kwargs}")
+            # 構建查詢路徑
+            path_parts = self._parse_path_parts(args)
             
-            # 從參數構建翻譯路徑
-            result = translations
-            path = []
+            if not path_parts:
+                return args[-1] if args else "TRANSLATION_ERROR"
             
-            for part in args:
-                if not part:
-                    continue
-                    
-                if '/' in part:
-                    # 處理包含路徑分隔符的部分
-                    subparts = part.split('/')
-                    path.extend(subparts)
-                else:
-                    path.append(part)
+            # 生成快取鍵
+            cache_key = f"{lang}:{':'.join(path_parts)}:{hash(str(sorted(kwargs.items())))}"
             
-            # 沿著路徑獲取翻譯
-            for part in path:
-                if not isinstance(result, dict):
-                    self.logger.warning(
-                        self.translate("0", "system", "language_manager", "logs", "path_traversal_error",
-                                     path='/'.join(path), result=str(result))
-                    )
-                    return path[-1]
-                result = result.get(part, {})
+            # 檢查快取
+            cached_result = self._translation_cache.get(cache_key)
+            if cached_result:
+                return self._format_result(cached_result, kwargs)
             
-            # 如果結果是字符串，進行格式化
-            if isinstance(result, str):
-                try:
-                    return result.format(**kwargs)
-                except KeyError as e:
-                    self.logger.error(
-                        self.translate("0", "system", "language_manager", "logs", "format_error", error=str(e))
-                    )
-                    return result
+            # 執行翻譯查找
+            result = self._find_translation_with_fallback(lang, path_parts)
             
-            # 如果找不到翻譯，返回最後一個路徑部分
-            self.logger.warning(
-                self.translate("0", "system", "language_manager", "logs", "translation_not_found",
-                             path='/'.join(path))
-            )
-            return path[-1] if path else "TRANSLATION_NOT_FOUND"
+            # 格式化結果
+            formatted_result = self._format_result(result, kwargs)
+            
+            # 快取結果
+            self._translation_cache.put(cache_key, result)
+            
+            return formatted_result
             
         except Exception as e:
-            import asyncio
             asyncio.create_task(func.report_error(e, "translation"))
             return args[-1] if args else "TRANSLATION_ERROR"
+    
+    def _parse_path_parts(self, args) -> List[str]:
+        """Parse translation path from arguments"""
+        path_parts = []
+        
+        for arg in args:
+            if not arg:
+                continue
+            
+            # 處理包含路徑分隔符的部分
+            if '/' in arg:
+                subparts = arg.split('/')
+                path_parts.extend(subparts)
+            else:
+                path_parts.append(arg)
+        
+        return path_parts
+    
+    def _format_result(self, result: str, kwargs: Dict[str, Any]) -> str:
+        """Format translation result with parameters"""
+        if not isinstance(result, str):
+            return str(result) if result is not None else "TRANSLATION_ERROR"
+        
+        if not kwargs:
+            return result
+        
+        try:
+            return result.format(**kwargs)
+        except KeyError as e:
+            self.logger.warning(f"Format error in translation: missing key {e}")
+            return result
+        except Exception as e:
+            self.logger.error(f"Format error in translation: {e}")
+            return result
+    
+    def clear_cache(self):
+        """清除翻譯快取"""
+        self._translation_cache.clear()
+        self.logger.info("Translation cache cleared")
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics for monitoring"""
+        return {
+            "cache_size": self._translation_cache.size(),
+            "max_cache_size": self._translation_cache._max_size,
+            "loaded_files": len(self._loaded_files),
+            "pending_loads": len(self._pending_loads),
+            "supported_languages": len(self.supported_languages)
+        }
+    
+    def _preload_related_files(self, lang: str, path_parts: List[str]):
+        """預載入相關檔案以提升效能"""
+        # 請求載入可能需要的檔案
+        file_path = self._resolve_translation_file(lang, *path_parts)
+        if file_path:
+            self._request_file_load(lang, file_path)
+        
+        # 預載入 common.json（如果尚未載入）
+        if lang not in self._loaded_files or ("common" not in [f[1] for f in self._loaded_files if f[0] == lang]):
+            self._request_file_load(lang, "common")
 
     @app_commands.command(
         name="set_language",
