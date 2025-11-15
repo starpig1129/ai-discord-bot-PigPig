@@ -1,3 +1,10 @@
 {
-  "yaml_parse_error": "YAML parse error: {error}"
+  "yaml_parse_error": "YAML parsing error",
+  "commands": {
+    "schedule": {
+      "errors": {
+        "yaml_parse_error": "YAML parsing error"
+      }
+    }
+  }
 }

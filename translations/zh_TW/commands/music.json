@@ -29,22 +29,22 @@
     "errors": {
       "no_voice_channel": "請先加入語音頻道！",
       "playlist_download_failed": "下載播放清單時出錯：{error}",
-      "queue_full_title": "播放清單已滿",
-      "queue_full_desc": "請等待當前歌曲播放完畢後再添加新歌曲",
-      "video_info_failed": "獲取影片資訊時出錯：{error}",
+      "queue_full_title": "播放佇列已滿",
+      "queue_full_desc": "播放佇列已達到上限，無法新增更多歌曲",
+      "video_info_failed": "無法取得影片資訊",
       "no_results": "未找到相關影片",
-      "playback_error": "播放音樂時出錯",
-      "attempting_next": "正在嘗試播放下一首歌曲...",
+      "playback_error": "播放時發生錯誤",
+      "attempting_next": "嘗試播放下一首歌曲",
       "playback_failed_title": "播放失敗",
-      "playback_failed_desc": "請使用 /play 重新播放",
+      "playback_failed_desc": "無法播放此歌曲",
       "nothing_playing": "目前沒有播放任何歌曲。"
     },
     "responses": {
       "playlist_added": "已添加 {count} 首歌曲到播放清單 (共 {total} 首)",
-      "song_added": "已添加到播放清單：{title}",
+      "song_added": "歌曲已加入播放佇列",
       "select_song": "請選擇要播放的歌曲：",
       "search_results_title": "YouTube搜尋結果",
-      "queue_finished": "播放清單已播放完畢！",
+      "queue_finished": "播放佇列已播放完畢",
       "refreshed_ui": "已刷新播放介面。",
       "recovering_state": "偵測到播放狀態異常，正在嘗試恢復..."
     }
@@ -61,5 +61,10 @@
     "queue_full_title": "佇列已滿",
     "queue_full_desc": "播放佇列已滿，請稍後再試",
     "video_info_failed": "獲取影片資訊失敗: {error}"
+  },
+  "commands": {
+    "music": {
+      "": ""
+    }
   }
 }

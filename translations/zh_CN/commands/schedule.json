@@ -3,8 +3,8 @@
     "name": "upload_schedule",
     "description": "上传日程表YAML文件",
     "responses": {
-      "success": "日程表已成功上传！",
-      "error": "上传日程表时发生错误：{error}"
+      "success": "日程表已成功上传",
+      "error": "上传日程表时发生错误"
     }
   },
   "query_schedule": {
@@ -32,26 +32,27 @@
         "Thursday": "星期四",
         "Friday": "星期五",
         "Saturday": "星期六",
-        "Sunday": "星期日"
+        "Sunday": "星期日",
+        "day": "星期"
       }
     },
     "responses": {
       "success": "查询完成",
-      "error": "查询日程表时发生错误：{error}",
-      "no_schedule": "找不到您的日程表。请使用 `/upload_schedule` 命令上传日程表。",
-      "user_not_found": "找不到该用户。",
-      "channel_not_found": "找不到频道。",
-      "permission_denied": "您或被查询者无权限查看此频道。",
-      "invalid_time_format": "无效的时间格式。请使用 YYYY-MM-DD HH:MM:SS 格式。",
-      "invalid_query_type": "无效的查询类型。"
+      "error": "查询日程表时发生错误",
+      "no_schedule": "找不到日程表",
+      "user_not_found": "找不到该用户",
+      "channel_not_found": "找不到该频道",
+      "permission_denied": "您没有权限查看此日程表",
+      "invalid_time_format": "时间格式无效",
+      "invalid_query_type": "查询类型无效"
     }
   },
   "update_schedule": {
     "name": "update_schedule",
     "description": "更新或创建日程表",
     "responses": {
-      "success": "日程表已成功更新或创建！",
-      "error": "更新或创建日程表时发生错误：{error}"
+      "success": "日程表已成功更新",
+      "error": "更新日程表时发生错误"
     }
   },
   "show_template": {

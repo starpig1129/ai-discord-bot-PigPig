@@ -6,7 +6,7 @@
       "query": "Search query"
     },
     "responses": {
-      "not_found": "No related GIF found.",
+      "not_found": "No matching GIF found",
       "searching": "Searching GIF..."
     }
   },

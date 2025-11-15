@@ -1,3 +1,6 @@
 {
-  "id_format": "User ID: {id}"
+  "id_format": "User ID: {user_id}",
+  "user": {
+    "id_format": "User ID: {user_id}"
+  }
 }

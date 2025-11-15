@@ -6,7 +6,7 @@
       "query": "検索クエリ"
     },
     "responses": {
-      "not_found": "関連GIFが見つかりません。",
+      "not_found": "一致するGIFが見つかりません",
       "searching": "GIFを検索中..."
     }
   },

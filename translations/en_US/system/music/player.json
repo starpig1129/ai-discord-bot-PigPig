@@ -1,3 +1,10 @@
 {
-  "queue_empty": "Queue is empty"
+  "queue_empty": "Queue is empty",
+  "commands": {
+    "music": {
+      "player": {
+        "queue_empty": "Queue is empty"
+      }
+    }
+  }
 }

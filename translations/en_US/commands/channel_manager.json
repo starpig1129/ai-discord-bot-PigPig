@@ -16,11 +16,14 @@
     "description": "Add channel to whitelist or blacklist",
     "choices": {
       "whitelist": "Whitelist",
-      "blacklist": "Blacklist"
+      "blacklist": "Blacklist",
+      "list_type": {
+        "value": "List Type"
+      }
     },
     "responses": {
-      "success": "Added channel {channel} to {list_type}",
-      "already_exists": "Channel {channel} already exists in {list_type}"
+      "success": "Channel added successfully",
+      "already_exists": "Channel already exists in list"
     }
   },
   "remove_channel": {
@@ -28,18 +31,21 @@
     "description": "Remove channel from whitelist or blacklist",
     "choices": {
       "whitelist": "Whitelist",
-      "blacklist": "Blacklist"
+      "blacklist": "Blacklist",
+      "list_type": {
+        "value": "List Type"
+      }
     },
     "responses": {
-      "success": "Removed channel {channel} from {list_type}",
-      "not_found": "Channel {channel} not found in {list_type}"
+      "success": "Channel removed successfully",
+      "not_found": "Channel not found in list"
     }
   },
   "auto_response": {
     "name": "auto_response",
     "description": "Set channel auto response",
     "responses": {
-      "success": "Set channel {channel} auto response to: {enabled}"
+      "success": "Auto response configured"
     }
   },
   "responses": {

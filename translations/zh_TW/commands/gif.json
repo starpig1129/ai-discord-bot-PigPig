@@ -6,7 +6,7 @@
       "query": "搜尋關鍵字"
     },
     "responses": {
-      "not_found": "找不到相關的 GIF。",
+      "not_found": "找不到符合的 GIF",
       "searching": "正在搜尋 GIF..."
     }
   },

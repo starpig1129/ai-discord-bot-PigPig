@@ -9,18 +9,8 @@
     "help_title": "Command Help",
     "help_description": "Show detailed information for all available commands"
   },
-  "help_title": {
-    "zh_TW": "🤖 機器人指令幫助",
-    "zh_CN": "🤖 机器人指令帮助",
-    "en_US": "🤖 Bot Command Help",
-    "ja_JP": "🤖 ボットコマンドヘルプ"
-  },
-  "help_description": {
-    "zh_TW": "以下是所有可用的機器人指令：",
-    "zh_CN": "以下是所有可用的机器人指令：",
-    "en_US": "Here are all available bot commands:",
-    "ja_JP": "以下是すべての利用可能なボットコマンドです："
-  },
+  "help_title": "Help",
+  "help_description": "Show help for available commands",
   "no_description": {
     "zh_TW": "無描述",
     "zh_CN": "无描述",
@@ -32,5 +22,8 @@
     "zh_CN": "错误",
     "en_US": "Error",
     "ja_JP": "エラー"
+  },
+  "command_name": {
+    "description": "Description for {command_name}"
   }
 }

@@ -16,11 +16,14 @@
     "description": "ホワイトリストまたはブラックリストにチャンネルを追加",
     "choices": {
       "whitelist": "ホワイトリスト",
-      "blacklist": "ブラックリスト"
+      "blacklist": "ブラックリスト",
+      "list_type": {
+        "value": "リストタイプ"
+      }
     },
     "responses": {
-      "success": "チャンネル{channel}を{list_type}に追加しました",
-      "already_exists": "チャンネル{channel}は既に{list_type}に存在します"
+      "success": "チャンネルが正常に追加されました",
+      "already_exists": "チャンネルはすでにリストに存在します"
     }
   },
   "remove_channel": {
@@ -28,18 +31,21 @@
     "description": "ホワイトリストまたはブラックリストからチャンネルを削除",
     "choices": {
       "whitelist": "ホワイトリスト",
-      "blacklist": "ブラックリスト"
+      "blacklist": "ブラックリスト",
+      "list_type": {
+        "value": "リストタイプ"
+      }
     },
     "responses": {
-      "success": "チャンネル{channel}を{list_type}から削除しました",
-      "not_found": "チャンネル{channel}は{list_type}に存在しません"
+      "success": "チャンネルが正常に削除されました",
+      "not_found": "リストにチャンネルが見つかりません"
     }
   },
   "auto_response": {
     "name": "auto_response",
     "description": "チャンネル自動応答を設定",
     "responses": {
-      "success": "チャンネル{channel}の自動応答を{enabled}に設定しました"
+      "success": "自動応答が設定されました"
     }
   },
   "responses": {

@@ -36,5 +36,12 @@
     }
   },
   "no_description": "説明なし",
-  "error": "エラー"
+  "error": "エラー",
+  "labels": {
+    "with": "と",
+    "relationships": "関係"
+  },
+  "dialogue": {
+    "no_substitute": "代替対話なし"
+  }
 }

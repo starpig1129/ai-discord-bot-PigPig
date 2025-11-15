@@ -29,22 +29,22 @@
     "errors": {
       "no_voice_channel": "Please join a voice channel first!",
       "playlist_download_failed": "Error downloading playlist: {error}",
-      "queue_full_title": "Playlist full",
-      "queue_full_desc": "Please wait for current song to finish before adding new songs",
-      "video_info_failed": "Error getting video info: {error}",
+      "queue_full_title": "Queue is Full",
+      "queue_full_desc": "Queue has reached its limit, cannot add more songs",
+      "video_info_failed": "Failed to get video information",
       "no_results": "No related videos found",
-      "playback_error": "Error playing music",
-      "attempting_next": "Attempting to play next song...",
-      "playback_failed_title": "Playback failed",
-      "playback_failed_desc": "Please use /play to replay",
+      "playback_error": "Playback error occurred",
+      "attempting_next": "Attempting to play next song",
+      "playback_failed_title": "Playback Failed",
+      "playback_failed_desc": "Unable to play this song",
       "nothing_playing": "Currently not playing any song."
     },
     "responses": {
       "playlist_added": "Added {count} songs to playlist (total {total})",
-      "song_added": "Added to playlist: {title}",
+      "song_added": "Song added to queue",
       "select_song": "Please select song to play:",
       "search_results_title": "YouTube search results",
-      "queue_finished": "Playlist finished!",
+      "queue_finished": "Queue finished playing",
       "refreshed_ui": "Refreshed playback UI.",
       "recovering_state": "Detected abnormal playback state, attempting recovery..."
     }
@@ -61,5 +61,10 @@
     "queue_full_title": "Queue full",
     "queue_full_desc": "Playback queue is full, please try again later",
     "video_info_failed": "Failed to get video info: {error}"
+  },
+  "commands": {
+    "music": {
+      "": ""
+    }
   }
 }

@@ -3,8 +3,8 @@
     "name": "upload_schedule",
     "description": "スケジュールYAMLファイルをアップロード",
     "responses": {
-      "success": "スケジュールが正常にアップロードされました！",
-      "error": "スケジュールアップロードエラー：{error}"
+      "success": "スケジュールが正常にアップロードされました",
+      "error": "スケジュールのアップロード中にエラーが発生しました"
     }
   },
   "query_schedule": {
@@ -32,26 +32,27 @@
         "Thursday": "木曜日",
         "Friday": "金曜日",
         "Saturday": "土曜日",
-        "Sunday": "日曜日"
+        "Sunday": "日曜日",
+        "day": "曜日"
       }
     },
     "responses": {
       "success": "クエリ完了",
-      "error": "スケジュールクエリエラー：{error}",
-      "no_schedule": "あなたのスケジュールが見つかりません。/upload_scheduleコマンドを使用してスケジュールをアップロードしてください。",
-      "user_not_found": "ユーザーが見つかりません。",
-      "channel_not_found": "チャンネルが見つかりません。",
-      "permission_denied": "あなたまたはクエリされたユーザーはこのチャンネルを表示する権限がありません。",
-      "invalid_time_format": "無効な時間フォーマット。YYYY-MM-DD HH:MM:SS形式を使用してください。",
-      "invalid_query_type": "無効なクエリタイプ。"
+      "error": "スケジュールの照会中にエラーが発生しました",
+      "no_schedule": "スケジュールが見つかりません",
+      "user_not_found": "ユーザーが見つかりません",
+      "channel_not_found": "チャンネルが見つかりません",
+      "permission_denied": "このスケジュールを表示する権限がありません",
+      "invalid_time_format": "無効な時刻形式",
+      "invalid_query_type": "無効なクエリタイプ"
     }
   },
   "update_schedule": {
     "name": "update_schedule",
     "description": "スケジュールを更新または作成",
     "responses": {
-      "success": "スケジュールが正常に更新または作成されました！",
-      "error": "スケジュール更新または作成エラー：{error}"
+      "success": "スケジュールが正常に更新されました",
+      "error": "スケジュールの更新中にエラーが発生しました"
     }
   },
   "show_template": {

@@ -1,3 +1,10 @@
 {
-  "queue_empty": "队列为空"
+  "queue_empty": "播放队列为空",
+  "commands": {
+    "music": {
+      "player": {
+        "queue_empty": "播放队列为空"
+      }
+    }
+  }
 }

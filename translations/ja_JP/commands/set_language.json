@@ -1,7 +1,14 @@
 {
   "responses": {
-    "success": "言語設定に成功しました: {language}",
-    "error": "言語設定に失敗しました",
+    "success": "言語が正常に設定されました",
+    "error": "言語設定中にエラーが発生しました",
     "unsupported": "サポートされていない言語"
+  },
+  "set_language": {
+    "responses": {
+      "unsupported": "サポートされていない言語",
+      "success": "言語が正常に設定されました",
+      "error": "言語設定中にエラーが発生しました"
+    }
   }
 }

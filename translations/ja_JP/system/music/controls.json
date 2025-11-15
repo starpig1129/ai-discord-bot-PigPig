@@ -9,5 +9,13 @@
   "shuffle_toggled": "{user} がシャッフルを切り替えました：{status}",
   "update_failed": "音楽インターフェースの更新に失敗しました",
   "now_playing_prefix": "再生中",
-  "queue_songs": "キューの曲"
+  "queue_songs": "キュー内の曲",
+  "commands": {
+    "music": {
+      "controls": {
+        "now_playing_prefix": "再生中",
+        "queue_songs": "キュー内の曲"
+      }
+    }
+  }
 }

@@ -29,22 +29,22 @@
     "errors": {
       "no_voice_channel": "请先加入语音频道！",
       "playlist_download_failed": "下载播放列表时出错：{error}",
-      "queue_full_title": "播放列表已满",
-      "queue_full_desc": "请等待当前歌曲播放完毕后再添加新歌曲",
-      "video_info_failed": "获取视频信息时出错：{error}",
+      "queue_full_title": "播放队列已满",
+      "queue_full_desc": "播放队列已达到上限，无法添加更多歌曲",
+      "video_info_failed": "无法获取视频信息",
       "no_results": "未找到相关视频",
-      "playback_error": "播放音乐时出错",
-      "attempting_next": "正在尝试播放下一首歌曲...",
+      "playback_error": "播放时发生错误",
+      "attempting_next": "尝试播放下一首歌曲",
       "playback_failed_title": "播放失败",
-      "playback_failed_desc": "请使用 /play 重新播放",
+      "playback_failed_desc": "无法播放此歌曲",
       "nothing_playing": "当前没有播放任何歌曲。"
     },
     "responses": {
       "playlist_added": "已添加 {count} 首歌曲到播放列表 (共 {total} 首)",
-      "song_added": "已添加到播放列表：{title}",
+      "song_added": "歌曲已加入播放队列",
       "select_song": "请选择要播放的歌曲：",
       "search_results_title": "YouTube搜索结果",
-      "queue_finished": "播放列表已播放完毕！",
+      "queue_finished": "播放队列已播放完毕",
       "refreshed_ui": "已刷新播放界面。"
     }
   },
@@ -60,5 +60,10 @@
     "queue_full_title": "队列已满",
     "queue_full_desc": "播放队列已满，请稍后再试",
     "video_info_failed": "获取影片资讯失败: {error}"
+  },
+  "commands": {
+    "music": {
+      "": ""
+    }
   }
 }

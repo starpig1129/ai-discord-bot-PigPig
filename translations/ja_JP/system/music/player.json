@@ -1,3 +1,10 @@
 {
-  "queue_empty": "キューが空です"
+  "queue_empty": "キューは空です",
+  "commands": {
+    "music": {
+      "player": {
+        "queue_empty": "キューは空です"
+      }
+    }
+  }
 }

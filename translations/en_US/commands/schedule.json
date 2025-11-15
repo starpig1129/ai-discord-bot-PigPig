@@ -3,8 +3,8 @@
     "name": "upload_schedule",
     "description": "Upload schedule YAML file",
     "responses": {
-      "success": "Schedule uploaded successfully!",
-      "error": "Error uploading schedule: {error}"
+      "success": "Schedule uploaded successfully",
+      "error": "Error uploading schedule"
     }
   },
   "query_schedule": {
@@ -32,26 +32,27 @@
         "Thursday": "Thursday",
         "Friday": "Friday",
         "Saturday": "Saturday",
-        "Sunday": "Sunday"
+        "Sunday": "Sunday",
+        "day": "Day"
       }
     },
     "responses": {
       "success": "Query completed",
-      "error": "Error querying schedule: {error}",
-      "no_schedule": "No schedule found for you. Please use `/upload_schedule` to upload a schedule.",
-      "user_not_found": "User not found.",
-      "channel_not_found": "Channel not found.",
-      "permission_denied": "You or the queried user does not have permission to view this channel.",
-      "invalid_time_format": "Invalid time format. Please use YYYY-MM-DD HH:MM:SS format.",
-      "invalid_query_type": "Invalid query type."
+      "error": "Error querying schedule",
+      "no_schedule": "No schedule found",
+      "user_not_found": "User not found",
+      "channel_not_found": "Channel not found",
+      "permission_denied": "Permission denied to view this schedule",
+      "invalid_time_format": "Invalid time format",
+      "invalid_query_type": "Invalid query type"
     }
   },
   "update_schedule": {
     "name": "update_schedule",
     "description": "Update or create schedule",
     "responses": {
-      "success": "Schedule updated or created successfully!",
-      "error": "Error updating or creating schedule: {error}"
+      "success": "Schedule updated successfully",
+      "error": "Error updating schedule"
     }
   },
   "show_template": {

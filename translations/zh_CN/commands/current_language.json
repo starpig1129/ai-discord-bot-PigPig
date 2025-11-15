@@ -1,5 +1,10 @@
 {
   "responses": {
-    "current": "目前使用语言: {language}"
+    "current": "当前语言：{language}"
+  },
+  "current_language": {
+    "responses": {
+      "current": "当前语言：{language}"
+    }
   }
 }

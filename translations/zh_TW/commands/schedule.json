@@ -3,8 +3,8 @@
     "name": "upload_schedule",
     "description": "上傳行程表YAML檔案",
     "responses": {
-      "success": "行程表已成功上傳！",
-      "error": "上傳行程表時發生錯誤：{error}"
+      "success": "行程表已成功上傳",
+      "error": "上傳行程表時發生錯誤"
     }
   },
   "query_schedule": {
@@ -32,26 +32,27 @@
         "Thursday": "星期四",
         "Friday": "星期五",
         "Saturday": "星期六",
-        "Sunday": "星期日"
+        "Sunday": "星期日",
+        "day": "星期"
       }
     },
     "responses": {
       "success": "查詢完成",
-      "error": "查詢行程表時發生錯誤：{error}",
-      "no_schedule": "找不到您的行程表。請使用 `/upload_schedule` 命令上傳行程表。",
-      "user_not_found": "找不到該使用者。",
-      "channel_not_found": "找不到頻道。",
-      "permission_denied": "您或被查詢者無權限查看此頻道。",
-      "invalid_time_format": "無效的時間格式。請使用 YYYY-MM-DD HH:MM:SS 格式。",
-      "invalid_query_type": "無效的查詢類型。"
+      "error": "查詢行程表時發生錯誤",
+      "no_schedule": "找不到行程表",
+      "user_not_found": "找不到該使用者",
+      "channel_not_found": "找不到該頻道",
+      "permission_denied": "您沒有權限查看此行程表",
+      "invalid_time_format": "時間格式無效",
+      "invalid_query_type": "查詢類型無效"
     }
   },
   "update_schedule": {
     "name": "update_schedule",
     "description": "更新或創建行程表",
     "responses": {
-      "success": "行程表已成功更新或創建！",
-      "error": "更新或創建行程表時發生錯誤：{error}"
+      "success": "行程表已成功更新",
+      "error": "更新行程表時發生錯誤"
     }
   },
   "show_template": {

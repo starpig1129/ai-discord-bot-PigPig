@@ -16,11 +16,14 @@
     "description": "新增频道到白名单或黑名单",
     "choices": {
       "whitelist": "白名单",
-      "blacklist": "黑名单"
+      "blacklist": "黑名单",
+      "list_type": {
+        "value": "列表类型"
+      }
     },
     "responses": {
-      "success": "已将频道 {channel} 新增到 {list_type}",
-      "already_exists": "频道 {channel} 已存在于 {list_type}"
+      "success": "频道已成功添加",
+      "already_exists": "頻道已存在于列表中"
     }
   },
   "remove_channel": {
@@ -28,18 +31,21 @@
     "description": "移除频道从白名单或黑名单",
     "choices": {
       "whitelist": "白名单",
-      "blacklist": "黑名单"
+      "blacklist": "黑名单",
+      "list_type": {
+        "value": "列表类型"
+      }
     },
     "responses": {
-      "success": "已将频道 {channel} 移除从 {list_type}",
-      "not_found": "频道 {channel} 不存在于 {list_type}"
+      "success": "频道已成功移除",
+      "not_found": "在列表中找不到该频道"
     }
   },
   "auto_response": {
     "name": "auto_response",
     "description": "设定频道自动回复",
     "responses": {
-      "success": "已将频道 {channel} 自动回复设定为：{enabled}"
+      "success": "自动回复已设置"
     }
   },
   "responses": {

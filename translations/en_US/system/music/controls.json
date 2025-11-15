@@ -8,6 +8,14 @@
   "mode_changed": "{user} switched to {mode} mode",
   "shuffle_toggled": "{user} toggled shuffle: {status}",
   "update_failed": "Failed to update music interface",
-  "now_playing_prefix": "Now playing",
-  "queue_songs": "Queue songs"
+  "now_playing_prefix": "Now Playing",
+  "queue_songs": "Songs in Queue",
+  "commands": {
+    "music": {
+      "controls": {
+        "now_playing_prefix": "Now Playing",
+        "queue_songs": "Songs in Queue"
+      }
+    }
+  }
 }

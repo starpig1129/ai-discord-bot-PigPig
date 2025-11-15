@@ -1,7 +1,18 @@
 {
-  "searching_gif": "GIFを検索中: {query}",
-  "found_gif": "GIFを発見: {url}",
-  "api_error": "GIF APIエラー (ステータスコード: {status_code})",
-  "search_error": "GIF検索エラー: {error}",
-  "empty_query_warning": "検索クエリが空です"
+  "searching_gif": "GIFを検索中：{query}",
+  "found_gif": "GIFが見つかりました：{url}",
+  "api_error": "GIF APIエラー：{error}",
+  "search_error": "GIF検索中にエラーが発生しました：{error}",
+  "empty_query_warning": "検索クエリが空です",
+  "gif_tools": {
+    "logs": {
+      "searching_gif": "GIFを検索中：{query}",
+      "found_gif": "GIFが見つかりました：{url}",
+      "api_error": "GIF APIエラー：{error}",
+      "search_error": "GIF検索中にエラーが発生しました：{error}",
+      "empty_query_warning": "検索クエリが空です",
+      "get_url_error": "GIF URLの取得中にエラーが発生しました：{error}"
+    }
+  },
+  "get_url_error": "GIF URLの取得中にエラーが発生しました：{error}"
 }

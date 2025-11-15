@@ -35,6 +35,13 @@
       }
     }
   },
-  "no_description": "無描述",
-  "error": "錯誤"
+  "no_description": "無說明",
+  "error": "錯誤",
+  "labels": {
+    "with": "與",
+    "relationships": "關係"
+  },
+  "dialogue": {
+    "no_substitute": "無替代對話"
+  }
 }

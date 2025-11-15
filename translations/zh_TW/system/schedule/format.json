@@ -2,11 +2,27 @@
   "full_schedule_title": "完整行程表",
   "empty_schedule": "行程表為空",
   "time_column": "時間",
-  "description_column": "描述",
-  "no_events": "沒有事件",
-  "day_header": "{day} 的行程",
-  "specific_time_title": "{time} 的行程",
-  "no_events_found": "找不到事件",
-  "next_event": "下一個事件",
-  "no_next_event": "沒有下一個事件"
+  "description_column": "說明",
+  "no_events": "沒有活動",
+  "day_header": "日期",
+  "specific_time_title": "指定時間的行程",
+  "no_events_found": "找不到任何活動",
+  "next_event": "下一個活動",
+  "no_next_event": "沒有下一個活動",
+  "commands": {
+    "schedule": {
+      "format": {
+        "full_schedule_title": "完整行程表",
+        "empty_schedule": "行程表為空",
+        "time_column": "時間",
+        "description_column": "說明",
+        "no_events": "沒有活動",
+        "day_header": "日期",
+        "specific_time_title": "指定時間的行程",
+        "no_events_found": "找不到任何活動",
+        "next_event": "下一個活動",
+        "no_next_event": "沒有下一個活動"
+      }
+    }
+  }
 }

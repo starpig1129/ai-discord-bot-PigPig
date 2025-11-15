@@ -1,7 +1,14 @@
 {
   "responses": {
-    "success": "Language set successfully: {language}",
-    "error": "Failed to set language",
+    "success": "Language set successfully",
+    "error": "Error setting language",
     "unsupported": "Unsupported language"
+  },
+  "set_language": {
+    "responses": {
+      "unsupported": "Unsupported language",
+      "success": "Language set successfully",
+      "error": "Error setting language"
+    }
   }
 }

@@ -4,9 +4,25 @@
   "time_column": "Time",
   "description_column": "Description",
   "no_events": "No events",
-  "day_header": "Schedule for {day}",
-  "specific_time_title": "Schedule for {time}",
+  "day_header": "Date",
+  "specific_time_title": "Schedule at Specific Time",
   "no_events_found": "No events found",
-  "next_event": "Next event",
-  "no_next_event": "No next event"
+  "next_event": "Next Event",
+  "no_next_event": "No next event",
+  "commands": {
+    "schedule": {
+      "format": {
+        "full_schedule_title": "Full Schedule",
+        "empty_schedule": "Schedule is empty",
+        "time_column": "Time",
+        "description_column": "Description",
+        "no_events": "No events",
+        "day_header": "Date",
+        "specific_time_title": "Schedule at Specific Time",
+        "no_events_found": "No events found",
+        "next_event": "Next Event",
+        "no_next_event": "No next event"
+      }
+    }
+  }
 }

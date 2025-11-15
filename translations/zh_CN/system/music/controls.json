@@ -9,5 +9,13 @@
   "shuffle_toggled": "{user} 切换随机播放：{status}",
   "update_failed": "无法更新音乐界面",
   "now_playing_prefix": "正在播放",
-  "queue_songs": "队列歌曲"
+  "queue_songs": "队列中的歌曲",
+  "commands": {
+    "music": {
+      "controls": {
+        "now_playing_prefix": "正在播放",
+        "queue_songs": "队列中的歌曲"
+      }
+    }
+  }
 }

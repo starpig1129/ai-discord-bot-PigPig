@@ -16,11 +16,14 @@
     "description": "新增頻道到白名單或黑名單",
     "choices": {
       "whitelist": "白名單",
-      "blacklist": "黑名單"
+      "blacklist": "黑名單",
+      "list_type": {
+        "value": "清單類型"
+      }
     },
     "responses": {
-      "success": "已將頻道 {channel} 新增到 {list_type}",
-      "already_exists": "頻道 {channel} 已存在於 {list_type}"
+      "success": "頻道已成功新增",
+      "already_exists": "頻道已存在於清單中"
     }
   },
   "remove_channel": {
@@ -28,18 +31,21 @@
     "description": "移除頻道從白名單或黑名單",
     "choices": {
       "whitelist": "白名單",
-      "blacklist": "黑名單"
+      "blacklist": "黑名單",
+      "list_type": {
+        "value": "清單類型"
+      }
     },
     "responses": {
-      "success": "已將頻道 {channel} 移除從 {list_type}",
-      "not_found": "頻道 {channel} 不存在於 {list_type}"
+      "success": "頻道已成功移除",
+      "not_found": "在清單中找不到該頻道"
     }
   },
   "auto_response": {
     "name": "auto_response",
     "description": "設定頻道自動回覆",
     "responses": {
-      "success": "已將頻道 {channel} 自動回覆設定為：{enabled}"
+      "success": "自動回應已設定"
     }
   },
   "responses": {

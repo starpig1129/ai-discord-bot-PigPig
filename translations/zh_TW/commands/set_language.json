@@ -1,7 +1,14 @@
 {
   "responses": {
-    "success": "語言設定成功: {language}",
-    "error": "語言設定失敗",
+    "success": "語言已成功設定",
+    "error": "設定語言時發生錯誤",
     "unsupported": "不支援的語言"
+  },
+  "set_language": {
+    "responses": {
+      "unsupported": "不支援的語言",
+      "success": "語言已成功設定",
+      "error": "設定語言時發生錯誤"
+    }
   }
 }

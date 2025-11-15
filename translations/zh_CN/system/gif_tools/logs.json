@@ -1,7 +1,18 @@
 {
-  "searching_gif": "正在搜索 GIF: {query}",
-  "found_gif": "找到 GIF: {url}",
-  "api_error": "GIF API 错误 (状态码: {status_code})",
-  "search_error": "搜索 GIF 时发生错误: {error}",
-  "empty_query_warning": "搜索查询为空"
+  "searching_gif": "正在搜索 GIF：{query}",
+  "found_gif": "找到 GIF：{url}",
+  "api_error": "GIF API 错误：{error}",
+  "search_error": "搜索 GIF 时发生错误：{error}",
+  "empty_query_warning": "搜索查询为空",
+  "gif_tools": {
+    "logs": {
+      "searching_gif": "正在搜索 GIF：{query}",
+      "found_gif": "找到 GIF：{url}",
+      "api_error": "GIF API 错误：{error}",
+      "search_error": "搜索 GIF 时发生错误：{error}",
+      "empty_query_warning": "搜索查询为空",
+      "get_url_error": "获取 GIF URL 时发生错误：{error}"
+    }
+  },
+  "get_url_error": "获取 GIF URL 时发生错误：{error}"
 }

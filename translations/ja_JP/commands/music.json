@@ -29,22 +29,22 @@
     "errors": {
       "no_voice_channel": "まずボイスチャンネルに参加してください！",
       "playlist_download_failed": "プレイリストダウンロードエラー：{error}",
-      "queue_full_title": "プレイリスト満杯",
-      "queue_full_desc": "新しい曲を追加する前に現在の曲が終了するのを待ってください",
-      "video_info_failed": "動画情報取得エラー：{error}",
+      "queue_full_title": "キューがいっぱいです",
+      "queue_full_desc": "キューが上限に達しました。これ以上曲を追加できません",
+      "video_info_failed": "動画情報の取得に失敗しました",
       "no_results": "関連動画が見つかりません",
-      "playback_error": "音楽再生エラー",
-      "attempting_next": "次の曲を再生しようとしています...",
-      "playback_failed_title": "再生失敗",
-      "playback_failed_desc": "/playを使用して再再生してください",
+      "playback_error": "再生中にエラーが発生しました",
+      "attempting_next": "次の曲の再生を試みています",
+      "playback_failed_title": "再生に失敗しました",
+      "playback_failed_desc": "この曲を再生できません",
       "nothing_playing": "現在曲を再生していません。"
     },
     "responses": {
       "playlist_added": "プレイリストに{count}曲を追加（合計{total}曲）",
-      "song_added": "プレイリストに追加：{title}",
+      "song_added": "曲がキューに追加されました",
       "select_song": "再生する曲を選択してください：",
       "search_results_title": "YouTube検索結果",
-      "queue_finished": "プレイリスト終了！",
+      "queue_finished": "キューの再生が完了しました",
       "refreshed_ui": "再生UIをリフレッシュしました。",
       "recovering_state": "異常な再生状態を検知、回復を試行中..."
     }
@@ -61,5 +61,10 @@
     "queue_full_title": "キューが満了です",
     "queue_full_desc": "再生キューが満了です。後でもう一度お試しください",
     "video_info_failed": "動画情報の取得に失敗しました: {error}"
+  },
+  "commands": {
+    "music": {
+      "": ""
+    }
   }
 }
