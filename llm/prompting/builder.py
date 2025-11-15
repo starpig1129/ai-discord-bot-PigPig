@@ -163,16 +163,29 @@ class PromptBuilder:
                         return None
                 return value if isinstance(value, str) else None
 
-            # Replacement function used by both placeholder patterns
+            # Enhanced replacement function to handle both {lang.xxx} and {{lang.xxx}} patterns
             def placeholder_repl_path(path: str) -> str:
+                # Try direct path resolution first
                 resolved = resolve_path(path)
                 if resolved:
                     return resolved
+                
+                # Try with 'system.' prefix if not already present
                 if not path.startswith("system."):
                     resolved = resolve_path("system." + path)
                     if resolved:
                         return resolved
+                
+                # Try extracting just the language parts from system.chat_bot.language.xxx
+                if "system.chat_bot.language." in path:
+                    # Extract the specific language attribute (e.g., "answer_in" from "system.chat_bot.language.answer_in")
+                    lang_attr = path.replace("system.chat_bot.language.", "")
+                    resolved = resolve_path(f"system.chat_bot.language.{lang_attr}")
+                    if resolved:
+                        return resolved
+                
                 # If cannot resolve, return empty string to avoid leaving raw placeholders
+                self.logger.debug(f"Could not resolve language path: {path}")
                 return ""
 
             # 1) Replace double-brace placeholders like {{lang.system.chat_bot.language.answer_in}}
@@ -229,10 +242,9 @@ class PromptBuilder:
                 variables['lang'] = getattr(lang_manager, 'default_lang', 'zh_TW') if lang_manager else 'zh_TW'
                 self.logger.debug(f"Added missing 'lang' variable with default value: {variables['lang']}")
             
-            # 進行標準的變數替換
-            formatted_prompt = prompt.format(**variables)
+            processed_prompt = prompt
             
-            # 如果有語言管理器，應用語言占位符替換
+            # 先應用語言占位符替換（在變數替換之前）
             if lang_manager and guild_id:
                 try:
                     # 獲取該伺服器的語言
@@ -242,12 +254,53 @@ class PromptBuilder:
                     mappings = variables.get('language_replacements', {}).get('mappings', {})
                     
                     # 應用語言占位符替換
-                    formatted_prompt = self.apply_language_replacements(
-                        formatted_prompt, server_lang, lang_manager, mappings
+                    processed_prompt = self.apply_language_replacements(
+                        processed_prompt, server_lang, lang_manager, mappings
                     )
+                    self.logger.debug(f"Applied language replacements, prompt length changed from {len(prompt)} to {len(processed_prompt)}")
                 except Exception as lang_e:
                     self.logger.warning(f"Language replacement failed: {lang_e}")
             
+            formatted_prompt = processed_prompt
+            
+            # 記錄替換過程以便調試
+            replacements_made = []
+            
+            for key, value in variables.items():
+                # 將變數轉為字符串，確保替換成功
+                str_value = str(value)
+                
+                # 創建完整的占位符格式
+                placeholder = f"{{{key}}}"
+                
+                # 進行安全替換
+                if placeholder in formatted_prompt:
+                    formatted_prompt = formatted_prompt.replace(placeholder, str_value)
+                    replacements_made.append(f"{placeholder} -> {str_value}")
+            
+            if replacements_made:
+                self.logger.debug(f"Safe variable replacements completed ({len(replacements_made)} replacements): {replacements_made}")
+            
+            # 檢查是否還有未替換的占位符
+            remaining_placeholders = []
+            import re
+            remaining_pattern = re.compile(r'\{(?!lang\.)([^{}]+)\}')
+            matches = remaining_pattern.findall(formatted_prompt)
+            if matches:
+                remaining_placeholders.extend(matches)
+                self.logger.warning(f"Found unresolved placeholders: {remaining_placeholders}, using prompt without these replacements")
+                
+                # 如果有未替換的占位符，嘗試使用更安全的 .format() 方法
+                # 但是只替換確實存在的變數
+                try:
+                    safe_variables = {k: v for k, v in variables.items() if f"{{{k}}}" in formatted_prompt}
+                    formatted_prompt = formatted_prompt.format(**safe_variables)
+                    self.logger.debug(f"Fallback .format() successful with safe variables: {list(safe_variables.keys())}")
+                except Exception as format_e:
+                    self.logger.warning(f"Fallback .format() failed: {format_e}")
+                    # 如果 .format() 失敗，保持原始的替換結果
+            
+            self.logger.debug(f"Final prompt length: {len(formatted_prompt)}")
             return formatted_prompt
             
         except KeyError as e:

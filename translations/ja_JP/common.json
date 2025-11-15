@@ -4,6 +4,14 @@
     "help_title": "コマンドヘルプ",
     "help_description": "利用可能なすべてのコマンドの詳細情報を表示"
   },
+  "system": {
+    "chat_bot": {
+      "language": {
+        "answer_in": "常に日本語で回答する",
+        "style": "簡潔な回答を保つ"
+      }
+    }
+  },
   "errors": {
     "permission_denied": "この操作を実行する権限がありません、管理者のみ。",
     "command_failed": "コマンド実行失敗：{error}",

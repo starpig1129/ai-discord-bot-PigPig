@@ -4,6 +4,14 @@
     "help_title": "Command Help",
     "help_description": "Show detailed information for all available commands"
   },
+  "system": {
+    "chat_bot": {
+      "language": {
+        "answer_in": "Always answer in English",
+        "style": "Keep responses concise"
+      }
+    }
+  },
   "errors": {
     "permission_denied": "You do not have permission to execute this operation, admin only.",
     "command_failed": "Command execution failed: {error}",

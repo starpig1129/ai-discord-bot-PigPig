@@ -164,9 +164,20 @@ class PromptConfig:
 
             logger.debug(f"PromptConfig.get_system_prompt: variables={variables!r}")
 
-            # 嘗試使用 PromptBuilder 的 format_with_variables 進行替換，並記錄結果
             try:
-                formatted = prompt_manager.builder.format_with_variables(system_prompt, variables)
+                # 嘗試獲取語言管理器（可能在某些上下文中可用）
+                lang_manager = None
+                guild_id = None
+                
+                # 嘗試從全局變數或上下文獲取語言管理器
+                try:
+                    import discord
+                    lang_manager = None  
+                    guild_id = None     
+                except Exception:
+                    pass 
+                
+                formatted = prompt_manager.builder.format_with_variables(system_prompt, variables, lang_manager, guild_id)
                 logger.debug(f"PromptConfig.get_system_prompt: formatted system_prompt={formatted!r}")
                 return formatted if formatted else system_prompt if system_prompt else ''
             except Exception as e:

@@ -223,7 +223,7 @@ class SystemPromptManager:
             # 第二層：應用伺服器級別提示
             server_level = system_prompts.get('server_level', {})
             if server_level:
-                prompt = self._apply_server_overrides(base_prompt, server_level)
+                prompt = self._apply_server_overrides(base_prompt, server_level, guild_id)
                 source = 'server'
             else:
                 prompt = base_prompt
@@ -234,7 +234,7 @@ class SystemPromptManager:
             channel_config = channels.get(channel_id)
             
             if channel_config and channel_config.get('enabled', True):
-                prompt = self._apply_channel_overrides(prompt, channel_config)
+                prompt = self._apply_channel_overrides(prompt, channel_config, guild_id)
                 source = 'channel'
             
             # 應用語言本地化
@@ -243,7 +243,7 @@ class SystemPromptManager:
             # 🔧 修復：確保最終提示都經過變數替換處理
             # 只有在非 YAML 來源時才需要額外的變數替換（因為 YAML 提示已經在 PromptManager 中替換過）
             if source != 'yaml':
-                prompt = self._apply_variable_replacements(prompt)
+                prompt = self._apply_variable_replacements(prompt, guild_id)
                 self.logger.debug(f"✅ 對 {source} 級別提示應用了最終變數替換")
             
             # 快取結果
@@ -1284,13 +1284,13 @@ class SystemPromptManager:
                 'timestamp': time.time()
             }
     
-    def _apply_server_overrides(self, base_prompt: str, server_config: Dict[str, Any]) -> str:
+    def _apply_server_overrides(self, base_prompt: str, server_config: Dict[str, Any], guild_id: Optional[str] = None) -> str:
         """應用伺服器級別覆蓋"""
         try:
             if 'prompt' in server_config:
                 # 對編輯後的提示進行變數替換
                 prompt = server_config['prompt']
-                return self._apply_variable_replacements(prompt)
+                return self._apply_variable_replacements(prompt, guild_id)
             
             # 模組覆蓋邏輯 - 重新建構 YAML 提示
             modules = server_config.get('modules', {})
@@ -1307,20 +1307,20 @@ class SystemPromptManager:
                 prompt += f"\n\n{server_config['append_content']}"
             
             # 對最終提示進行變數替換
-            return self._apply_variable_replacements(prompt)
+            return self._apply_variable_replacements(prompt, guild_id)
             
         except Exception as e:
             asyncio.create_task(func.report_error(e, "Error applying server overrides"))
             self.logger.error(f"應用伺服器覆蓋時發生錯誤: {e}")
             return base_prompt
     
-    def _apply_channel_overrides(self, base_prompt: str, channel_config: Dict[str, Any]) -> str:
+    def _apply_channel_overrides(self, base_prompt: str, channel_config: Dict[str, Any], guild_id: Optional[str] = None) -> str:
         """應用頻道級別覆蓋"""
         try:
             if 'prompt' in channel_config:
                 # 對編輯後的提示進行變數替換
                 prompt = channel_config['prompt']
-                return self._apply_variable_replacements(prompt)
+                return self._apply_variable_replacements(prompt, guild_id)
             
             # 模組覆蓋邏輯 - 重新建構 YAML 提示
             modules = channel_config.get('modules', {})
@@ -1337,7 +1337,7 @@ class SystemPromptManager:
                 prompt += f"\n\n{channel_config['append_content']}"
             
             # 對最終提示進行變數替換
-            return self._apply_variable_replacements(prompt)
+            return self._apply_variable_replacements(prompt, guild_id)
             
         except Exception as e:
             asyncio.create_task(func.report_error(e, "Error applying channel overrides"))
@@ -1470,12 +1470,13 @@ class SystemPromptManager:
                     self.logger.error(f"降級重建也失敗: {fallback_error}")
             return ""
     
-    def _apply_variable_replacements(self, prompt: str) -> str:
+    def _apply_variable_replacements(self, prompt: str, guild_id: Optional[str] = None) -> str:
         """
         對系統提示應用變數替換
         
         Args:
             prompt: 包含變數占位符的提示字串
+            guild_id: 伺服器 ID（用於語言本地化）
             
         Returns:
             替換變數後的提示字串
@@ -1484,9 +1485,13 @@ class SystemPromptManager:
             # 獲取必要的變數
             variables = self._get_system_variables()
             
-            # 使用 PromptBuilder 的變數替換功能
             if self._prompt_manager and hasattr(self._prompt_manager, 'builder'):
-                formatted_prompt = self._prompt_manager.builder.format_with_variables(prompt, variables)
+                # 獲取語言管理器
+                lang_manager = self.bot.get_cog("LanguageManager")
+                
+                formatted_prompt = self._prompt_manager.builder.format_with_variables(
+                    prompt, variables, lang_manager, guild_id
+                )
                 self.logger.debug(f"✅ 變數替換完成 - 原長度: {len(prompt)}, 新長度: {len(formatted_prompt)}")
                 return formatted_prompt
             else:

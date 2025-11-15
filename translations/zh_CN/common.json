@@ -4,6 +4,14 @@
     "help_title": "指令帮助",
     "help_description": "显示所有可用指令的详细信息"
   },
+  "system": {
+    "chat_bot": {
+      "language": {
+        "answer_in": "总是使用简体中文回答",
+        "style": "保持回答简洁"
+      }
+    }
+  },
   "errors": {
     "permission_denied": "您没有权限执行此操作，仅限管理员使用此命令。",
     "command_failed": "指令执行失败：{error}",
