@@ -134,8 +134,8 @@ class QdrantStore(VectorStoreInterface):
                 metadata = getattr(mem, "metadata", {}) or {}
                 if isinstance(metadata, dict):
                     # Ensure IDs are strings for filtering
-                    if "author_id" in metadata:
-                        metadata["author_id"] = str(metadata["author_id"])
+                    if "author_ids" in metadata:
+                        metadata["author_ids"] = [str(uid) for uid in metadata["author_ids"]] if isinstance(metadata["author_ids"], list) else [str(metadata["author_ids"])]
                     if "channel_id" in metadata:
                         metadata["channel_id"] = str(metadata["channel_id"])
                 
