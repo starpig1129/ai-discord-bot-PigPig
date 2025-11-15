@@ -70,7 +70,7 @@ class EpisodicMemoryService(commands.Cog):
             ("commands", "memory", "force_update", "error"): "強制更新記憶失敗，已記錄錯誤。",
             ("commands", "memory", "search", "searching"): "正在搜尋情境記憶...",
             ("commands", "memory", "search", "no_parameters"): "請至少提供一個搜尋參數（vector_query、keyword_query、user_id 或 channel_id）。",
-            ("commands", "memory", "search", "results_found"): f"找到 {{len}} 筆相關記憶：\n\n",
+            ("commands", "memory", "search", "results_found"): "找到 {len} 筆相關記憶：\n\n",
             ("commands", "memory", "search", "no_results"): "找不到符合條件的記憶。",
             ("commands", "memory", "search", "not_implemented"): "搜尋功能尚未在儲存後端實現。請聯繫開發者。",
             ("commands", "memory", "search", "error"): "搜尋記憶時發生錯誤，已記錄錯誤日誌。"
