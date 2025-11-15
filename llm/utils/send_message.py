@@ -79,7 +79,7 @@ async def safe_edit_message(
     message: discord.Message,
     content: str,
     max_retries: int = _MAX_RETRIES
-) -> None:
+) -> bool:
     """Safely edits a Discord message with retry logic.
     
     Args:
@@ -87,28 +87,39 @@ async def safe_edit_message(
         content: New content for the message.
         max_retries: Maximum number of retry attempts.
         
+    Returns:
+        True if message was successfully edited, False if content was empty or other issues.
+        
     Raises:
         discord.errors.HTTPException: If all retry attempts fail.
     """
+    # Ensure content is not empty after sanitization
+    sanitized_content = _sanitize_response(content)
+    if not sanitized_content or not sanitized_content.strip():
+        _logger.warning('Attempted to edit message with empty content')
+        return False
+        
     for attempt in range(max_retries):
         try:
-            sanitized_content = _sanitize_response(content)
             await message.edit(
                 content=sanitized_content,
                 allowed_mentions=_ALLOWED_MENTIONS
             )
-            return
+            return True
         except discord.errors.NotFound:
             _logger.warning(
                 'Message not found during edit attempt %d',
                 attempt + 1
             )
-            return
+            return False
         except discord.errors.HTTPException as exc:
             if attempt < max_retries - 1:
                 await asyncio.sleep(0.5 * (attempt + 1))
             else:
                 raise exc
+    
+    # This should never be reached, but for type safety
+    return False
 
 
 async def _safe_send_message(
@@ -130,13 +141,22 @@ async def _safe_send_message(
         
     Raises:
         discord.errors.HTTPException: If all retry attempts fail.
+        ValueError: If content is empty after sanitization.
     """
+    # Ensure content is not empty after sanitization
+    sanitized_content = _sanitize_response(content)
+    if not sanitized_content or not sanitized_content.strip():
+        _logger.warning('Attempted to send message with empty content')
+        raise ValueError('Cannot send empty message content')
+    
+    # Convert files list to sequence for Discord API
+    files_sequence = files if files is not None else []
+    
     for attempt in range(max_retries):
         try:
-            sanitized_content = _sanitize_response(content)
             return await channel.send(
                 content=sanitized_content,
-                files=files,
+                files=files_sequence,
                 allowed_mentions=_ALLOWED_MENTIONS
             )
         except discord.errors.HTTPException as exc:
@@ -144,6 +164,9 @@ async def _safe_send_message(
                 await asyncio.sleep(0.5 * (attempt + 1))
             else:
                 raise exc
+    
+    # This should never be reached, but for type safety
+    raise RuntimeError('Failed to send message after all retry attempts')
 
 
 def _get_processing_message(
@@ -227,8 +250,14 @@ async def _process_token_stream(
             return
         
         current_block += pending_content
-        converted = (converter.convert(current_block) 
+        converted = (converter.convert(current_block)
                     if converter else current_block)
+        
+        # Ensure converted content is not empty after sanitization
+        if not converted or not converted.strip():
+            _logger.warning('Update message skipped - converted content is empty')
+            pending_content = ''
+            return
         
         # Check if message exceeds Discord limit
         if len(converted) > _HARD_LIMIT:
@@ -236,16 +265,28 @@ async def _process_token_stream(
             processing_msg = _get_processing_message(
                 message, lang_manager, 'continuation'
             )
-            current_message = await _safe_send_message(
-                channel, processing_msg
-            )
-            current_block = pending_content  # Start new block with pending content
-            converted = (converter.convert(current_block) 
-                        if converter else current_block)
+            try:
+                current_message = await _safe_send_message(
+                    channel, processing_msg
+                )
+                current_block = pending_content  # Start new block with pending content
+                converted = (converter.convert(current_block)
+                            if converter else current_block)
+                # Re-check converted content after language conversion
+                if not converted or not converted.strip():
+                    _logger.warning('Continuation message skipped - converted content is empty')
+                    pending_content = ''
+                    return
+            except Exception as e:
+                _logger.error('Failed to send continuation message: %s', e)
+                pending_content = ''
+                return
         
-        # Update the message
-        if converted:
-            await safe_edit_message(current_message, converted)
+        # Update the message only if we have valid content
+        if converted and converted.strip():
+            success = await safe_edit_message(current_message, converted)
+            if not success:
+                _logger.warning('Failed to edit message with current content')
         
         pending_content = ''
         last_update_time = time.time()
@@ -388,11 +429,14 @@ async def send_message(
         await func.report_error(exc, 'Error generating GPT response')
         _logger.error('Error generating GPT response: %s', exc)
         
-        error_message = f'抱歉，生成回應時發生錯誤: {exc}'
+        error_message = '不知道該怎麼回覆你了...'  # Default error message
+        
         try:
             if message_to_edit:
                 try:
-                    await safe_edit_message(message_to_edit, error_message)
+                    success = await safe_edit_message(message_to_edit, error_message)
+                    if not success:
+                        await _safe_send_message(channel, error_message)
                 except discord.errors.NotFound:
                     await _safe_send_message(channel, error_message)
             else:

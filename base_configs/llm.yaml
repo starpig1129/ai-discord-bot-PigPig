@@ -7,7 +7,7 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
-      - gpt-oss-20b
+      - gpt-oss:20b
     - openai:
       - gpt-5-nano
     - anthropic:
@@ -19,7 +19,7 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
-      - gpt-oss-20b
+      - gpt-oss:20b
     - openai:
       - gpt-5-nano
     - anthropic:
@@ -33,7 +33,7 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
-      - gpt-oss-20b
+      - gpt-oss:20b
     - openai:
       - gpt-5-nano
     - anthropic:
@@ -46,7 +46,7 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
-      - gpt-oss-20b
+      - gpt-oss:20b
     - openai:
       - gpt-5-nano
     - anthropic:
@@ -59,7 +59,7 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
-      - gpt-oss-20b
+      - gpt-oss:20b
     - openai:
       - gpt-5-nano
     - anthropic:
@@ -72,7 +72,7 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
-      - gpt-oss-20b
+      - gpt-oss:20b
     - openai:
       - gpt-5-nano
     - anthropic:
@@ -85,7 +85,7 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
-      - gpt-oss-20b
+      - gpt-oss:20b
     - openai:
       - gpt-5-nano
     - anthropic:
@@ -98,7 +98,7 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
-      - gpt-oss-20b
+      - gpt-oss:20b
     - openai:
       - gpt-5-nano
     - anthropic:
@@ -111,7 +111,7 @@ model_priorities:
       - gemini-2.0-flash
       - gemini-2.0-flash-lite
     - ollama:
-      - gpt-oss-20b
+      - gpt-oss:20b
     - openai:
       - gpt-5-nano
     - anthropic:
