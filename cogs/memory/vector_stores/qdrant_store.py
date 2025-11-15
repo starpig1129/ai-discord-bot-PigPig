@@ -11,7 +11,8 @@ import logging
 from typing import List, Optional
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, FieldCondition, MatchAny, Filter
+
+from qdrant_client.models import Distance, VectorParams, FieldCondition, MatchAny, MatchValue,Filter
 from langchain_qdrant import QdrantVectorStore
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -169,64 +170,96 @@ class QdrantStore(VectorStoreInterface):
     ) -> List[MemoryFragment]:
         """Vector similarity search with metadata filtering."""
         try:
-            # Build Qdrant filter for vector search
-            
+            from qdrant_client.models import FieldCondition, MatchAny, MatchValue, Filter
             
             filter_conditions = []
             
-            # Add user_id filter if provided
             if user_id:
                 user_condition = FieldCondition(
-                    key="author_ids",
+                    key="metadata.author_ids",
                     match=MatchAny(any=[str(user_id)])
                 )
                 filter_conditions.append(user_condition)
+                logger.info(f"🔍 Filter: metadata.author_ids contains '{user_id}'")
             
-            # Add channel_id filter if provided
             if channel_id:
                 channel_condition = FieldCondition(
-                    key="channel_id",
-                    match=MatchAny(any=[str(channel_id)])
+                    key="metadata.channel_id",
+                    match=MatchValue(value=str(channel_id))
                 )
                 filter_conditions.append(channel_condition)
+                logger.info(f"🔍 Filter: metadata.channel_id equals '{channel_id}'")
             
-            # Create filter with all conditions
-            if filter_conditions:
-                search_filter = Filter(must=filter_conditions)
-            else:
-                search_filter = None
 
-            # Use LangChain's similarity_search with Qdrant filter
+            search_filter = Filter(must=filter_conditions) if filter_conditions else None
             loop = asyncio.get_event_loop()
-            docs = await loop.run_in_executor(
-                None,
-                lambda: self.vector_store.similarity_search(
-                    query_text,
-                    k=limit,
-                    filter=search_filter
-                )
-            )
-
-            # Convert back to MemoryFragments
-            results = []
-            for doc in docs:
-                metadata = doc.metadata.copy()
-                summary = metadata.pop("summary", doc.page_content)
+            if search_filter:
+                logger.info(f"🔍 Applying filter with {len(filter_conditions)} conditions")
                 
-                mem = MemoryFragment(
-                    id=metadata.get("fragment_id", ""),
-                    content=summary,
-                    metadata=metadata,
-                    query_key=doc.page_content,
-                    score=None  # LangChain doesn't return scores by default
+                query_vector = await loop.run_in_executor(
+                    None,
+                    lambda: self.embedding_model.embed_query(query_text)
                 )
-                results.append(mem)
-
-            return results
+                
+                search_results = await loop.run_in_executor(
+                    None,
+                    lambda: self.client.search(
+                        collection_name=self.collection_name,
+                        query_vector=query_vector,
+                        query_filter=search_filter,
+                        limit=limit,
+                        with_payload=True,
+                        score_threshold=min_score
+                    )
+                )
+                
+                logger.info(f"✅ Found {len(search_results)} results with filter")
+                
+                results = []
+                for scored_point in search_results:
+                    payload = scored_point.payload or {}
+                    metadata = payload.get("metadata", {})
+                    
+                    mem = MemoryFragment(
+                        id=metadata.get("fragment_id", str(scored_point.id)),
+                        content=metadata.get("summary", ""),
+                        metadata=metadata,
+                        query_key=payload.get("page_content", ""),
+                        score=scored_point.score
+                    )
+                    results.append(mem)
+                
+                return results
+            
+            else:
+                logger.info("🔍 No filter, using LangChain similarity_search")
+                docs = await loop.run_in_executor(
+                    None,
+                    lambda: self.vector_store.similarity_search(query_text, k=limit)
+                )
+                
+                results = []
+                for doc in docs:
+                    metadata = doc.metadata.copy()
+                    summary = metadata.pop("summary", doc.page_content)
+                    
+                    mem = MemoryFragment(
+                        id=metadata.get("fragment_id", ""),
+                        content=summary,
+                        metadata=metadata,
+                        query_key=doc.page_content,
+                        score=None
+                    )
+                    results.append(mem)
+                
+                logger.info(f"✅ Found {len(results)} results without filter")
+                return results
 
         except Exception as e:
+            logger.exception("❌ Vector search failed")
             asyncio.create_task(self._report_error(e))
-            raise SearchError("Vector search failed") from e
+            raise SearchError(f"Vector search failed: {str(e)}") from e
+
 
     async def search_memories_by_keyword(
         self,
@@ -237,43 +270,38 @@ class QdrantStore(VectorStoreInterface):
     ) -> List[MemoryFragment]:
         """Keyword search using Qdrant query API with payload filtering."""
         try:
+            
             # Parse query keywords
             keywords = [kw.strip().lower() for kw in query_text.split() if kw.strip()]
             
             # Build filter conditions
             filter_conditions = []
             
-            # Add keyword condition using MatchAny for keywords field
             if keywords:
                 keyword_condition = FieldCondition(
-                    key="keywords",
+                    key="metadata.keywords",
                     match=MatchAny(any=keywords)
                 )
                 filter_conditions.append(keyword_condition)
             
-            # Add user_id filter if provided
             if user_id:
                 user_condition = FieldCondition(
-                    key="author_ids",
+                    key="metadata.author_ids",
                     match=MatchAny(any=[str(user_id)])
                 )
                 filter_conditions.append(user_condition)
             
-            # Add channel_id filter if provided
             if channel_id:
                 channel_condition = FieldCondition(
-                    key="channel_id",
-                    match=MatchAny(any=[str(channel_id)])
+                    key="metadata.channel_id",
+                    match=MatchValue(value=str(channel_id))
                 )
                 filter_conditions.append(channel_condition)
             
             # Create filter with all conditions
-            if filter_conditions:
-                search_filter = Filter(must=filter_conditions)
-            else:
-                search_filter = None
+            search_filter = Filter(must=filter_conditions) if filter_conditions else None
             
-            # Execute query search with filter (use query_points instead of scroll for filtering)
+            # Execute query search with filter
             loop = asyncio.get_event_loop()
             query_results = await loop.run_in_executor(
                 None,
@@ -291,26 +319,25 @@ class QdrantStore(VectorStoreInterface):
             results = []
             for point in query_results.points:
                 payload = point.payload or {}
-                
-                # Extract metadata
-                metadata = payload.copy()
+                metadata = payload.get("metadata", {})
                 
                 # Create MemoryFragment
                 mem = MemoryFragment(
                     id=metadata.get("fragment_id", str(point.id)),
                     content=metadata.get("summary", ""),
                     metadata=metadata,
-                    query_key=metadata.get("query_key", ""),
+                    query_key=payload.get("page_content", ""),
                     score=point.score if hasattr(point, 'score') else None
                 )
                 results.append(mem)
             
-            logger.debug(f"Keyword search returned {len(results)} results for query: {query_text}")
+            logger.info(f"✅ Keyword search returned {len(results)} results for query: {query_text}")
             return results
             
         except Exception as e:
+            logger.exception("❌ Keyword search failed")
             asyncio.create_task(self._report_error(e))
-            raise SearchError("Keyword search failed") from e
+            raise SearchError(f"Keyword search failed: {str(e)}") from e
 
     async def search(
         self,
