@@ -1,0 +1,9 @@
+{
+  "sqlite_not_available": "個人メモリシステムが初期化されていません",
+  "database_error": "データベース操作に失敗しました",
+  "invalid_user": "無効なユーザーです",
+  "analysis_failed": "分析に失敗しました",
+  "ai_processing_failed": "AI処理に失敗しました",
+  "no_data_provided": "データが提供されていません",
+  "update_failed": "更新に失敗しました"
+}

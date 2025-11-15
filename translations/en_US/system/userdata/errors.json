@@ -1,0 +1,9 @@
+{
+  "sqlite_not_available": "Personal memory system not initialized",
+  "database_error": "Database operation failed",
+  "invalid_user": "Invalid user",
+  "analysis_failed": "Analysis failed",
+  "ai_processing_failed": "AI processing failed",
+  "no_data_provided": "No data provided",
+  "update_failed": "Update failed"
+}

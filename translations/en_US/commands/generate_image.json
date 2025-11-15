@@ -1,24 +1,37 @@
 {
-    "generate_image": {
-        "name": "generate_image",
-        "description": "Generate or edit image",
-        "options": {
-            "prompt": "Prompt for generating or editing image"
-        },
-        "responses": {
-            "image_generated": "Image generated",
-            "gemini_error": "Gemini API error: {error}",
-            "all_methods_failed": "All image generation methods failed, please try again later.",
-            "general_error": "Error generating image: {error}",
-            "local_model_processing": "Generating with local model...",
-            "local_model_complete": "Local model generation complete!"
-        },
-        "errors": {
-            "generation_error": "Image generation process error: {error}",
-            "local_model_error": "Local model generation error: {error}",
-            "image_processing_error": "Image processing error: {error}",
-            "api_error": "API request error: {error}",
-            "gemini_generation_error": "Gemini API generation error: {error}"
-        }
+  "generate_image": {
+    "name": "generate_image",
+    "description": "Generate or edit image",
+    "options": {
+      "prompt": "Prompt for generating or editing image"
+    },
+    "responses": {
+      "image_generated": "Image generated",
+      "gemini_error": "Gemini API error: {error}",
+      "all_methods_failed": "All image generation methods failed, please try again later.",
+      "general_error": "Error generating image: {error}",
+      "local_model_processing": "Generating with local model...",
+      "local_model_complete": "Local model generation complete!"
+    },
+    "errors": {
+      "generation_error": "Image generation process error: {error}",
+      "local_model_error": "Local model generation error: {error}",
+      "image_processing_error": "Image processing error: {error}",
+      "api_error": "API request error: {error}",
+      "gemini_generation_error": "Gemini API generation error: {error}"
     }
+  },
+  "responses": {
+    "all_methods_failed": "All image generation methods failed",
+    "local_model_processing": "Generating image with local model...",
+    "local_model_complete": "Local model image generation complete",
+    "image_generated": "Image generated successfully",
+    "gemini_error": "Gemini image generation error: {error}",
+    "general_error": "Image generation error: {error}"
+  },
+  "errors": {
+    "gemini_generation_error": "Gemini image generation error",
+    "image_processing_error": "Image processing error",
+    "local_model_error": "Local model error"
+  }
 }

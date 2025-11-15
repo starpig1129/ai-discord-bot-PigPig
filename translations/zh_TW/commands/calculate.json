@@ -1,17 +1,25 @@
 {
-    "calculate": {
-        "name": "calculate",
-        "description": "計算數學表達式",
-        "options": {
-            "expression": "要計算的數學表達式"
-        },
-        "responses": {
-            "processing": "計算中...",
-            "result": "計算結果: {expression} = {result}",
-            "error_too_long": "錯誤：表達式過長，請縮短後再試。",
-            "error_undefined_function": "錯誤：表達式包含未定義的函數。",
-            "error_unsupported_elements": "錯誤：表達式包含不支持的元素。",
-            "error_general": "計算錯誤：無法解析或計算該表達式。"
-        }
+  "calculate": {
+    "name": "calculate",
+    "description": "計算數學表達式",
+    "options": {
+      "expression": "要計算的數學表達式"
+    },
+    "responses": {
+      "processing": "計算中...",
+      "result": "計算結果: {expression} = {result}",
+      "error_too_long": "錯誤：表達式過長，請縮短後再試。",
+      "error_undefined_function": "錯誤：表達式包含未定義的函數。",
+      "error_unsupported_elements": "錯誤：表達式包含不支持的元素。",
+      "error_general": "計算錯誤：無法解析或計算該表達式。"
     }
+  },
+  "responses": {
+    "processing": "正在計算中...",
+    "result": "計算結果: {result}",
+    "error_general": "計算錯誤: {error}",
+    "error_too_long": "表達式太長",
+    "error_undefined_function": "未定義的函數",
+    "error_unsupported_elements": "不支援的元素"
+  }
 }

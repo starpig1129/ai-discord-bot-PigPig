@@ -1,0 +1,7 @@
+{
+  "responses": {
+    "success": "言語設定に成功しました: {language}",
+    "error": "言語設定に失敗しました",
+    "unsupported": "サポートされていない言語"
+  }
+}

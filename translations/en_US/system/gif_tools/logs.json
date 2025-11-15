@@ -1,0 +1,7 @@
+{
+  "searching_gif": "Searching for GIF: {query}",
+  "found_gif": "Found GIF: {url}",
+  "api_error": "GIF API error (status code: {status_code})",
+  "search_error": "Error searching GIF: {error}",
+  "empty_query_warning": "Search query is empty"
+}

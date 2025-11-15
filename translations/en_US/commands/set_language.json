@@ -1,0 +1,7 @@
+{
+  "responses": {
+    "success": "Language set successfully: {language}",
+    "error": "Failed to set language",
+    "unsupported": "Unsupported language"
+  }
+}

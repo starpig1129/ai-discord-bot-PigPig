@@ -1,0 +1,7 @@
+{
+  "searching_gif": "GIFを検索中: {query}",
+  "found_gif": "GIFを発見: {url}",
+  "api_error": "GIF APIエラー (ステータスコード: {status_code})",
+  "search_error": "GIF検索エラー: {error}",
+  "empty_query_warning": "検索クエリが空です"
+}

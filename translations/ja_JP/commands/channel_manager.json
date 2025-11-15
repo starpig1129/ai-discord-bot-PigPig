@@ -1,45 +1,54 @@
 {
-    "set_channel_mode": {
-        "name": "set_channel_mode",
-        "description": "チャンネル応答モードを設定",
-        "choices": {
-            "unrestricted": "無制限",
-            "whitelist": "ホワイトリスト",
-            "blacklist": "ブラックリスト"
-        },
-        "responses": {
-            "success": "チャンネル応答モードを{mode}に設定しました"
-        }
+  "set_channel_mode": {
+    "name": "set_channel_mode",
+    "description": "チャンネル応答モードを設定",
+    "choices": {
+      "unrestricted": "無制限",
+      "whitelist": "ホワイトリスト",
+      "blacklist": "ブラックリスト"
     },
-    "add_channel": {
-        "name": "add_channel",
-        "description": "ホワイトリストまたはブラックリストにチャンネルを追加",
-        "choices": {
-            "whitelist": "ホワイトリスト",
-            "blacklist": "ブラックリスト"
-        },
-        "responses": {
-            "success": "チャンネル{channel}を{list_type}に追加しました",
-            "already_exists": "チャンネル{channel}は既に{list_type}に存在します"
-        }
-    },
-    "remove_channel": {
-        "name": "remove_channel",
-        "description": "ホワイトリストまたはブラックリストからチャンネルを削除",
-        "choices": {
-            "whitelist": "ホワイトリスト",
-            "blacklist": "ブラックリスト"
-        },
-        "responses": {
-            "success": "チャンネル{channel}を{list_type}から削除しました",
-            "not_found": "チャンネル{channel}は{list_type}に存在しません"
-        }
-    },
-    "auto_response": {
-        "name": "auto_response",
-        "description": "チャンネル自動応答を設定",
-        "responses": {
-            "success": "チャンネル{channel}の自動応答を{enabled}に設定しました"
-        }
+    "responses": {
+      "success": "チャンネル応答モードを{mode}に設定しました"
     }
+  },
+  "add_channel": {
+    "name": "add_channel",
+    "description": "ホワイトリストまたはブラックリストにチャンネルを追加",
+    "choices": {
+      "whitelist": "ホワイトリスト",
+      "blacklist": "ブラックリスト"
+    },
+    "responses": {
+      "success": "チャンネル{channel}を{list_type}に追加しました",
+      "already_exists": "チャンネル{channel}は既に{list_type}に存在します"
+    }
+  },
+  "remove_channel": {
+    "name": "remove_channel",
+    "description": "ホワイトリストまたはブラックリストからチャンネルを削除",
+    "choices": {
+      "whitelist": "ホワイトリスト",
+      "blacklist": "ブラックリスト"
+    },
+    "responses": {
+      "success": "チャンネル{channel}を{list_type}から削除しました",
+      "not_found": "チャンネル{channel}は{list_type}に存在しません"
+    }
+  },
+  "auto_response": {
+    "name": "auto_response",
+    "description": "チャンネル自動応答を設定",
+    "responses": {
+      "success": "チャンネル{channel}の自動応答を{enabled}に設定しました"
+    }
+  },
+  "responses": {
+    "success": "自動応答の設定に成功しました"
+  },
+  "choices": {
+    "list_type": {
+      "value": "リストタイプ"
+    }
+  },
+  "name": "auto_response"
 }

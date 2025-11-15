@@ -1,0 +1,5 @@
+{
+  "enabled": "Enabled",
+  "disabled": "Disabled",
+  "toggled": "{user} toggled autoplay: {status}"
+}

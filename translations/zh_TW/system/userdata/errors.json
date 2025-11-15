@@ -1,0 +1,9 @@
+{
+  "sqlite_not_available": "個人記憶系統尚未初始化",
+  "database_error": "資料庫操作失敗",
+  "invalid_user": "無效的使用者",
+  "analysis_failed": "分析失敗",
+  "ai_processing_failed": "AI 處理失敗",
+  "no_data_provided": "未提供資料",
+  "update_failed": "更新失敗"
+}

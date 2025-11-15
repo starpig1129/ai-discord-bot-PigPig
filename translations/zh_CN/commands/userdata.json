@@ -1,24 +1,39 @@
 {
-    "userdata": {
-        "name": "userdata",
-        "description": "管理用户数据",
-        "options": {
-            "action": "选择动作（读取/保存）",
-            "user": "目标用户",
-            "user_data": "要保存的用户数据"
-        },
-        "choices": {
-            "read": "读取",
-            "save": "保存"
-        },
-        "responses": {
-            "searching": "查询用户资料中...",
-            "updating": "资料更新中...",
-            "data_found": "用户 <@{user_id}> 的资料：{data}",
-            "data_not_found": "找不到用户 <@{user_id}> 的资料。",
-            "data_updated": "已更新用户 <@{user_id}> 的资料：{data}",
-            "data_created": "已为用户 <@{user_id}> 创建资料：{data}",
-            "invalid_action": "无效的操作。请使用 '读取' 或 '保存'。"
-        }
+  "userdata": {
+    "name": "userdata",
+    "description": "管理用户数据",
+    "options": {
+      "action": "选择动作（读取/保存）",
+      "user": "目标用户",
+      "user_data": "要保存的用户数据"
+    },
+    "choices": {
+      "read": "读取",
+      "save": "保存"
+    },
+    "responses": {
+      "searching": "查询用户资料中...",
+      "updating": "资料更新中...",
+      "data_found": "用户 <@{user_id}> 的资料：{data}",
+      "data_not_found": "找不到用户 <@{user_id}> 的资料。",
+      "data_updated": "已更新用户 <@{user_id}> 的资料：{data}",
+      "data_created": "已为用户 <@{user_id}> 创建资料：{data}",
+      "invalid_action": "无效的操作。请使用 '读取' 或 '保存'。"
     }
+  },
+  "errors": {
+    "sqlite_not_available": "个人记忆系统尚未初始化",
+    "database_error": "数据库操作失败",
+    "invalid_user": "无效的用户",
+    "analysis_failed": "分析失败",
+    "ai_processing_failed": "AI 处理失败",
+    "no_data_provided": "未提供数据",
+    "update_failed": "更新失败"
+  },
+  "responses": {
+    "message_key": "消息键",
+    "response_key": "回复键",
+    "invalid_action": "无效的操作",
+    "data_not_found": "找不到数据"
+  }
 }

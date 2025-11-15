@@ -1,0 +1,13 @@
+{
+  "no_music": "現在音楽が再生されていません",
+  "previous": "{user} が前の曲に戻しました",
+  "paused": "{user} が再生をポーズしました",
+  "resumed": "{user} が再生を再開しました",
+  "skipped": "{user} が曲跳过ぎました",
+  "stopped": "{user} が再生を停止しました",
+  "mode_changed": "{user} が {mode} モードに切り替わりました",
+  "shuffle_toggled": "{user} がシャッフルを切り替えました：{status}",
+  "update_failed": "音楽インターフェースの更新に失敗しました",
+  "now_playing_prefix": "再生中",
+  "queue_songs": "キューの曲"
+}

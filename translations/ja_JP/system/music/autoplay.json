@@ -1,0 +1,5 @@
+{
+  "enabled": "有効",
+  "disabled": "無効",
+  "toggled": "{user} が自動再生を切り替えました：{status}"
+}

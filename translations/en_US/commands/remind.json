@@ -1,35 +1,48 @@
 {
-    "remind": {
-        "name": "remind",
-        "description": "Set a reminder",
-        "options": {
-            "time": "Reminder time (e.g., 10 minutes later, or 2023-12-31 20:00:00)",
-            "message": "Reminder message",
-            "user": "User to remind (optional, defaults to self)"
-        },
-        "responses": {
-            "received": "Reminder received",
-            "invalid_format": "Invalid time format. Please use '10 minutes later' or '2023-12-31 20:00:00' format.",
-            "future_time_required": "Reminder time must be in the future.",
-            "confirm_setup": "Reminder set: Will remind {user} {message} in {duration}",
-            "reminder_message": "{user} reminder: {message}",
-            "reminder_sent": "Reminder sent to {user}",
-            "error_setting": "Error setting reminder: {error}"
-        },
-        "time_units": {
-            "years": "years",
-            "months": "months",
-            "weeks": "weeks",
-            "days": "days",
-            "hours": "hours",
-            "minutes": "minutes",
-            "seconds": "seconds"
-        },
-        "time_patterns": {
-            "seconds_later": "{value} seconds later",
-            "minutes_later": "{value} minutes later",
-            "hours_later": "{value} hours later",
-            "days_later": "{value} days later"
-        }
+  "remind": {
+    "name": "remind",
+    "description": "Set a reminder",
+    "options": {
+      "time": "Reminder time (e.g., 10 minutes later, or 2023-12-31 20:00:00)",
+      "message": "Reminder message",
+      "user": "User to remind (optional, defaults to self)"
+    },
+    "responses": {
+      "received": "Reminder received",
+      "invalid_format": "Invalid time format. Please use '10 minutes later' or '2023-12-31 20:00:00' format.",
+      "future_time_required": "Reminder time must be in the future.",
+      "confirm_setup": "Reminder set: Will remind {user} {message} in {duration}",
+      "reminder_message": "{user} reminder: {message}",
+      "reminder_sent": "Reminder sent to {user}",
+      "error_setting": "Error setting reminder: {error}"
+    },
+    "time_units": {
+      "years": "years",
+      "months": "months",
+      "weeks": "weeks",
+      "days": "days",
+      "hours": "hours",
+      "minutes": "minutes",
+      "seconds": "seconds"
+    },
+    "time_patterns": {
+      "seconds_later": "{value} seconds later",
+      "minutes_later": "{value} minutes later",
+      "hours_later": "{value} hours later",
+      "days_later": "{value} days later"
     }
+  },
+  "responses": {
+    "received": "Reminder received",
+    "confirm_setup": "Confirm setting reminder",
+    "future_time_required": "Future time required",
+    "invalid_format": "Invalid format",
+    "reminder_message": "Reminder: {message}",
+    "fallback_user": "User",
+    "error_setting": "Error setting reminder"
+  },
+  "time_units": {
+    "seconds": "seconds",
+    "unit_key": "time unit"
+  }
 }

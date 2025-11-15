@@ -1,0 +1,13 @@
+{
+  "no_music": "No music currently playing",
+  "previous": "{user} played previous",
+  "paused": "{user} paused playback",
+  "resumed": "{user} resumed playback",
+  "skipped": "{user} skipped song",
+  "stopped": "{user} stopped playback",
+  "mode_changed": "{user} switched to {mode} mode",
+  "shuffle_toggled": "{user} toggled shuffle: {status}",
+  "update_failed": "Failed to update music interface",
+  "now_playing_prefix": "Now playing",
+  "queue_songs": "Queue songs"
+}

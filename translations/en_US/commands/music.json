@@ -1,52 +1,65 @@
 {
-    "mode": {
-        "name": "mode",
-        "description": "Set playback mode",
-        "choices": {
-            "no_loop": "No loop",
-            "loop_queue": "Loop queue",
-            "loop_single": "Loop single"
-        },
-        "responses": {
-            "success": "Playback mode set to: {mode}"
-        }
+  "mode": {
+    "name": "mode",
+    "description": "Set playback mode",
+    "choices": {
+      "no_loop": "No loop",
+      "loop_queue": "Loop queue",
+      "loop_single": "Loop single"
     },
-    "shuffle": {
-        "name": "shuffle",
-        "description": "Toggle shuffle",
-        "responses": {
-            "enabled": "Enabled",
-            "disabled": "Disabled",
-            "success": "Shuffle {status}"
-        }
-    },
-    "play": {
-        "name": "play",
-        "description": "Play video (URL or keyword) or refresh UI",
-        "options": {
-            "query": "Video URL, search keyword, or leave blank to refresh UI"
-        },
-        "errors": {
-            "no_voice_channel": "Please join a voice channel first!",
-            "playlist_download_failed": "Error downloading playlist: {error}",
-            "queue_full_title": "Playlist full",
-            "queue_full_desc": "Please wait for current song to finish before adding new songs",
-            "video_info_failed": "Error getting video info: {error}",
-            "no_results": "No related videos found",
-            "playback_error": "Error playing music",
-            "attempting_next": "Attempting to play next song...",
-            "playback_failed_title": "Playback failed",
-            "playback_failed_desc": "Please use /play to replay",
-            "nothing_playing": "Currently not playing any song."
-        },
-        "responses": {
-            "playlist_added": "Added {count} songs to playlist (total {total})",
-            "song_added": "Added to playlist: {title}",
-            "select_song": "Please select song to play:",
-            "search_results_title": "YouTube search results",
-            "queue_finished": "Playlist finished!",
-            "refreshed_ui": "Refreshed playback UI.",
-            "recovering_state": "Detected abnormal playback state, attempting recovery..."
-        }
+    "responses": {
+      "success": "Playback mode set to: {mode}"
     }
+  },
+  "shuffle": {
+    "name": "shuffle",
+    "description": "Toggle shuffle",
+    "responses": {
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "success": "Shuffle {status}"
+    }
+  },
+  "play": {
+    "name": "play",
+    "description": "Play video (URL or keyword) or refresh UI",
+    "options": {
+      "query": "Video URL, search keyword, or leave blank to refresh UI"
+    },
+    "errors": {
+      "no_voice_channel": "Please join a voice channel first!",
+      "playlist_download_failed": "Error downloading playlist: {error}",
+      "queue_full_title": "Playlist full",
+      "queue_full_desc": "Please wait for current song to finish before adding new songs",
+      "video_info_failed": "Error getting video info: {error}",
+      "no_results": "No related videos found",
+      "playback_error": "Error playing music",
+      "attempting_next": "Attempting to play next song...",
+      "playback_failed_title": "Playback failed",
+      "playback_failed_desc": "Please use /play to replay",
+      "nothing_playing": "Currently not playing any song."
+    },
+    "responses": {
+      "playlist_added": "Added {count} songs to playlist (total {total})",
+      "song_added": "Added to playlist: {title}",
+      "select_song": "Please select song to play:",
+      "search_results_title": "YouTube search results",
+      "queue_finished": "Playlist finished!",
+      "refreshed_ui": "Refreshed playback UI.",
+      "recovering_state": "Detected abnormal playback state, attempting recovery..."
+    }
+  },
+  "responses": {
+    "queue_finished": "Playback queue finished",
+    "song_added": "Song {title} added to queue"
+  },
+  "errors": {
+    "playback_error": "Playback error",
+    "playback_failed_title": "Playback failed",
+    "playback_failed_desc": "Unable to play music, attempting next song",
+    "attempting_next": "Attempting to play next song",
+    "queue_full_title": "Queue full",
+    "queue_full_desc": "Playback queue is full, please try again later",
+    "video_info_failed": "Failed to get video info: {error}"
+  }
 }

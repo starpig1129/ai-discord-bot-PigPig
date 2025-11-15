@@ -1,0 +1,5 @@
+{
+  "enabled": "開啟",
+  "disabled": "關閉",
+  "toggled": "{user} 切換自動播放：{status}"
+}

@@ -1,0 +1,7 @@
+{
+  "responses": {
+    "success": "語言設定成功: {language}",
+    "error": "語言設定失敗",
+    "unsupported": "不支援的語言"
+  }
+}

@@ -1,38 +1,40 @@
 {
-    "general": {
-        "no_description": "No description",
-        "help_title": "Command Help",
-        "help_description": "Show detailed information for all available commands"
+  "general": {
+    "no_description": "No description",
+    "help_title": "Command Help",
+    "help_description": "Show detailed information for all available commands"
+  },
+  "errors": {
+    "permission_denied": "You do not have permission to execute this operation, admin only.",
+    "command_failed": "Command execution failed: {error}",
+    "invalid_input": "Invalid input.",
+    "unknown_error": "Unknown error occurred, please try again later."
+  },
+  "commands": {
+    "help": {
+      "name": "help",
+      "description": "Show help message"
     },
-    "errors": {
-        "permission_denied": "You do not have permission to execute this operation, admin only.",
-        "command_failed": "Command execution failed: {error}",
-        "invalid_input": "Invalid input.",
-        "unknown_error": "Unknown error occurred, please try again later."
+    "set_language": {
+      "name": "set_language",
+      "description": "Set server language",
+      "options": {
+        "language": "Choose the language to use"
+      },
+      "responses": {
+        "success": "Server language set to: {language}",
+        "error": "Error setting language, please try again later.",
+        "unsupported": "Unsupported language option."
+      }
     },
-    "commands": {
-        "help": {
-            "name": "help",
-            "description": "Show all commands"
-        },
-        "set_language": {
-            "name": "set_language",
-            "description": "Set the server's language",
-            "options": {
-                "language": "Choose the language to use"
-            },
-            "responses": {
-                "success": "Server language set to: {language}",
-                "error": "Error setting language, please try again later.",
-                "unsupported": "Unsupported language option."
-            }
-        },
-        "current_language": {
-            "name": "current_language",
-            "description": "Show the current server language",
-            "responses": {
-                "current": "Current server language: {language}"
-            }
-        }
+    "current_language": {
+      "name": "current_language",
+      "description": "Show the current server language",
+      "responses": {
+        "current": "Current server language: {language}"
+      }
     }
+  },
+  "no_description": "No description",
+  "error": "Error"
 }

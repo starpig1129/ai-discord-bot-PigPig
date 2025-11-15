@@ -1,24 +1,39 @@
 {
-    "userdata": {
-        "name": "userdata",
-        "description": "ユーザーデータを管理",
-        "options": {
-            "action": "アクションを選択（読み取り/保存）",
-            "user": "対象ユーザー",
-            "user_data": "保存するユーザーデータ"
-        },
-        "choices": {
-            "read": "読み取り",
-            "save": "保存"
-        },
-        "responses": {
-            "searching": "ユーザーデータを検索中...",
-            "updating": "データを更新中...",
-            "data_found": "ユーザー <@{user_id}> のデータ：{data}",
-            "data_not_found": "ユーザー <@{user_id}> のデータが見つかりません。",
-            "data_updated": "ユーザー <@{user_id}> のデータを更新：{data}",
-            "data_created": "ユーザー <@{user_id}> のデータを作成：{data}",
-            "invalid_action": "無効なアクション。'読み取り'または'保存'を使用してください。"
-        }
+  "userdata": {
+    "name": "userdata",
+    "description": "ユーザーデータを管理",
+    "options": {
+      "action": "アクションを選択（読み取り/保存）",
+      "user": "対象ユーザー",
+      "user_data": "保存するユーザーデータ"
+    },
+    "choices": {
+      "read": "読み取り",
+      "save": "保存"
+    },
+    "responses": {
+      "searching": "ユーザーデータを検索中...",
+      "updating": "データを更新中...",
+      "data_found": "ユーザー <@{user_id}> のデータ：{data}",
+      "data_not_found": "ユーザー <@{user_id}> のデータが見つかりません。",
+      "data_updated": "ユーザー <@{user_id}> のデータを更新：{data}",
+      "data_created": "ユーザー <@{user_id}> のデータを作成：{data}",
+      "invalid_action": "無効なアクション。'読み取り'または'保存'を使用してください。"
     }
+  },
+  "errors": {
+    "sqlite_not_available": "個人メモリシステムが初期化されていません",
+    "database_error": "データベース操作が失敗しました",
+    "invalid_user": "無効なユーザー",
+    "analysis_failed": "分析に失敗しました",
+    "ai_processing_failed": "AI処理が失敗しました",
+    "no_data_provided": "データが提供されませんでした",
+    "update_failed": "更新に失敗しました"
+  },
+  "responses": {
+    "message_key": "メッセージキー",
+    "response_key": "応答キー",
+    "invalid_action": "無効なアクション",
+    "data_not_found": "データが見つかりません"
+  }
 }

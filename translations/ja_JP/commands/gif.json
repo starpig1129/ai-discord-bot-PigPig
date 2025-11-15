@@ -1,13 +1,23 @@
 {
-    "search_gif": {
-        "name": "search_gif",
-        "description": "GIFを検索",
-        "options": {
-            "query": "検索クエリ"
-        },
-        "responses": {
-            "not_found": "関連GIFが見つかりません。",
-            "searching": "GIFを検索中..."
-        }
+  "search_gif": {
+    "name": "search_gif",
+    "description": "GIFを検索",
+    "options": {
+      "query": "検索クエリ"
+    },
+    "responses": {
+      "not_found": "関連GIFが見つかりません。",
+      "searching": "GIFを検索中..."
     }
+  },
+  "responses": {
+    "search_gif": {
+      "not_found": "GIFが見つかりません"
+    }
+  },
+  "name": "search_gif",
+  "description": "GIFアニメーションを検索",
+  "options": {
+    "query": "検索キーワード"
+  }
 }

@@ -1,38 +1,40 @@
 {
-    "general": {
-        "no_description": "説明なし",
-        "help_title": "コマンドヘルプ",
-        "help_description": "利用可能なすべてのコマンドの詳細情報を表示"
+  "general": {
+    "no_description": "説明なし",
+    "help_title": "コマンドヘルプ",
+    "help_description": "利用可能なすべてのコマンドの詳細情報を表示"
+  },
+  "errors": {
+    "permission_denied": "この操作を実行する権限がありません、管理者のみ。",
+    "command_failed": "コマンド実行失敗：{error}",
+    "invalid_input": "無効な入力。",
+    "unknown_error": "未知のエラーが発生しました、後で再試行してください。"
+  },
+  "commands": {
+    "help": {
+      "name": "help",
+      "description": "ヘルプメッセージを表示"
     },
-    "errors": {
-        "permission_denied": "この操作を実行する権限がありません、管理者のみ。",
-        "command_failed": "コマンド実行失敗：{error}",
-        "invalid_input": "無効な入力。",
-        "unknown_error": "未知のエラーが発生しました、後で再試行してください。"
+    "set_language": {
+      "name": "set_language",
+      "description": "サーバー言語を設定",
+      "options": {
+        "language": "使用する言語を選択"
+      },
+      "responses": {
+        "success": "サーバーの言語を{language}に設定しました",
+        "error": "言語設定エラー、後で再試行してください。",
+        "unsupported": "サポートされていない言語オプション。"
+      }
     },
-    "commands": {
-        "help": {
-            "name": "help",
-            "description": "すべてのコマンドを表示"
-        },
-        "set_language": {
-            "name": "set_language",
-            "description": "サーバーの言語を設定",
-            "options": {
-                "language": "使用する言語を選択"
-            },
-            "responses": {
-                "success": "サーバーの言語を{language}に設定しました",
-                "error": "言語設定エラー、後で再試行してください。",
-                "unsupported": "サポートされていない言語オプション。"
-            }
-        },
-        "current_language": {
-            "name": "current_language",
-            "description": "現在のサーバー言語を表示",
-            "responses": {
-                "current": "現在のサーバー言語：{language}"
-            }
-        }
+    "current_language": {
+      "name": "current_language",
+      "description": "現在のサーバー言語を表示",
+      "responses": {
+        "current": "現在のサーバー言語：{language}"
+      }
     }
+  },
+  "no_description": "説明なし",
+  "error": "エラー"
 }

@@ -1,0 +1,7 @@
+{
+  "searching_gif": "正在搜索 GIF: {query}",
+  "found_gif": "找到 GIF: {url}",
+  "api_error": "GIF API 错误 (状态码: {status_code})",
+  "search_error": "搜索 GIF 时发生错误: {error}",
+  "empty_query_warning": "搜索查询为空"
+}

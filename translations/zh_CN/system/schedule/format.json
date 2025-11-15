@@ -1,0 +1,12 @@
+{
+  "full_schedule_title": "完整行程表",
+  "empty_schedule": "行程表为空",
+  "time_column": "时间",
+  "description_column": "描述",
+  "no_events": "没有事件",
+  "day_header": "{day} 的行程",
+  "specific_time_title": "{time} 的行程",
+  "no_events_found": "找不到事件",
+  "next_event": "下一个事件",
+  "no_next_event": "没有下一个事件"
+}

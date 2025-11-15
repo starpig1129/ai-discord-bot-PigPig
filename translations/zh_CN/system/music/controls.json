@@ -1,0 +1,13 @@
+{
+  "no_music": "当前没有播放音乐",
+  "previous": "{user} 播放上一首",
+  "paused": "{user} 暂停播放",
+  "resumed": "{user} 继续播放",
+  "skipped": "{user} 跳过歌曲",
+  "stopped": "{user} 停止播放",
+  "mode_changed": "{user} 切换到 {mode} 模式",
+  "shuffle_toggled": "{user} 切换随机播放：{status}",
+  "update_failed": "无法更新音乐界面",
+  "now_playing_prefix": "正在播放",
+  "queue_songs": "队列歌曲"
+}

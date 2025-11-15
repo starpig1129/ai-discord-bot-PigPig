@@ -1,61 +1,85 @@
 {
+  "upload_schedule": {
+    "name": "upload_schedule",
+    "description": "Upload schedule YAML file",
+    "responses": {
+      "success": "Schedule uploaded successfully!",
+      "error": "Error uploading schedule: {error}"
+    }
+  },
+  "query_schedule": {
+    "name": "query_schedule",
+    "description": "Query schedule",
+    "choices": {
+      "query_type": {
+        "full": "Full schedule",
+        "specific_time": "Specific time",
+        "next": "Next event"
+      },
+      "day": {
+        "Monday": "Monday",
+        "Tuesday": "Tuesday",
+        "Wednesday": "Wednesday",
+        "Thursday": "Thursday",
+        "Friday": "Friday",
+        "Saturday": "Saturday",
+        "Sunday": "Sunday"
+      },
+      "weekdays": {
+        "Monday": "Monday",
+        "Tuesday": "Tuesday",
+        "Wednesday": "Wednesday",
+        "Thursday": "Thursday",
+        "Friday": "Friday",
+        "Saturday": "Saturday",
+        "Sunday": "Sunday"
+      }
+    },
+    "responses": {
+      "success": "Query completed",
+      "error": "Error querying schedule: {error}",
+      "no_schedule": "No schedule found for you. Please use `/upload_schedule` to upload a schedule.",
+      "user_not_found": "User not found.",
+      "channel_not_found": "Channel not found.",
+      "permission_denied": "You or the queried user does not have permission to view this channel.",
+      "invalid_time_format": "Invalid time format. Please use YYYY-MM-DD HH:MM:SS format.",
+      "invalid_query_type": "Invalid query type."
+    }
+  },
+  "update_schedule": {
+    "name": "update_schedule",
+    "description": "Update or create schedule",
+    "responses": {
+      "success": "Schedule updated or created successfully!",
+      "error": "Error updating or creating schedule: {error}"
+    }
+  },
+  "show_template": {
+    "name": "show_template",
+    "description": "Show schedule template"
+  },
+  "responses": {
     "upload_schedule": {
-        "name": "upload_schedule",
-        "description": "Upload schedule YAML file",
-        "responses": {
-            "success": "Schedule uploaded successfully!",
-            "error": "Error uploading schedule: {error}"
-        }
+      "success": "Schedule uploaded successfully",
+      "error": "Schedule upload failed: {error}"
     },
     "query_schedule": {
-        "name": "query_schedule",
-        "description": "Query schedule",
-        "choices": {
-            "query_type": {
-                "full": "Full schedule",
-                "specific_time": "Specific time",
-                "next": "Next event"
-            },
-            "day": {
-                "Monday": "Monday",
-                "Tuesday": "Tuesday",
-                "Wednesday": "Wednesday",
-                "Thursday": "Thursday",
-                "Friday": "Friday",
-                "Saturday": "Saturday",
-                "Sunday": "Sunday"
-            },
-            "weekdays": {
-                "Monday": "Monday",
-                "Tuesday": "Tuesday",
-                "Wednesday": "Wednesday",
-                "Thursday": "Thursday",
-                "Friday": "Friday",
-                "Saturday": "Saturday",
-                "Sunday": "Sunday"
-            }
-        },
-        "responses": {
-            "success": "Query completed",
-            "error": "Error querying schedule: {error}",
-            "no_schedule": "No schedule found for you. Please use `/upload_schedule` to upload a schedule.",
-            "user_not_found": "User not found.",
-            "channel_not_found": "Channel not found.",
-            "permission_denied": "You or the queried user does not have permission to view this channel.",
-            "invalid_time_format": "Invalid time format. Please use YYYY-MM-DD HH:MM:SS format.",
-            "invalid_query_type": "Invalid query type."
-        }
+      "error": "Error querying schedule: {error}",
+      "no_schedule": "No schedule data found",
+      "user_not_found": "User not found",
+      "channel_not_found": "Channel not found",
+      "permission_denied": "Permission denied to query this channel's schedule",
+      "invalid_time_format": "Invalid time format",
+      "invalid_query_type": "Invalid query type"
     },
     "update_schedule": {
-        "name": "update_schedule",
-        "description": "Update or create schedule",
-        "responses": {
-            "success": "Schedule updated or created successfully!",
-            "error": "Error updating or creating schedule: {error}"
-        }
-    },
-    "show_template": {
-        "name": "show_template",
-        "description": "Show schedule template"
+      "success": "Schedule updated successfully",
+      "error": "Schedule update failed: {error}"
     }
+  },
+  "choices": {
+    "weekdays": {
+      "day": "Day"
+    }
+  }
 }

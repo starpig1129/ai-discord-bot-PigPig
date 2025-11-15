@@ -1,35 +1,48 @@
 {
-    "remind": {
-        "name": "remind",
-        "description": "リマインダーを設定",
-        "options": {
-            "time": "リマインダー時間（例：10分後、または2023年12月31日20:00:00）",
-            "message": "リマインダーメッセージ",
-            "user": "リマインダー対象ユーザー（オプション、デフォルトは自分）"
-        },
-        "responses": {
-            "received": "リマインダーを受信しました",
-            "invalid_format": "無効な時間フォーマット。'10分後'または'2023年12月31日20:00:00'形式を使用してください。",
-            "future_time_required": "リマインダー時間は未来でなければなりません。",
-            "confirm_setup": "リマインダー設定：{duration}後に{user}に{message}をリマインド",
-            "reminder_message": "{user}リマインダー：{message}",
-            "reminder_sent": "{user}にリマインダーを送信しました",
-            "error_setting": "リマインダー設定エラー：{error}"
-        },
-        "time_units": {
-            "years": "年",
-            "months": "月",
-            "weeks": "週",
-            "days": "日",
-            "hours": "時間",
-            "minutes": "分",
-            "seconds": "秒"
-        },
-        "time_patterns": {
-            "seconds_later": "{value}秒後",
-            "minutes_later": "{value}分後",
-            "hours_later": "{value}時間後",
-            "days_later": "{value}日後"
-        }
+  "remind": {
+    "name": "remind",
+    "description": "リマインダーを設定",
+    "options": {
+      "time": "リマインダー時間（例：10分後、または2023年12月31日20:00:00）",
+      "message": "リマインダーメッセージ",
+      "user": "リマインダー対象ユーザー（オプション、デフォルトは自分）"
+    },
+    "responses": {
+      "received": "リマインダーを受信しました",
+      "invalid_format": "無効な時間フォーマット。'10分後'または'2023年12月31日20:00:00'形式を使用してください。",
+      "future_time_required": "リマインダー時間は未来でなければなりません。",
+      "confirm_setup": "リマインダー設定：{duration}後に{user}に{message}をリマインド",
+      "reminder_message": "{user}リマインダー：{message}",
+      "reminder_sent": "{user}にリマインダーを送信しました",
+      "error_setting": "リマインダー設定エラー：{error}"
+    },
+    "time_units": {
+      "years": "年",
+      "months": "月",
+      "weeks": "週",
+      "days": "日",
+      "hours": "時間",
+      "minutes": "分",
+      "seconds": "秒"
+    },
+    "time_patterns": {
+      "seconds_later": "{value}秒後",
+      "minutes_later": "{value}分後",
+      "hours_later": "{value}時間後",
+      "days_later": "{value}日後"
     }
+  },
+  "responses": {
+    "received": "リマインダーを受信しました",
+    "confirm_setup": "リマインダーの設定を確認",
+    "future_time_required": "将来の時間が必要です",
+    "invalid_format": "無効な形式",
+    "reminder_message": "リマインダー: {message}",
+    "fallback_user": "ユーザー",
+    "error_setting": "リマインダー設定エラー"
+  },
+  "time_units": {
+    "seconds": "秒",
+    "unit_key": "時間単位"
+  }
 }

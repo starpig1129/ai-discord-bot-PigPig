@@ -1,35 +1,48 @@
 {
-    "remind": {
-        "name": "remind",
-        "description": "设置一个提醒",
-        "options": {
-            "time": "提醒时间（例如：10分钟后，或 2023年12月31日20:00:00）",
-            "message": "提醒内容",
-            "user": "要提醒的用户（可选，默认为自己）"
-        },
-        "responses": {
-            "received": "收到提醒",
-            "invalid_format": "无效的时间格式。请使用 '10分钟后' 或 '2023年12月31日20:00:00' 格式。",
-            "future_time_required": "提醒时间必须在将来。",
-            "confirm_setup": "已设置提醒：将在 {duration} 后提醒 {user} {message}",
-            "reminder_message": "{user} 提醒：{message}",
-            "reminder_sent": "提醒已发送给 {user}",
-            "error_setting": "设置提醒时发生错误：{error}"
-        },
-        "time_units": {
-            "years": "年",
-            "months": "月",
-            "weeks": "周",
-            "days": "天",
-            "hours": "小时",
-            "minutes": "分钟",
-            "seconds": "秒"
-        },
-        "time_patterns": {
-            "seconds_later": "{value}秒后",
-            "minutes_later": "{value}分钟后",
-            "hours_later": "{value}小时后",
-            "days_later": "{value}天后"
-        }
+  "remind": {
+    "name": "remind",
+    "description": "设置一个提醒",
+    "options": {
+      "time": "提醒时间（例如：10分钟后，或 2023年12月31日20:00:00）",
+      "message": "提醒内容",
+      "user": "要提醒的用户（可选，默认为自己）"
+    },
+    "responses": {
+      "received": "收到提醒",
+      "invalid_format": "无效的时间格式。请使用 '10分钟后' 或 '2023年12月31日20:00:00' 格式。",
+      "future_time_required": "提醒时间必须在将来。",
+      "confirm_setup": "已设置提醒：将在 {duration} 后提醒 {user} {message}",
+      "reminder_message": "{user} 提醒：{message}",
+      "reminder_sent": "提醒已发送给 {user}",
+      "error_setting": "设置提醒时发生错误：{error}"
+    },
+    "time_units": {
+      "years": "年",
+      "months": "月",
+      "weeks": "周",
+      "days": "天",
+      "hours": "小时",
+      "minutes": "分钟",
+      "seconds": "秒"
+    },
+    "time_patterns": {
+      "seconds_later": "{value}秒后",
+      "minutes_later": "{value}分钟后",
+      "hours_later": "{value}小时后",
+      "days_later": "{value}天后"
     }
+  },
+  "responses": {
+    "received": "提醒已接收",
+    "confirm_setup": "确认设置提醒",
+    "future_time_required": "需要未来时间",
+    "invalid_format": "无效的格式",
+    "reminder_message": "提醒: {message}",
+    "fallback_user": "使用者",
+    "error_setting": "设置提醒时发生错误"
+  },
+  "time_units": {
+    "seconds": "秒",
+    "unit_key": "时间单位"
+  }
 }
