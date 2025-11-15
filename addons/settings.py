@@ -93,6 +93,7 @@ class MusicConfig:
         data = _load_yaml_file(path)
         self.music_temp_base: dict = data.get("music_temp_base", "temp/music")
         self.ffmpeg : dict = data.get("ffmpeg", {})
+        self.youtube_cookies_path: str = data.get("youtube_cookies_path", "./data/youtube_cookies.txt")
 
 class PromptConfig:
     """對應 config/prompt/*.yaml 的設定物件"""

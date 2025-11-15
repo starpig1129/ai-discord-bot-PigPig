@@ -27,3 +27,4 @@ ffmpeg:
     accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     accept_language: "en-us,en;q=0.5"
     sec_fetch_mode: navigate
+youtube_cookies_path: "./data/youtube_cookies.txt"
