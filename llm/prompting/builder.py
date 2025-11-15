@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 import asyncio
 from function import func
 class PromptBuilder:
@@ -209,19 +209,47 @@ class PromptBuilder:
             asyncio.create_task(func.report_error(e, "applying language replacements"))
             return prompt
     
-    def format_with_variables(self, prompt: str, variables: dict) -> str:
+    def format_with_variables(self, prompt: str, variables: dict, lang_manager=None, guild_id: Union[str, None] = None) -> str:
         """
         格式化變數替換
         
         Args:
             prompt: 包含變數的提示模板
             variables: 變數字典
+            lang_manager: LanguageManager instance for language replacements
+            guild_id: Server ID for language-specific translations
             
         Returns:
             替換變數後的提示
         """
         try:
-            return prompt.format(**variables)
+            # 首先確保 'lang' 變數存在，如果沒有則設置為預設值
+            if 'lang' not in variables:
+                variables = variables.copy()  # 創建副本避免修改原始字典
+                variables['lang'] = getattr(lang_manager, 'default_lang', 'zh_TW') if lang_manager else 'zh_TW'
+                self.logger.debug(f"Added missing 'lang' variable with default value: {variables['lang']}")
+            
+            # 進行標準的變數替換
+            formatted_prompt = prompt.format(**variables)
+            
+            # 如果有語言管理器，應用語言占位符替換
+            if lang_manager and guild_id:
+                try:
+                    # 獲取該伺服器的語言
+                    server_lang = lang_manager.get_server_lang(guild_id)
+                    
+                    # 獲取語言映射（如果存在）
+                    mappings = variables.get('language_replacements', {}).get('mappings', {})
+                    
+                    # 應用語言占位符替換
+                    formatted_prompt = self.apply_language_replacements(
+                        formatted_prompt, server_lang, lang_manager, mappings
+                    )
+                except Exception as lang_e:
+                    self.logger.warning(f"Language replacement failed: {lang_e}")
+            
+            return formatted_prompt
+            
         except KeyError as e:
             # 如果變數不存在，記錄警告但不中斷
             self.logger.warning(f"Missing variable in prompt formatting: {e}")

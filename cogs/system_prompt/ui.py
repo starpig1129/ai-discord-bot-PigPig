@@ -86,6 +86,12 @@ class SystemPromptModal(discord.ui.Modal):
                 asyncio.create_task(func.report_error(e, "Error loading default content"))
                 self.logger.warning(f"載入預設內容時發生錯誤: {e}")
         
+        # 檢查並處理初始值的長度限制
+        if initial_value and len(initial_value) > 4000:
+            self.logger.warning(f"Initial content too long ({len(initial_value)} chars), truncating to 4000 chars")
+            initial_value = initial_value[:4000]
+            prompt_placeholder += " (內容已截斷以符合 Discord 限制)"
+        
         # 系統提示輸入框
         self.prompt_input = discord.ui.TextInput(
             label=prompt_label,
@@ -232,6 +238,12 @@ class SystemPromptModuleModal(discord.ui.Modal):
                 asyncio.create_task(func.report_error(e, f"Error loading default content for module '{module_name}'"))
                 self.logger.warning(f"載入模組 '{module_name}' 預設內容時發生錯誤: {e}")
         
+        # 檢查並處理初始值的長度限制（模組輸入框限制為2000字符）
+        if initial_value and len(initial_value) > 2000:
+            self.logger.warning(f"Module '{module_name}' initial content too long ({len(initial_value)} chars), truncating to 2000 chars")
+            initial_value = initial_value[:2000]
+            placeholder_text += " (內容已截斷以符合 Discord 限制)"
+        
         # 構建標籤，包含模組說明
         label_text = f"{module_name} 模組內容"
         if module_description:
@@ -252,10 +264,16 @@ class SystemPromptModuleModal(discord.ui.Modal):
         
         # 如果有詳細說明，添加說明輸入框（僅顯示，不可編輯）
         if module_description and len(module_description) > 50:
+            # 檢查說明長度是否超過限制
+            description_content = module_description
+            if len(description_content) > 1000:
+                self.logger.warning(f"Module '{module_name}' description too long ({len(description_content)} chars), truncating to 1000 chars")
+                description_content = description_content[:1000]
+            
             self.description_display = discord.ui.TextInput(
                 label="📋 模組說明",
                 placeholder="",
-                default=module_description,
+                default=description_content,
                 style=discord.TextStyle.paragraph,
                 max_length=1000,
                 required=False

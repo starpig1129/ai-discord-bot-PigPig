@@ -177,26 +177,26 @@ class PromptManager:
             'environment': environment
         }
         
-        prompt = self.builder.format_with_variables(prompt, variables)
-        
-        # 語言相關替換（整合現有語言管理器）
+        # 語言相關變數
+        lang_manager = None
+        guild_id = None
         if message and message.guild:
             try:
                 bot = message.guild.me._state._get_client()
-                if lang_manager := bot.get_cog("LanguageManager"):
+                lang_manager = bot.get_cog("LanguageManager")
+                if lang_manager:
                     guild_id = str(message.guild.id)
-                    lang = lang_manager.get_server_lang(guild_id)
-
-                    # Prefer YAML-provided mappings so replacement targets are driven by config
+                    # Add language replacements mappings to variables
                     try:
                         config = self.loader.load_yaml_config()
-                        mappings = config.get('language_replacements', {}).get('mappings', {})
+                        variables['language_replacements'] = config.get('language_replacements', {})
                     except Exception:
-                        mappings = {}
-
-                    prompt = self.builder.apply_language_replacements(prompt, lang, lang_manager, mappings)
+                        pass
             except Exception as e:
-                asyncio.create_task(func.report_error(e, "language replacement"))
+                self.logger.warning(f"Failed to get language manager: {e}")
+        
+        # 使用更新後的方法進行變數替換
+        prompt = self.builder.format_with_variables(prompt, variables, lang_manager, guild_id)
         
         return prompt
     

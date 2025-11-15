@@ -936,7 +936,7 @@ class SystemPromptManager:
     def _clear_yaml_prompt_cache(self, guild_id: Optional[str] = None,
                                 channel_id: Optional[str] = None) -> None:
         """
-        清除 YAML PromptManager 和 sendmessage 的相關快取
+        清除 YAML PromptManager 的相關快取
         
         Args:
             guild_id: 伺服器 ID（可選）
@@ -958,14 +958,6 @@ class SystemPromptManager:
                     # 清除所有快取
                     self._prompt_manager.cache.clear_all()
                     self.logger.debug("清除所有 YAML 快取")
-            
-            # 同步清除 sendmessage 模組的快取
-            try:
-                from llm.core.message_sender import clear_system_prompt_cache
-                clear_system_prompt_cache(guild_id, channel_id)
-                self.logger.debug("已同步清除 sendmessage 快取")
-            except ImportError:
-                self.logger.warning("無法匯入 sendmessage 快取清除函式")
                     
         except Exception as e:
             asyncio.create_task(func.report_error(e, "Error clearing YAML PromptManager cache"))
@@ -1010,54 +1002,57 @@ class SystemPromptManager:
     
     def _force_clear_sendmessage_cache(self, guild_id: str, channel_id: Optional[str] = None) -> None:
         """
-        強制清除 sendmessage 模組的所有相關快取（加強版）
+        強制清除 prompting 模組的所有相關快取
         
         Args:
             guild_id: 伺服器 ID
             channel_id: 頻道 ID（可選）
         """
         try:
-            self.logger.info(f"🔥 開始強制清除 sendmessage 快取 - 伺服器: {guild_id}, 頻道: {channel_id}")
+            self.logger.info(f"🔥 開始強制清除 prompting 模組快取 - 伺服器: {guild_id}, 頻道: {channel_id}")
             
-            # 清除 sendmessage 模組快取（使用加強版清除）
-            from llm.core.message_sender import clear_system_prompt_cache, _get_prompt_manager
-            
-            # 使用加強版快取清除
-            clear_system_prompt_cache(guild_id, channel_id)
-            
-            # 額外清除全域 PromptManager 實例的所有可能快取
-            global_prompt_manager = _get_prompt_manager()
-            if global_prompt_manager:
-                # 清除主要快取
-                if hasattr(global_prompt_manager, 'cache'):
-                    if hasattr(global_prompt_manager.cache, 'clear_all'):
-                        global_prompt_manager.cache.clear_all()
-                        self.logger.debug("✅ 已清除全域 PromptManager 主要快取")
+            # 清除新架構中的 PromptManager 快取
+            try:
+                from llm.prompting.manager import get_prompt_manager
                 
-                # 清除可能的其他快取屬性
-                cache_attrs = ['_cached_prompts', '_cache', 'prompt_cache', '_prompt_cache', '_system_prompts']
-                for attr in cache_attrs:
-                    if hasattr(global_prompt_manager, attr):
-                        cache_obj = getattr(global_prompt_manager, attr)
-                        if hasattr(cache_obj, 'clear'):
-                            cache_obj.clear()
-                            self.logger.debug(f"✅ 已清除 {attr}")
-                        elif hasattr(cache_obj, 'clear_all'):
-                            cache_obj.clear_all()
-                            self.logger.debug(f"✅ 已清除 {attr}")
-                
-                # 強制重置時間戳以觸發重新載入
-                timestamp_attrs = ['_last_reload_time', '_last_update_time', '_cache_timestamp']
-                for attr in timestamp_attrs:
-                    if hasattr(global_prompt_manager, attr):
-                        setattr(global_prompt_manager, attr, 0)
-                        self.logger.debug(f"✅ 已重置 {attr}")
-                
-            self.logger.info(f"✅ sendmessage 快取強制清除完成")
+                # 取得全域 PromptManager 實例
+                global_prompt_manager = get_prompt_manager()
+                if global_prompt_manager:
+                    # 清除主要快取
+                    if hasattr(global_prompt_manager, 'cache'):
+                        if hasattr(global_prompt_manager.cache, 'clear_all'):
+                            global_prompt_manager.cache.clear_all()
+                            self.logger.debug("✅ 已清除全域 PromptManager 主要快取")
+                    
+                    # 清除可能的其他快取屬性
+                    cache_attrs = ['_cached_prompts', '_cache', 'prompt_cache', '_prompt_cache', '_system_prompts']
+                    for attr in cache_attrs:
+                        if hasattr(global_prompt_manager, attr):
+                            cache_obj = getattr(global_prompt_manager, attr)
+                            if hasattr(cache_obj, 'clear'):
+                                cache_obj.clear()
+                                self.logger.debug(f"✅ 已清除 {attr}")
+                            elif hasattr(cache_obj, 'clear_all'):
+                                cache_obj.clear_all()
+                                self.logger.debug(f"✅ 已清除 {attr}")
+                    
+                    # 強制重置時間戳以觸發重新載入
+                    timestamp_attrs = ['_last_reload_time', '_last_update_time', '_cache_timestamp']
+                    for attr in timestamp_attrs:
+                        if hasattr(global_prompt_manager, attr):
+                            setattr(global_prompt_manager, attr, 0)
+                            self.logger.debug(f"✅ 已重置 {attr}")
+                    
+                    self.logger.info(f"✅ PromptManager 快取強制清除完成")
+                else:
+                    self.logger.warning("⚠️ 無法取得 PromptManager 實例")
+                    
+            except ImportError as import_err:
+                self.logger.warning(f"⚠️ 無法匯入 llm.prompting.manager: {import_err}")
             
         except Exception as e:
-            asyncio.create_task(func.report_error(e, "Error force-clearing sendmessage cache"))
-            self.logger.warning(f"強制清除 sendmessage 快取時發生錯誤: {e}")
+            asyncio.create_task(func.report_error(e, "Error force-clearing prompting cache"))
+            self.logger.warning(f"強制清除 prompting 快取時發生錯誤: {e}")
             import traceback
             self.logger.debug(f"詳細錯誤追蹤: {traceback.format_exc()}")
     
@@ -1075,10 +1070,10 @@ class SystemPromptManager:
             
             # 清除可能被匯入模組的快取
             modules_to_clear = [
-                'gpt.prompt_manager',
-                'gpt.sendmessage',
-                'gpt.prompt_cache',
-                'gpt.prompt_builder'
+                'llm.prompting.manager',
+                'llm.prompting.cache',
+                'llm.prompting.builder',
+                'llm.prompting.system_prompt'
             ]
             
             for module_name in modules_to_clear:
@@ -1138,12 +1133,12 @@ class SystemPromptManager:
             
             # 4. 清除可能的單例快取
             try:
-                from llm import sendmessage
-                if hasattr(sendmessage, '_prompt_manager'):
-                    sendmessage._prompt_manager = None
-                    self.logger.debug("✅ 已重置 sendmessage 全域 PromptManager")
+                from llm.prompting.manager import _prompt_manager_instances
+                if _prompt_manager_instances:
+                    _prompt_manager_instances.clear()
+                    self.logger.debug("✅ 已清除全域 PromptManager 實例快取")
             except Exception as e:
-                self.logger.debug(f"重置全域變數時發生錯誤: {e}")
+                self.logger.debug(f"清除全域 PromptManager 實例時發生錯誤: {e}")
             
             self.logger.debug(f"✅ 深度快取清理完成")
             
