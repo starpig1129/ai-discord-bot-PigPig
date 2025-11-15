@@ -40,7 +40,7 @@ class EpisodicMemoryTools:
             vector_query: Optional[str] = None,
             keyword_query: Optional[str] = None,
             user_id: Optional[str] = None,
-            channel_id: Optional[str] = None
+            global_search: bool = False
         ) -> str:
             """
             Search episodic memory using semantic vectors and/or keyword matching.
@@ -55,7 +55,7 @@ class EpisodicMemoryTools:
                 vector_query (Optional[str]): Natural-language semantic query for vector search.
                 keyword_query (Optional[str]): Exact-term query for keyword-based matching.
                 user_id (Optional[str]): If provided, filter memories to the specified user.
-                channel_id (Optional[str]): If provided, filter memories to the specified channel.
+                global_search (bool): If True, search across all channels. If False, search only in current channel. Default is False.
     
             Returns:
                 str: A human-readable, plain-text summary of matched MemoryFragment entries,
@@ -70,14 +70,24 @@ class EpisodicMemoryTools:
                 vector_manager = getattr(bot, "vector_manager", None)
                 if not vector_manager:
                     return "Error: VectorManager is not available on the bot."
-    
+                
+                # Get channel_id from runtime.message
+                message = getattr(self.runtime, "message", None)
+                if not message:
+                    return "Error: Runtime message is not available."
+                
+                current_channel_id = str(message.channel.id) if hasattr(message, 'channel') and hasattr(message.channel, 'id') else None
+                
+                # Determine search scope based on global_search parameter
+                search_channel_id = None if global_search else current_channel_id
+                
                 # Delegate to the vector store's search implementation, forwarding both
                 # semantic and keyword parameters for a hybrid search when available.
                 fragments: List[MemoryFragment] = await vector_manager.store.search(
                     vector_query=vector_query,
                     keyword_query=keyword_query,
                     user_id=user_id,
-                    channel_id=channel_id
+                    channel_id=search_channel_id
                 )
     
                 if not fragments:

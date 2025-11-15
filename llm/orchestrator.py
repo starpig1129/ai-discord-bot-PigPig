@@ -177,7 +177,20 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             # Inject short-term memory messages directly before current user input
             messages_for_info_agent = list(short_term_msgs)
             #print("Info Agent Messages:\n", messages_for_info_agent)
+            
+            # Execute info_agent to process user message and tools
             info_result = await info_agent.ainvoke({"messages": messages_for_info_agent})
+            
+            # Extract the analysis output from info_agent result
+            # Info agent should return analysis in a format suitable for message generation
+            info_message: List[BaseMessage] = []
+            if isinstance(info_result, dict) and "messages" in info_result:
+                info_message = info_result["messages"]
+            else:
+                # Fallback: create a human message from the result
+                result_str = str(info_result) if info_result else ""
+                from langchain_core.messages import HumanMessage
+                info_message = [HumanMessage(content=result_str)]
         except Exception as e:
             await asyncio.create_task(func.report_error(e, "info_agent failed"))
             raise
@@ -203,14 +216,12 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"), fallback],
             )
 
-            # info_result["messages"] is expected to be a List[BaseMessage]
-            info_message: List[BaseMessage] = info_result.get("messages", [])  # type: ignore
-
-            # Compose messages for message_agent:
-            # 1) info_message (analysis output)
-            # 2) short_term memory (oldest->newest)
+            # Use the analysis from info_agent for message generation
+            # Compose messages for message_agent with analysis output and context
             messages_for_message_agent = list(info_message)
+
             #print("Message Agent Messages:\n", messages_for_message_agent)
+            
             streamer = message_agent.astream(
                 {"messages": messages_for_message_agent},
                 stream_mode="messages",
