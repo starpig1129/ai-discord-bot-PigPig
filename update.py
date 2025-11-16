@@ -1,193 +1,303 @@
-import requests, zipfile, os, shutil, argparse
-from io import BytesIO
+#!/usr/bin/env python3
+"""
+Lightweight CLI wrapper for update system
 
-ROOT_DIR = os.path.dirname(os.path.abspath(__file__))  # 獲取當前腳本所在的目錄路徑
-__version__ = "v3.0.0"  # 當前版本號
+This script provides a lightweight CLI interface that delegates core functionality
+to the new update architecture in addons.update.* modules.
 
-GITHUB_API_URL = "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest"  # GitHub API 地址,用於獲取最新版本信息
-PIGPIG_URL = "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"  # 下載 PigPig Bot 的 URL
-IGNORE_FILES = [
-    "settings.json", ".env", "data/", "systemPrompt.yaml",'config/',
-    "logs/", "temp/", "__pycache__/", "*.pyc", "models/", 
-    "lavalink/", "chromedriver*/", "school", ".git/", ".gitignore"
-]  # 忽略的文件和目錄列表
+Usage:
+    python update.py -c           # Check version
+    python update.py -l           # Install latest version
+    python update.py -v <version> # Install specific version
+    python update.py -b           # Install beta version
+"""
 
-class bcolors:
-    WARNING = '\033[93m'  # 警告顏色
-    FAIL = '\033[91m'  # 失敗顏色
-    OKGREEN = '\033[92m'  # 成功顏色
-    ENDC = '\033[0m'  # 顏色結束標記
+import os
+import sys
+import argparse
+import asyncio
+import logging
+from typing import Optional
 
-def check_version(with_msg=False):
-    """檢查項目的最新版本。
+# Add current directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-    Args:
-        with_msg (bool): 是否打印消息的選項。
+# Import from new architecture
+from addons.update.manager import UpdateManager
+from addons.update.security import UpdatePermissionChecker
+from addons.update.checker import VersionChecker
+from addons.update.downloader import UpdateDownloader
+from addons.settings import update_config
+from function import func
 
-    Returns:
-        str: 最新版本號。
-    """
-    try:
-        response = requests.get(GITHUB_API_URL, timeout=30)  # 發送 GET 請求獲取最新版本信息
-        response.raise_for_status()
-        latest_version = response.json().get("name", __version__)  # 從 JSON 響應中獲取最新版本號,如果獲取失敗則使用當前版本號
-        
-        if with_msg:
-            msg = f"{bcolors.OKGREEN}Your PigPig Bot is up-to-date! - {latest_version}{bcolors.ENDC}" if latest_version == __version__ else \
-                  f"{bcolors.WARNING}Your PigPig Bot is not up-to-date! The latest version is {latest_version} and you are currently running version {__version__}\n. Run `python update.py -l` to update your bot!{bcolors.ENDC}"
-            print(msg)  # 打印版本檢查消息
-        return latest_version
-    except Exception as e:
-        if with_msg:
-            print(f"{bcolors.FAIL}Error checking version: {e}{bcolors.ENDC}")
-        return __version__
 
-def download_file(version=None):
-    """下載項目的最新版本。
-
-    Args:
-        version (str): 要下載的版本號。如果為 None,則下載最新版本。
-
-    Returns:
-        requests.Response: 下載的響應對象。
-    """
-    version = version if version else check_version()  # 如果版本號未指定,則獲取最新版本號
-    print(f"Downloading PigPig Bot version: {version}")  # 打印下載的版本號
+class UpdateCLI:
+    """Lightweight CLI wrapper for update operations"""
     
-    try:
-        response = requests.get(PIGPIG_URL + version + ".zip", timeout=300)  # 下載指定版本的 ZIP 文件
-        if response.status_code == 404:
-            print(f"{bcolors.FAIL}Warning: Version {version} not found!{bcolors.ENDC}")  # 如果版本不存在,則打印警告消息
-            exit(1)  # 退出程序
-        response.raise_for_status()
-        print("Download Completed")  # 打印下載完成消息
-        return response
-    except Exception as e:
-        print(f"{bcolors.FAIL}Error downloading file: {e}{bcolors.ENDC}")
-        exit(1)
-
-def install(response, version):
-    """安裝下載的項目版本。
-
-    Args:
-        response (requests.Response): 下載的響應對象。
-        version (str): 要安裝的版本號。
-    """
-    user_input = input(f"{bcolors.WARNING}--------------------------------------------------------------------------\n"
-                           "Note: Before proceeding, please ensure that there are no personal files or\n" \
-                           "sensitive information in the directory you're about to delete. This action\n" \
-                           "will preserve settings.json, .env, and data/ directory, but other files\n" \
-                           f"will be replaced. {bcolors.ENDC} Continue with caution? (Y/n) ")  # 提示用戶確認是否繼續安裝
+    def __init__(self):
+        """Initialize CLI wrapper"""
+        self.config = update_config
+        self.bot_owner_id = 0
+        self._init_bot_owner_id()
         
-    if user_input.lower() in ["y", "yes", ""]:
-        print("Installing ...")  # 打印安裝中消息
+        # Initialize components from new architecture
+        self.github_config = self.config.github
+        self.version_checker = VersionChecker(self.github_config)
+        self.permission_checker = UpdatePermissionChecker()
+        
+        # Setup logging
+        self.logger = logging.getLogger(__name__)
+        self._setup_logging()
+    
+    def _init_bot_owner_id(self):
+        """Initialize bot owner ID from environment"""
         try:
-            zfile = zipfile.ZipFile(BytesIO(response.content))  # 創建 ZipFile 對象
-            zfile.extractall(ROOT_DIR)  # 解壓 ZIP 文件到當前目錄
-
-            version_clean = version.replace("v", "")  # 去掉版本號前面的 "v"
+            from dotenv import load_dotenv
+            load_dotenv()
+            self.bot_owner_id = int(os.getenv("BOT_OWNER_ID", "0"))
+        except Exception:
+            self.bot_owner_id = 0
+    
+    def _setup_logging(self):
+        """Setup logging configuration"""
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+    
+    def check_version(self, with_message: bool = False) -> str:
+        """
+        Check current version status
+        
+        Args:
+            with_message: Whether to print message
             
-            # 嘗試不同的可能目錄名稱
-            possible_dirs = [
-                f"ai-discord-bot-PigPig-{version_clean}",
-                f"ai-discord-bot-PigPig-{version}",
-                "ai-discord-bot-PigPig-main"
-            ]
-            
-            source_dir = None
-            for dir_name in possible_dirs:
-                potential_path = os.path.join(ROOT_DIR, dir_name)
-                if os.path.exists(potential_path):
-                    source_dir = potential_path
-                    break
-            
-            if not source_dir:
-                print(f"{bcolors.FAIL}Error: Could not find extracted directory{bcolors.ENDC}")
-                return
-            
-            print(f"Found source directory: {source_dir}")
-            
-            # 刪除舊文件（除了忽略文件）
-            for filename in os.listdir(ROOT_DIR):
-                if filename in IGNORE_FILES or filename.startswith('.') or filename == os.path.basename(source_dir):
-                    continue  # 忽略指定的文件和目錄
-
-                file_path = os.path.join(ROOT_DIR, filename)
-                try:
-                    if os.path.isdir(file_path):
-                        shutil.rmtree(file_path)  # 刪除目錄
-                        print(f"Removed directory: {filename}")
-                    else:
-                        os.remove(file_path)  # 刪除文件
-                        print(f"Removed file: {filename}")
-                except Exception as e:
-                    print(f"{bcolors.WARNING}Warning: Could not remove {filename}: {e}{bcolors.ENDC}")
-            
-            # 移動新文件
-            for filename in os.listdir(source_dir):
-                if filename in IGNORE_FILES:
-                    continue  # 不覆蓋忽略的文件
-                
-                source_path = os.path.join(source_dir, filename)
-                dest_path = os.path.join(ROOT_DIR, filename)
-                
-                try:
-                    if os.path.exists(dest_path):
-                        if os.path.isdir(dest_path):
-                            shutil.rmtree(dest_path)
-                        else:
-                            os.remove(dest_path)
+        Returns:
+            Latest version string
+        """
+        try:
+            # Create a simple bot-like object for compatibility
+            class BotObject:
+                def __init__(self):
+                    self.user: Optional[object] = None
                     
-                    shutil.move(source_path, dest_path)  # 將源代碼目錄中的文件移動到當前目錄
-                    print(f"Updated: {filename}")
-                except Exception as e:
-                    print(f"{bcolors.WARNING}Warning: Could not update {filename}: {e}{bcolors.ENDC}")
+                class UserObject:
+                    def __init__(self, user_id: int):
+                        self.id = user_id
             
-            # 清理解壓目錄
+            bot = BotObject()
+            
+            # Check if we have permission (always allowed for CLI)
+            if self.bot_owner_id == 0:
+                # Create a temporary UpdateManager to get version info
+                temp_manager = UpdateManager(bot)
+                current_version = temp_manager.version_checker.get_current_version()
+            else:
+                # Use permission checker if bot owner is configured
+                bot.user = BotObject.UserObject(self.bot_owner_id)
+                if self.permission_checker.check_update_permission(self.bot_owner_id):
+                    temp_manager = UpdateManager(bot)
+                    current_version = temp_manager.version_checker.get_current_version()
+                else:
+                    current_version = "v3.0.0"  # Fallback
+            
+            # Get latest version asynchronously
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
-                shutil.rmtree(source_dir)  # 刪除源代碼目錄
-            except Exception as e:
-                print(f"{bcolors.WARNING}Warning: Could not clean up {source_dir}: {e}{bcolors.ENDC}")
+                result = loop.run_until_complete(self.version_checker.check_for_updates())
+                latest_version = result.get("latest_version", current_version)
+            finally:
+                loop.close()
             
-            print(f"{bcolors.OKGREEN}Version {version} installed Successfully! Run `python main.py` to start your bot{bcolors.ENDC}")  # 打印安裝成功消息
+            if with_message:
+                if latest_version == current_version:
+                    print(f"\033[92mYour PigPig Bot is up-to-date! - {latest_version}\033[0m")
+                else:
+                    print(f"\033[93mYour PigPig Bot is not up-to-date! The latest version is {latest_version} "
+                          f"and you are currently running version {current_version}\n"
+                          f"Run `python update.py -l` to update your bot!\033[0m")
+            
+            return latest_version
             
         except Exception as e:
-            print(f"{bcolors.FAIL}Error during installation: {e}{bcolors.ENDC}")
-    else:
-        print("Update canceled!")  # 打印更新取消消息
+            if with_message:
+                print(f"\033[91mError checking version: {e}\033[0m")
+            return "v3.0.0"  # Fallback version
+    
+    def install_version(self, version: Optional[str] = None, is_latest: bool = False, 
+                       is_beta: bool = False) -> bool:
+        """
+        Install specified version
+        
+        Args:
+            version: Version to install
+            is_latest: Whether to install latest version
+            is_beta: Whether to install beta version
+            
+        Returns:
+            Installation success status
+        """
+        try:
+            # Check permissions
+            if self.bot_owner_id == 0:
+                print("\033[93mWarning: BOT_OWNER_ID not configured. Update functionality may be restricted.\033[0m")
+            else:
+                if not self.permission_checker.check_update_permission(self.bot_owner_id):
+                    print(f"\033[91mError: No permission to update. Bot owner ID required.\033[0m")
+                    return False
+            
+            # Determine target version
+            if is_beta:
+                target_version = "refs/heads/beta"
+            elif is_latest:
+                target_version = self.check_version(with_message=False)
+            elif version:
+                target_version = version
+            else:
+                print("\033[91mError: No version specified\033[0m")
+                return False
+            
+            # Get download URL
+            download_url = f"https://github.com/starpig1129/ai-discord-bot-PigPig/archive/{target_version}.zip"
+            
+            # Show download info
+            print(f"Downloading PigPig Bot version: {target_version}")
+            
+            # Download the update
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                downloader = UpdateDownloader()
+                
+                async def progress_callback(progress):
+                    print(f"Download progress: {progress}%")
+                
+                download_path = loop.run_until_complete(
+                    downloader.download_update(download_url, progress_callback)
+                )
+                
+                print("Download completed")
+                
+                # Create temporary bot for installation
+                class BotObject2:
+                    def __init__(self):
+                        self.user: Optional[object] = None
+                    
+                    class UserObject2:
+                        def __init__(self, user_id: int):
+                            self.id = user_id
+                
+                bot = BotObject2()
+                if self.bot_owner_id > 0:
+                    bot.user = BotObject2.UserObject2(self.bot_owner_id)
+                
+                # Use UpdateManager for installation
+                manager = UpdateManager(bot)
+                
+                # Execute installation
+                print("Installing update...")
+                
+                # Execute update with force flag
+                result = loop.run_until_complete(
+                    manager.execute_update(force=True)
+                )
+                
+                if result.get("success"):
+                    print(f"\033[92mVersion {target_version} installed successfully! "
+                          f"Run `python main.py` to start your bot\033[0m")
+                    return True
+                else:
+                    print(f"\033[91mUpdate failed: {result.get('error', 'Unknown error')}\033[0m")
+                    return False
+                    
+            finally:
+                loop.close()
+                
+        except Exception as e:
+            print(f"\033[91mError during installation: {e}\033[0m")
+            # Report error using the new architecture
+            asyncio.create_task(func.report_error(e, "update.py/install_version"))
+            return False
+    
+    def parse_args(self) -> argparse.Namespace:
+        """Parse command line arguments"""
+        parser = argparse.ArgumentParser(
+            description='Update script for PigPig Discord Bot - Lightweight CLI wrapper'
+        )
+        
+        parser.add_argument(
+            '-c', '--check',
+            action='store_true',
+            help='Check the current version of the PigPig Bot'
+        )
+        
+        parser.add_argument(
+            '-v', '--version',
+            type=str,
+            help='Install the specified version of the PigPig Bot'
+        )
+        
+        parser.add_argument(
+            '-l', '--latest',
+            action='store_true',
+            help='Install the latest version of the PigPig Bot from Github'
+        )
+        
+        parser.add_argument(
+            '-b', '--beta',
+            action='store_true',
+            help='Install the beta version of the PigPig Bot from Github'
+        )
+        
+        return parser.parse_args()
+    
+    def run(self) -> int:
+        """Main execution method"""
+        try:
+            args = self.parse_args()
+            
+            # Version check only
+            if args.check:
+                self.check_version(with_message=True)
+                return 0
+            
+            # Install specific version
+            elif args.version:
+                success = self.install_version(version=args.version)
+                return 0 if success else 1
+            
+            # Install latest version
+            elif args.latest:
+                success = self.install_version(is_latest=True)
+                return 0 if success else 1
+            
+            # Install beta version
+            elif args.beta:
+                success = self.install_version(is_beta=True)
+                return 0 if success else 1
+            
+            # No arguments provided
+            else:
+                print(f"\033[91mNo arguments provided. Run `python update.py -h` for help.\033[0m")
+                return 1
+                
+        except KeyboardInterrupt:
+            print("\n\033[93mUpdate cancelled by user\033[0m")
+            return 1
+        except Exception as e:
+            error_msg = f"Unexpected error: {e}"
+            print(f"\033[91m{error_msg}\033[0m")
+            asyncio.create_task(func.report_error(e, "update.py/run"))
+            return 1
 
-def parse_args():
-    """解析命令行參數。"""
-    parser = argparse.ArgumentParser(description='Update script for PigPig Discord Bot.')  # 創建參數解析器
-    parser.add_argument('-c', '--check', action='store_true', help='Check the current version of the PigPig Bot')  # 添加 -c 或 --check 參數,用於檢查當前版本
-    parser.add_argument('-v', '--version', type=str, help='Install the specified version of the PigPig Bot')  # 添加 -v 或 --version 參數,用於安裝指定版本
-    parser.add_argument('-l', '--latest', action='store_true', help='Install the latest version of the PigPig Bot from Github')  # 添加 -l 或 --latest 參數,用於安裝最新版本
-    parser.add_argument('-b', '--beta', action='store_true', help='Install the beta version of the PigPig Bot from Github')  # 添加 -b 或 --beta 參數,用於安裝 beta 版本
-    return parser.parse_args()  # 返回解析後的參數
 
 def main():
-    """主函數。"""
-    args = parse_args()  # 解析命令行參數
+    """Main entry point"""
+    cli = UpdateCLI()
+    exit_code = cli.run()
+    sys.exit(exit_code)
 
-    if args.check:
-        check_version(with_msg=True)  # 檢查當前版本並打印消息
-        
-    elif args.version:
-        version = args.version  # 獲取指定的版本號
-        response = download_file(version)  # 下載指定版本
-        install(response, version)  # 安裝指定版本
-        
-    elif args.latest:
-        response = download_file()  # 下載最新版本
-        version = check_version()  # 獲取最新版本號
-        install(response, version)  # 安裝最新版本
-        
-    elif args.beta:
-        response = download_file("refs/heads/beta")  # 下載 beta 版本
-        install(response, "beta")  # 安裝 beta 版本
-
-    else:
-        print(f"{bcolors.FAIL}No arguments provided. Run `python update.py -h` for help.{bcolors.ENDC}")  # 打印缺少參數的錯誤消息
 
 if __name__ == "__main__":
-    main()  # 運行主函數
+    main()
