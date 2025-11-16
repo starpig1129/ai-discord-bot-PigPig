@@ -61,6 +61,9 @@ class BaseConfig:
         self.ipc_server: dict = data.get("ipc_server", {})
         self.version: str = data.get("version", "")
         self.logging: dict = data.get("logging", {})
+        # Color configuration for logging
+        self.enable_colored_logs: bool = data.get("enable_colored_logs", True)
+        self.colored_logs_config: dict = data.get("colored_logs_config", {})
 
 
 class LLMConfig:

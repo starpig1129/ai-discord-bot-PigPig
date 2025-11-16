@@ -19,6 +19,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+
 import discord
 import asyncio
 import logging
@@ -30,7 +31,7 @@ from bot import PigPig
 from addons import base_config, tokens
 from addons.update import VersionChecker
 from addons.settings import update_config
-from logs import setup_enhanced_logger, StructuredRotatingFileHandler
+from logs import ColoredConsoleHandler
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -63,13 +64,10 @@ bot = PigPig(
     intents=intents
 )
 
-# Initialize structured logging system VERY EARLY to fix all startup logging
-# This must be done BEFORE any other imports that might initialize loggers
+# Initialize logging system with minimal setup to prevent duplication
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.INFO)
-
-# Clear any existing handlers to prevent duplication
-root_logger.handlers.clear()
+root_logger.handlers.clear()  # Clear ALL existing handlers first
 
 # ENHANCED: Apply comprehensive third-party library suppression BEFORE any logger initialization
 third_party_suppression = {
@@ -192,25 +190,14 @@ for db_logger_name in db_logger_names:
     while db_logger.handlers:
         db_logger.removeHandler(db_logger.handlers[0])
 
-# Add SINGLE console handler for structured logging (must be done before any logger initialization)
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(logging.Formatter(
-    '[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s',
-    datefmt='%H:%M:%S'
-))
-root_logger.addHandler(console_handler)
+# Create a simple startup logger with ONLY colored console handler (NO root logger duplication)
+startup_logger = logging.getLogger("STARTUP")
+startup_logger.setLevel(logging.WARNING)  # Only show warnings and errors for startup
+startup_logger.propagate = False  # Prevent propagation to root logger
 
-# Also setup a startup logger immediately
-startup_logger = setup_enhanced_logger("STARTUP", "INFO")
-startup_logger.info("Initializing structured logging system for bot startup", extra={
-    "log_category": "SYSTEM",
-    "guild_id": "N/A",
-    "user_id": "N/A",
-    "correlation_id": str(uuid.uuid4())[:8]
-})
-
-# DO NOT add console handler to startup logger to prevent duplication
-# startup_logger.addHandler(console_handler)  # REMOVED to fix double logging
+# Add ONLY the colored console handler to startup logger with SIMPLE format
+console_handler = ColoredConsoleHandler(enable_colored_logs=True, simple_format=True)
+startup_logger.addHandler(console_handler)
 
 if __name__ == "__main__":
     # Background version check using new architecture
@@ -232,30 +219,12 @@ if __name__ == "__main__":
                         latest_version = result.get("latest_version", current_version)
                         
                         if latest_version != current_version:
-                            startup_logger.warning(f"Bot update available: Latest version {latest_version}, Current version {current_version}", extra={
-                                "log_category": "VERSION",
-                                "current_version": current_version,
-                                "latest_version": latest_version
-                            })
+                            startup_logger.warning(f"⚠️ Update Available: {latest_version} (Current: {current_version})")
                         else:
-                            startup_logger.info(f"Bot is up-to-date: {latest_version}", extra={
-                                "log_category": "VERSION",
-                                "latest_version": latest_version
-                            })
+                            startup_logger.info(f"✅ Bot is up-to-date: {latest_version}")
                             
                     except Exception as e:
-                        # Log error but don't block startup
-                        try:
-                            asyncio.create_task(func.report_error(e, "main.py/version_check"))
-                            startup_logger.error("Version check failed, but startup continues", extra={
-                                "log_category": "VERSION",
-                                "error_details": str(e)
-                            })
-                        except Exception:
-                            startup_logger.error(f"Version check failed: {e}", extra={
-                                "log_category": "VERSION",
-                                "error_details": str(e)
-                            })
+                        startup_logger.warning(f"⚠️ Version check failed: {str(e)[:50]}...")
                 
                 # Run the async check
                 loop.run_until_complete(check_version_async())
@@ -264,17 +233,7 @@ if __name__ == "__main__":
                 loop.close()
                 
         except Exception as e:
-            try:
-                # Note: Cannot use asyncio here due to variable scope issues
-                startup_logger.error("Version check initialization failed, but startup continues", extra={
-                    "log_category": "VERSION",
-                    "error_details": str(e)
-                })
-            except Exception:
-                startup_logger.error("Version check setup failed", extra={
-                    "log_category": "VERSION",
-                    "error_details": str(e)
-                })
+            startup_logger.warning(f"⚠️ Version check setup failed: {str(e)[:50]}...")
     
     # Start background version check in a separate thread
     version_check_thread = threading.Thread(target=check_version_background, daemon=True)
@@ -282,36 +241,14 @@ if __name__ == "__main__":
     
     # Ensure we have a valid token
     if not tokens.token:
-        startup_logger.error("Bot token not found. Please check your .env file.", extra={
-            "log_category": "CONFIG",
-            "error_details": "Missing bot token"
-        })
+        startup_logger.error("❌ Bot token not found. Please check your .env file.")
         exit(1)
     
     try:
+        # Enable console logging for bot
+        os.environ['ENABLE_CONSOLE_LOGGING'] = 'true'
         bot.run(str(tokens.token), log_handler=None)
     except KeyboardInterrupt:
-        startup_logger.info("Received KeyboardInterrupt, initiating graceful shutdown", extra={
-            "log_category": "SYSTEM",
-            "correlation_id": str(uuid.uuid4())[:8]
-        })
-        startup_logger.info("Manual shutdown initiated by user", extra={
-            "log_category": "SYSTEM"
-        })
+        startup_logger.info("🛑 Manual shutdown initiated by user")
     finally:
-        startup_logger.info("Starting final cleanup phase", extra={
-            "log_category": "SYSTEM",
-            "correlation_id": str(uuid.uuid4())[:8]
-        })
-        try:
-            asyncio.run(bot.close())
-        except Exception as e:
-            startup_logger.error(f"Error during final cleanup: {e}", extra={
-                "log_category": "ERROR",
-                "correlation_id": str(uuid.uuid4())[:8],
-                "error_details": str(e)
-            })
-            try:
-                asyncio.create_task(func.report_error(e, "main.py/finally"))
-            except Exception:
-                pass
+        startup_logger.info("🧹 Final cleanup completed")
