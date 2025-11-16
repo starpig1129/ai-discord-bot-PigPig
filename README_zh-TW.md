@@ -10,7 +10,7 @@
 
 ## 簡介
 
-PigPig 是一款由大型語言模型 (LLM) 驅動的強大、多模態 Discord 機器人。它旨在透過自然語言與使用者互動，結合先進的 AI 功能與實用、有趣的特性，豐富任何 Discord 社群。
+PigPig 是一款由大型語言模型 (LLM) 驅動的強大、多模態 Discord 機器人。透過自然語言與使用者互動，結合先進的 AI 功能與實用、有趣的特性，豐富任何 Discord 社群。
 
 [**邀請 PigPig 到您的伺服器！**](https://discord.com/oauth2/authorize?client_id=1208661941539704852&permissions=4292493394706417&integration_type=0&scope=bot+applications.commands)
 
@@ -30,7 +30,6 @@ PigPig 是一款由大型語言模型 (LLM) 驅動的強大、多模態 Discord 
 *   🧠 **智慧頻道記憶**：永久儲存並透過語意搜尋智慧檢索對話歷史，為回應提供增強的上下文。
 *   🔄 **自動更新系統**：自動檢查並應用 GitHub 更新，具備安全備份和還原功能。
 *   🍽️ **實用工具**：設定提醒、獲取餐廳推薦、執行計算等。
-*   💭 **思維鏈推理**：提供其思維過程的詳細、逐步解釋，以增強透明度。
 
 ## 📸 功能展示
 
@@ -45,11 +44,17 @@ PigPig 是一款由大型語言模型 (LLM) 驅動的強大、多模態 Discord 
 ### 系統需求
 
 *   **基本依賴項目：**
-    *   [Python 3.10+](https://www.python.org/downloads/)
+    *   [Python 3.11+](https://www.python.org/downloads/)
     *   [FFmpeg](https://ffmpeg.org/) (用於音樂播放)
+    
+    **FFmpeg 安裝：**
+    *   **Ubuntu/Debian：** `sudo apt update && sudo apt install ffmpeg`
+    *   **CentOS/RHEL：** `sudo yum install epel-release && sudo yum install ffmpeg`
+    *   **macOS：** `brew install ffmpeg`
+    *   **Windows：** 從 [FFmpeg Windows builds](https://www.gyan.dev/ffmpeg/builds/) 下載
+    
     *   [`requirements.txt`](./requirements.txt) 中列出的 Python 套件
-*   **硬體需求：**
-    *   **GPU (可選)**：建議使用至少 12GB VRAM 的 NVIDIA GPU 來運行本地模型。機器人優先使用 API 服務，因此大多數功能不需要 GPU。
+
 
 ### 安裝步驟
 
@@ -90,6 +95,12 @@ MODEL_NAME=openbmb/MiniCPM-o-2_6
 ANTHROPIC_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 OPENAI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 GEMINI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# --- 向量資料庫 API 金鑰 ---
+VECTOR_STORE_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# --- 機器人設定檔路徑 ---
+CONFIG_ROOT="/path/to/your/config" 
 ```
 
 | 變數                  | 描述                                                                                                       |
@@ -98,69 +109,25 @@ GEMINI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 | `CLIENT_ID`           | **(必要)** 您機器人的用戶端 ID，來自開發者入口網站。                                                         |
 | `CLIENT_SECRET_ID`    | *(可選)* 您機器人的用戶端密鑰，用於特定的 API 互動。                                                         |
 | `SERCET_KEY`          | *(可選)* 用於儀表板驗證的密鑰。                                                                            |
-| `BOT_OWNER_ID`        | **(必要)** 您的 Discord 使用者 ID。授予擁有者等級的權限，並且是自動更新系統所必需的。                         |
+| `BOT_OWNER_ID`        | **(必要)** 您的 Discord 使用者 ID。授予擁有者等級的權限，並且是自動更新系統所必需的。                             |
 | `BUG_REPORT_CHANNEL_ID` | *(可選)* 用於發送錯誤訊息和錯誤報告的 Discord 頻道 ID。                                                    |
-| `MODEL_NAME`          | 預設使用的本地多模態模型。                                                                                 |
-| `ANTHROPIC_API_KEY`   | *(可選)* 您用於 Anthropic 的 Claude 模型的 API 金鑰。                                                      |
-| `OPENAI_API_KEY`      | *(可選)* 您用於 OpenAI 的 GPT 模型的 API 金鑰。                                                            |
-| `GEMINI_API_KEY`      | *(可選)* 您用於 Google 的 Gemini 模型的 API 金鑰。                                                         |
+| `ANTHROPIC_API_KEY`   | *(可選)* 您用於 Anthropic 的 Claude 模型的 API 金鑰，可以在[Anthropic 官方網站](https://www.anthropic.com/)取得。                                                      |
+| `OPENAI_API_KEY`      | *(可選)* 您用於 OpenAI 的 GPT 模型的 API 金鑰，可以在[OpenAI 官方網站](https://platform.openai.com/)取得。                                                            |
+| `GEMINI_API_KEY`      | *(可選)* 您用於 Google 的 Gemini 模型的 API 金鑰，可以在[Google AI Studio](https://aistudio.google.com/)取得。                                                         |
+| `VECTOR_STORE_API_KEY` | *(可選)* 您用於向量資料庫（如 Qdrant）的 API 金鑰，若使用雲端資料庫才需要。                                     |
+| `CONFIG_ROOT`         | *(可選)* 自訂設定檔和資料的根目錄路徑。預設為當前目錄下的 `./base_configs` 資料夾。                               |
 
-### 步驟 2：設定 `settings.json` 檔案
+### 步驟 2：設定 `configs` 資料夾
 
-如果存在 `settingsExample.json` 檔案，請將其重新命名為 `settings.json`。否則，請建立它。此檔案控制機器人的行為、功能和其他操作參數。請勿更改鍵名。
+機器人預設檔案在 [./base_configs](./base_configs) 資料夾中。您可以根據需要編輯這些 JSON 檔案來自訂機器人行為，建議複製一份並且在 '.env' 中設定 'CONFIG_ROOT' 參數。
 
-```json
-{
-    "prefix": "/",
-    "activity": [
-        {
-            "paly": "學習說話"
-        }
-    ],
-    "ipc_server": {
-        "host": "127.0.0.1",
-        "port": 8000,
-        "enable": false
-    },
-    "version": "v2.2.11",
-    "mongodb": "mongodb://localhost:27017/",
-    "music_temp_base": "./temp/music",
-    "model_priority": ["gemini", "local", "openai", "claude"],
-    "auto_update": {
-        "enabled": true,
-        "check_interval": 21600,
-        "require_owner_confirmation": true,
-        "auto_restart": true
-    },
-    "notification": {
-        "discord_dm": true,
-        "update_channel_id": null,
-        "notification_mentions": []
-    },
-    "security": {
-        "backup_enabled": true,
-        "max_backups": 5,
-        "verify_downloads": true,
-        "protected_files": ["settings.json", ".env", "data/"]
-    },
-    "restart": {
-        "graceful_shutdown_timeout": 30,
-        "restart_command": "python bot.py",
-        "pre_restart_delay": 5
-    },
-    "github": {
-        "repository": "starpig1129/ai-discord-bot-PigPig",
-        "api_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/releases/latest",
-        "download_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
-    },
-    "ffmpeg": {
-        "location": "/usr/bin/ffmpeg",
-        "audio_quality": "192"
-    }
-}
-```
+### 步驟 3：設定長期記憶系統
+如果您不希望啟用長期記憶系統，請在 `base_configs/memory.yaml` 中將 `enabled` 設為 `false`。
+如果您使用雲端向量資料庫（如 Qdrant），請在 `.env` 檔案中設定 `VECTOR_STORE_API_KEY`。
+並且確保在 `base_configs/memory.yaml` 中正確設定向量資料庫的 URL 和其他參數。
+本地安裝方式或是雲端設定方法可以參考[Qdrant 官方文件](https://qdrant.tech/documentation/).
 
-### 步驟 3：啟動機器人
+### 步驟 4：啟動機器人
 
 設定完成後，您可以使用以下指令啟動機器人：
 

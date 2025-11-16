@@ -17,8 +17,8 @@ PigPig is a powerful, multi-modal Discord bot powered by Large Language Models (
 ## 📄 Legal Documents
 To ensure user rights and service transparency, please refer to the following documents:
 
-* **Terms of Service**: [TERMS\_OF\_SERVICE.md](docs/TERMS_OF_SERVICE.md)
-* **Privacy Policy**: [PRIVACY\_POLICY.md](docs/PRIVACY_POLICY.md)
+* **Terms of Service**: [TERMS\_OF\_SERVICE.md](docs/TERMS_OF_SERVICE_zh-TW.md)
+* **Privacy Policy**: [PRIVACY\_POLICY.md](docs/PRIVACY_POLICY_zh-TW.md)
 * **Support Email**: james911129@gmail.com
 * **Support Server**: [https://discord.gg/BvP64mqKzR](https://discord.gg/BvP64mqKzR)
 
@@ -30,7 +30,6 @@ To ensure user rights and service transparency, please refer to the following do
 *   🧠 **Intelligent Channel Memory**: Permanently stores and intelligently retrieves conversation history with semantic search to provide enhanced context for responses.
 *   🔄 **Auto-Update System**: Automatically checks for and applies GitHub updates with secure backups and rollback functionality.
 *   🍽️ **Practical Tools**: Set reminders, get restaurant recommendations, perform calculations, and more.
-*   💭 **Chain of Thought Reasoning**: Provides detailed, step-by-step explanations of its thought process for enhanced transparency.
 
 ## 📸 Feature Showcase
 
@@ -45,11 +44,16 @@ To ensure user rights and service transparency, please refer to the following do
 ### System Requirements
 
 *   **Essential Dependencies:**
-    *   [Python 3.10+](https://www.python.org/downloads/)
+    *   [Python 3.11+](https://www.python.org/downloads/)
     *   [FFmpeg](https://ffmpeg.org/) (For music playback)
+    
+    **FFmpeg Installation:**
+    *   **Ubuntu/Debian:** `sudo apt update && sudo apt install ffmpeg`
+    *   **CentOS/RHEL:** `sudo yum install epel-release && sudo yum install ffmpeg`
+    *   **macOS:** `brew install ffmpeg`
+    *   **Windows:** Download from [FFmpeg Windows builds](https://www.gyan.dev/ffmpeg/builds/)
+    
     *   Python packages listed in [`requirements.txt`](./requirements.txt)
-*   **Hardware Requirements:**
-    *   **GPU (Optional)**: An NVIDIA GPU with at least 12GB VRAM is recommended for running local models. The bot prioritizes API services, so a GPU is not required for most features.
 
 ### Installation Steps
 
@@ -90,6 +94,12 @@ MODEL_NAME=openbmb/MiniCPM-o-2_6
 ANTHROPIC_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 OPENAI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 GEMINI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# --- Vector Database API Keys ---
+VECTOR_STORE_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# --- Bot Configuration File Path ---
+CONFIG_ROOT="/path/to/your/config"
 ```
 
 | Variable              | Description                                                                                                |
@@ -101,66 +111,23 @@ GEMINI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 | `BOT_OWNER_ID`        | **(Required)** Your Discord User ID. Grants owner-level privileges and is required for the auto-update system. |
 | `BUG_REPORT_CHANNEL_ID` | *(Optional)* A Discord channel ID where error messages and bug reports will be sent.                       |
 | `MODEL_NAME`          | The default local multi-modal model to use.                                                                |
-| `ANTHROPIC_API_KEY`   | *(Optional)* Your API key for Anthropic's Claude models.                                                   |
-| `OPENAI_API_KEY`      | *(Optional)* Your API key for OpenAI's GPT models.                                                         |
-| `GEMINI_API_KEY`      | *(Optional)* Your API key for Google's Gemini models.                                                      |
+| `ANTHROPIC_API_KEY`   | *(Optional)* Your API key for Anthropic's Claude models, available on [Anthropic official website](https://www.anthropic.com/).                                                   |
+| `OPENAI_API_KEY`      | *(Optional)* Your API key for OpenAI's GPT models, available on [OpenAI official website](https://platform.openai.com/).                                                         |
+| `GEMINI_API_KEY`      | *(Optional)* Your API key for Google's Gemini models, available on [Google AI Studio](https://aistudio.google.com/).                                                      |
+| `VECTOR_STORE_API_KEY` | *(Optional)* Your API key for vector databases (like Qdrant), only needed if using cloud database.         |
+| `CONFIG_ROOT`         | *(Optional)* Root directory path for custom configuration files and data. Defaults to `./base_configs` folder in current directory. |
 
-### Step 2: Configure `settings.json` file
+### Step 2: Configure `configs` folder
 
-If a `settingsExample.json` file exists, rename it to `settings.json`. Otherwise, create it. This file controls the bot's behavior, features, and other operational parameters. Do not change the key names.
+The bot's default files are in the [./base_configs](./base_configs) folder. You can edit these JSON files to customize the bot's behavior as needed. It is recommended to copy them and set the 'CONFIG_ROOT' parameter in '.env'.
 
-```json
-{
-    "prefix": "/",
-    "activity": [
-        {
-            "paly": "學習說話"
-        }
-    ],
-    "ipc_server": {
-        "host": "127.0.0.1",
-        "port": 8000,
-        "enable": false
-    },
-    "version": "v2.2.11",
-    "mongodb": "mongodb://localhost:27017/",
-    "music_temp_base": "./temp/music",
-    "model_priority": ["gemini", "local", "openai", "claude"],
-    "auto_update": {
-        "enabled": true,
-        "check_interval": 21600,
-        "require_owner_confirmation": true,
-        "auto_restart": true
-    },
-    "notification": {
-        "discord_dm": true,
-        "update_channel_id": null,
-        "notification_mentions": []
-    },
-    "security": {
-        "backup_enabled": true,
-        "max_backups": 5,
-        "verify_downloads": true,
-        "protected_files": ["settings.json", ".env", "data/"]
-    },
-    "restart": {
-        "graceful_shutdown_timeout": 30,
-        "restart_command": "python bot.py",
-        "pre_restart_delay": 5
-    },
-    "github": {
-        "repository": "starpig1129/ai-discord-bot-PigPig",
-        "api_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/releases/latest",
-        "download_url": "https://github.com/starpig1129/ai-discord-bot-PigPig/archive/"
-    },
-    "ffmpeg": {
-        "location": "/usr/bin/ffmpeg",
-        "audio_quality": "192"
-    }
-}
-```
+### Step 3: Configure Long-term Memory System
+If you do not want to enable the long-term memory system, set `enabled` to `false` in `base_configs/memory.yaml`.
+If you use a cloud vector database (like Qdrant), set the `VECTOR_STORE_API_KEY` in the `.env` file.
+And ensure that the vector database URL and other parameters are correctly set in `base_configs/memory.yaml`.
+For local installation or cloud setup methods, refer to [Qdrant official documentation](https://qdrant.tech/documentation/).
 
-### Step 3: Start the Bot
+### Step 4: Start the Bot
 
 Once configured, you can start the bot with the following command:
 
