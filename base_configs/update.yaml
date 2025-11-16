@@ -9,18 +9,12 @@ security:
   max_backups: 5
   verify_downloads: true
   protected_files:
-    - "settings.json"
-    - "systemPrompt.yaml"
-    - "config/"
+    - "configs/"
     - ".env"
     - ".git/"
     - ".gitignore"
     - ".gitattributes"
-    - "data/schedule/"
-    - "data/dialogue_history.json"
-    - "data/channel_configs/"
-    - "data/user_data/"
-    - "data/update_logs/"
+    - "data/"
 
 notification:
   discord_dm: true

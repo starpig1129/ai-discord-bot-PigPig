@@ -13,5 +13,5 @@ GOOGLE_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 VECTOR_STORE_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
-CONFIG_ROOT="/path/to/your/config" #if not set, use default "./base_configs"
+CONFIG_ROOT="configs" #if not set, use default "./base_configs"
 
