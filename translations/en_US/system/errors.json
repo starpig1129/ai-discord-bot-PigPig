@@ -1,3 +1,19 @@
 {
-  "unexpected": "An unexpected error occurred"
+  "unexpected": "An unexpected error occurred",
+  "system_title": "System Error",
+  "system_description": "A system-level error has occurred. Please try again later.",
+  "permission_title": "Permission Error", 
+  "permission_description": "You don't have sufficient permissions to perform this action.",
+  "database_title": "Database Error",
+  "database_description": "A database operation failed. The system is attempting to recover.",
+  "external_title": "External Service Error",
+  "external_description": "An external service is currently unavailable. Please try again later.",
+  "user_action_title": "User Action Error",
+  "user_action_description": "There was an issue processing your request. Please check your input and try again.",
+  "multimedia_title": "Multimedia Error",
+  "multimedia_description": "There was an issue processing multimedia content.",
+  "localization_title": "Localization Error",
+  "localization_description": "A translation or localization error occurred.",
+  "data_title": "Data Error",
+  "data_description": "There was an issue with data processing or validation."
 }

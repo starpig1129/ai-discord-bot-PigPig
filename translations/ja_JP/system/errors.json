@@ -1,3 +1,19 @@
 {
-  "unexpected": "予期しないエラーが発生しました"
+  "unexpected": "予期しないエラーが発生しました",
+  "system_title": "システムエラー",
+  "system_description": "システムレベルのエラーが発生しました。後でもう一度お試しください。",
+  "permission_title": "権限エラー",
+  "permission_description": "この操作を実行する権限が不足しています。",
+  "database_title": "データベースエラー",
+  "database_description": "データベース操作が失敗しました。システムが回復を試みています。",
+  "external_title": "外部サービスエラー",
+  "external_description": "外部サービスは現在利用できません。後でもう一度お試しください。",
+  "user_action_title": "ユーザー操作エラー",
+  "user_action_description": "リクエストの処理中に問題が発生しました。入力内容を確認して再試行してください。",
+  "multimedia_title": "マルチメディアエラー",
+  "multimedia_description": "マルチメディアコンテンツの処理中に問題が発生しました。",
+  "localization_title": "ローカライゼーションエラー",
+  "localization_description": "翻訳またはローカライゼーションエラーが発生しました。",
+  "data_title": "データエラー",
+  "data_description": "データの処理または検証中に問題が発生しました。"
 }

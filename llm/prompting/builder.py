@@ -163,7 +163,7 @@ class PromptBuilder:
                         return None
                 return value if isinstance(value, str) else None
 
-            # Enhanced replacement function to handle both {lang.xxx} and {{lang.xxx}} patterns
+            # Replacement function to handle both {lang.xxx} and {{lang.xxx}} patterns
             def placeholder_repl_path(path: str) -> str:
                 # Try direct path resolution first
                 resolved = resolve_path(path)

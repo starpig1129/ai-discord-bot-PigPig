@@ -1,3 +1,19 @@
 {
-  "unexpected": "發生意外錯誤"
+  "unexpected": "發生意外錯誤",
+  "system_title": "系統錯誤",
+  "system_description": "發生系統層級錯誤。請稍後再試。",
+  "permission_title": "權限錯誤",
+  "permission_description": "您沒有足夠的權限執行此操作。",
+  "database_title": "資料庫錯誤",
+  "database_description": "資料庫操作失敗。系統正在嘗試恢復。",
+  "external_title": "外部服務錯誤",
+  "external_description": "外部服務目前無法使用。請稍後再試。",
+  "user_action_title": "使用者操作錯誤",
+  "user_action_description": "處理您的請求時發生問題。請檢查輸入內容並再試一次。",
+  "multimedia_title": "多媒體錯誤",
+  "multimedia_description": "處理多媒體內容時發生問題。",
+  "localization_title": "本地化錯誤",
+  "localization_description": "發生翻譯或本地化錯誤。",
+  "data_title": "資料錯誤",
+  "data_description": "資料處理或驗證時發生問題。"
 }

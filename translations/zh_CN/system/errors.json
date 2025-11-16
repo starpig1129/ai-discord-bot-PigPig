@@ -1,3 +1,19 @@
 {
-  "unexpected": "发生意外错误"
+  "unexpected": "发生意外错误",
+  "system_title": "系统错误",
+  "system_description": "发生系统级别错误。请稍后再试。",
+  "permission_title": "权限错误",
+  "permission_description": "您没有足够的权限执行此操作。",
+  "database_title": "数据库错误",
+  "database_description": "数据库操作失败。系统正在尝试恢复。",
+  "external_title": "外部服务错误",
+  "external_description": "外部服务目前无法使用。请稍后再试。",
+  "user_action_title": "用户操作错误",
+  "user_action_description": "处理您的请求时发生问题。请检查输入内容并再试一次。",
+  "multimedia_title": "多媒体错误",
+  "multimedia_description": "处理多媒体内容时发生问题。",
+  "localization_title": "本地化错误",
+  "localization_description": "发生翻译或本地化错误。",
+  "data_title": "数据错误",
+  "data_description": "数据处理或验证时发生问题。"
 }

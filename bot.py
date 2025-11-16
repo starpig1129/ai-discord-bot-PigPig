@@ -34,62 +34,102 @@ import update
 from function import func, ROOT_DIR
 import json
 import logging
+import uuid
 import asyncio
 from discord.ext import commands, tasks
 from itertools import cycle
 from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
+from logs import setup_enhanced_logger, TimedRotatingFileHandler
 from llm.orchestrator import Orchestrator
-from logs import TimedRotatingFileHandler
 
 
 from addons.settings import base_config, memory_config
-from addons.tokens import tokens
-
-
-def setup_logger(server_name):
-    """Configure logging for a specific server.
+def setup_logger(server_name: str, level: str = "INFO") -> logging.Logger:
+    """Configure logging for a specific server following technical specifications.
     
-    Sets up a logger with timed rotating file handler for a Discord server.
-    Suppresses INFO and DEBUG messages from third-party libraries while
-    maintaining INFO level logging for application-specific logs.
+    Sets up a logger with structured logging capabilities for Discord server.
+    Implements optimized third-party library suppression while maintaining proper
+    application logging levels and structured logging format.
     
     Args:
         server_name (str): The name of the Discord server to create logger for.
+        level (str): Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         
     Returns:
-        logging.Logger: Configured logger instance for the specified server.
+        logging.Logger: logger instance with structured logging support
         
     Note:
-        - Root logger is set to WARNING level to suppress third-party logs
-        - Application logger is set to INFO level
-        - Uses TimedRotatingFileHandler for log rotation
-        - Prevents duplicate handlers by checking existing handlers
+        - Root logger is set to ERROR level to suppress excessive third-party logs
+        - Optimized third-party library log suppression with granular control
+        - Structured logging with correlation IDs and context tracking
+        - Server isolation architecture with category-based filtering
     """
-    # Set root logger default level to WARNING
-    # This suppresses INFO and DEBUG messages from loggers without explicit level settings
-    logging.getLogger().setLevel(logging.WARNING)
-
-    # Explicitly set log level to WARNING for specific third-party libraries
-    third_party_loggers = [
-        "faiss", "WDM", "sqlalchemy", "httpx", "google_genai",
-        "discord", "websockets", "cogs.memory", "gpt", "jieba"
-    ]
-    for logger_name in third_party_loggers:
-        logging.getLogger(logger_name).setLevel(logging.WARNING)
-
-    # Set up specific logger for our application (per guild)
-    logger = logging.getLogger(server_name)
-    logger.setLevel(logging.INFO)  # Application logs start from INFO level
-
-    # Ensure handler is added only once per logger to avoid duplicate logs
-    if not logger.handlers:
-        handler = TimedRotatingFileHandler(server_name)
-        formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+    # Third-party library log suppression configuration
+    # Based on technical specifications for optimal performance
+    third_party_suppression = {
+        # Database libraries - suppress verbose connection pooling logs
+        "sqlalchemy": logging.ERROR,
+        "alembic": logging.WARNING,
         
+        # HTTP libraries - suppress request/response debug logs
+        "httpx": logging.WARNING,
+        "urllib3": logging.WARNING,
+        "requests": logging.WARNING,
+        
+        # AI/ML libraries - suppress model loading and inference logs
+        "faiss": logging.ERROR,
+        "openai": logging.WARNING,
+        "anthropic": logging.WARNING,
+        "google_genai": logging.WARNING,
+        
+        # Discord and websockets - suppress connection noise
+        "discord": logging.WARNING,
+        "websockets": logging.WARNING,
+        "discord.ext.tasks": logging.ERROR,
+        
+        # Web drivers and scraping
+        "WDM": logging.WARNING,
+        "selenium": logging.WARNING,
+        
+        # System and utility libraries
+        "jieba": logging.WARNING,
+        "gpt": logging.ERROR,
+        "cogs.memory": logging.WARNING,
+        
+        # Performance monitoring (suppress debug info)
+        "asyncio": logging.WARNING,
+        "uvloop": logging.WARNING,
+    }
+    
+    # Set root logger to ERROR level to minimize noise
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.ERROR)
+    
+    # Apply granular third-party library suppression
+    for lib_name, lib_level in third_party_suppression.items():
+        lib_logger = logging.getLogger(lib_name)
+        lib_logger.setLevel(lib_level)
+        # Ensure no propagation to root logger to prevent duplicates
+        lib_logger.propagate = False
+    
+    # Set up structured logger for the guild
+    logger = setup_enhanced_logger(server_name, level)
+    
+    # Add structured logging category setup
+    logger.info(f" Logging system initialized for server: {server_name}", extra={
+        "category": "SYSTEM",
+        "mod_name": "bot_logger",
+        "guild_id": "N/A",
+        "user_id": "N/A",
+        "correlation_id": str(uuid.uuid4())[:8]
+    })
+    
+
     return logger
+from addons.tokens import tokens
+
+
 
 
 class PigPig(commands.Bot):
@@ -530,7 +570,16 @@ class PigPig(commands.Bot):
         print(f"指令 '{ctx.command}' 發生錯誤: {error}")
         print("".join(traceback.format_exception(type(error), error, error.__traceback__)))
 
-        await func.report_error(error, f"on_command_error: {ctx.command}")
+        # Get guild and user IDs for error context
+        guild_id = str(ctx.guild.id) if ctx.guild else None
+        user_id = str(ctx.author.id) if ctx.author else None
+        
+        await func.report_error(
+            error=error,
+            details=f"on_command_error: {ctx.command}",
+            guild_id=guild_id,
+            user_id=user_id
+        )
 
         # Try to reply to channel (only log if reply fails, don't raise)
         try:
@@ -540,7 +589,7 @@ class PigPig(commands.Bot):
                 logger.exception("回覆錯誤訊息時發生例外")
             else:
                 print(f"回覆錯誤訊息時發生例外: {e}")
-            await func.report_error(ctx, error)
+            await func.report_error(e, "Failed to send error reply to user")
             
     async def send_error_report(self, embed: discord.Embed):
         bug_report_channel_id = tokens.bug_report_channel_id

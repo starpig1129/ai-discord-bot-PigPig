@@ -3,7 +3,7 @@ import os
 import discord
 from discord.ext import commands
 from discord import app_commands
-import logging as logger
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
@@ -14,11 +14,13 @@ from .music_lib.state_manager import StateManager
 from .music_lib.queue_manager import QueueManager, PlayMode
 from .music_lib.ui_manager import UIManager
 from .music_lib.ui.song_select import SongSelectView
-from cogs.language_manager import LanguageManager # Import LanguageManager
+from cogs.language_manager import LanguageManager
 from function import func
+from utils.logger import LoggerMixin, log_user_action, log_system_event, log_performance_metric, log_error
 
-class YTMusic(commands.Cog):
+class YTMusic(commands.Cog, LoggerMixin):
     def __init__(self, bot):
+        LoggerMixin.__init__(self, "music")
         self.bot = bot
         self.youtube = None  # Will be initialized in setup_hook
         self._executor = ThreadPoolExecutor(max_workers=3)
@@ -29,7 +31,7 @@ class YTMusic(commands.Cog):
         self.state_manager = bot.state_manager
         self.queue_manager = QueueManager(bot=bot)
         self.ui_manager = bot.ui_manager
-        self.lang_manager: Optional[LanguageManager] = None # Initialize lang_manager
+        self.lang_manager: Optional[LanguageManager] = None
         self.disconnect_timers = {}
 
     async def setup_hook(self):
@@ -39,7 +41,7 @@ class YTMusic(commands.Cog):
         await asyncio.sleep(1) # Small delay to ensure bot is ready
         self.lang_manager = self.bot.get_cog("LanguageManager")
         if not self.lang_manager:
-            logger.error("LanguageManager cog not found!")
+            self.logger.error("LanguageManager cog not found!", category="SYSTEM")
 
     @app_commands.command(name="mode", description="設置播放模式 (不循環/清單循環/單曲循環)")
     @app_commands.choices(mode=[
@@ -49,55 +51,63 @@ class YTMusic(commands.Cog):
     ])
     async def mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
         """播放模式命令"""
-        guild_id = interaction.guild.id
+        guild_id = str(interaction.guild.id)
         if not self.lang_manager: # Ensure lang_manager is loaded
              self.lang_manager = self.bot.get_cog("LanguageManager")
              if not self.lang_manager:
                  await interaction.response.send_message("Language manager not loaded.", ephemeral=True)
                  return
- 
+  
          # Localize choices (name is already localized by decorator, but value needs translation for response)
         mode_value = mode.value
-        mode_name = self.lang_manager.translate(str(guild_id), "commands", "mode", "choices", mode_value)
+        mode_name = self.lang_manager.translate(guild_id, "commands", "mode", "choices", mode_value)
 
-        self.queue_manager.set_play_mode(guild_id, PlayMode(mode_value))
+        self.queue_manager.set_play_mode(int(guild_id), PlayMode(mode_value))
 
-        title = self.lang_manager.translate(str(guild_id), "commands", "mode", "responses", "success", mode=mode_name)
+        title = self.lang_manager.translate(guild_id, "commands", "mode", "responses", "success", mode=mode_name)
         embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
         message = await interaction.response.send_message(embed=embed)
-        state = self.state_manager.get_state(interaction.guild.id)
+        state = self.state_manager.get_state(int(guild_id))
         state.ui_messages.append(message)
 
     @app_commands.command(name="shuffle", description="切換隨機播放")
     async def shuffle(self, interaction: discord.Interaction):
         """隨機播放命令"""
-        guild_id = interaction.guild.id
+        guild_id = str(interaction.guild.id)
         if not self.lang_manager: # Ensure lang_manager is loaded
              self.lang_manager = self.bot.get_cog("LanguageManager")
              if not self.lang_manager:
                  await interaction.response.send_message("Language manager not loaded.", ephemeral=True)
                  return
- 
-        is_shuffle = self.queue_manager.toggle_shuffle(guild_id)
+  
+        is_shuffle = self.queue_manager.toggle_shuffle(int(guild_id))
         status_key = "enabled" if is_shuffle else "disabled"
-        status = self.lang_manager.translate(str(guild_id), "commands", "shuffle", "responses", status_key)
-        title = self.lang_manager.translate(str(guild_id), "commands", "shuffle", "responses", "success", status=status)
+        status = self.lang_manager.translate(guild_id, "commands", "shuffle", "responses", status_key)
+        title = self.lang_manager.translate(guild_id, "commands", "shuffle", "responses", "success", status=status)
         embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
         message = await interaction.response.send_message(embed=embed)
-        state = self.state_manager.get_state(interaction.guild.id)
+        state = self.state_manager.get_state(int(guild_id))
         state.ui_messages.append(message)
 
 
     @app_commands.command(name="play", description="播放影片(網址或關鍵字) 或 刷新UI")
     async def play(self, interaction: discord.Interaction, query: Optional[str] = None):
         """播放音樂或刷新UI命令"""
-        guild_id = interaction.guild.id
+        guild_id = str(interaction.guild.id)
+        
+        # Log user action with structured logging
+        log_user_action(
+            message=f"User initiated play command with query: {query or 'None'}",
+            module="music",
+            guild_id=guild_id,
+            user_id=str(interaction.user.id)
+        )
         
         # 檢查使用者是否已在語音頻道
         if not interaction.user.voice:
             if not self.lang_manager:
                 self.lang_manager = self.bot.get_cog("LanguageManager")
-            title = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "no_voice_channel")
+            title = self.lang_manager.translate(guild_id, "commands", "play", "errors", "no_voice_channel")
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
@@ -109,10 +119,10 @@ class YTMusic(commands.Cog):
 
         # 如果沒有提供查詢，刷新UI
         if not query:
-            state = self.state_manager.get_state(guild_id)
+            state = self.state_manager.get_state(int(guild_id))
             voice_client = interaction.guild.voice_client
             
-            is_active = not self.queue_manager.get_queue(guild_id).empty() or (voice_client and voice_client.is_playing())
+            is_active = not self.queue_manager.get_queue(int(guild_id)).empty() or (voice_client and voice_client.is_playing())
 
             if is_active:
                 await self.ui_manager.update_player_ui(
@@ -122,15 +132,20 @@ class YTMusic(commands.Cog):
                     self.youtube,
                     self
                 )
-                refresh_message = self.lang_manager.translate(str(guild_id), "commands", "play", "responses", "refreshed_ui")
+                refresh_message = self.lang_manager.translate(guild_id, "commands", "play", "responses", "refreshed_ui")
                 await interaction.response.send_message(refresh_message, ephemeral=True, delete_after=5)
             else:
-                no_song_message = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "nothing_playing")
+                no_song_message = self.lang_manager.translate(guild_id, "commands", "play", "errors", "nothing_playing")
                 await interaction.response.send_message(no_song_message, ephemeral=True, delete_after=5)
             return
 
         # 如果有提供查詢，將音樂加入播放清單
-        logger.info(f"[音樂] 伺服器 ID： {interaction.guild.name}, 使用者名稱： {interaction.user.name}, 使用者輸入： {query}")
+        self.logger.info(
+            f"Received play request from guild {interaction.guild.name} by user {interaction.user.name}: {query}",
+            category="USER_ACTION",
+            guild_id=guild_id,
+            user_id=str(interaction.user.id)
+        )
         
         # 檢查是否為URL
         if "youtube.com" in query or "youtu.be" in query:
