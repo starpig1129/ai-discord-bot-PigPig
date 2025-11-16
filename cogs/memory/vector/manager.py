@@ -1,5 +1,4 @@
 import importlib
-import logging
 import inspect
 from typing import Type, Optional, TYPE_CHECKING, Callable, Awaitable, Dict
 
@@ -8,12 +7,11 @@ from langchain_core.embeddings import Embeddings
 
 from addons.settings import MemoryConfig
 from cogs.memory.interfaces.vector_store_interface import VectorStoreInterface
+from utils.logger import LoggerMixin
 from function import func
 
 if TYPE_CHECKING:
     from bot import PigPig as Bot
-
-logger = logging.getLogger(__name__)
 
 # Type of a provider factory: can be sync (return Embeddings) or async (return Awaitable[Embeddings])
 EmbedFactory = Callable[[MemoryConfig], "Embeddings"]
@@ -21,6 +19,15 @@ AsyncEmbedFactory = Callable[[MemoryConfig], Awaitable["Embeddings"]]
 
 # Global registry for embedding providers; other modules can register via register_embedding_provider
 _embedding_providers: Dict[str, Callable[..., object]] = {}
+
+
+class VectorLogger(LoggerMixin):
+    """Logger for vector manager operations."""
+    def __init__(self):
+        super().__init__("cogs.memory.vector.manager")
+
+
+vector_logger = VectorLogger()
 
 
 def register_embedding_provider(name: str):
@@ -34,7 +41,7 @@ def register_embedding_provider(name: str):
     """
     def decorator(factory: Callable[[MemoryConfig], object]):
         _embedding_providers[name] = factory
-        logger.info("Registered embedding provider: %s", name)
+        vector_logger.logger.info(f"Registered embedding provider: {name}")
         return factory
     return decorator
 
@@ -60,7 +67,7 @@ class VectorManager:
         self.embedding_model: Optional[Embeddings] = None
         self._store: Optional[VectorStoreInterface] = None
         # store is intentionally left uninitialized until async initialize is called
-        logger.debug("VectorManager created with settings: %s", getattr(settings, "vector_store_type", None))
+        vector_logger.logger.debug("VectorManager created with settings: %s", getattr(settings, "vector_store_type", None))
 
     def _get_store_class(self, store_type: str) -> Type[VectorStoreInterface]:
         """
@@ -82,7 +89,7 @@ class VectorManager:
             return getattr(module, class_name)
         except (ImportError, AttributeError) as e:
             msg = f"Could not find or import vector store for type '{store_type}'. Error: {e}"
-            logger.exception(msg)
+            vector_logger.logger.exception(msg)
             raise ValueError(msg)
 
     def _initialize_store(self) -> VectorStoreInterface:
@@ -111,7 +118,7 @@ class VectorManager:
             try:
                 await func.report_error(err, "Embedding provider not configured")
             except Exception:
-                logger.exception("Failed to report missing embedding provider")
+                vector_logger.logger.exception("Failed to report missing embedding provider")
             raise err
 
         factory = _embedding_providers.get(provider_name)
@@ -120,7 +127,7 @@ class VectorManager:
             try:
                 await func.report_error(err, f"Missing embedding provider registration: {provider_name}")
             except Exception:
-                logger.exception("Failed to report missing embedding provider registration")
+                vector_logger.logger.exception("Failed to report missing embedding provider registration")
             raise err
 
         try:
@@ -134,7 +141,7 @@ class VectorManager:
                 raise TypeError("Embedding provider did not return an Embeddings instance")
             return embeddings
         except Exception as e:
-            logger.exception("Failed to initialize embedding provider %s: %s", provider_name, e)
+            vector_logger.logger.exception("Failed to initialize embedding provider %s: %s", provider_name, e)
             await func.report_error(e, f"Failed to initialize embedding provider {provider_name}")
             raise
 
@@ -151,9 +158,9 @@ class VectorManager:
             # initialize store now that embedding_model exists
             self._store = self._initialize_store()
             await self._store.ensure_storage()
-            logger.info("VectorManager initialization complete")
+            vector_logger.logger.info("VectorManager initialization complete")
         except Exception as e:
-            logger.exception("VectorManager failed to initialize: %s", e)
+            vector_logger.logger.exception("VectorManager failed to initialize: %s", e)
             await func.report_error(e, "VectorManager initialization failed")
             raise
 

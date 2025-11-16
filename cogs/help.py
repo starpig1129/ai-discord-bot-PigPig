@@ -3,9 +3,11 @@ from discord.ext import commands
 from discord import app_commands
 from typing import Optional
 from .language_manager import LanguageManager
+from utils.logger import LoggerMixin
 
-class HelpCog(commands.Cog):
+class HelpCog(commands.Cog, LoggerMixin):
     def __init__(self, bot):
+        LoggerMixin.__init__(self, "help")
         self.bot = bot
         self.lang_manager: Optional[LanguageManager] = None
 
@@ -15,11 +17,20 @@ class HelpCog(commands.Cog):
 
     @app_commands.command(name="help", description="Display all commands")
     async def help_command(self, interaction: discord.Interaction):
+        guild_id = str(interaction.guild_id)
+        user_id = str(interaction.user.id)
+        
+        # Log user action with structured logging
+        self.info(
+            f"User {interaction.user.name} requested help command in guild {interaction.guild.name}",
+            category="USER_ACTION",
+            guild_id=guild_id,
+            user_id=user_id
+        )
+        
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
 
-        guild_id = str(interaction.guild_id)
-        
         # 獲取本地化的標題和描述
         title = self.lang_manager.translate(guild_id, "general", "help_title") or "指令幫助"
         description = self.lang_manager.translate(guild_id, "general", "help_description") or "顯示所有可用指令的詳細資訊"
@@ -62,6 +73,14 @@ class HelpCog(commands.Cog):
                 )
         
         await interaction.response.send_message(embed=embed)
+        
+        # Log successful completion
+        self.info(
+            f"Help command completed successfully for user {interaction.user.name}",
+            category="USER_ACTION",
+            guild_id=guild_id,
+            user_id=user_id
+        )
 
 async def setup(bot):
     await bot.add_cog(HelpCog(bot))

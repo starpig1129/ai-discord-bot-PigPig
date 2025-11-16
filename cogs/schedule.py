@@ -8,11 +8,15 @@ import os
 import logging
 from typing import Optional
 from .language_manager import LanguageManager
+from utils.logger import LoggerMixin
+from function import func
+
 
 logger = logging.getLogger(__name__)
 
-class ScheduleManager(commands.Cog):
+class ScheduleManager(commands.Cog, LoggerMixin):
     def __init__(self, bot):
+        LoggerMixin.__init__(self, "ScheduleManager")
         self.bot = bot
         self.schedule_dir = "data/schedule"
         os.makedirs(self.schedule_dir, exist_ok=True)

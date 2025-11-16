@@ -9,19 +9,23 @@ from langchain.agents.middleware import ModelFallbackMiddleware
 
 from addons import settings
 from function import func
+from utils.logger import LoggerMixin
 
 
-class ModelManager:
+class ModelManager(LoggerMixin):
     """管理 LLM 模型優先順序，從設定檔取得並建立 ModelFallbackMiddleware"""
 
     def __init__(self) -> None:
+        LoggerMixin.__init__(self, "model_manager")
         self._load_config()
 
     def _load_config(self) -> None:
         try:
             # 從 addons.settings 的 llm_config 取得 model_priorities
             self.priorities = settings.llm_config.model_priorities or {}
+            self.info("Model priorities loaded successfully", category="CONFIGURATION")
         except Exception as e:
+            self.error(f"Failed to load llm_config: {e}", category="CONFIGURATION", function_name="_load_config", exc_info=e)
             try:
                 asyncio.create_task(func.report_error(e, "llm/model_manager.py/_load_config"))
             except Exception:
@@ -54,6 +58,7 @@ class ModelManager:
                             result.append(f"{provider}:{model}")
             return result
         except Exception as e:
+            self.error(f"Failed to resolve priority list for agent_type '{agent_type}': {e}", category="CONFIGURATION", function_name="_resolve_priority_list", exc_info=e)
             try:
                 asyncio.create_task(func.report_error(e, "llm/model_manager.py/_resolve_priority_list"))
             except Exception:
@@ -71,6 +76,7 @@ class ModelManager:
 
         if not priorities:
             err = ValueError(f"No model priorities configured for agent_type '{agent_type}'")
+            self.error(f"No model priorities configured for agent_type '{agent_type}'", category="CONFIGURATION", function_name="get_model", guild_id=None, user_id=None)
             try:
                 # 非同步上報錯誤，不要阻塞呼叫流程
                 asyncio.create_task(func.report_error(err, "llm/model_manager.py/get_model"))
@@ -82,8 +88,10 @@ class ModelManager:
         try:
             primary = priorities[0]
             fallback_mw = ModelFallbackMiddleware(*priorities[1:])  # type: ignore[arg-type]
+            self.info(f"Successfully created model fallback middleware for agent_type '{agent_type}' with primary: {primary}", category="MODEL_MANAGEMENT", function_name="get_model")
             return primary, fallback_mw
         except Exception as e:
+            self.error(f"Failed to create ModelFallbackMiddleware for agent_type '{agent_type}': {e}", category="MODEL_MANAGEMENT", function_name="get_model", exc_info=e)
             try:
                 asyncio.create_task(func.report_error(e, "llm/model_manager.py/get_model"))
             except Exception:

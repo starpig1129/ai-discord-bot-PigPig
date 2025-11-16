@@ -7,12 +7,13 @@ from typing import Optional
 
 from .language_manager import LanguageManager
 from function import func
+from utils.logger import LoggerMixin
 
-
-class BotInfo(commands.Cog):
+class BotInfo(commands.Cog, LoggerMixin):
     """機器人資訊顯示 Cog"""
 
     def __init__(self, bot):
+        LoggerMixin.__init__(self, "BotInfo")
         self.bot = bot
         self.start_time = datetime.utcnow()
         self.lang_manager: Optional[LanguageManager] = None

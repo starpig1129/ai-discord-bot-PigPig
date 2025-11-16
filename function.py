@@ -7,6 +7,7 @@ import sys
 import discord
 from typing import Optional, Dict, Any, Union
 from datetime import datetime, timezone
+from utils.logger import LoggerMixin, log_error
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -44,11 +45,11 @@ class ErrorContext:
             "traceback": self.traceback
         }
 
-class Function:
+class Function(LoggerMixin):
     def __init__(self):
+        LoggerMixin.__init__(self, "function")
         self.bot = None
         self.language_manager = None
-        self.logger = logging.getLogger(__name__)
 
     def set_bot(self, bot):
         self.bot = bot
@@ -141,20 +142,16 @@ class Function:
         """Log error with structured format following technical specifications"""
         log_data = context.to_log_dict()
         
-        # Logging with structured context
-        self.logger.error(
+        # Use structured logging with context tracking
+        self.error(
             f"Error in {context.category}: {context.error_type} - {context.error}",
-            extra={
-                "category": context.category,
-                "mod_name": "function",
-                "function": "report_error",
-                "correlation_id": context.correlation_id,
-                "guild_id": context.guild_id,
-                "user_id": context.user_id,
-                "error_code": f"ERR_{context.category}_{context.error_type.upper()}",
-                "timestamp": context.timestamp.isoformat(),
-                "context": log_data
-            },
+            category=context.category,
+            function_name="report_error",
+            guild_id=context.guild_id,
+            user_id=context.user_id,
+            correlation_id=context.correlation_id,
+            error_code=f"ERR_{context.category}_{context.error_type.upper()}",
+            duration_ms=None,
             exc_info=context.error
         )
 

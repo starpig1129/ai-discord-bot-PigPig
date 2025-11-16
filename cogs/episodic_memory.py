@@ -17,13 +17,14 @@ from addons.settings import memory_config, MemoryConfig
 from cogs.memory.interfaces.storage_interface import StorageInterface
 from cogs.memory.interfaces.vector_store_interface import MemoryFragment
 from cogs.memory.services.message_tracker import MessageTracker
+from utils.logger import LoggerMixin
 
 if TYPE_CHECKING:
     from bot import PigPig
 
 log = logging.getLogger(__name__)
 
-class EpisodicMemoryService(commands.Cog):
+class EpisodicMemoryService(commands.Cog, LoggerMixin):
     """
     A background service responsible for the first stage of the ETL process
     for episodic memory. It fetches full message objects from Discord's API
@@ -31,6 +32,7 @@ class EpisodicMemoryService(commands.Cog):
     """
 
     def __init__(self, bot: "PigPig | commands.Bot", storage: "StorageInterface"):
+        LoggerMixin.__init__(self, "EpisodicMemoryService")
         """
         Args:
             bot (PigPig | commands.Bot): The bot instance.

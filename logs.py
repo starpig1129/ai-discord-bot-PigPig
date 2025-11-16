@@ -71,7 +71,7 @@ class StructuredRotatingFileHandler(logging.Handler):
         # Structured formatter with structured data support
         self.formatter = logging.Formatter(
             ENHANCED_FORMAT,
-            datefmt='%Y-%m-%dT%H:%M:%S.%fZ'
+            datefmt='%Y-%m-%dT%H:%M:%S'
         )
 
     def _create_new_folder(self):
@@ -111,8 +111,19 @@ class StructuredRotatingFileHandler(logging.Handler):
             extra_context['log_category'] = getattr(record, 'category', 'SYSTEM')
             extra_context['custom_module'] = getattr(record, 'mod_name',
                                                     getattr(record, 'module_name', record.name))
-            extra_context['function_name'] = getattr(record, 'function_name',
-                                                   getattr(record, 'function', 'unknown'))
+            # Extract function name with better fallback logic
+            function_name = 'unknown'
+            if getattr(record, 'function_name', None):
+                function_name = getattr(record, 'function_name')
+            elif getattr(record, 'function', None):
+                function_name = getattr(record, 'function')
+            elif getattr(record, 'funcName', None):
+                function_name = getattr(record, 'funcName')
+            elif hasattr(record, 'name') and '.' in record.name:
+                # Fallback to last part of module name
+                function_name = record.name.split('.')[-1]
+            
+            extra_context['function_name'] = function_name
             extra_context['guild_id'] = getattr(record, 'guild_id', 'N/A')
             extra_context['user_id'] = getattr(record, 'user_id', 'N/A')
             extra_context['correlation_id'] = getattr(record, 'correlation_id', str(uuid.uuid4())[:8])

@@ -14,9 +14,11 @@ import asyncio
 from addons.update.manager import UpdateManager
 from addons.update.security import UpdatePermissionChecker
 from function import func
+from utils.logger import LoggerMixin
 
 
-class UpdateManagerCog(commands.Cog):
+
+class UpdateManagerCog(commands.Cog, LoggerMixin):
     """Discord 更新管理介面"""
     
     def __init__(self, bot):
@@ -26,16 +28,16 @@ class UpdateManagerCog(commands.Cog):
         Args:
             bot: Discord Bot 實例
         """
+        LoggerMixin.__init__(self, "UpdateManagerCog")
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
         
         # 初始化更新管理器
         try:
             self.update_manager = UpdateManager(bot)
             self.permission_checker = UpdatePermissionChecker()
-            self.logger.info("更新管理器初始化成功")
+            self.logger.info("UpdateManager initialized successfully")
         except Exception as e:
-            self.logger.error(f"更新管理器初始化失敗: {e}")
+            self.logger.error(f"UpdateManager initialization failed: {e}")
             self.update_manager = None
             self.permission_checker = UpdatePermissionChecker()
     

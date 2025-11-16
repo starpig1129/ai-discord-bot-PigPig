@@ -28,16 +28,18 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
     implicit_multiplication_application,
 )
+from sympy.core.function import UndefinedFunction
 from typing import Optional
 import re
 import unicodedata
 from .language_manager import LanguageManager
 from llm.utils.send_message import safe_edit_message
 from function import func
-import asyncio
+from utils.logger import LoggerMixin, log_user_action, log_system_event, log_performance_metric, log_error
 
-class MathCalculatorCog(commands.Cog):
+class MathCalculatorCog(commands.Cog, LoggerMixin):
     def __init__(self, bot):
+        LoggerMixin.__init__(self, "MathCalculatorCog")
         self.bot = bot
         self.lang_manager: Optional[LanguageManager] = None
 
@@ -181,7 +183,6 @@ class MathCalculatorCog(commands.Cog):
             )
 
             # 檢查解析結果是否包含未定義的函數
-            from sympy.core.function import UndefinedFunction
             if sympy_expr.has(UndefinedFunction):
                 error_message = self.lang_manager.translate(
                     guild_id, "commands", "calculate", "responses", "error_undefined_function"

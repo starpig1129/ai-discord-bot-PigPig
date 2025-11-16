@@ -22,6 +22,7 @@ from .exceptions import (
 from function import func
 import asyncio
 
+from utils.logger import LoggerMixin
 
 def handle_system_prompt_error(func):
     """系統提示錯誤處理裝飾器"""
@@ -71,10 +72,11 @@ def handle_system_prompt_error(func):
     return wrapper
 
 
-class SystemPromptCommands(commands.Cog):
+class SystemPromptCommands(commands.Cog, LoggerMixin):
     """系統提示管理命令類別"""
     
     def __init__(self, bot: discord.Client):
+        LoggerMixin.__init__(self, "SystemPromptCommands")
         """
         初始化命令類別
         
@@ -82,7 +84,7 @@ class SystemPromptCommands(commands.Cog):
             bot: Discord 機器人實例
         """
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        # Logger is automatically set by LoggerMixin - no need to override
         self.manager = SystemPromptManager(bot)
         
         # 設定語言管理器

@@ -1,41 +1,42 @@
 """
-頻道系統提示管理模組的主要 Cog
+System Prompt Management Module Main Cog
 
-這個檔案作為系統提示管理模組的入口點，整合所有功能組件。
+This file serves as the entry point for the system prompt management module,
+integrating all functional components.
 """
 
 import discord
 from discord.ext import commands
-import logging
 from typing import Optional
 
 from .system_prompt.manager import SystemPromptManager
 from .system_prompt.commands import SystemPromptCommands
 from .system_prompt.permissions import PermissionValidator
+from utils.logger import LoggerMixin
 from function import func
 
 
-class SystemPromptManagerCog(commands.Cog):
-    """系統提示管理主要 Cog 類別"""
+class SystemPromptManagerCog(commands.Cog, LoggerMixin):
+    """System prompt management main Cog class"""
     
     def __init__(self, bot: commands.Bot):
         """
-        初始化系統提示管理 Cog
+        Initialize system prompt management Cog
         
         Args:
-            bot: Discord 機器人實例
+            bot: Discord bot instance
         """
+        LoggerMixin.__init__(self, "SystemPromptManagerCog")
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
         
-        # 初始化核心組件
+        # Initialize core components
         self.manager = SystemPromptManager(bot)
         self.permission_validator = PermissionValidator(bot)
         
-        # 初始化命令組件
+        # Initialize command components
         self.commands_cog = SystemPromptCommands(bot)
         
-        self.logger.info("系統提示管理模組已初始化")
+        self.logger.info("System prompt management module initialized")
     
     async def cog_load(self):
         """Cog 載入時的初始化"""

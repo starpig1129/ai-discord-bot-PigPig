@@ -8,6 +8,7 @@ import asyncio
 from functools import lru_cache
 from typing import Optional, Dict, Any, List, Set, Tuple
 from pathlib import Path
+from utils.logger import LoggerMixin, log_user_action, log_system_event, log_performance_metric, log_error
 from function import func
 
 class TranslationCache:
@@ -58,16 +59,17 @@ class TranslationCache:
         """Get current cache size"""
         return len(self._cache)
 
-class LanguageManager(commands.Cog):
+class LanguageManager(commands.Cog, LoggerMixin):
     """Language Management System with modular translation support"""
     
     def __init__(self, bot: commands.Bot):
+        LoggerMixin.__init__(self, "language_manager")
         self.bot = bot
         self.config_dir = "data/serverconfig"
         # 確保配置目錄存在
         os.makedirs(self.config_dir, exist_ok=True)
         
-        self.logger = logging.getLogger(__name__)
+        self._old_logger = logging.getLogger(__name__)
         self.default_lang = "zh_TW"  # 預設使用繁體中文
         
         # 新的資料結構：lang -> file_key -> path -> value

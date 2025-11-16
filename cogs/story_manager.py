@@ -1,31 +1,31 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import logging
 from typing import Optional
 
 from .story.manager import StoryManager
 from .story.ui import UIManager
 from .system_prompt.manager import SystemPromptManager
+from utils.logger import LoggerMixin
 from function import func
 
-class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
+class StoryManagerCog(commands.Cog, LoggerMixin, name="StoryManagerCog"):
     """
-    故事模組主要 Cog
+    Story module main Cog
     
-    重構後的故事模組採用 UI 驅動設計：
-    - 單一 /story 命令作為入口點
-    - 所有功能透過 Discord UI 元件操作
-    - 臨時性介面降低狀態管理複雜度
+    Refactored story module using UI-driven design:
+    - Single /story command as entry point
+    - All functionality through Discord UI components
+    - Ephemeral interfaces reduce state management complexity
     """
 
     def __init__(self, bot: commands.Bot):
+        LoggerMixin.__init__(self, "StoryManagerCog")
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
         self.system_prompt_manager: Optional[SystemPromptManager] = None
         self.story_manager: Optional[StoryManager] = None
         self.ui_manager: Optional[UIManager] = None
-        self.logger.info("StoryManagerCog (UI版本) 已初始化")
+        self.logger.info("StoryManagerCog initialized successfully")
 
     story = app_commands.Group(name="story", description="與故事模式相關的指令")
 

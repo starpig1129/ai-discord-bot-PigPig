@@ -45,6 +45,7 @@ from cogs.memory.users.models import UserInfo
 from function import func
 from llm.model_manager import ModelManager
 from llm.utils.send_message import safe_edit_message
+from utils.logger import LoggerMixin
 
 from .language_manager import LanguageManager
 
@@ -98,7 +99,7 @@ class UserDataResponse(BaseModel):
     )
 
 
-class UserDataCog(commands.Cog):
+class UserDataCog(commands.Cog, LoggerMixin):
     """Manages personalized user data for Discord bot interactions.
     
     Provides /memory command group allowing users to save or view bot's
@@ -128,10 +129,10 @@ class UserDataCog(commands.Cog):
             user_manager: Optional user manager instance. If None, will be
                 injected during cog_load from bot.user_manager.
         """
+        LoggerMixin.__init__(self, "userdata")
         self.bot = bot
         self.user_manager = user_manager
         self.lang_manager: Optional[LanguageManager] = None
-        self.logger = logging.getLogger(__name__)
 
     async def cog_load(self) -> None:
         """Initializes language manager and user manager when cog loads."""

@@ -31,16 +31,17 @@ from typing import Optional
 from addons.tokens import tokens
 from .language_manager import LanguageManager
 from function import func
+from utils.logger import LoggerMixin
 
-class GifTools(commands.Cog):
+class GifTools(commands.Cog, LoggerMixin):
     """GIF 搜尋與管理工具。"""
 
     def __init__(self, bot):
         self.bot = bot
+        LoggerMixin.__init__(self, "GifTools")
         self.tenor_api_key = tokens.tenor_api_key
         if not self.tenor_api_key:
             raise ValueError("TENOR_API_KEY not found in environment variables")
-        self.logger = logging.getLogger('gif_tools')
         self.lang_manager: Optional[LanguageManager] = None
 
     async def cog_load(self):

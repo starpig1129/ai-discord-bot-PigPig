@@ -49,12 +49,14 @@ from typing import Optional
 from .language_manager import LanguageManager
 from llm.utils.send_message import safe_edit_message
 from function import func
+from utils.logger import LoggerMixin, log_user_action, log_system_event, log_performance_metric, log_error
 
 def install_driver():
     return ChromeDriverManager().install()
 
-class InternetSearchCog(commands.Cog):
+class InternetSearchCog(commands.Cog, LoggerMixin):
     def __init__(self, bot):
+        LoggerMixin.__init__(self, "InternetSearchCog")
         self.bot = bot
         self.db = DB()
         self.train = Train(db=self.db)
@@ -526,7 +528,7 @@ class InternetSearchCog(commands.Cog):
                     logging.getLogger(__name__).info("eat_search: 臨時訊息不存在，略過結果訊息編輯。")
 
             self.train.genModel(str(ctx.guild.id))
-            return None  
+            return None
         except Exception as e:
             await func.report_error(e, f"eat_search: {e}")
             keyword_to_use = keyword if predict is None else predict

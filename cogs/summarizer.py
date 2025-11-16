@@ -11,14 +11,16 @@ from langchain.agents.middleware import ModelCallLimitMiddleware
 
 from function import func
 from llm.model_manager import ModelManager
+from utils.logger import LoggerMixin
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-class SummarizerCog(commands.Cog):
+class SummarizerCog(commands.Cog, LoggerMixin):
     """一個專門用於處理對話摘要功能的 Cog，整合了訊息數與字元數雙重限制。"""
 
     def __init__(self, bot: commands.Bot):
+        LoggerMixin.__init__(self, "SummarizerCog")
         self.bot = bot
         self.MAX_CHAR_COUNT = 15000
         self.EMBED_DESC_LIMIT = 4000

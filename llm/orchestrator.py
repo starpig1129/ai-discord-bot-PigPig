@@ -19,6 +19,7 @@ from .prompting.system_prompt import get_system_prompt
 from llm.context_manager import ContextManager
 from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.procedural import ProceduralMemoryProvider
+from utils.logger import LoggerMixin, log_error, log_system_event
 
 
 class DirectToolOutputMiddleware(AgentMiddleware):
@@ -27,7 +28,7 @@ class DirectToolOutputMiddleware(AgentMiddleware):
         return {"jump_to": "end"}
 
 
-class Orchestrator:
+class Orchestrator(LoggerMixin):
     """
     Orchestrator updated to accept ContextManager's new return type.
 
@@ -43,6 +44,7 @@ class Orchestrator:
         """
         Initialize model manager and context manager.
         """
+        LoggerMixin.__init__(self, "orchestrator")
         self.model_manager = ModelManager()
 
         # Initialize providers using resources from bot
@@ -50,9 +52,11 @@ class Orchestrator:
         user_manager = getattr(cog, "user_manager", None) if cog is not None else None
 
         if user_manager is None:
+            error_msg = "Missing user_manager on bot UserDataCog for Orchestrator"
+            self.error(error_msg, category="INITIALIZATION", guild_id=None, user_id=None)
             asyncio.create_task(
                 func.report_error(
-                    Exception("Missing user_manager on bot UserDataCog for Orchestrator"),
+                    Exception(error_msg),
                     "Orchestrator.__init__",
                 )
             )
@@ -64,6 +68,9 @@ class Orchestrator:
             short_term_provider=short_term_provider,
             procedural_provider=procedural_provider,
         )
+        
+        # Log successful initialization
+        self.info("Orchestrator initialized successfully", category="SYSTEM")
 
     def _build_info_agent_prompt(self, bot_id: int, message: Message) -> str:
         """
@@ -72,15 +79,18 @@ class Orchestrator:
         try:
             info_system_prompt = prompt_config.get_system_prompt("info_agent")
             if not info_system_prompt:
+                error_msg = "info_agent system_prompt is empty"
+                self.error(error_msg, category="CONFIGURATION", function_name="_build_info_agent_prompt")
                 asyncio.create_task(
                     func.report_error(
-                        Exception("info_agent system_prompt is empty"),
+                        Exception(error_msg),
                         "Orchestrator._build_info_agent_prompt",
                     )
                 )
                 return self._get_info_agent_fallback_prompt(bot_id)
             return info_system_prompt
         except Exception as e:
+            self.error(f"Failed to build info agent prompt: {e}", category="CONFIGURATION", function_name="_build_info_agent_prompt", exc_info=e)
             asyncio.create_task(func.report_error(e, "Orchestrator._build_info_agent_prompt"))
             return self._get_info_agent_fallback_prompt(bot_id)
 
@@ -131,14 +141,17 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 procedural_context_str, short_term_msgs = ctx  # type: ignore
             else:
                 # unexpected return type; report and continue with fallbacks
+                error_msg = f"ContextManager.get_context returned unexpected type: {type(ctx)}"
+                self.error(error_msg, category="CONTEXT_MANAGEMENT", function_name="handle_message")
                 asyncio.create_task(
                     func.report_error(
-                        Exception(f"ContextManager.get_context returned unexpected type: {type(ctx)}"),
+                        Exception(error_msg),
                         "Orchestrator.handle_message",
                     )
                 )
         except Exception as e:
             # Per design: report and continue with safe defaults
+            self.error(f"ContextManager.get_context failed: {e}", category="CONTEXT_MANAGEMENT", function_name="handle_message", exc_info=e)
             asyncio.create_task(func.report_error(e, "ContextManager.get_context failed in Orchestrator"))
             procedural_context_str = ""
             short_term_msgs = []
