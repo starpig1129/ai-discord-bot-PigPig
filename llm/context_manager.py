@@ -1,6 +1,6 @@
 """Context manager that returns procedural context string and short-term LangChain messages.
 
-This module implements the new ContextManager per docs/gpt/llms/context_manager.md:
+This module implements the new ContextManager per docs/llm/context_manager.md:
 - get_context returns Tuple[str, List[BaseMessage]]
 - _format_context_for_prompt formats procedural memory only
 """

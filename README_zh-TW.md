@@ -273,7 +273,7 @@ python main.py
 
 | 模組類別 | 描述 | 文件連結 |
 |---|---|---|
-| **核心 GPT 引擎** | 處理 LLM 整合、回應生成和工具。 | [`gpt/`](./docs/gpt/core/index.md) |
+| **核心 GPT 引擎** | 處理 LLM 整合、回應生成和工具。 | [`llm/`](./docs/llm/index.md) |
 | **附加元件** | 管理系統級功能，如自動更新。 | [`addons/`](./docs/addons/update/index.md) |
 | **Cogs (功能)** | 核心機器人功能和指令。 | [`cogs/`](./docs/cogs/) |
 | ↳ Eat 系統 | 智慧美食推薦模組。 | [`cogs/eat/`](./docs/cogs/eat/index.md) |

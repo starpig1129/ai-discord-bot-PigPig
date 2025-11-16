@@ -273,7 +273,7 @@ The codebase is extensively documented. Below are links to the main documentatio
 
 | Module Category | Description | Documentation Link |
 |---|---|---|
-| **Core GPT Engine** | Handles LLM integration, response generation, and tools. | [`gpt/`](./docs/gpt/core/index.md) |
+| **Core GPT Engine** | Handles LLM integration, response generation, and tools. | [`llm/`](./docs/llm/index.md) |
 | **Addons** | Manages system-level features like auto-updates. | [`addons/`](./docs/addons/update/index.md) |
 | **Cogs (Features)** | Core bot features and commands. | [`cogs/`](./docs/cogs/) |
 | ↳ Eat System | Intelligent food recommendation module. | [`cogs/eat/`](./docs/cogs/eat/index.md) |
