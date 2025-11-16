@@ -65,60 +65,34 @@ def setup_logger(server_name: str, level: str = "INFO") -> logging.Logger:
         - Structured logging with correlation IDs and context tracking
         - Server isolation architecture with category-based filtering
     """
-    # Third-party library log suppression configuration
-    # Based on technical specifications for optimal performance
-    third_party_suppression = {
-        # Database libraries - suppress verbose connection pooling logs
-        "sqlalchemy": logging.ERROR,
-        "alembic": logging.WARNING,
-        
-        # HTTP libraries - suppress request/response debug logs
-        "httpx": logging.WARNING,
-        "urllib3": logging.WARNING,
-        "requests": logging.WARNING,
-        
-        # AI/ML libraries - suppress model loading and inference logs
-        "faiss": logging.ERROR,
-        "openai": logging.WARNING,
-        "anthropic": logging.WARNING,
-        "google_genai": logging.WARNING,
-        
-        # Discord and websockets - suppress connection noise
-        "discord": logging.WARNING,
-        "websockets": logging.WARNING,
-        "discord.ext.tasks": logging.ERROR,
-        
-        # Web drivers and scraping
-        "WDM": logging.WARNING,
-        "selenium": logging.WARNING,
-        
-        # System and utility libraries
-        "jieba": logging.WARNING,
-        "gpt": logging.ERROR,
+    # NOTE: Third-party library suppression is now handled in main.py BEFORE bot initialization
+    # This function now only sets up server-specific structured logging
+    # The comprehensive suppression in main.py prevents all standard format logs from third-party libraries
+    
+    # For any additional server-specific suppressions, add them here
+    additional_suppression = {
+        # Server-specific libraries that might need suppression
         "cogs.memory": logging.WARNING,
-        
-        # Performance monitoring (suppress debug info)
         "asyncio": logging.WARNING,
         "uvloop": logging.WARNING,
     }
     
-    # Set root logger to ERROR level to minimize noise
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.ERROR)
-    
-    # Apply granular third-party library suppression
-    for lib_name, lib_level in third_party_suppression.items():
+    # Apply additional suppressions (main.py already handled the comprehensive list)
+    for lib_name, lib_level in additional_suppression.items():
         lib_logger = logging.getLogger(lib_name)
         lib_logger.setLevel(lib_level)
         # Ensure no propagation to root logger to prevent duplicates
         lib_logger.propagate = False
+    
+    # DO NOT set root logger here - it's already configured in main.py
+    # Root logger setup moved to main.py to prevent duplication
     
     # Set up structured logger for the guild
     logger = setup_enhanced_logger(server_name, level)
     
     # Add structured logging category setup
     logger.info(f" Logging system initialized for server: {server_name}", extra={
-        "category": "SYSTEM",
+        "log_category": "SYSTEM",
         "mod_name": "bot_logger",
         "guild_id": "N/A",
         "user_id": "N/A",
@@ -306,7 +280,8 @@ class PigPig(commands.Bot):
             self.setup_logger_for_guild(guild_name)
             logger = self.loggers[guild_name]
             
-            logger.info("Message received", category="MESSAGE", extra={
+            logger.info("Message received", extra={
+                "log_category": "MESSAGE",
                 "guild_id": str(message.guild.id),
                 "user_id": str(message.author.id),
                 "channel_name": message.channel.name,
@@ -366,7 +341,8 @@ class PigPig(commands.Bot):
                 return
             
             logger = self.get_logger_for_guild(before.guild.name)
-            logger.info("Message edited", category="MESSAGE_EDIT", extra={
+            logger.info("Message edited", extra={
+                "log_category": "MESSAGE_EDIT",
                 "guild_id": str(before.guild.id),
                 "user_id": str(before.author.id),
                 "channel_name": getattr(before.channel, 'name', 'DM'),
@@ -534,7 +510,8 @@ class PigPig(commands.Bot):
         logger = self.get_logger_for_guild("Bot")
 
         # Log error
-        logger.error("Event handler error", category="ERROR", extra={
+        logger.error("Event handler error", extra={
+            "log_category": "ERROR",
             "event_method": event_method,
             "error_details": str(traceback.format_exc())
         })
@@ -584,7 +561,8 @@ class PigPig(commands.Bot):
         
         # Log error
         if logger:
-            logger.error("Command execution error", category="COMMAND_ERROR", extra={
+            logger.error("Command execution error", extra={
+                "log_category": "COMMAND_ERROR",
                 "command_name": ctx.command,
                 "error_details": str(error),
                 "guild_id": guild_id,
@@ -610,7 +588,9 @@ class PigPig(commands.Bot):
             await ctx.send("error on command execution.")
         except Exception as e:
             if logger:
-                logger.exception("Failed to send error reply to user", category="ERROR")
+                logger.exception("Failed to send error reply to user", extra={
+                    "log_category": "ERROR"
+                })
             else:
                 print(f"Failed to send error reply to user: {e}")
             await func.report_error(e, "Failed to send error reply to user")

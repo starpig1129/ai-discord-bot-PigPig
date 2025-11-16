@@ -23,11 +23,14 @@ import discord
 import asyncio
 import logging
 import threading
+import uuid
+import os
 from function import func
 from bot import PigPig
 from addons import base_config, tokens
 from addons.update import VersionChecker
 from addons.settings import update_config
+from logs import setup_enhanced_logger, StructuredRotatingFileHandler
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -59,6 +62,155 @@ bot = PigPig(
     case_insensitive=True,
     intents=intents
 )
+
+# Initialize structured logging system VERY EARLY to fix all startup logging
+# This must be done BEFORE any other imports that might initialize loggers
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+# Clear any existing handlers to prevent duplication
+root_logger.handlers.clear()
+
+# ENHANCED: Apply comprehensive third-party library suppression BEFORE any logger initialization
+third_party_suppression = {
+    # Database libraries - suppress completely to prevent standard format logs
+    "sqlalchemy.engine.Engine": logging.CRITICAL,  # CRITICAL to completely suppress
+    "sqlalchemy.engine.base": logging.CRITICAL,   # SQLAlchemy engine base
+    "sqlalchemy.engine": logging.CRITICAL,        # SQLAlchemy engine general
+    "sqlalchemy.pool": logging.CRITICAL,          # SQLAlchemy connection pool
+    "sqlalchemy.pool.impl": logging.CRITICAL,     # SQLAlchemy pool implementations
+    "sqlalchemy.dialects": logging.CRITICAL,      # SQLAlchemy dialects
+    "sqlalchemy.dialects.sqlite": logging.CRITICAL, # SQLite dialect
+    "sqlalchemy.dialects.mysql": logging.CRITICAL,  # MySQL dialect
+    "sqlalchemy.dialects.postgresql": logging.CRITICAL, # PostgreSQL dialect
+    "sqlalchemy.orm": logging.CRITICAL,           # SQLAlchemy ORM
+    "sqlalchemy.orm.session": logging.CRITICAL,   # SQLAlchemy ORM session
+    "sqlalchemy.orm.query": logging.CRITICAL,     # SQLAlchemy ORM query
+    "sqlalchemy.orm.mapper": logging.CRITICAL,    # SQLAlchemy ORM mapper
+    "sqlalchemy.sql": logging.CRITICAL,           # SQLAlchemy SQL compilation
+    "sqlalchemy.util": logging.CRITICAL,          # SQLAlchemy utilities
+    "sqlalchemy": logging.CRITICAL,               # Main SQLAlchemy logger
+    "alembic": logging.CRITICAL,                  # Database migrations
+    
+    # HTTP libraries - suppress completely
+    "httpx": logging.CRITICAL,  # CRITICAL to suppress HTTP request logs
+    "httpx.client": logging.CRITICAL,
+    "httpx._client": logging.CRITICAL,
+    "urllib3.connectionpool": logging.CRITICAL,
+    "urllib3.poolmanager": logging.CRITICAL,
+    "urllib3": logging.CRITICAL,
+    "urllib3.util": logging.CRITICAL,
+    "requests": logging.CRITICAL,
+    "requests.packages": logging.CRITICAL,
+    "requests.models": logging.CRITICAL,
+    "aiohttp": logging.CRITICAL,
+    "aiohttp.client": logging.CRITICAL,
+    "aiohttp.connector": logging.CRITICAL,
+    
+    # Web drivers - suppress completely
+    "WDM": logging.CRITICAL,  # CRITICAL to suppress WebDriver manager logs
+    "selenium": logging.CRITICAL,
+    "selenium.webdriver": logging.CRITICAL,
+    "selenium.common": logging.CRITICAL,
+    "webdriver": logging.CRITICAL,
+    "webdriver_manager": logging.CRITICAL,
+    
+    # System and utility libraries
+    "jieba": logging.CRITICAL,
+    "jieba.analyse": logging.CRITICAL,
+    "jieba.posseg": logging.CRITICAL,
+    "jieba.finalseg": logging.CRITICAL,
+    "pkg_resources": logging.CRITICAL,  # Suppress deprecation warnings
+    "setuptools": logging.CRITICAL,
+    "pip._internal": logging.CRITICAL,
+    "pip._internal.utils": logging.CRITICAL,
+    
+    # Discord and websockets - suppress verbose logs
+    "discord": logging.WARNING,
+    "discord.gateway": logging.WARNING,
+    "discord.http": logging.WARNING,
+    "discord.state": logging.WARNING,
+    "discord.client": logging.WARNING,
+    "discord.ext": logging.WARNING,
+    "discord.ext.commands": logging.WARNING,
+    "discord.ext.tasks": logging.CRITICAL,
+    "discord.voice_client": logging.WARNING,
+    "discord.message": logging.WARNING,
+    "discord.user": logging.WARNING,
+    "discord.guild": logging.WARNING,
+    "websockets": logging.WARNING,
+    "websockets.legacy": logging.WARNING,
+    "websockets.protocol": logging.WARNING,
+    "websockets.client": logging.WARNING,
+}
+
+# Apply suppression to ALL third-party loggers BEFORE setting up our handler
+for lib_name, lib_level in third_party_suppression.items():
+    lib_logger = logging.getLogger(lib_name)
+    lib_logger.setLevel(lib_level)
+    lib_logger.propagate = False  # Prevent propagation to root logger
+    
+    # Also suppress any child loggers
+    for handler in lib_logger.handlers[:]:
+        lib_logger.removeHandler(handler)
+
+# Additional comprehensive suppression for ALL database-related loggers
+# This catches any SQLAlchemy sub-loggers that might not be explicitly listed
+db_logger_names = [
+    "sqlalchemy.engine.Engine",
+    "sqlalchemy.engine.base.Engine",
+    "sqlalchemy.engine.base.Connection",
+    "sqlalchemy.engine.base.Executable",
+    "sqlalchemy.engine.result",
+    "sqlalchemy.engine.strategies",
+    "sqlalchemy.pool.impl.QueuePool",
+    "sqlalchemy.pool.impl.LifoQueueProxy",
+    "sqlalchemy.pool.impl.StackedSharedProxy",
+    "sqlalchemy.pool.events",
+    "sqlalchemy.dialects.sqlite",
+    "sqlalchemy.dialects.mysql",
+    "sqlalchemy.dialects.postgresql",
+    "sqlalchemy.orm.session",
+    "sqlalchemy.orm.query",
+    "sqlalchemy.orm.mapper",
+    "sqlalchemy.orm.relationships",
+    "sqlalchemy.orm.attributes",
+    "sqlalchemy.orm.util",
+    "sqlalchemy.sql.elements",
+    "sqlalchemy.sql.selectable",
+    "sqlalchemy.sql.dml",
+    "sqlalchemy.sql.schema",
+    "sqlalchemy.sql.types",
+    "sqlalchemy.util.langhelpers",
+    "sqlalchemy.util.concurrency",
+]
+
+for db_logger_name in db_logger_names:
+    db_logger = logging.getLogger(db_logger_name)
+    db_logger.setLevel(logging.CRITICAL)
+    db_logger.propagate = False
+    while db_logger.handlers:
+        db_logger.removeHandler(db_logger.handlers[0])
+
+# Add SINGLE console handler for structured logging (must be done before any logger initialization)
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter(
+    '[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s',
+    datefmt='%H:%M:%S'
+))
+root_logger.addHandler(console_handler)
+
+# Also setup a startup logger immediately
+startup_logger = setup_enhanced_logger("STARTUP", "INFO")
+startup_logger.info("Initializing structured logging system for bot startup", extra={
+    "log_category": "SYSTEM",
+    "guild_id": "N/A",
+    "user_id": "N/A",
+    "correlation_id": str(uuid.uuid4())[:8]
+})
+
+# DO NOT add console handler to startup logger to prevent duplication
+# startup_logger.addHandler(console_handler)  # REMOVED to fix double logging
 
 if __name__ == "__main__":
     # Background version check using new architecture
@@ -119,11 +271,23 @@ if __name__ == "__main__":
     try:
         bot.run(str(tokens.token), log_handler=None)
     except KeyboardInterrupt:
+        startup_logger.info("Received KeyboardInterrupt, initiating graceful shutdown", extra={
+            "log_category": "SYSTEM",
+            "correlation_id": str(uuid.uuid4())[:8]
+        })
         print("收到 KeyboardInterrupt，使用者手動中斷，開始優雅關閉...")
     finally:
+        startup_logger.info("Starting final cleanup phase", extra={
+            "log_category": "SYSTEM",
+            "correlation_id": str(uuid.uuid4())[:8]
+        })
         try:
             asyncio.run(bot.close())
         except Exception as e:
+            startup_logger.error(f"Error during final cleanup: {e}", extra={
+                "log_category": "ERROR",
+                "correlation_id": str(uuid.uuid4())[:8]
+            })
             print(f"最終清理階段發生錯誤: {e}")
             try:
                 asyncio.create_task(func.report_error(e, "main.py/finally"))

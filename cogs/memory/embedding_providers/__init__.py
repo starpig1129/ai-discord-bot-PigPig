@@ -16,15 +16,21 @@ def _import_all_providers() -> None:
     """
     Import all modules in this package so that registration decorators run.
     Provider modules should call register_embedding_provider when defined.
+    
+    NOTE: Suppress import logging to prevent duplicate messages during startup.
     """
     package = __name__
+    original_level = logger.level
+    logger.setLevel(logging.WARNING)  # Suppress import info logs
+    
     for finder, name, ispkg in pkgutil.iter_modules(__path__):
         full_name = f"{package}.{name}"
         try:
             importlib.import_module(full_name)
-            logger.info("Imported embedding provider module: %s", full_name)
         except Exception as e:
             logger.exception("Failed to import embedding provider %s: %s", full_name, e)
+    
+    logger.setLevel(original_level)  # Restore original log level
 
 _import_all_providers()
 

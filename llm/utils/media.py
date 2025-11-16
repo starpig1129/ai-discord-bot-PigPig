@@ -10,8 +10,8 @@ from function import func
 MAX_NUM_FRAMES = 16  # if cuda OOM set a smaller number
 TARGET_IMAGE_SIZE = (224, 224)  # 設置目標圖像大小
 
-# 設置日誌
-logging.basicConfig(level=logging.INFO)
+# REMOVED: logging.basicConfig() to prevent standard Python logging format
+# All logging now uses the unified structured logging system from main.py
 logger = logging.getLogger(__name__)
 
 def standardize_image(image, target_size=TARGET_IMAGE_SIZE):

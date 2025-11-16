@@ -13,7 +13,8 @@ from function import func
 from llm.model_manager import ModelManager
 from utils.logger import LoggerMixin
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# REMOVED: logging.basicConfig() to prevent standard Python logging format
+# All logging now uses the unified structured logging system from main.py
 
 
 class SummarizerCog(commands.Cog, LoggerMixin):

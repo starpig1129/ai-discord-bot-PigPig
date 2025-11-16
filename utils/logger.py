@@ -37,9 +37,26 @@ class LoggerMixin:
             module_name: Name of the module using this logger
         """
         self._module_name = module_name or self.__class__.__name__
-        # Use the structured logger from logs.py system
-        self._logger = setup_enhanced_logger(self._module_name)
+        # Use the structured logger from logs.py system, with fallback for early startup
+        try:
+            self._logger = setup_enhanced_logger(self._module_name)
+        except Exception:
+            # Fallback to root logger if structured logger fails (e.g., during early startup)
+            self._logger = logging.getLogger(self._module_name)
+            self._setup_fallback_handler()
         self._correlation_id = None
+        
+    def _setup_fallback_handler(self):
+        """Setup fallback console handler for early startup logging."""
+        # REMOVED: Do not add console handlers to prevent double logging
+        # The main.py already sets up the single console handler for all loggers
+        # Just configure the logger level and propagation
+        
+        self._logger.setLevel(logging.INFO)
+        
+        # Ensure no other handlers interfere with our structured format
+        # Set propagate to False to prevent duplicate logging to parent loggers
+        self._logger.propagate = True  # Changed to True to use root logger handler
         
     @property
     def logger(self) -> logging.Logger:

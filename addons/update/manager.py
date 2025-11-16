@@ -504,7 +504,7 @@ class UpdateManager:
         @tasks.loop(seconds=self.config["auto_update"]["check_interval"])
         async def auto_check():
             try:
-                self.logger.info("執行自動更新檢查...")
+                self.logger.info("Executing auto update check...")
                 update_info = await self.check_for_updates()
                 
                 if (update_info.get("update_available") and 
@@ -517,7 +517,7 @@ class UpdateManager:
                 await self.notifier.notify_update_error(e, "自動檢查更新")
         
         auto_check.start()
-        self.logger.info(f"自動檢查已啟動，間隔: {self.config['auto_update']['check_interval']}秒")
+        self.logger.info(f"Auto update check started, interval: {self.config['auto_update']['check_interval']} seconds")
     
     def get_status(self) -> Dict[str, Any]:
         """獲取更新系統狀態"""

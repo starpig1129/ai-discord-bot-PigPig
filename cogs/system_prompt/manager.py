@@ -839,12 +839,12 @@ class SystemPromptManager(LoggerMixin):
             channel_id: 頻道 ID（可選）
             interaction: Discord 互動物件（可選）
         """
-        self.logger.info(f"🔥 開始強制清除所有快取 - 伺服器: {guild_id}, 頻道: {channel_id}")
-        
-        # 使用整合的強化快取清除方法
-        self._enhanced_force_clear_all_caches(guild_id, channel_id)
-        self.logger.info(f"✅ 快取清除完成")
+        self.logger.info(f"Starting force clear all caches - server: {guild_id}, channel: {channel_id}")
     
+        # Use integrated enhanced cache clearing method
+        self._enhanced_force_clear_all_caches(guild_id, channel_id)
+        self.logger.info(f"Cache clearing completed")
+        
     def _enhanced_force_clear_all_caches(self, guild_id: str, channel_id: Optional[str] = None) -> None:
         """
         增強的強制清除所有相關快取方法（整合版）
@@ -1299,7 +1299,7 @@ class SystemPromptManager(LoggerMixin):
             
             if modules or override_modules:
                 prompt = self._rebuild_prompt_with_module_overrides(modules, override_modules)
-                self.logger.info(f"🔄 伺服器級別應用模組覆蓋：{list(modules.keys())}")
+                self.logger.info(f"Applied server-level module overrides: {list(modules.keys())}")
             else:
                 prompt = base_prompt
             
@@ -1329,7 +1329,7 @@ class SystemPromptManager(LoggerMixin):
             
             if modules or override_modules:
                 prompt = self._rebuild_prompt_with_module_overrides(modules, override_modules)
-                self.logger.info(f"🔄 頻道級別應用模組覆蓋：{list(modules.keys())}")
+                self.logger.info(f"Applied channel-level module overrides: {list(modules.keys())}")
             else:
                 prompt = base_prompt
             
@@ -1452,8 +1452,8 @@ class SystemPromptManager(LoggerMixin):
             # 使用修改後的配置重新建構提示
             prompt = self._prompt_manager.builder.build_system_prompt(modified_config, default_modules)
             
-            self.logger.info(f"✅ 重新建構提示完成，長度: {len(prompt)}")
-            self.logger.debug(f"重新建構的提示預覽: {prompt[:200]}...")
+            self.logger.info(f"Rebuilt prompt completed, length: {len(prompt)}")
+            self.logger.debug(f"Rebuilt prompt preview: {prompt[:200]}...")
             
             return prompt
             
