@@ -7,7 +7,7 @@ integrating all functional components.
 
 import discord
 from discord.ext import commands
-from typing import Optional
+from typing import Optional, Any
 
 from .system_prompt.manager import SystemPromptManager
 from .system_prompt.commands import SystemPromptCommands
@@ -43,7 +43,7 @@ class SystemPromptManagerCog(commands.Cog, LoggerMixin):
         try:
             # 載入命令 Cog
             await self.bot.add_cog(self.commands_cog)
-            self.logger.info("系統提示命令模組已載入")
+            self.logger.info("System prompt commands module loaded")
             
         except Exception as e:
             await func.report_error(e, "loading system prompt commands cog")
@@ -101,10 +101,10 @@ class SystemPromptManagerCog(commands.Cog, LoggerMixin):
             await func.report_error(e, "getting effective system prompt")
             return ''
     
-    async def validate_user_permission(self, 
+    async def validate_user_permission(self,
                                      user: discord.Member,
                                      action: str,
-                                     target: any = None) -> bool:
+                                     target: Optional[Any] = None) -> bool:
         """
         驗證用戶權限（供外部模組調用的便利方法）
         

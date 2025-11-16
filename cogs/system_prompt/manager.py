@@ -24,6 +24,7 @@ from .exceptions import (
     PromptNotFoundError
 )
 from .permissions import PermissionValidator
+from utils.logger import LoggerMixin
 
 from function import func
 import asyncio
@@ -146,7 +147,7 @@ class PromptValidator:
         return True, ""
 
 
-class SystemPromptManager:
+class SystemPromptManager(LoggerMixin):
     """系統提示管理器 - 核心協調器"""
     
     def __init__(self, bot: discord.Client):
@@ -156,8 +157,8 @@ class SystemPromptManager:
         Args:
             bot: Discord 機器人實例
         """
+        super().__init__("cogs.system_prompt.manager")
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
         self.cache = SystemPromptCache()
         self.validator = PromptValidator()
         self.permission_validator = PermissionValidator(bot)
@@ -171,7 +172,7 @@ class SystemPromptManager:
         self._init_prompt_manager()
         
         # 快取清除策略已整合到核心方法中
-        self.logger.info("✅ 使用整合快取清除策略")
+        self.logger.info("Using integrated cache clearing strategy")
     
     def _init_prompt_manager(self) -> None:
         """初始化 YAML 提示管理器"""

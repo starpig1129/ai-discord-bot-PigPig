@@ -96,7 +96,7 @@ class StoryManagerCog(commands.Cog, LoggerMixin, name="StoryManagerCog"):
         Cog 準備就緒事件。
         此時所有 cogs 都已載入，可以安全地獲取其他 cog。
         """
-        self.logger.info("StoryManagerCog 進入 on_ready 狀態，開始初始化依賴。")
+        self.logger.info("StoryManagerCog entering on_ready state, initializing dependencies.")
         
         system_prompt_manager_cog = self.bot.get_cog("SystemPromptManagerCog")
         if system_prompt_manager_cog:
@@ -105,9 +105,9 @@ class StoryManagerCog(commands.Cog, LoggerMixin, name="StoryManagerCog"):
             self.ui_manager = UIManager(self.bot, self.story_manager, self.system_prompt_manager)
             
             await self.story_manager.initialize()
-            self.logger.info("StoryManagerCog 已成功連接到 SystemPromptManagerCog 並完成初始化。")
+            self.logger.info("StoryManagerCog successfully connected to SystemPromptManagerCog and completed initialization.")
         else:
-            self.logger.error("警告：StoryManagerCog 在 on_ready 後仍無法找到 SystemPromptManagerCog。模組將無法正常運作。")
+            self.logger.error("Warning: StoryManagerCog could not find SystemPromptManagerCog after on_ready. Module will not operate normally.")
 
     async def handle_story_message(self, message: discord.Message):
         """

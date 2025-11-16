@@ -3,6 +3,7 @@ logging utilities following technical specifications.
 
 This module provides consistent logging capabilities across all modules,
 including structured logging, context tracking, and performance monitoring.
+Now integrated with the main logs.py system for unified logging architecture.
 """
 
 import logging
@@ -12,30 +13,32 @@ import functools
 from typing import Optional, Dict, Any, Union
 from datetime import datetime, timezone
 from contextlib import contextmanager
+# Import the structured logging system from logs.py
+from logs import setup_enhanced_logger, StructuredRotatingFileHandler
 
 
 class LoggerMixin:
     """Mixin class providing consistent logging capabilities across modules.
     
-    Implements structured logging with correlation IDs, context tracking,
-    and performance monitoring following technical specifications.
+    Now integrated with the structured logging system from logs.py for unified architecture.
     
     Features:
     - Automatic correlation ID generation
     - Guild and user context tracking
     - Performance logging decorators
     - Category-based logging
-    - Structured logging with extra fields
+    - Structured logging with extra fields using ENHANCED_FORMAT
     """
     
     def __init__(self, module_name: Optional[str] = None):
-        """Initialize LoggerMixin with module name.
+        """Initialize LoggerMixin with structured logging system.
         
         Args:
             module_name: Name of the module using this logger
         """
         self._module_name = module_name or self.__class__.__name__
-        self._logger = logging.getLogger(self._module_name)
+        # Use the structured logger from logs.py system
+        self._logger = setup_enhanced_logger(self._module_name)
         self._correlation_id = None
         
     @property
@@ -52,7 +55,7 @@ class LoggerMixin:
                           guild_id: Optional[str] = None,
                           user_id: Optional[str] = None,
                           **kwargs) -> Dict[str, Any]:
-        """Get structured logging extra fields with context.
+        """Get structured logging extra fields with context compatible with logs.py.
         
         Args:
             category: Log category (SYSTEM, USER_ACTION, PERFORMANCE, etc.)
@@ -61,25 +64,50 @@ class LoggerMixin:
             **kwargs: Additional structured fields
             
         Returns:
-            Dictionary with structured logging fields
+            Dictionary with structured logging fields compatible with logs.py format
         """
         if not self._correlation_id:
             self._correlation_id = self._generate_correlation_id()
         
+        # Use field names compatible with logs.py ENHANCED_FORMAT
         extra = {
-            "category": category,
+            "log_category": category,
             "mod_name": self._module_name,
+            "custom_module": self._module_name,
+            "function_name": self._get_caller_function_name(),
             "correlation_id": self._correlation_id,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "guild_id": str(guild_id) if guild_id else "N/A",
+            "user_id": str(user_id) if user_id else "N/A",
+            "duration_ms": kwargs.pop("duration_ms", None),
+            "error_code": kwargs.pop("error_code", None)
         }
         
-        if guild_id:
-            extra["guild_id"] = str(guild_id)
-        if user_id:
-            extra["user_id"] = str(user_id)
-            
-        extra.update(kwargs)
+        # Add any remaining kwargs as extra context
+        for key, value in kwargs.items():
+            if key not in extra:
+                extra[key] = value
+                
         return extra
+    
+    def _get_caller_function_name(self) -> str:
+        """Get the name of the calling function for structured logging."""
+        import inspect
+        frame = None
+        try:
+            frame = inspect.currentframe()
+            if frame and frame.f_back and frame.f_back.f_back:
+                frame = frame.f_back.f_back
+                if frame and frame.f_code:
+                    return frame.f_code.co_name
+        except Exception:
+            pass
+        finally:
+            if frame:
+                try:
+                    del frame
+                except:
+                    pass
+        return "unknown"
     
     def log_with_context(self,
                         level: int,
@@ -88,7 +116,7 @@ class LoggerMixin:
                         guild_id: Optional[str] = None,
                         user_id: Optional[str] = None,
                         **kwargs):
-        """Log message with structured context.
+        """Log message with structured context compatible with logs.py system.
         
         Args:
             level: Logging level (logging.DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -96,10 +124,11 @@ class LoggerMixin:
             category: Log category for filtering
             guild_id: Discord guild/server ID
             user_id: Discord user ID
-            **kwargs: Additional structured fields
+            **kwargs: Additional structured fields compatible with logs.py
         """
         extra = self._get_context_extra(category, guild_id, user_id, **kwargs)
         
+        # Ensure extra fields are compatible with logs.py ENHANCED_FORMAT
         self._logger.log(level, message, extra=extra)
     
     def debug(self, message: str, category: str = "DEBUG", guild_id: Optional[str] = None,

@@ -47,7 +47,7 @@ class UpdateManagerCog(commands.Cog, LoggerMixin):
             if self.update_manager:
                 # 執行重啟後檢查
                 await self.update_manager.post_restart_initialization()
-            self.logger.info("更新管理 Cog 載入完成")
+            self.logger.info("Update management Cog loaded successfully")
         except Exception as e:
             self.logger.error(f"Cog 載入時發生錯誤: {e}")
             await func.report_error(self.bot, e, f"UpdateManagerCog Cog 載入時發生錯誤")

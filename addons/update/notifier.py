@@ -29,9 +29,9 @@ class DiscordNotifier:
         self.owner_id = int(os.getenv("BOT_OWNER_ID", 0))
         
         if self.owner_id == 0:
-            self.logger.error("BOT_OWNER_ID 未設定或為 0，無法發送通知")
+            self.logger.error("BOT_OWNER_ID not configured or is 0, cannot send notifications")
         else:
-            self.logger.info(f"DiscordNotifier 初始化完成，Bot 擁有者 ID: {self.owner_id}")
+            self.logger.info(f"DiscordNotifier initialized successfully, Bot owner ID: {self.owner_id}")
     
     async def _get_bot_owner_safely(self) -> Optional[discord.User]:
         """
@@ -41,7 +41,7 @@ class DiscordNotifier:
             Bot 擁有者物件，如果獲取失敗則返回 None
         """
         if self.owner_id == 0:
-            self.logger.error("BOT_OWNER_ID 未設定或為 0")
+            self.logger.error("BOT_OWNER_ID not configured or is 0")
             return None
         
         try:

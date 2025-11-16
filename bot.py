@@ -306,7 +306,14 @@ class PigPig(commands.Bot):
             self.setup_logger_for_guild(guild_name)
             logger = self.loggers[guild_name]
             
-            logger.info(f'收到訊息: {message.content} (來自:伺服器:{message.guild},頻道:{message.channel.name},{message.author.name})')
+            logger.info("Message received", category="MESSAGE", extra={
+                "guild_id": str(message.guild.id),
+                "user_id": str(message.author.id),
+                "channel_name": message.channel.name,
+                "channel_id": str(message.channel.id),
+                "message_content": message.content,
+                "author_name": message.author.name
+            })
             
             
             await self.process_commands(message)
@@ -359,9 +366,15 @@ class PigPig(commands.Bot):
                 return
             
             logger = self.get_logger_for_guild(before.guild.name)
-            logger.info(
-                f"訊息修改: 原訊息({before.content}) 新訊息({after.content}) 頻道:{before.channel.name}, 作者:{before.author}"
-            )
+            logger.info("Message edited", category="MESSAGE_EDIT", extra={
+                "guild_id": str(before.guild.id),
+                "user_id": str(before.author.id),
+                "channel_name": getattr(before.channel, 'name', 'DM'),
+                "channel_id": str(before.channel.id),
+                "before_content": before.content,
+                "after_content": after.content,
+                "author_name": str(before.author)
+            })
             
             guild_id = str(after.guild.id)
             channel_manager = self.get_cog('ChannelManager')
@@ -521,9 +534,11 @@ class PigPig(commands.Bot):
         logger = self.get_logger_for_guild("Bot")
 
         # Log error
-        logger.error(f"事件 '{event_method}' 發生錯誤")
-        logger.error(traceback.format_exc())
-        print(f"事件 '{event_method}' 發生錯誤")
+        logger.error("Event handler error", category="ERROR", extra={
+            "event_method": event_method,
+            "error_details": str(traceback.format_exc())
+        })
+        print(f"Event '{event_method}' error occurred")
         print(traceback.format_exc())
 
         await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
@@ -563,11 +578,20 @@ class PigPig(commands.Bot):
             except Exception:
                 logger = None
 
+        # Get guild and user IDs for error context
+        guild_id = str(ctx.guild.id) if ctx.guild else None
+        user_id = str(ctx.author.id) if ctx.author else None
+        
         # Log error
         if logger:
-            logger.error(f"指令 '{ctx.command}' 發生錯誤: {error}")
-            logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
-        print(f"指令 '{ctx.command}' 發生錯誤: {error}")
+            logger.error("Command execution error", category="COMMAND_ERROR", extra={
+                "command_name": ctx.command,
+                "error_details": str(error),
+                "guild_id": guild_id,
+                "user_id": user_id,
+                "traceback": "".join(traceback.format_exception(type(error), error, error.__traceback__))
+            })
+        print(f"Command '{ctx.command}' error: {error}")
         print("".join(traceback.format_exception(type(error), error, error.__traceback__)))
 
         # Get guild and user IDs for error context
@@ -586,9 +610,9 @@ class PigPig(commands.Bot):
             await ctx.send("error on command execution.")
         except Exception as e:
             if logger:
-                logger.exception("回覆錯誤訊息時發生例外")
+                logger.exception("Failed to send error reply to user", category="ERROR")
             else:
-                print(f"回覆錯誤訊息時發生例外: {e}")
+                print(f"Failed to send error reply to user: {e}")
             await func.report_error(e, "Failed to send error reply to user")
             
     async def send_error_report(self, embed: discord.Embed):

@@ -181,13 +181,14 @@ def setup_enhanced_logger(server_name: str,
     handler = StructuredRotatingFileHandler(server_name)
     logger.addHandler(handler)
     
-    # Add console handler for development
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(logging.Formatter(
-        '[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s',
-        datefmt='%H:%M:%S'
-    ))
-    logger.addHandler(console_handler)
+    # Add console handler for development (only if environment variable set)
+    if os.getenv('ENABLE_CONSOLE_LOGGING', 'false').lower() == 'true':
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(logging.Formatter(
+            '[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s',
+            datefmt='%H:%M:%S'
+        ))
+        logger.addHandler(console_handler)
     
     return logger
 
