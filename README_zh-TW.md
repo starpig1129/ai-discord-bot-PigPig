@@ -17,8 +17,8 @@ PigPig 是一款由大型語言模型 (LLM) 驅動的強大、多模態 Discord 
 ## 📄 法律文件
 為了確保使用者權益與服務透明度，請參閱以下文件：
 
-* **服務條款 (Terms of Service)**：[TERMS\_OF\_SERVICE\_zh-TW.md](docs/TERMS_OF_SERVICE_zh-TW.md)
-* **隱私權政策 (Privacy Policy)**：[PRIVACY\_POLICY\_zh-TW.md](docs/PRIVACY_POLICY_zh-TW.md)
+* **服務條款 (Terms of Service)**：[TERMS_OF_SERVICE.md](docs/TERMS_OF_SERVICE.md)
+* **隱私權政策 (Privacy Policy)**：[PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md)
 * **支援信箱**：james911129@gmail.com
 * **支援伺服器**：[https://discord.gg/BvP64mqKzR](https://discord.gg/BvP64mqKzR)
 
@@ -54,7 +54,6 @@ PigPig 是一款由大型語言模型 (LLM) 驅動的強大、多模態 Discord 
     *   **Windows：** 從 [FFmpeg Windows builds](https://www.gyan.dev/ffmpeg/builds/) 下載
     
     *   [`requirements.txt`](./requirements.txt) 中列出的 Python 套件
-
 
 ### 安裝步驟
 
@@ -100,7 +99,7 @@ GEMINI_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 VECTOR_STORE_API_KEY=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 # --- 機器人設定檔路徑 ---
-CONFIG_ROOT="/path/to/your/config" 
+CONFIG_ROOT="/path/to/your/config"
 ```
 
 | 變數                  | 描述                                                                                                       |
@@ -111,6 +110,7 @@ CONFIG_ROOT="/path/to/your/config"
 | `SERCET_KEY`          | *(可選)* 用於儀表板驗證的密鑰。                                                                            |
 | `BOT_OWNER_ID`        | **(必要)** 您的 Discord 使用者 ID。授予擁有者等級的權限，並且是自動更新系統所必需的。                             |
 | `BUG_REPORT_CHANNEL_ID` | *(可選)* 用於發送錯誤訊息和錯誤報告的 Discord 頻道 ID。                                                    |
+| `MODEL_NAME`          | 要使用的預設本地多模態模型。                                                                                 |
 | `ANTHROPIC_API_KEY`   | *(可選)* 您用於 Anthropic 的 Claude 模型的 API 金鑰，可以在[Anthropic 官方網站](https://www.anthropic.com/)取得。                                                      |
 | `OPENAI_API_KEY`      | *(可選)* 您用於 OpenAI 的 GPT 模型的 API 金鑰，可以在[OpenAI 官方網站](https://platform.openai.com/)取得。                                                            |
 | `GEMINI_API_KEY`      | *(可選)* 您用於 Google 的 Gemini 模型的 API 金鑰，可以在[Google AI Studio](https://aistudio.google.com/)取得。                                                         |
@@ -158,7 +158,7 @@ python main.py
 ### 📖 故事管理員 (Story Manager)
 *   **描述：** 利用多代理 (multi-agent) AI 架構，促進互動式、協作性的故事創作，根據使用者的行動創造動態的敘事。
 *   **主要指令：** `/story`
-*   **[完整文件](./docs/cogs/story/index.md)**
+*   **[完整文件](./docs/cogs/story_manager.md)**
 
 ---
 
@@ -186,7 +186,7 @@ python main.py
 ### ⚙️ 系統提示管理員 (System Prompt Manager)
 *   **描述：** 允許透過三層繼承模型，對每個伺服器或每個頻道的機器人個性和行為進行深度客製化。
 *   **主要指令：** `/system_prompt`
-*   **[完整文件](./docs/cogs/system_prompt/index.md)**
+*   **[完整文件](./docs/cogs/system_prompt_manager.md)**
 
 ---
 
@@ -194,6 +194,13 @@ python main.py
 *   **描述：** 允許使用者為自己或他人設定提醒，可使用自然語言來指定時間（例如「10 分鐘後」或特定日期）。
 *   **主要指令：** `/remind`
 *   **[完整文件](./docs/cogs/remind.md)**
+
+---
+
+### 📅 排程管理員 (Schedule Manager)
+*   **描述：** 使用 YAML 檔案管理伺服器排程，允許使用者透過自然語言上傳、查詢和更新排程。
+*   **主要指令：** `/upload_schedule`, `/query_schedule`, `/update_schedule`
+*   **[完整文件](./docs/cogs/schedule.md)**
 
 ---
 
@@ -237,6 +244,29 @@ python main.py
 *   **主要指令：** 這是一個內部工具，沒有直接的斜線指令。
 *   **[完整文件](./docs/cogs/math.md)**
 
+---
+
+### 📝 摘要工具 (Summarizer)
+*   **描述：** 使用 AI 摘要頻道對話，附帶訊息來源歸屬和可自訂的限制。
+*   **主要指令：** `/summarize`
+*   **[完整文件](./docs/cogs/summarizer.md)**
+
+---
+
+### 🔍 GIF 工具 (GIF Tools)
+*   **描述：** 為 Discord 伺服器搜尋和管理 GIF 內容，具備智慧配對功能。
+*   **主要指令：** `/search_gif`
+*   **[完整文件](./docs/cogs/gif_tools.md)**
+
+---
+
+### 🤖 機器人資訊 (Bot Info)
+*   **描述：** 顯示機器人的詳細資訊，包括運行時間、版本和系統狀態。
+*   **主要指令：** `/botinfo`
+*   **[文件](./docs/cogs/) (一般文件區域)**
+
+---
+
 ## 📚 開發者：技術文件
 
 程式碼庫有廣泛的文件紀錄。以下是為開發者提供的主要文件部分的連結：
@@ -249,8 +279,8 @@ python main.py
 | ↳ Eat 系統 | 智慧美食推薦模組。 | [`cogs/eat/`](./docs/cogs/eat/index.md) |
 | ↳ 記憶系統 | 管理長期對話記憶。 | [`cogs/memory/`](./docs/cogs/memory/index.md) |
 | ↳ 音樂系統 | 處理音樂播放和佇列。 | [`cogs/music_lib/`](./docs/cogs/music_lib/index.md) |
-| ↳ 故事系統 | 互動式故事生成模組。 | [`cogs/story/`](./docs/cogs/story/index.md) |
-| ↳ 系統提示 | 管理伺服器和頻道的系統提示。 | [`cogs/system_prompt/`](./docs/cogs/system_prompt/index.md) |
+| ↳ 故事系統 | 互動式故事生成模組。 | [`cogs/story/`](./docs/cogs/story_manager.md) |
+| ↳ 系統提示 | 管理伺服器和頻道的系統提示。 | [`cogs/system_prompt/`](./docs/cogs/system_prompt_manager.md) |
 
 ## 授權
 

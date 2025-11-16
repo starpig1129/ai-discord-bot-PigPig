@@ -17,8 +17,8 @@ PigPig is a powerful, multi-modal Discord bot powered by Large Language Models (
 ## 📄 Legal Documents
 To ensure user rights and service transparency, please refer to the following documents:
 
-* **Terms of Service**: [TERMS\_OF\_SERVICE.md](docs/TERMS_OF_SERVICE_zh-TW.md)
-* **Privacy Policy**: [PRIVACY\_POLICY.md](docs/PRIVACY_POLICY_zh-TW.md)
+* **Terms of Service**: [TERMS_OF_SERVICE.md](docs/TERMS_OF_SERVICE.md)
+* **Privacy Policy**: [PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md)
 * **Support Email**: james911129@gmail.com
 * **Support Server**: [https://discord.gg/BvP64mqKzR](https://discord.gg/BvP64mqKzR)
 
@@ -158,7 +158,7 @@ The bot's functionality is divided into modules called "Cogs". Here are the key 
 ### 📖 Story Manager
 *   **Description:** Facilitates interactive, collaborative storytelling using a multi-agent AI architecture to create dynamic narratives guided by user actions.
 *   **Key Commands:** `/story`
-*   **[Full Documentation](./docs/cogs/story/index.md)**
+*   **[Full Documentation](./docs/cogs/story_manager.md)**
 
 ---
 
@@ -186,7 +186,7 @@ The bot's functionality is divided into modules called "Cogs". Here are the key 
 ### ⚙️ System Prompt Manager
 *   **Description:** Allows deep customization of the bot's personality and behavior on a per-server or per-channel basis using a three-tiered inheritance model.
 *   **Key Commands:** `/system_prompt`
-*   **[Full Documentation](./docs/cogs/system_prompt/index.md)**
+*   **[Full Documentation](./docs/cogs/system_prompt_manager.md)**
 
 ---
 
@@ -194,6 +194,13 @@ The bot's functionality is divided into modules called "Cogs". Here are the key 
 *   **Description:** Allows users to set reminders for themselves or others using natural language for timing (e.g., "in 10 minutes" or a specific date).
 *   **Key Commands:** `/remind`
 *   **[Full Documentation](./docs/cogs/remind.md)**
+
+---
+
+### 📅 Schedule Manager
+*   **Description:** Manages server schedules using YAML files, allowing users to upload, query, and update schedules through natural language.
+*   **Key Commands:** `/upload_schedule`, `/query_schedule`, `/update_schedule`
+*   **[Full Documentation](./docs/cogs/schedule.md)**
 
 ---
 
@@ -237,6 +244,29 @@ The bot's functionality is divided into modules called "Cogs". Here are the key 
 *   **Key Commands:** This is an internal tool, not a direct slash command.
 *   **[Full Documentation](./docs/cogs/math.md)**
 
+---
+
+### 📝 Summarizer
+*   **Description:** Uses AI to summarize channel conversations with message source attribution and customizable limits.
+*   **Key Commands:** `/summarize`
+*   **[Full Documentation](./docs/cogs/summarizer.md)**
+
+---
+
+### 🔍 GIF Tools
+*   **Description:** Search and manage GIF content for Discord servers with intelligent matching capabilities.
+*   **Key Commands:** `/search_gif`
+*   **[Full Documentation](./docs/cogs/gif_tools.md)**
+
+---
+
+### 🤖 Bot Info
+*   **Description:** Displays detailed information about the bot including uptime, version, and system status.
+*   **Key Commands:** `/botinfo`
+*   **[Documentation](./docs/cogs/) (general documentation section)**
+
+---
+
 ## 📚 For Developers: Technical Documentation
 
 The codebase is extensively documented. Below are links to the main documentation sections for developers:
@@ -249,8 +279,8 @@ The codebase is extensively documented. Below are links to the main documentatio
 | ↳ Eat System | Intelligent food recommendation module. | [`cogs/eat/`](./docs/cogs/eat/index.md) |
 | ↳ Memory System | Manages long-term conversation memory. | [`cogs/memory/`](./docs/cogs/memory/index.md) |
 | ↳ Music System | Handles music playback and queues. | [`cogs/music_lib/`](./docs/cogs/music_lib/index.md) |
-| ↳ Story System | Interactive story generation module. | [`cogs/story/`](./docs/cogs/story/index.md) |
-| ↳ System Prompt | Manages server and channel system prompts. | [`cogs/system_prompt/`](./docs/cogs/system_prompt/index.md) |
+| ↳ Story System | Interactive story generation module. | [`cogs/story/`](./docs/cogs/story_manager.md) |
+| ↳ System Prompt | Manages server and channel system prompts. | [`cogs/system_prompt/`](./docs/cogs/system_prompt_manager.md) |
 
 ## License
 
