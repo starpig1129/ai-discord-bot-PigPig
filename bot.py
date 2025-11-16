@@ -404,8 +404,9 @@ class PigPig(commands.Bot):
         if base_config.ipc_server.get("enable", False):
             await self.ipc.start()
     
-        if not base_config.version or base_config.version != update.__version__:
-            func.update_json("settings.json", new_data={"version": update.__version__})
+        # Update version in settings.json using base_config.version (which gets from base_configs/base.yaml)
+        if base_config.version:
+            func.update_json("settings.json", new_data={"version": base_config.version})
     
         await self.tree.sync()
 

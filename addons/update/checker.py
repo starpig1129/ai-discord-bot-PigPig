@@ -37,10 +37,34 @@ class VersionChecker:
             當前版本字串
         """
         try:
-            return update.__version__
-        except AttributeError:
-            self.logger.warning("無法從 update.py 獲取版本資訊，使用預設版本")
-            return "v1.0.0"
+            # 嘗試從 base_configs/base.yaml 獲取版本
+            import os
+            import yaml
+            config_path = os.path.join(os.getenv("CONFIG_ROOT", "./base_configs"), "base.yaml")
+            
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config_data = yaml.safe_load(f)
+                    version = config_data.get("version", "")
+                    if version:
+                        return version
+            
+            # 如果無法從配置獲取，使用 git 或預設版本
+            try:
+                import subprocess
+                result = subprocess.run(['git', 'describe', '--tags', '--always'],
+                                      capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    return result.stdout.strip()
+            except Exception:
+                pass
+                
+            # 使用預設版本
+            return "v3.0.0"
+            
+        except Exception as e:
+            self.logger.warning(f"獲取版本資訊時發生錯誤: {e}，使用預設版本")
+            return "v3.0.0"
     
     async def check_for_updates(self) -> Dict[str, any]:
         """

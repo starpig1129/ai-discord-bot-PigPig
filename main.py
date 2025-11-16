@@ -21,10 +21,13 @@
 # SOFTWARE.
 import discord
 import asyncio
-import update
+import logging
+import threading
 from function import func
 from bot import PigPig
-from addons import base_config,tokens
+from addons import base_config, tokens
+from addons.update import VersionChecker
+from addons.settings import update_config
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -58,16 +61,71 @@ bot = PigPig(
 )
 
 if __name__ == "__main__":
-    update.check_version(with_msg=True)
+    # Background version check using new architecture
+    def check_version_background():
+        """Background version check that doesn't block startup"""
+        try:
+            # Use a separate event loop for the version check
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                # Initialize version checker with new architecture
+                version_checker = VersionChecker(update_config.github)
+                
+                async def check_version_async():
+                    try:
+                        result = await version_checker.check_for_updates()
+                        current_version = version_checker.get_current_version()
+                        latest_version = result.get("latest_version", current_version)
+                        
+                        if latest_version != current_version:
+                            print(f"\033[93mYour PigPig Bot is not up-to-date! The latest version is {latest_version} "
+                                  f"and you are currently running version {current_version}\n"
+                                  f"Run `python update.py -l` to update your bot!\033[0m")
+                        else:
+                            print(f"\033[92mYour PigPig Bot is up-to-date! - {latest_version}\033[0m")
+                            
+                    except Exception as e:
+                        # Log error but don't block startup
+                        try:
+                            asyncio.create_task(func.report_error(e, "main.py/version_check"))
+                            print("\033[91mVersion check failed, but startup continues...\033[0m")
+                        except Exception:
+                            print(f"\033[91mVersion check failed: {e}\033[0m")
+                
+                # Run the async check
+                loop.run_until_complete(check_version_async())
+                
+            finally:
+                loop.close()
+                
+        except Exception as e:
+            try:
+                # Note: Cannot use asyncio here due to variable scope issues
+                print("\033[91mVersion check initialization failed, but startup continues...\033[0m")
+            except Exception:
+                print(f"\033[91mVersion check setup failed\033[0m")
+    
+    # Start background version check in a separate thread
+    version_check_thread = threading.Thread(target=check_version_background, daemon=True)
+    version_check_thread.start()
+    
+    # Ensure we have a valid token
+    if not tokens.token:
+        print("\033[91mError: Bot token not found. Please check your .env file.\033[0m")
+        exit(1)
+    
     try:
-        bot.run(tokens.token, log_handler=None)
+        bot.run(str(tokens.token), log_handler=None)
     except KeyboardInterrupt:
         print("收到 KeyboardInterrupt，使用者手動中斷，開始優雅關閉...")
     finally:
-        # 最終保險清理，避免 Task exception was never retrieved
         try:
-            # 使用新的事件迴圈執行關閉（若先前已關閉則此呼叫為冪等）
             asyncio.run(bot.close())
         except Exception as e:
             print(f"最終清理階段發生錯誤: {e}")
-            asyncio.create_task(func.report_error(e, "main.py/finally"))
+            try:
+                asyncio.create_task(func.report_error(e, "main.py/finally"))
+            except Exception:
+                pass
