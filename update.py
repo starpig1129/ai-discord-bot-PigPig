@@ -112,17 +112,15 @@ class UpdateCLI:
             
             if with_message:
                 if latest_version == current_version:
-                    print(f"\033[92mYour PigPig Bot is up-to-date! - {latest_version}\033[0m")
+                    self.logger.info(f"Bot is up-to-date: {latest_version}")
                 else:
-                    print(f"\033[93mYour PigPig Bot is not up-to-date! The latest version is {latest_version} "
-                          f"and you are currently running version {current_version}\n"
-                          f"Run `python update.py -l` to update your bot!\033[0m")
+                    self.logger.warning(f"Update available: Latest version {latest_version}, Current version {current_version}")
             
             return latest_version
             
         except Exception as e:
             if with_message:
-                print(f"\033[91mError checking version: {e}\033[0m")
+                self.logger.error(f"Error checking version: {e}")
             return "v3.0.0"  # Fallback version
     
     def install_version(self, version: Optional[str] = None, is_latest: bool = False, 
@@ -141,10 +139,10 @@ class UpdateCLI:
         try:
             # Check permissions
             if self.bot_owner_id == 0:
-                print("\033[93mWarning: BOT_OWNER_ID not configured. Update functionality may be restricted.\033[0m")
+                self.logger.warning("BOT_OWNER_ID not configured. Update functionality may be restricted.")
             else:
                 if not self.permission_checker.check_update_permission(self.bot_owner_id):
-                    print(f"\033[91mError: No permission to update. Bot owner ID required.\033[0m")
+                    self.logger.error("No permission to update. Bot owner ID required.")
                     return False
             
             # Determine target version
@@ -155,14 +153,14 @@ class UpdateCLI:
             elif version:
                 target_version = version
             else:
-                print("\033[91mError: No version specified\033[0m")
+                self.logger.error("No version specified")
                 return False
             
             # Get download URL
             download_url = f"https://github.com/starpig1129/ai-discord-bot-PigPig/archive/{target_version}.zip"
             
             # Show download info
-            print(f"Downloading PigPig Bot version: {target_version}")
+            self.logger.info(f"Downloading PigPig Bot version: {target_version}")
             
             # Download the update
             loop = asyncio.new_event_loop()
@@ -171,13 +169,13 @@ class UpdateCLI:
                 downloader = UpdateDownloader()
                 
                 async def progress_callback(progress):
-                    print(f"Download progress: {progress}%")
+                    self.logger.info(f"Download progress: {progress}%")
                 
                 download_path = loop.run_until_complete(
                     downloader.download_update(download_url, progress_callback)
                 )
                 
-                print("Download completed")
+                self.logger.info("Download completed")
                 
                 # Create temporary bot for installation
                 class BotObject2:
@@ -196,7 +194,7 @@ class UpdateCLI:
                 manager = UpdateManager(bot)
                 
                 # Execute installation
-                print("Installing update...")
+                self.logger.info("Installing update...")
                 
                 # Execute update with force flag
                 result = loop.run_until_complete(
@@ -204,18 +202,17 @@ class UpdateCLI:
                 )
                 
                 if result.get("success"):
-                    print(f"\033[92mVersion {target_version} installed successfully! "
-                          f"Run `python main.py` to start your bot\033[0m")
+                    self.logger.info(f"Version {target_version} installed successfully")
                     return True
                 else:
-                    print(f"\033[91mUpdate failed: {result.get('error', 'Unknown error')}\033[0m")
+                    self.logger.error(f"Update failed: {result.get('error', 'Unknown error')}")
                     return False
                     
             finally:
                 loop.close()
                 
         except Exception as e:
-            print(f"\033[91mError during installation: {e}\033[0m")
+            self.logger.error(f"Error during installation: {e}")
             # Report error using the new architecture
             asyncio.create_task(func.report_error(e, "update.py/install_version"))
             return False
@@ -279,15 +276,15 @@ class UpdateCLI:
             
             # No arguments provided
             else:
-                print(f"\033[91mNo arguments provided. Run `python update.py -h` for help.\033[0m")
+                self.logger.error("No arguments provided. Run `python update.py -h` for help.")
                 return 1
                 
         except KeyboardInterrupt:
-            print("\n\033[93mUpdate cancelled by user\033[0m")
+            self.logger.info("Update cancelled by user")
             return 1
         except Exception as e:
             error_msg = f"Unexpected error: {e}"
-            print(f"\033[91m{error_msg}\033[0m")
+            self.logger.error(error_msg)
             asyncio.create_task(func.report_error(e, "update.py/run"))
             return 1
 

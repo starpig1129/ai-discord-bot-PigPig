@@ -18,7 +18,7 @@ def _load_yaml_file(path: str) -> dict:
             from function import func
             asyncio.create_task(func.report_error(e, "addons/settings.py/_load_yaml_file"))
         except Exception:
-            print(f"載入 YAML 檔案失敗 ({path}): {e}")
+            logger.error(f"Failed to load YAML file ({path}): {e}")
         return {}
 
 def _get_config_root() -> str:

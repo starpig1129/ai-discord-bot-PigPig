@@ -232,19 +232,30 @@ if __name__ == "__main__":
                         latest_version = result.get("latest_version", current_version)
                         
                         if latest_version != current_version:
-                            print(f"\033[93mYour PigPig Bot is not up-to-date! The latest version is {latest_version} "
-                                  f"and you are currently running version {current_version}\n"
-                                  f"Run `python update.py -l` to update your bot!\033[0m")
+                            startup_logger.warning(f"Bot update available: Latest version {latest_version}, Current version {current_version}", extra={
+                                "log_category": "VERSION",
+                                "current_version": current_version,
+                                "latest_version": latest_version
+                            })
                         else:
-                            print(f"\033[92mYour PigPig Bot is up-to-date! - {latest_version}\033[0m")
+                            startup_logger.info(f"Bot is up-to-date: {latest_version}", extra={
+                                "log_category": "VERSION",
+                                "latest_version": latest_version
+                            })
                             
                     except Exception as e:
                         # Log error but don't block startup
                         try:
                             asyncio.create_task(func.report_error(e, "main.py/version_check"))
-                            print("\033[91mVersion check failed, but startup continues...\033[0m")
+                            startup_logger.error("Version check failed, but startup continues", extra={
+                                "log_category": "VERSION",
+                                "error_details": str(e)
+                            })
                         except Exception:
-                            print(f"\033[91mVersion check failed: {e}\033[0m")
+                            startup_logger.error(f"Version check failed: {e}", extra={
+                                "log_category": "VERSION",
+                                "error_details": str(e)
+                            })
                 
                 # Run the async check
                 loop.run_until_complete(check_version_async())
@@ -255,9 +266,15 @@ if __name__ == "__main__":
         except Exception as e:
             try:
                 # Note: Cannot use asyncio here due to variable scope issues
-                print("\033[91mVersion check initialization failed, but startup continues...\033[0m")
+                startup_logger.error("Version check initialization failed, but startup continues", extra={
+                    "log_category": "VERSION",
+                    "error_details": str(e)
+                })
             except Exception:
-                print(f"\033[91mVersion check setup failed\033[0m")
+                startup_logger.error("Version check setup failed", extra={
+                    "log_category": "VERSION",
+                    "error_details": str(e)
+                })
     
     # Start background version check in a separate thread
     version_check_thread = threading.Thread(target=check_version_background, daemon=True)
@@ -265,7 +282,10 @@ if __name__ == "__main__":
     
     # Ensure we have a valid token
     if not tokens.token:
-        print("\033[91mError: Bot token not found. Please check your .env file.\033[0m")
+        startup_logger.error("Bot token not found. Please check your .env file.", extra={
+            "log_category": "CONFIG",
+            "error_details": "Missing bot token"
+        })
         exit(1)
     
     try:
@@ -275,7 +295,9 @@ if __name__ == "__main__":
             "log_category": "SYSTEM",
             "correlation_id": str(uuid.uuid4())[:8]
         })
-        print("收到 KeyboardInterrupt，使用者手動中斷，開始優雅關閉...")
+        startup_logger.info("Manual shutdown initiated by user", extra={
+            "log_category": "SYSTEM"
+        })
     finally:
         startup_logger.info("Starting final cleanup phase", extra={
             "log_category": "SYSTEM",
@@ -286,9 +308,9 @@ if __name__ == "__main__":
         except Exception as e:
             startup_logger.error(f"Error during final cleanup: {e}", extra={
                 "log_category": "ERROR",
-                "correlation_id": str(uuid.uuid4())[:8]
+                "correlation_id": str(uuid.uuid4())[:8],
+                "error_details": str(e)
             })
-            print(f"最終清理階段發生錯誤: {e}")
             try:
                 asyncio.create_task(func.report_error(e, "main.py/finally"))
             except Exception:

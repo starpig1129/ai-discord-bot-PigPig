@@ -213,7 +213,11 @@ class PigPig(commands.Bot):
         try:
             await self.change_presence(*args, **kwargs)
         except ConnectionResetError:
-            print("Connection reset error while changing presence, retrying in 60 seconds...")
+            logger = self.get_logger_for_guild("Bot")
+            logger.warning("Connection reset error while changing presence, retrying in 60 seconds...", extra={
+                "log_category": "SYSTEM",
+                "mod_name": "bot"
+            })
             await asyncio.sleep(60)
 
     def get_logger_for_guild(self, guild_name):
@@ -409,10 +413,19 @@ class PigPig(commands.Bot):
                 not module.startswith('.')):
                 try:
                     await self.load_extension(f"cogs.{module[:-3]}")
-                    print(f"Loaded {module[:-3]}")
+                    logger = self.get_logger_for_guild("Bot")
+                    logger.info(f"Successfully loaded cog module: {module[:-3]}", extra={
+                        "log_category": "SYSTEM",
+                        "mod_name": "bot"
+                    })
                 except Exception as e:
-                    print(f"Failed to load {module[:-3]}: {e}")
-                    print(traceback.format_exc())
+                    logger = self.get_logger_for_guild("Bot")
+                    logger.error(f"Failed to load cog module: {module[:-3]}", extra={
+                        "log_category": "SYSTEM",
+                        "mod_name": "bot",
+                        "error_details": str(e),
+                        "traceback": traceback.format_exc()
+                    })
 
         # Initialize core services
         self.orchestrator = Orchestrator(self)
@@ -457,13 +470,14 @@ class PigPig(commands.Bot):
             - Initializes logger for each guild the bot is in
             - Starts periodic status updates if not already running
         """
-        print("------------------")
-        print(f"Logging As {self.user}")
-        print(f"Bot ID: {self.user.id}")
-        print("------------------")
-        print(f"Discord Version: {discord.__version__}")
-        print(f"Python Version: {sys.version}")
-        print("------------------")
+        logger = self.get_logger_for_guild("Bot")
+        logger.info("==================", extra={"log_category": "SYSTEM", "mod_name": "bot"})
+        logger.info(f"Bot logged in as: {self.user}", extra={"log_category": "SYSTEM", "mod_name": "bot"})
+        logger.info(f"Bot ID: {self.user.id}", extra={"log_category": "SYSTEM", "mod_name": "bot"})
+        logger.info("==================", extra={"log_category": "SYSTEM", "mod_name": "bot"})
+        logger.info(f"Discord Version: {discord.__version__}", extra={"log_category": "SYSTEM", "mod_name": "bot"})
+        logger.info(f"Python Version: {sys.version}", extra={"log_category": "SYSTEM", "mod_name": "bot"})
+        logger.info("==================", extra={"log_category": "SYSTEM", "mod_name": "bot"})
         data = {}
         data['guilds'] = []
         for guild in self.guilds:
@@ -479,7 +493,10 @@ class PigPig(commands.Bot):
         # Write data to JSON file
         with open('logs/guilds_and_channels.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
-        print('update succesfully guilds_and_channels.json')
+        logger.info("Successfully updated guilds_and_channels.json", extra={
+            "log_category": "SYSTEM",
+            "mod_name": "bot"
+        })
         tokens.client_id = self.user.id
         
         # Start status update task
@@ -515,8 +532,12 @@ class PigPig(commands.Bot):
             "event_method": event_method,
             "error_details": str(traceback.format_exc())
         })
-        print(f"Event '{event_method}' error occurred")
-        print(traceback.format_exc())
+        logger.error(f"Event '{event_method}' error occurred", extra={
+            "log_category": "ERROR",
+            "mod_name": "bot",
+            "event_method": event_method,
+            "error_details": traceback.format_exc()
+        })
 
         await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
 
@@ -569,8 +590,13 @@ class PigPig(commands.Bot):
                 "user_id": user_id,
                 "traceback": "".join(traceback.format_exception(type(error), error, error.__traceback__))
             })
-        print(f"Command '{ctx.command}' error: {error}")
-        print("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+        logger.error(f"Command '{ctx.command}' error: {error}", extra={
+            "log_category": "COMMAND_ERROR",
+            "mod_name": "bot",
+            "command_name": str(ctx.command),
+            "error_details": str(error),
+            "traceback": "".join(traceback.format_exception(type(error), error, error.__traceback__))
+        })
 
         # Get guild and user IDs for error context
         guild_id = str(ctx.guild.id) if ctx.guild else None
@@ -592,7 +618,11 @@ class PigPig(commands.Bot):
                     "log_category": "ERROR"
                 })
             else:
-                print(f"Failed to send error reply to user: {e}")
+                logger.error(f"Failed to send error reply to user: {e}", extra={
+                    "log_category": "ERROR",
+                    "mod_name": "bot",
+                    "error_details": str(e)
+                })
             await func.report_error(e, "Failed to send error reply to user")
             
     async def send_error_report(self, embed: discord.Embed):
@@ -638,6 +668,16 @@ class PigPig(commands.Bot):
                 loop = asyncio.get_running_loop()
                 await loop.shutdown_default_executor()
             except Exception as e:
-                print(f"Error occurred while shutting down default executor: {e}")
+                logger = self.get_logger_for_guild("Bot")
+                logger.error(f"Error occurred while shutting down default executor: {e}", extra={
+                    "log_category": "ERROR",
+                    "mod_name": "bot",
+                    "error_details": str(e)
+                })
         except Exception as e:
-            print(f"Error occurred while closing bot: {e}")
+            logger = self.get_logger_for_guild("Bot")
+            logger.error(f"Error occurred while closing bot: {e}", extra={
+                "log_category": "ERROR",
+                "mod_name": "bot",
+                "error_details": str(e)
+            })
