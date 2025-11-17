@@ -10,7 +10,7 @@ system:
   cleanup_threshold_days: 30
   inactive_threshold_hours: 24
   correlation_id_length: 8
-  enable_console_logging: false
+  enable_console_logging: true
   root_logger_level: "INFO"
   startup_logger_level: "WARNING"
 

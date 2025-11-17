@@ -237,15 +237,15 @@ class MemoryConfig:
         self.message_threshold: int = data.get("message_threshold", 100)
 
 class LoggingConfig:
-    """Comprehensive logging configuration management system.
+    """Configuration management system for logging infrastructure.
     
-    This class consolidates all logging configuration including:
-    - Third-party library suppression rules
-    - Logger initialization methods
-    - Color configuration settings
-    - Format templates
-    - Root logger setup
-    - System and guild-specific logging
+    This class focuses PURELY on configuration management, including:
+    - Loading and managing YAML configuration files
+    - Providing access to configuration values
+    - Validation of configuration structure
+    - Configuration summaries and metadata
+    
+    This class should only be used for reading configuration values.
     """
     
     def __init__(self, config_path: Optional[str] = None):
@@ -254,8 +254,6 @@ class LoggingConfig:
         Args:
             config_path: Path to logging.yaml config file. If None, uses default path.
         """
-        self.logger = logging.getLogger(__name__)
-        
         # Determine config path
         if config_path is None:
             config_path = f"{CONFIG_ROOT}/logging.yaml"
@@ -272,16 +270,6 @@ class LoggingConfig:
         # Maintain backward compatibility attribute
         self.enable_colored_logs = getattr(base_config, 'enable_colored_logs', True)
         self.colored_logs_config = getattr(base_config, 'colored_logs_config', {})
-        
-        # Validate configuration
-        if self.validate_configuration():
-            self.logger.info("YAML configuration validation passed")
-        else:
-            self.logger.warning("YAML configuration validation failed")
-        
-        # Log configuration summary
-        config_summary = self.get_configuration_summary()
-        self.logger.debug(f"LoggingConfig initialized: {config_summary}")
     
     def _load_configuration(self):
         """Load configuration from YAML file."""
@@ -329,7 +317,6 @@ class LoggingConfig:
         
         # Store configuration source for debugging
         self.config_source = "yaml"
-        self.logger.debug(f"Logging configuration loaded from YAML: {self.config_path}")
     
     def _build_suppression_rules(self, critical_list, warning_list):
         """Build suppression rule dictionaries from YAML lists."""
@@ -377,8 +364,6 @@ class LoggingConfig:
             'httpx': '\033[95m',
             'web': '\033[93m',        # Orange/Yellow for web services
         }
-        
-        self.logger.debug("Color support initialized")
     
     def validate_configuration(self) -> bool:
         """Validate the loaded configuration against required structure.
@@ -395,51 +380,42 @@ class LoggingConfig:
             # Check required sections
             for section in required_sections:
                 if section not in self.config_data:
-                    self.logger.error(f"Missing required configuration section: {section}")
                     return False
             
             # Check required system keys
             system_config = self.config_data.get("system", {})
             for key in required_system_keys:
                 if key not in system_config:
-                    self.logger.error(f"Missing required system configuration key: {key}")
                     return False
             
             # Check required format keys
             formats_config = self.config_data.get("formats", {})
             for key in required_format_keys:
                 if key not in formats_config:
-                    self.logger.error(f"Missing required format configuration key: {key}")
                     return False
             
             # Check required color keys
             colors_config = self.config_data.get("colors", {})
             for key in required_color_keys:
                 if key not in colors_config:
-                    self.logger.error(f"Missing required color configuration key: {key}")
                     return False
             
             # Validate value constraints
             correlation_id_length = system_config.get("correlation_id_length", 8)
             if not (4 <= correlation_id_length <= 32):
-                self.logger.error(f"Invalid correlation_id_length: {correlation_id_length}. Must be between 4 and 32.")
                 return False
             
             cleanup_days = system_config.get("cleanup_threshold_days", 30)
             if not (1 <= cleanup_days <= 365):
-                self.logger.error(f"Invalid cleanup_threshold_days: {cleanup_days}. Must be between 1 and 365.")
                 return False
             
             inactive_hours = system_config.get("inactive_threshold_hours", 24)
             if not (1 <= inactive_hours <= 168):
-                self.logger.error(f"Invalid inactive_threshold_hours: {inactive_hours}. Must be between 1 and 168.")
                 return False
             
-            self.logger.info("Configuration validation passed")
             return True
             
-        except Exception as e:
-            self.logger.error(f"Configuration validation failed: {e}")
+        except Exception:
             return False
     
     def get_configuration_summary(self) -> dict:
@@ -475,11 +451,9 @@ class LoggingConfig:
     
     def reload_configuration(self):
         """Reload configuration from YAML file."""
-        self.logger.info("Reloading logging configuration...")
         self.config_data = _load_yaml_file(self.config_path)
         self._load_configuration()
         self._init_color_support()
-        self.logger.info("Logging configuration reloaded successfully")
     
     def is_yaml_config_available(self) -> bool:
         """Check if YAML configuration is available and loaded.
@@ -497,190 +471,119 @@ class LoggingConfig:
         """
         return getattr(self, 'config_path', f"{CONFIG_ROOT}/logging.yaml")
     
-    def suppress_third_party_logs(self):
-        """Apply comprehensive third-party library suppression.
-        
-        This method suppresses all third-party library logs to prevent
-        excessive logging noise while maintaining proper application logging levels.
-        """
-        # Apply suppression to ALL third-party loggers BEFORE setting up our handler
-        for lib_name, lib_level in self._combined_suppression.items():
-            lib_logger = logging.getLogger(lib_name)
-            lib_logger.setLevel(lib_level)
-            lib_logger.propagate = False  # Prevent propagation to root logger
-            
-            # Also suppress any child loggers
-            for handler in lib_logger.handlers[:]:
-                lib_logger.removeHandler(handler)
-        
-        # Additional comprehensive suppression for ALL database-related loggers
-        # This catches any SQLAlchemy sub-loggers that might not be explicitly listed
-        for db_logger_name in self.db_logger_names:
-            db_logger = logging.getLogger(db_logger_name)
-            db_logger.setLevel(logging.CRITICAL)
-            db_logger.propagate = False
-            while db_logger.handlers:
-                db_logger.removeHandler(db_logger.handlers[0])
-        
-        self.logger.debug("Applied comprehensive third-party library suppression")
-    
-    def setup_root_logger(self):
-        """Set up the root logger with proper configuration."""
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.INFO)
-        root_logger.handlers.clear()  # Clear ALL existing handlers first
-        
-        self.logger.debug("Root logger configured successfully")
-    
-    def setup_startup_logger(self):
-        """Set up startup logger for initial logging before full system is ready."""
-        startup_logger = logging.getLogger("STARTUP")
-        startup_logger.setLevel(logging.WARNING)  # Only show warnings and errors for startup
-        startup_logger.propagate = False  # Prevent propagation to root logger
-        
-        # Add ONLY the colored console handler to startup logger with SIMPLE format
-        try:
-            from logs import ColoredConsoleHandler
-            console_handler = ColoredConsoleHandler(enable_colored_logs=self.enable_colored_logs, simple_format=True)
-            startup_logger.addHandler(console_handler)
-            self.logger.debug("Startup logger configured successfully")
-        except ImportError:
-            self.logger.warning("ColoredConsoleHandler not available for startup logger")
-        
-        return startup_logger
-    
-    def setup_guild_logger(self, guild_id: str, guild_name: Optional[str] = None, level: str = "INFO") -> logging.Logger:
-        """Configure logging for a specific guild following technical specifications.
-        
-        Sets up a logger with structured logging capabilities for Discord server.
-        Implements optimized third-party library suppression while maintaining proper
-        application logging levels and structured logging format.
-        
-        Args:
-            guild_id: Discord guild ID for logger identification
-            guild_name: Discord guild name for configuration tracking
-            level: Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-            
-        Returns:
-            logging.Logger: logger instance with structured logging support
-            
-        Note:
-            - Root logger suppression is handled separately
-            - Structured logging with correlation IDs and context tracking
-            - Guild isolation architecture with category-based filtering
-        """
-        try:
-            from logs import setup_enhanced_logger
-            
-            # Set up structured logger for the guild
-            logger = setup_enhanced_logger(guild_id, guild_name, level, self.enable_colored_logs)
-            
-            # Add structured logging category setup
-            logger.info(f"Logging system initialized for guild: {guild_id}", extra={
-                "log_category": "SYSTEM",
-                "mod_name": "bot_logger",
-                "guild_id": guild_id,
-                "user_id": "N/A",
-                "correlation_id": str(uuid.uuid4())[:8]
-            })
-            
-            self.logger.debug(f"Guild logger setup completed for guild: {guild_id}")
-            return logger
-            
-        except ImportError:
-            # Fallback if logs module is not available
-            logger = logging.getLogger(f"guild_{guild_id}")
-            logger.setLevel(getattr(logging, level.upper()))
-            
-            # Clear existing handlers
-            if logger.hasHandlers():
-                logger.handlers.clear()
-            
-            # Add console handler if enabled
-            if self.enable_colored_logs and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
-                try:
-                    from logs import ColoredConsoleHandler
-                    console_handler = ColoredConsoleHandler(enable_colored_logs=True, simple_format=True)
-                    logger.addHandler(console_handler)
-                except ImportError:
-                    pass
-            
-            return logger
-    
-    def setup_logging_system(self):
-        """Initialize the entire logging system.
-        
-        This is the main entry point for setting up the complete logging configuration
-        including third-party suppression, root logger setup, and startup logger.
+    def get_suppression_rules(self) -> Dict[str, int]:
+        """Get combined suppression rules for third-party libraries.
         
         Returns:
-            logging.Logger: Startup logger instance for early logging
+            Dictionary mapping logger names to suppression levels
         """
-        self.logger.info("Initializing comprehensive logging system...")
-        
-        # Step 1: Apply comprehensive third-party suppression
-        self.suppress_third_party_logs()
-        
-        # Step 2: Set up root logger
-        self.setup_root_logger()
-        
-        # Step 3: Set up startup logger
-        startup_logger = self.setup_startup_logger()
-        
-        self.logger.info("Comprehensive logging system initialized successfully")
-        return startup_logger
+        return getattr(self, '_combined_suppression', {})
     
-    def get_logger(self, guild_id: str, guild_name: Optional[str] = None, level: str = "INFO") -> logging.Logger:
-        """Get or create a logger for a specific guild.
+    def get_db_logger_names(self) -> list:
+        """Get list of database logger names for comprehensive suppression.
         
-        This is the unified API for getting loggers throughout the application.
-        
-        Args:
-            guild_id: Discord guild ID
-            guild_name: Discord guild name for configuration tracking
-            level: Minimum log level
-            
         Returns:
-            logging.Logger: Configured logger instance
+            List of database logger names
         """
-        return self.setup_guild_logger(guild_id, guild_name, level)
-    
-    def get_system_logger(self) -> logging.Logger:
-        """Get system-level logger for non-guild events."""
-        return self.setup_guild_logger('system', 'System Logs')
-    
-    def apply_custom_suppression(self, suppression_rules: Dict[str, int]):
-        """Apply custom suppression rules in addition to defaults.
-        
-        Args:
-            suppression_rules: Dictionary of logger names to suppression levels
-        """
-        for lib_name, lib_level in suppression_rules.items():
-            lib_logger = logging.getLogger(lib_name)
-            lib_logger.setLevel(lib_level)
-            lib_logger.propagate = False
-        
-        self.logger.debug(f"Applied custom suppression rules: {suppression_rules}")
+        return getattr(self, 'db_logger_names', [])
     
     def is_colored_logging_enabled(self) -> bool:
-        """Check if colored logging is enabled."""
-        return self.enable_colored_logs
+        """Check if colored logging is enabled.
+        
+        Returns:
+            bool: True if colored logging is enabled
+        """
+        return getattr(self, 'enable_colored_logs', True)
     
-    def get_log_format(self, enhanced: bool = False) -> str:
+    def get_log_format(self, enhanced: bool = False) -> Optional[str]:
         """Get the log format template.
         
         Args:
             enhanced: If True, return enhanced format with correlation ID
             
         Returns:
-            Log format string
+            Log format string or None if not available
         """
-        return self.enhanced_format if enhanced else self.log_format
+        return getattr(self, 'enhanced_format', None) if enhanced else getattr(self, 'log_format', None)
+    
+    def get_logger(self, guild_id: str, guild_name: Optional[str] = None, level: str = "INFO") -> logging.Logger:
+        """Get or create a logger for the specified guild using YAML configuration.
+        
+        This method creates and configures loggers for specific guilds using the YAML
+        configuration. It maintains backward compatibility with bot.py's expectations.
+        
+        Args:
+            guild_id: Discord guild ID for log organization
+            guild_name: Discord guild name for configuration tracking
+            level: Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+            
+        Returns:
+            logging.Logger: Properly configured logger instance
+        """
+        try:
+            # Import the unified logger manager from logs.py
+            from logs import get_unified_logger_manager
+            
+            # Get or create unified logger manager with YAML configuration
+            unified_manager = get_unified_logger_manager(self.config_path)
+            
+            # Get logger using unified manager with YAML config
+            logger = unified_manager.get_logger(guild_id, guild_name, level)
+            
+            return logger
+            
+        except ImportError as e:
+            # Fallback if logs module is not available
+            logger = logging.getLogger(f"guild_{guild_id}")
+            logger.setLevel(getattr(logging, level.upper()))
+            
+            # Ensure handlers are set up
+            if not logger.handlers:
+                # Import here to avoid circular dependency
+                import os
+                from logs import GuildBasedRotatingFileHandler
+                
+                # Create guild-based file handler
+                handler = GuildBasedRotatingFileHandler(guild_id, self)
+                logger.addHandler(handler)
+                
+                # Add console handler if enabled
+                if getattr(self, 'enable_console_logging', False):
+                    from logs import ColoredConsoleHandler
+                    console_handler = ColoredConsoleHandler(
+                        getattr(self, 'enable_colored_logs', True),
+                        simple_format=True,
+                        config=self
+                    )
+                    logger.addHandler(console_handler)
+            
+            return logger
+            
+        except Exception as e:
+            # Emergency fallback - create basic logger
+            try:
+                from function import func
+                asyncio.create_task(func.report_error(e, f"LoggingConfig.get_logger for guild {guild_id}"))
+            except Exception:
+                logging.error(f"Failed to create logger for guild {guild_id}: {e}")
+            
+            # Create a basic logger as fallback
+            logger = logging.getLogger(f"fallback_guild_{guild_id}")
+            logger.setLevel(getattr(logging, level.upper()))
+            
+            if not logger.handlers:
+                handler = logging.StreamHandler()
+                formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(name)s: %(message)s")
+                handler.setFormatter(formatter)
+                logger.addHandler(handler)
+            
+            return logger
     
     def cleanup(self):
-        """Cleanup logging resources if needed."""
-        # This could be expanded to handle cleanup of loggers, handlers, etc.
-        self.logger.debug("LoggingConfig cleanup completed")
+        """Cleanup configuration resources if needed."""
+        # Configuration cleanup - clear any cached data
+        pass
+    
 
 try:
     base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")

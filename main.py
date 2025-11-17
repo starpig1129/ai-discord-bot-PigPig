@@ -63,9 +63,13 @@ bot = PigPig(
     intents=intents
 )
 
-# Initialize logging system using the centralized LoggingConfig
-# This replaces all the scattered logging setup logic from bot.py and the previous main.py
-startup_logger = logging_config.setup_logging_system()
+# Initialize logging system using the unified logging architecture
+# Use UnifiedLoggerManager for proper setup and configuration
+from logs import get_unified_logger_manager
+
+logger_manager = get_unified_logger_manager()
+# Initialize the complete logging system including root logger
+startup_logger = logger_manager.initialize_logging_system()
 
 if __name__ == "__main__":
     # Background version check using new architecture
@@ -115,7 +119,22 @@ if __name__ == "__main__":
     try:
         # Enable console logging for bot
         os.environ['ENABLE_CONSOLE_LOGGING'] = 'true'
-        bot.run(str(tokens.token), log_handler=None)
+        
+        # Use existing ColoredConsoleHandler from logs.py instead of custom one
+        from logs import ColoredConsoleHandler, get_unified_logger_manager
+        
+        # Get unified logger manager for configuration
+        logger_manager = get_unified_logger_manager()
+        
+        # Create colored console handler using existing system
+        colored_handler = ColoredConsoleHandler(
+            enable_colored_logs=True,
+            simple_format=True,
+            config=logger_manager.config
+        )
+        
+        # Run bot with existing colored logging handler
+        bot.run(str(tokens.token), log_handler=colored_handler)
     except KeyboardInterrupt:
         startup_logger.info("🛑 Manual shutdown initiated by user")
     finally:

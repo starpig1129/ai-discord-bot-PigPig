@@ -57,13 +57,20 @@ ENHANCED_FORMAT = (
 )
 
 
-def apply_colors(text: str, enable_colored_logs: bool = True) -> str:
-    """Apply colors to log text if enabled and supported."""
+def apply_colors(text: str, enable_colored_logs: bool = True, level_colors: Optional[Dict[str, str]] = None, module_colors: Optional[Dict[str, str]] = None) -> str:
+    """Apply colors to log text if enabled and supported.
+    
+    Args:
+        text: Text to colorize
+        enable_colored_logs: Whether to apply colors
+        level_colors: Color mapping for log levels (from YAML config)
+        module_colors: Color mapping for modules (from YAML config)
+    """
     if not enable_colored_logs:
         return text
     
-    # Color codes for different log levels
-    COLORS = {
+    # Default colors if not provided (fallback for backward compatibility)
+    default_level_colors = {
         'DEBUG': '\033[90m',      # Gray
         'INFO': '\033[92m',       # Green
         'WARNING': '\033[93m',    # Yellow
@@ -72,8 +79,7 @@ def apply_colors(text: str, enable_colored_logs: bool = True) -> str:
         'RESET': '\033[0m'        # Reset color
     }
     
-    # Color codes for different modules
-    MODULE_COLORS = {
+    default_module_colors = {
         'bot': '\033[94m',        # Blue
         'main': '\033[94m',
         'startup': '\033[94m',
@@ -85,22 +91,41 @@ def apply_colors(text: str, enable_colored_logs: bool = True) -> str:
         'web': '\033[93m',        # Orange/Yellow for web services
     }
     
-    # Detect if output supports colors
-    supports_color = (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or \
-                     os.getenv('FORCE_COLOR', 'false').lower() == 'true'
+    # Use provided colors or fall back to defaults
+    COLORS = level_colors if level_colors else default_level_colors
+    MODULE_COLORS = module_colors if module_colors else default_module_colors
+    
+    # Enhanced color detection with more permissive logic and debug output
+    supports_color = (
+        (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or
+        os.getenv('FORCE_COLOR', 'false').lower() == 'true' or
+        os.getenv('ENABLE_CONSOLE_LOGGING', 'false').lower() == 'true' or
+        sys.stderr.isatty() or  # Check stderr as well
+        os.getenv('TERM', '').lower() in ['xterm', 'xterm-256color', 'screen', 'tmux']
+    )
     
     if not supports_color:
         return text
     
+    # Pre-clean any existing ANSI codes to prevent double-application
+    # Remove any existing color codes to avoid duplication
+    ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+    text = ansi_escape.sub('', text)
+    
     # Apply level-based coloring
     for level, color in COLORS.items():
         if level != 'RESET':
-            text = text.replace(f"[{level}]", f"{color}[{level}]{COLORS['RESET']}")
+            # Use regex to match level patterns more precisely
+            level_pattern = rf'\[({level})\]'
+            replacement = f"{color}[{level}]{COLORS['RESET']}"
+            text = re.sub(level_pattern, replacement, text)
     
     # Apply module-based coloring
     for module_prefix, color in MODULE_COLORS.items():
+        # More precise regex to avoid false matches
         pattern = rf'\[([^\]]*{re.escape(module_prefix)}[^\]]*)\]'
-        text = re.sub(pattern, f"{color}[\\1]{COLORS['RESET']}", text, flags=re.IGNORECASE)
+        replacement = f"{color}[\\1]{COLORS['RESET']}"
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     
     return text
 
@@ -108,37 +133,67 @@ def apply_colors(text: str, enable_colored_logs: bool = True) -> str:
 class ColoredConsoleHandler(logging.StreamHandler):
     """Colored console handler for structured logging with color support."""
     
-    def __init__(self, enable_colored_logs: bool = True, simple_format: bool = True):
+    def __init__(self, enable_colored_logs: bool = True, simple_format: bool = True, config: Optional[Any] = None):
         super().__init__(sys.stdout)
         self.enable_colored_logs = enable_colored_logs
         self.simple_format = simple_format
+        self.config = config
         
-        # Choose format based on simple_format setting
+        # Choose format based on simple_format setting and configuration
         if simple_format:
-            # Simple format: [TIME] [LEVEL] [MODULE] message
+            # Simple format: use from config or fallback
+            simple_format_str = getattr(config, 'simple_format', "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s") if config else "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
             self.base_formatter = logging.Formatter(
-                "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+                simple_format_str,
                 datefmt='%H:%M:%S'
             )
         else:
-            # Enhanced format with all details
+            # Enhanced format with all details - use from config or fallback
+            enhanced_format_str = getattr(config, 'enhanced_format', ENHANCED_FORMAT) if config else ENHANCED_FORMAT
             self.base_formatter = logging.Formatter(
-                ENHANCED_FORMAT,
+                enhanced_format_str,
                 datefmt='%H:%M:%S'
             )
+        
+        # Initialize colors for backward compatibility
+        self._init_color_maps()
+    
+    def _init_color_maps(self):
+        """Initialize color mappings for this handler."""
+        # Get colors from config or use defaults
+        if self.config:
+            self.level_colors = getattr(self.config, 'level_colors', None)
+            self.module_colors = getattr(self.config, 'module_colors', None)
+        else:
+            self.level_colors = None
+            self.module_colors = None
     
     def emit(self, record):
         """Emit log record to console with color support."""
         try:
-            # Set custom_module for consistent formatting
+            # Set default values for missing structured fields to prevent formatting errors
+            if not hasattr(record, 'log_category') or not getattr(record, 'log_category', None):
+                record.log_category = "GENERAL"
             if not hasattr(record, 'custom_module') or not getattr(record, 'custom_module', None):
                 record.custom_module = getattr(record, 'module_name', getattr(record, 'mod_name', record.name))
+            if not hasattr(record, 'guild_id') or not getattr(record, 'guild_id', None):
+                record.guild_id = "system"
+            if not hasattr(record, 'user_id') or not getattr(record, 'user_id', None):
+                record.user_id = "N/A"
+            if not hasattr(record, 'correlation_id') or not getattr(record, 'correlation_id', None):
+                record.correlation_id = getattr(record, 'correlation_id', "default")
             
             # Format base message using consistent formatter
-            base_msg = self.base_formatter.format(record)
+            try:
+                base_msg = self.base_formatter.format(record)
+            except (KeyError, ValueError) as e:
+                # Fallback to simple formatting if structured fields cause issues
+                simple_format = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+                simple_formatter = logging.Formatter(simple_format, datefmt='%H:%M:%S')
+                base_msg = simple_formatter.format(record)
             
             # Extract structured information for MESSAGE categories
-            log_category = getattr(record, 'log_category', getattr(record, 'category', None))
+            log_category = getattr(record, 'log_category', None)
             channel_name = getattr(record, 'channel_name', None)
             author_name = getattr(record, 'author_name', None)
             message_content = getattr(record, 'message_content', None)
@@ -175,11 +230,19 @@ class ColoredConsoleHandler(logging.StreamHandler):
                 if context_parts:
                     msg = f"{base_msg} [{' | '.join(context_parts)}]"
             
-            # Apply colors if enabled
-            colored_msg = apply_colors(msg, self.enable_colored_logs)
+            # Apply colors if enabled - pass configured colors directly
+            if self.enable_colored_logs and hasattr(self, 'level_colors') and hasattr(self, 'module_colors'):
+                colored_msg = apply_colors(msg, True, self.level_colors, self.module_colors)
+            else:
+                colored_msg = msg
             
-            # Print message
-            print(colored_msg)
+            # Write to stdout and flush
+            try:
+                sys.stdout.write(colored_msg + '\n')
+                sys.stdout.flush()
+            except (OSError, BrokenPipeError):
+                # Handle broken pipe errors (e.g., when output is redirected)
+                pass
             
         except Exception:
             self.handleError(record)
@@ -196,18 +259,25 @@ class GuildBasedRotatingFileHandler(logging.Handler):
     - Guild configuration management
     """
     
-    def __init__(self, guild_id: str):
+    def __init__(self, guild_id: str, config: Optional[Any] = None):
         super().__init__()
         self.guild_id = guild_id
+        self.config = config
         self.current_date = datetime.now().strftime('%Y%m%d')
-        self.log_base_dir = 'logs'
+        
+        # Use config for log base dir or fallback to default
+        self.log_base_dir = getattr(config, 'log_base_dir', 'logs') if config else 'logs'
+        
         self.guild_log_dir = self._get_guild_log_dir()
         self._create_guild_directory()
         self._open_current_log_file()
         
+        # Use config for format or fallback to default
+        format_string = getattr(config, 'log_format', "[%(asctime)s] [%(levelname)s] [%(custom_module)s] %(message)s") if config else "[%(asctime)s] [%(levelname)s] [%(custom_module)s] %(message)s"
+        
         # Structured formatter with consistent format and time format
         self.formatter = logging.Formatter(
-            "[%(asctime)s] [%(levelname)s] [%(custom_module)s] %(message)s",
+            format_string,
             datefmt='%H:%M:%S'
         )
         
@@ -255,7 +325,8 @@ class GuildBasedRotatingFileHandler(logging.Handler):
                     os.remove(new_log_path)
                     
             except Exception as e:
-                print(f"Error rotating log file: {e}")
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Error rotating log file: {e}")
             
             # Open new current log file
             self._open_current_log_file()
@@ -276,7 +347,8 @@ class GuildBasedRotatingFileHandler(logging.Handler):
                         os.remove(file_path)
                         
         except Exception as e:
-            print(f"Error cleaning up old logs: {e}")
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error cleaning up old logs: {e}")
 
     def emit(self, record):
         """Emit log record with structured data."""
@@ -284,18 +356,32 @@ class GuildBasedRotatingFileHandler(logging.Handler):
             # Check if log rotation is needed
             self._rotate_logs_if_needed()
             
-            # Set custom_module for consistent formatting
+            # Set default values for missing structured fields to prevent formatting errors
+            if not hasattr(record, 'log_category') or not getattr(record, 'log_category', None):
+                record.log_category = "GENERAL"
             if not hasattr(record, 'custom_module') or not getattr(record, 'custom_module', None):
                 record.custom_module = getattr(record, 'module_name', getattr(record, 'mod_name', record.name))
+            if not hasattr(record, 'guild_id') or not getattr(record, 'guild_id', None):
+                record.guild_id = "system"
+            if not hasattr(record, 'user_id') or not getattr(record, 'user_id', None):
+                record.user_id = "N/A"
+            if not hasattr(record, 'correlation_id') or not getattr(record, 'correlation_id', None):
+                record.correlation_id = getattr(record, 'correlation_id', "default")
             
             # Format base message using consistent formatter
-            if self.formatter:
-                base_msg = self.formatter.format(record)
-            else:
-                base_msg = record.getMessage()
+            try:
+                if self.formatter:
+                    base_msg = self.formatter.format(record)
+                else:
+                    base_msg = record.getMessage()
+            except (KeyError, ValueError) as e:
+                # Fallback to simple formatting if structured fields cause issues
+                simple_format = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+                simple_formatter = logging.Formatter(simple_format, datefmt='%H:%M:%S')
+                base_msg = simple_formatter.format(record)
             
             # Extract structured information for MESSAGE categories
-            log_category = getattr(record, 'log_category', getattr(record, 'category', None))
+            log_category = getattr(record, 'log_category', None)
             channel_name = getattr(record, 'channel_name', None)
             author_name = getattr(record, 'author_name', None)
             message_content = getattr(record, 'message_content', None)
@@ -397,7 +483,8 @@ class GuildConfigManager:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(self.config_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            print(f"Error saving guild config: {e}")
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error saving guild config: {e}")
     
     def update_guild_activity(self, guild_id: str, guild_name: Optional[str] = None):
         """Update guild activity information."""
@@ -589,27 +676,375 @@ def get_guild_config() -> GuildConfigManager:
     return _guild_logger_manager.config_manager
 
 
-# Backward compatibility wrapper
-def setup_logger(server_name: str, enable_colored_logs: bool = True) -> logging.Logger:
-    """Legacy function wrapper for backward compatibility.
-    
-    Args:
-        server_name: Server name for log setup
-        enable_colored_logs: Enable colored console output
-        
-    Returns:
-        Structured logger instance
-    """
-    # Treat server_name as guild_id for backward compatibility
-    return setup_enhanced_logger(server_name, enable_colored_logs=enable_colored_logs)
-
-
-# Legacy class name for backward compatibility
 class StructuredRotatingFileHandler(GuildBasedRotatingFileHandler):
-    """Legacy class name for backward compatibility."""
     pass
-
 
 class TimedRotatingFileHandler(GuildBasedRotatingFileHandler):
-    """Legacy class name for backward compatibility."""
     pass
+
+class UnifiedLoggerManager:
+    """Unified logging API manager providing centralized logging operations.
+    
+    This is the primary entry point for all logging operations, providing:
+    - Consistent API across all logging functionality
+    - YAML configuration-based setup
+    - Guild-based logging organization
+    - Backward compatibility with existing function names
+    - Efficient resource management
+    """
+    
+    def __init__(self, config_path: Optional[str] = None):
+        """Initialize UnifiedLoggerManager with YAML configuration.
+        
+        Args:
+            config_path: Path to logging.yaml config file. If None, uses default.
+        """
+        self.logger = logging.getLogger(__name__)
+        
+        # Import LoggingConfig for centralized configuration management (lazy import)
+        try:
+            # Use lazy import to avoid potential circular dependency during module loading
+            import importlib
+            settings_module = importlib.import_module('addons.settings')
+            LoggingConfig = getattr(settings_module, 'LoggingConfig', None)
+            if LoggingConfig:
+                self.config = LoggingConfig(config_path)
+                self._use_yaml_config = True
+            else:
+                raise ImportError("LoggingConfig not available in addons.settings")
+        except ImportError:
+            # Fallback to basic configuration if LoggingConfig not available
+            self.config = self._create_fallback_config()
+            self._use_yaml_config = False
+            self.logger.warning("LoggingConfig not available, using fallback configuration")
+        
+        # Initialize guild logger managers
+        self.guild_managers: Dict[str, logging.Logger] = {}
+        self.guild_config_managers: Dict[str, Any] = {}
+        
+        # Store configuration for backward compatibility
+        self._setup_configuration()
+        
+        self.logger.debug("UnifiedLoggerManager initialized successfully")
+    
+    def _create_fallback_config(self):
+        """Create fallback configuration when YAML config is not available."""
+        class FallbackConfig:
+            def __init__(self):
+                self.enable_colored_logs = True
+                self.level_colors = {
+                    'DEBUG': '\033[90m', 'INFO': '\033[92m', 'WARNING': '\033[93m',
+                    'ERROR': '\033[91m', 'CRITICAL': '\033[95m', 'RESET': '\033[0m'
+                }
+                self.module_colors = {
+                    'bot': '\033[94m', 'main': '\033[94m', 'cogs': '\033[96m',
+                    'utils': '\033[96m', 'discord': '\033[95m', 'sqlalchemy': '\033[95m'
+                }
+                self.log_format = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+                self.enhanced_format = "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+                self.simple_format = "[%(levelname)s] %(message)s"
+                self.log_base_dir = "logs"
+                self.enable_console_logging = False
+            
+            def reload_configuration(self):
+                """Fallback reload method that does nothing."""
+                pass
+            
+            def cleanup(self):
+                """Fallback cleanup method that does nothing."""
+                pass
+        return FallbackConfig()
+    
+    def _setup_configuration(self):
+        """Setup configuration parameters for backward compatibility."""
+        self.enable_colored_logs = getattr(self.config, 'enable_colored_logs', True)
+        self.level_colors = getattr(self.config, 'level_colors', {})
+        self.module_colors = getattr(self.config, 'module_colors', {})
+        self.log_format = getattr(self.config, 'log_format', '')
+        self.enhanced_format = getattr(self.config, 'enhanced_format', '')
+        self.log_base_dir = getattr(self.config, 'log_base_dir', 'logs')
+    
+    def get_logger(self, 
+                   guild_id: str, 
+                   guild_name: Optional[str] = None,
+                   level: str = "INFO") -> logging.Logger:
+        """Get or create a logger for the specified guild.
+        
+        This is the primary unified API for getting loggers throughout the application.
+        
+        Args:
+            guild_id: Discord guild ID for log organization (use 'system' for system logs)
+            guild_name: Discord guild name for configuration tracking
+            level: Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+            
+        Returns:
+            Logger instance with structured logging capabilities
+        """
+        if guild_id in self.guild_managers:
+            logger = self.guild_managers[guild_id]
+            logger.setLevel(getattr(logging, level.upper()))
+            return logger
+        
+        # Create new guild-based logger
+        logger = self._create_guild_logger(guild_id, guild_name, level)
+        
+        # Store reference for resource management
+        self.guild_managers[guild_id] = logger
+        
+        # Update guild configuration if not system
+        if guild_id not in ['system', 'N/A']:
+            self._update_guild_config(guild_id, guild_name)
+        
+        return logger
+    
+    def _create_guild_logger(self, guild_id: str, guild_name: Optional[str], level: str) -> logging.Logger:
+        """Create a new guild-specific logger."""
+        # Use existing logger creation logic but integrate with YAML config
+        guild_log_dir = self._get_guild_log_dir(guild_id)
+        
+        # Create logger name
+        if guild_id in ['system', 'N/A']:
+            logger_name = 'system'
+        else:
+            logger_name = f'guild_{guild_id}'
+        
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(getattr(logging, level.upper()))
+        
+        # Clear existing handlers
+        if logger.hasHandlers():
+            logger.handlers.clear()
+        
+        # Create guild-based file handler with YAML configuration
+        handler = GuildBasedRotatingFileHandler(guild_id, self.config)
+        logger.addHandler(handler)
+        
+        # Add console handler if enabled and configured
+        if self._should_add_console_handler():
+            console_handler = ColoredConsoleHandler(self.enable_colored_logs, simple_format=True, config=self.config)
+            logger.addHandler(console_handler)
+        
+        return logger
+    
+    def _get_guild_log_dir(self, guild_id: str) -> str:
+        """Get guild-specific log directory path using YAML configuration."""
+        if guild_id in ['system', 'N/A']:
+            return os.path.join(self.log_base_dir, 'system')
+        else:
+            return os.path.join(self.log_base_dir, f'guild_{guild_id}')
+    
+    def _should_add_console_handler(self) -> bool:
+        """Check if console handler should be added based on configuration."""
+        # Always enable console logging for debugging unless explicitly disabled
+        enable_console = getattr(self.config, 'enable_console_logging', True)  # Default to True
+        env_override = os.getenv('ENABLE_CONSOLE_LOGGING', 'false').lower() == 'true'
+        
+        # Environment variable takes precedence
+        if env_override:
+            return True
+        
+        # Return configuration setting (now defaults to True for development)
+        return enable_console
+    
+    def _update_guild_config(self, guild_id: str, guild_name: Optional[str]):
+        """Update guild configuration tracking."""
+        if guild_id not in self.guild_config_managers:
+            self.guild_config_managers[guild_id] = GuildConfigManager()
+        
+        self.guild_config_managers[guild_id].update_guild_activity(guild_id, guild_name)
+    
+    def setup_enhanced_logger(self, 
+                             guild_id: str,
+                             guild_name: Optional[str] = None,
+                             level: str = "INFO",
+                             enable_colored_logs: Optional[bool] = None) -> logging.Logger:
+        """Setup enhanced logger with guild-based organization and color support.
+        
+        Args:
+            guild_id: Discord guild ID for log organization
+            guild_name: Discord guild name for configuration tracking
+            level: Minimum log level
+            enable_colored_logs: Override colored console output setting
+            
+        Returns:
+            Logger instance with enhanced structured logging
+        """
+        # Use provided colored logs setting or fall back to config
+        colored_logs = enable_colored_logs if enable_colored_logs is not None else self.enable_colored_logs
+        
+        # Get or create guild logger
+        logger = self.get_logger(guild_id, guild_name, level)
+        
+        # Update colored logs setting if needed
+        if colored_logs != self.enable_colored_logs:
+            for handler in logger.handlers:
+                if isinstance(handler, ColoredConsoleHandler):
+                    handler.enable_colored_logs = colored_logs
+        
+        self.logger.debug(f"Enhanced logger setup completed for guild: {guild_id}")
+        return logger
+    
+    def get_system_logger(self) -> logging.Logger:
+        """Get system-level logger for non-guild events."""
+        return self.get_logger('system', 'System Logs')
+    
+    def get_guild_logger(self, guild_id: str, guild_name: Optional[str] = None) -> logging.Logger:
+        """Get guild-specific logger for Discord guild events."""
+        return self.get_logger(guild_id, guild_name)
+    
+    def cleanup_inactive_loggers(self, hours_threshold: int = 24):
+        """Cleanup inactive guild loggers to save resources."""
+        current_time = datetime.now()
+        inactive_guilds = []
+        
+        for guild_id, logger in self.guild_managers.items():
+            if guild_id in ['system', 'N/A']:
+                continue
+                
+            # Check if logger has been inactive
+            # For simplicity, we'll check if no handlers are present or log directory is old
+            if not logger.handlers:
+                inactive_guilds.append(guild_id)
+                continue
+            
+            # Check log directory modification time
+            guild_log_dir = self._get_guild_log_dir(guild_id)
+            if os.path.exists(guild_log_dir):
+                last_modified = datetime.fromtimestamp(os.path.getmtime(guild_log_dir))
+                if (current_time - last_modified).total_seconds() > (hours_threshold * 3600):
+                    inactive_guilds.append(guild_id)
+        
+        # Clean up inactive loggers
+        for guild_id in inactive_guilds:
+            if guild_id in self.guild_managers:
+                logger = self.guild_managers[guild_id]
+                logger.handlers.clear()
+                del self.guild_managers[guild_id]
+            
+            if guild_id in self.guild_config_managers:
+                del self.guild_config_managers[guild_id]
+        
+        if inactive_guilds:
+            self.logger.debug(f"Cleaned up {len(inactive_guilds)} inactive guild loggers")
+    
+    def get_all_active_guilds(self) -> List[str]:
+        """Get list of all currently active guilds."""
+        return [guild_id for guild_id in self.guild_managers.keys() if guild_id not in ['system', 'N/A']]
+    
+    def get_configuration_summary(self) -> Dict[str, Any]:
+        """Get summary of current logging configuration."""
+        return {
+            "yaml_config_available": self._use_yaml_config,
+            "active_guilds": len(self.get_all_active_guilds()),
+            "colored_logs_enabled": self.enable_colored_logs,
+            "config_source": "yaml" if self._use_yaml_config else "fallback",
+            "log_base_dir": self.log_base_dir
+        }
+    
+    def reload_configuration(self):
+        """Reload configuration from YAML file."""
+        if self._use_yaml_config and hasattr(self.config, 'reload_configuration'):
+            self.config.reload_configuration()
+            self._setup_configuration()
+            self.logger.info("Logging configuration reloaded successfully")
+        else:
+            self.logger.warning("Configuration reload not available")
+    
+    def shutdown(self):
+        """Shutdown all loggers and cleanup resources."""
+        for logger in self.guild_managers.values():
+            logger.handlers.clear()
+        
+        self.guild_managers.clear()
+        self.guild_config_managers.clear()
+        
+        if hasattr(self.config, 'cleanup'):
+            self.config.cleanup()
+        
+        self.logger.info("UnifiedLoggerManager shutdown completed")
+    
+    def setup_root_logger(self):
+        """Setup root logger with appropriate handlers and level."""
+        import logging
+        
+        root_logger = logging.getLogger()
+        
+        # Set root logger level based on configuration
+        root_level = getattr(self.config, 'root_logger_level', 'INFO')
+        root_logger.setLevel(getattr(logging, root_level.upper()))
+        
+        # This prevents duplicate output when ColoredConsoleHandler is already handling console logging
+        has_colored_console = any(
+            isinstance(handler, ColoredConsoleHandler)
+            for handler in root_logger.handlers
+        ) or (
+            # Also check if any guild loggers have ColoredConsoleHandler
+            hasattr(self, 'guild_managers') and any(
+                isinstance(h, ColoredConsoleHandler)
+                for logger in self.guild_managers.values()
+                for h in logger.handlers
+            )
+        )
+        
+        if not has_colored_console and self._should_add_console_handler():
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(logging.DEBUG)
+            
+            # Use simple format for root logger
+            formatter = logging.Formatter(
+                "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+                datefmt='%H:%M:%S'
+            )
+            console_handler.setFormatter(formatter)
+            root_logger.addHandler(console_handler)
+            
+            self.logger.debug("Root logger console handler added")
+        
+        # Ensure propagation is enabled for proper logging hierarchy
+        root_logger.propagate = True
+        
+        self.logger.debug(f"Root logger setup completed - level: {root_logger.level}, handlers: {len(root_logger.handlers)}")
+    
+    def initialize_logging_system(self):
+        """Initialize the complete logging system including root logger."""
+        self.setup_root_logger()
+        
+        # Setup system logger as well
+        system_logger = self.get_system_logger()
+        
+        self.logger.info("Complete logging system initialized successfully")
+        return system_logger
+
+
+# Global unified logger manager instance
+_unified_logger_manager = None
+
+
+def get_unified_logger_manager(config_path: Optional[str] = None) -> UnifiedLoggerManager:
+    """Get or create the global unified logger manager instance.
+    
+    Args:
+        config_path: Path to logging.yaml config file
+        
+    Returns:
+        UnifiedLoggerManager instance
+    """
+    global _unified_logger_manager
+    
+    if _unified_logger_manager is None:
+        _unified_logger_manager = UnifiedLoggerManager(config_path)
+    
+    return _unified_logger_manager
+
+
+# Legacy compatibility - DEPRECATED
+__all__ = [
+    "UnifiedLoggerManager",
+    "GuildBasedRotatingFileHandler",
+    "ColoredConsoleHandler",
+    "GuildConfigManager",
+    "StructuredRotatingFileHandler",
+    "TimedRotatingFileHandler",
+    "get_unified_logger_manager",
+    "apply_colors",
+]

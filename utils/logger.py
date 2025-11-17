@@ -3,7 +3,7 @@ logging utilities following technical specifications.
 
 This module provides consistent logging capabilities across all modules,
 including structured logging, context tracking, and performance monitoring.
-Now integrated with the main logs.py system for unified logging architecture.
+Now integrated with YAML configuration for unified logging architecture.
 """
 
 import logging
@@ -13,39 +13,67 @@ import functools
 from typing import Optional, Dict, Any, Union
 from datetime import datetime, timezone
 from contextlib import contextmanager
-# Import the structured logging system from logs.py
-from logs import setup_enhanced_logger, StructuredRotatingFileHandler
+# Import LoggingConfig for centralized configuration management
+from addons.settings import LoggingConfig
 
 
 class LoggerMixin:
     """Mixin class providing consistent logging capabilities across modules.
     
-    Now integrated with the structured logging system from logs.py for unified architecture.
+    Now integrated with YAML configuration for unified architecture.
     
     Features:
     - Automatic correlation ID generation
     - Guild and user context tracking
     - Performance logging decorators
     - Category-based logging
-    - Structured logging with extra fields using ENHANCED_FORMAT
+    - Structured logging with extra fields using YAML configuration
     """
     
     def __init__(self, module_name: Optional[str] = None):
-        """Initialize LoggerMixin with structured logging system.
+        """Initialize LoggerMixin with YAML-based logging system.
         
         Args:
             module_name: Name of the module using this logger
         """
         self._module_name = module_name or self.__class__.__name__
-        # Use the structured logger from logs.py system for SYSTEM logs (not guild-based)
-        # Module names should NOT be treated as guild IDs to prevent wrong directory structure
+        
+        # Use LoggingConfig for centralized configuration management
         try:
-            self._logger = setup_enhanced_logger('system')
+            self._logging_config = LoggingConfig()
+            self._use_yaml_config = True
         except Exception:
-            # Fallback to root logger if structured logger fails (e.g., during early startup)
+            # Fallback to basic configuration if LoggingConfig not available
+            self._logging_config = self._create_fallback_config()
+            self._use_yaml_config = False
+        
+        # Get system logger using the unified logging system
+        try:
+            from logs import get_unified_logger_manager
+            # Use lazy import to avoid circular dependency
+            manager = get_unified_logger_manager()
+            self._logger = manager.get_system_logger()
+        except ImportError:
+            # Fallback to root logger if unified logger fails (e.g., during early startup)
             self._logger = logging.getLogger(self._module_name)
             self._setup_fallback_handler()
+        except Exception:
+            # Fallback to root logger for any other issues
+            self._logger = logging.getLogger(self._module_name)
+            self._setup_fallback_handler()
+        
         self._correlation_id = None
+    
+    def _create_fallback_config(self):
+        """Create fallback configuration when YAML config is not available."""
+        class FallbackConfig:
+            def __init__(self):
+                self.enable_colored_logs = True
+                self.level_colors = {
+                    'DEBUG': '\033[90m', 'INFO': '\033[92m', 'WARNING': '\033[93m',
+                    'ERROR': '\033[91m', 'CRITICAL': '\033[95m', 'RESET': '\033[0m'
+                }
+        return FallbackConfig()
         
     def _setup_fallback_handler(self):
         """Setup fallback console handler for early startup logging."""
@@ -66,14 +94,16 @@ class LoggerMixin:
     
     def _generate_correlation_id(self) -> str:
         """Generate a unique correlation ID for request tracing."""
-        return str(uuid.uuid4())[:8]
+        # Use correlation_id_length from YAML config or fallback to 8
+        correlation_length = getattr(self._logging_config, 'correlation_id_length', 8)
+        return str(uuid.uuid4())[:correlation_length]
     
     def _get_context_extra(self,
                           category: str = "SYSTEM",
                           guild_id: Optional[str] = None,
                           user_id: Optional[str] = None,
                           **kwargs) -> Dict[str, Any]:
-        """Get structured logging extra fields with context compatible with logs.py.
+        """Get structured logging extra fields with context compatible with unified logging system.
         
         Args:
             category: Log category (SYSTEM, USER_ACTION, PERFORMANCE, etc.)
@@ -82,12 +112,12 @@ class LoggerMixin:
             **kwargs: Additional structured fields
             
         Returns:
-            Dictionary with structured logging fields compatible with logs.py format
+            Dictionary with structured logging fields compatible with unified format
         """
         if not self._correlation_id:
             self._correlation_id = self._generate_correlation_id()
         
-        # Use field names compatible with logs.py ENHANCED_FORMAT
+        # Use field names compatible with unified logging system ENHANCED_FORMAT
         extra = {
             "log_category": category,
             "mod_name": self._module_name,
