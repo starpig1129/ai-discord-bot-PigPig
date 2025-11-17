@@ -130,79 +130,34 @@ class ColoredConsoleHandler(logging.StreamHandler):
     def emit(self, record):
         """Emit log record to console with color support."""
         try:
-            if self.simple_format:
-                # Simple format with enhanced message context
-                # Extract structured information from record
-                log_category = getattr(record, 'log_category', getattr(record, 'category', None))
-                guild_id = getattr(record, 'guild_id', None)
-                channel_name = getattr(record, 'channel_name', None)
-                author_name = getattr(record, 'author_name', None)
-                message_content = getattr(record, 'message_content', None)
+            # Set custom_module for consistent formatting
+            if not hasattr(record, 'custom_module') or not getattr(record, 'custom_module', None):
+                record.custom_module = getattr(record, 'module_name', getattr(record, 'mod_name', record.name))
+            
+            # Format base message using consistent formatter
+            base_msg = self.base_formatter.format(record)
+            
+            # Extract structured information for MESSAGE categories
+            log_category = getattr(record, 'log_category', getattr(record, 'category', None))
+            channel_name = getattr(record, 'channel_name', None)
+            author_name = getattr(record, 'author_name', None)
+            message_content = getattr(record, 'message_content', None)
+            
+            # Add structured context if available (for MESSAGE categories)
+            msg = base_msg
+            if log_category and 'MESSAGE' in log_category and any([channel_name, author_name, message_content]):
+                context_parts = []
+                if channel_name:
+                    context_parts.append(f"CH:{channel_name}")
+                if author_name:
+                    context_parts.append(f"USER:{author_name}")
+                if message_content is not None:
+                    # Truncate long messages for console display
+                    content_preview = message_content[:50] + "..." if len(message_content) > 50 else message_content
+                    context_parts.append(f"MSG:{content_preview}")
                 
-                # Build enhanced message with structured info
-                base_msg = self.base_formatter.format(record)
-                
-                # Add structured context if available (for MESSAGE categories)
-                if log_category and 'MESSAGE' in log_category and any([channel_name, author_name]):
-                    context_parts = []
-                    # Note: guild_id is intentionally excluded from console display
-                    if channel_name:
-                        context_parts.append(f"CH:{channel_name}")
-                    if author_name:
-                        context_parts.append(f"USER:{author_name}")
-                    if message_content is not None:
-                        # Truncate long messages for console display
-                        content_preview = message_content[:50] + "..." if len(message_content) > 50 else message_content
-                        context_parts.append(f"MSG:{content_preview}")
-                    
-                    if context_parts:
-                        msg = f"{base_msg} [{' | '.join(context_parts)}]"
-                    else:
-                        msg = base_msg
-                else:
-                    msg = base_msg
-            else:
-                # Enhanced format: add extra context
-                # Initialize extra context dictionary
-                extra_context = {}
-                
-                # Extract or set defaults for structured logging
-                extra_context['log_category'] = getattr(record, 'category', 'SYSTEM')
-                extra_context['custom_module'] = getattr(record, 'mod_name',
-                                                        getattr(record, 'module_name', record.name))
-                
-                # Extract function name with better fallback logic
-                function_name = 'unknown'
-                if getattr(record, 'function_name', None):
-                    function_name = getattr(record, 'function_name')
-                elif getattr(record, 'function', None):
-                    function_name = getattr(record, 'function')
-                elif getattr(record, 'funcName', None):
-                    function_name = getattr(record, 'funcName')
-                elif hasattr(record, 'name') and '.' in record.name:
-                    function_name = record.name.split('.')[-1]
-                
-                extra_context['function_name'] = function_name
-                extra_context['guild_id'] = getattr(record, 'guild_id', 'N/A')
-                extra_context['user_id'] = getattr(record, 'user_id', 'N/A')
-                extra_context['correlation_id'] = getattr(record, 'correlation_id', str(uuid.uuid4())[:8])
-                extra_context['duration_ms'] = getattr(record, 'duration_ms', None)
-                extra_context['error_code'] = getattr(record, 'error_code', None)
-                
-                # Format extra context for display
-                extra_context_parts = []
-                if extra_context.get('duration_ms'):
-                    extra_context_parts.append(f"[DUR:{extra_context['duration_ms']:.1f}ms]")
-                if extra_context.get('error_code'):
-                    extra_context_parts.append(f"[ERR:{extra_context['error_code']}]")
-                
-                extra_context['extra_context'] = ' '.join(extra_context_parts)
-                
-                # Add extra context to record for formatter access
-                record.__dict__.update(extra_context)
-                
-                # Format message
-                msg = self.base_formatter.format(record)
+                if context_parts:
+                    msg = f"{base_msg} [{' | '.join(context_parts)}]"
             
             # Apply colors if enabled
             colored_msg = apply_colors(msg, self.enable_colored_logs)
@@ -234,10 +189,10 @@ class GuildBasedRotatingFileHandler(logging.Handler):
         self._create_guild_directory()
         self._open_current_log_file()
         
-        # Structured formatter with structured data support
+        # Structured formatter with consistent format and time format
         self.formatter = logging.Formatter(
-            ENHANCED_FORMAT,
-            datefmt='%Y-%m-%dT%H:%M:%S'
+            "[%(asctime)s] [%(levelname)s] [%(custom_module)s] %(message)s",
+            datefmt='%H:%M:%S'
         )
         
         # Initialize guild configuration manager
@@ -313,49 +268,35 @@ class GuildBasedRotatingFileHandler(logging.Handler):
             # Check if log rotation is needed
             self._rotate_logs_if_needed()
             
-            # Initialize extra context dictionary
-            extra_context = {}
+            # Set custom_module for consistent formatting
+            if not hasattr(record, 'custom_module') or not getattr(record, 'custom_module', None):
+                record.custom_module = getattr(record, 'module_name', getattr(record, 'mod_name', record.name))
             
-            # Extract or set defaults for structured logging
-            extra_context['log_category'] = getattr(record, 'log_category', getattr(record, 'category', 'SYSTEM'))
-            extra_context['custom_module'] = getattr(record, 'mod_name',
-                                                    getattr(record, 'module_name', record.name))
-            
-            # Extract function name with better fallback logic
-            function_name = 'unknown'
-            if getattr(record, 'function_name', None):
-                function_name = getattr(record, 'function_name')
-            elif getattr(record, 'function', None):
-                function_name = getattr(record, 'function')
-            elif getattr(record, 'funcName', None):
-                function_name = getattr(record, 'funcName')
-            elif hasattr(record, 'name') and '.' in record.name:
-                function_name = record.name.split('.')[-1]
-            
-            extra_context['function_name'] = function_name
-            extra_context['guild_id'] = getattr(record, 'guild_id', self.guild_id)
-            extra_context['user_id'] = getattr(record, 'user_id', 'N/A')
-            extra_context['correlation_id'] = getattr(record, 'correlation_id', str(uuid.uuid4())[:8])
-            extra_context['duration_ms'] = getattr(record, 'duration_ms', None)
-            extra_context['error_code'] = getattr(record, 'error_code', None)
-            
-            # Format extra context for display
-            extra_context_parts = []
-            if extra_context.get('duration_ms'):
-                extra_context_parts.append(f"[DUR:{extra_context['duration_ms']:.1f}ms]")
-            if extra_context.get('error_code'):
-                extra_context_parts.append(f"[ERR:{extra_context['error_code']}]")
-            
-            extra_context['extra_context'] = ' '.join(extra_context_parts)
-            
-            # Add extra context to record for formatter access
-            record.__dict__.update(extra_context)
-            
-            # Format message with template
-            if hasattr(self, 'formatter') and self.formatter is not None:
-                msg = self.formatter.format(record)
+            # Format base message using consistent formatter
+            if self.formatter:
+                base_msg = self.formatter.format(record)
             else:
-                msg = record.getMessage()
+                base_msg = record.getMessage()
+            
+            # Extract structured information for MESSAGE categories
+            log_category = getattr(record, 'log_category', getattr(record, 'category', None))
+            channel_name = getattr(record, 'channel_name', None)
+            author_name = getattr(record, 'author_name', None)
+            message_content = getattr(record, 'message_content', None)
+            
+            # Add structured context if available (for MESSAGE categories)
+            msg = base_msg
+            if log_category and 'MESSAGE' in log_category and any([channel_name, author_name, message_content]):
+                context_parts = []
+                if channel_name:
+                    context_parts.append(f"CH:{channel_name}")
+                if author_name:
+                    context_parts.append(f"USER:{author_name}")
+                if message_content is not None:
+                    context_parts.append(f"MSG:{message_content}")
+                
+                if context_parts:
+                    msg = f"{base_msg} [{' | '.join(context_parts)}]"
             
             self.stream.write(msg + '\n')
             self.stream.flush()
