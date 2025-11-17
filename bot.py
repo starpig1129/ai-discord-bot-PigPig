@@ -36,11 +36,12 @@ import json
 import logging
 import uuid
 import asyncio
+from typing import Optional
 from discord.ext import commands, tasks
 from itertools import cycle
 from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
-from logs import setup_enhanced_logger, TimedRotatingFileHandler
+from logs import setup_enhanced_logger, TimedRotatingFileHandler, get_system_logger
 from llm.orchestrator import Orchestrator
 
 
@@ -213,7 +214,8 @@ class PigPig(commands.Bot):
         try:
             await self.change_presence(*args, **kwargs)
         except ConnectionResetError:
-            logger = self.get_logger_for_guild("Bot")
+            # Use system logger for connection reset errors
+            logger = get_system_logger()
             logger.warning("Connection reset error while changing presence, retrying in 60 seconds...", extra={
                 "log_category": "SYSTEM",
                 "mod_name": "bot"
@@ -224,7 +226,7 @@ class PigPig(commands.Bot):
         """Get or create logger for a specific guild.
         
         Args:
-            guild_name (str): Name of the guild to get logger for.
+            guild_name (str): Name of the guild to get logger for (for backward compatibility).
             
         Returns:
             logging.Logger: Logger instance for the specified guild.
@@ -232,11 +234,56 @@ class PigPig(commands.Bot):
         Note:
             Creates a new logger if one doesn't exist for the guild.
         """
-        if guild_name in self.loggers:
-            return self.loggers[guild_name]
+        # For backward compatibility, we need to find guild_id from guild_name
+        # This should be updated to use guild_id directly where possible
+        guild_id = None
+        if hasattr(self, 'guilds'):
+            for guild in self.guilds:
+                if guild.name == guild_name:
+                    guild_id = str(guild.id)
+                    break
+        
+        if guild_id and guild_id in self.loggers:
+            return self.loggers[guild_id]
         else:
             self.setup_logger_for_guild(guild_name)
-            return self.loggers[guild_name]
+            # Return logger based on guild_id if found, otherwise use guild_name for system logs
+            if guild_id and guild_id in self.loggers:
+                return self.loggers[guild_id]
+            else:
+                return self.loggers.get(guild_name, self.loggers.get('system'))
+        
+    def get_logger_for_guild_id(self, guild_id: str, guild_name: Optional[str] = None):
+        """Get or create logger for a specific guild using guild ID.
+        
+        Args:
+            guild_id (str): Discord guild ID for the logger.
+            guild_name (str): Name of the guild (optional, for documentation).
+            
+        Returns:
+            logging.Logger: Logger instance for the specified guild.
+            
+        Note:
+            This is the preferred method that uses actual Discord guild IDs.
+        """
+        if guild_id in self.loggers:
+            return self.loggers[guild_id]
+        else:
+            self.setup_logger_for_guild_id(guild_id, guild_name)
+            return self.loggers[guild_id]
+        
+    def setup_logger_for_guild_id(self, guild_id: str, guild_name: Optional[str] = None):
+        """Set up logger for a guild using guild ID.
+        
+        Args:
+            guild_id (str): Discord guild ID for the logger.
+            guild_name (str): Name of the guild (optional, for configuration).
+            
+        Note:
+            Only creates logger if one doesn't already exist for the guild.
+        """
+        if guild_id not in self.loggers:
+            self.loggers[guild_id] = setup_logger(guild_id, level="INFO")
         
     def setup_logger_for_guild(self, guild_name):
         """Set up logger for a guild if it doesn't exist.
@@ -246,9 +293,21 @@ class PigPig(commands.Bot):
             
         Note:
             Only creates logger if one doesn't already exist for the guild.
+            This method is kept for backward compatibility but will be deprecated.
         """
-        if guild_name not in self.loggers:
-            self.loggers[guild_name] = setup_logger(guild_name)
+        # For backward compatibility, try to find guild by name
+        guild_id = None
+        if hasattr(self, 'guilds'):
+            for guild in self.guilds:
+                if guild.name == guild_name:
+                    guild_id = str(guild.id)
+                    break
+        
+        if guild_id and guild_id not in self.loggers:
+            self.loggers[guild_id] = setup_logger(guild_id, level="INFO")
+        elif not guild_id and guild_name not in self.loggers:
+            # If no guild found, treat as system log
+            self.loggers[guild_name] = setup_logger(guild_name, level="INFO")
         
     async def on_message(self, message: discord.Message, /) -> None:
         """Handle incoming Discord messages.
@@ -277,10 +336,11 @@ class PigPig(commands.Bot):
             if not message.guild:
                 return
             
-            # Set up guild-specific logging
+            # Set up guild-specific logging using proper guild ID
+            guild_id = str(message.guild.id)
             guild_name = message.guild.name
-            self.setup_logger_for_guild(guild_name)
-            logger = self.loggers[guild_name]
+            self.setup_logger_for_guild_id(guild_id, guild_name)
+            logger = self.get_logger_for_guild_id(guild_id, guild_name)
             
             # Determine message category and log with complete structure
             if message.author.bot:
@@ -307,10 +367,10 @@ class PigPig(commands.Bot):
                     message_type = "empty_user"
                     message_content = "[NO_CONTENT]"
             
-            # Log message with complete structured format
+            # Log message with complete structured format using proper guild ID
             logger.info("Message received", extra={
                 "log_category": message_category,
-                "guild_id": str(message.guild.id),
+                "guild_id": guild_id,
                 "channel_id": str(message.channel.id),
                 "channel_name": getattr(message.channel, 'name', 'Unknown'),
                 "message_type": message_type,
@@ -379,10 +439,15 @@ class PigPig(commands.Bot):
             if not before.guild or before.author.bot or not after.guild or after.author.bot:
                 return
             
-            logger = self.get_logger_for_guild(before.guild.name)
+            # Use proper guild ID for logging setup
+            guild_id = str(before.guild.id)
+            guild_name = before.guild.name
+            self.setup_logger_for_guild_id(guild_id, guild_name)
+            logger = self.get_logger_for_guild_id(guild_id, guild_name)
+            
             logger.info("Message edited", extra={
                 "log_category": "MESSAGE_EDIT",
-                "guild_id": str(before.guild.id),
+                "guild_id": guild_id,
                 "user_id": str(before.author.id),
                 "channel_name": getattr(before.channel, 'name', 'DM'),
                 "channel_id": str(before.channel.id),
@@ -391,7 +456,6 @@ class PigPig(commands.Bot):
                 "author_name": str(before.author)
             })
             
-            guild_id = str(after.guild.id)
             channel_manager = self.get_cog('ChannelManager')
             
             # Implement logic for generating responses
@@ -401,7 +465,6 @@ class PigPig(commands.Bot):
                         if msg.reference and msg.reference.message_id == before.id and msg.author.id == self.user.id:
                             await msg.delete()  # Delete previous reply
                     if channel_manager:
-                        guild_id = str(after.guild.id)
                         is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(after.channel, guild_id)
                         # Check if it's a story mode channel
                         if channel_mode == 'story':
@@ -448,13 +511,15 @@ class PigPig(commands.Bot):
                 not module.startswith('.')):
                 try:
                     await self.load_extension(f"cogs.{module[:-3]}")
-                    logger = self.get_logger_for_guild("Bot")
+                    # Use system logger for loading success
+                    logger = get_system_logger()
                     logger.info(f"Successfully loaded cog module: {module[:-3]}", extra={
                         "log_category": "SYSTEM",
                         "mod_name": "bot"
                     })
                 except Exception as e:
-                    logger = self.get_logger_for_guild("Bot")
+                    # Use system logger for loading errors
+                    logger = get_system_logger()
                     logger.error(f"Failed to load cog module: {module[:-3]}", extra={
                         "log_category": "SYSTEM",
                         "mod_name": "bot",
@@ -505,7 +570,8 @@ class PigPig(commands.Bot):
             - Initializes logger for each guild the bot is in
             - Starts periodic status updates if not already running
         """
-        logger = self.get_logger_for_guild("Bot")
+        # Use system logger for startup information
+        logger = get_system_logger()
         logger.info("==================", extra={"log_category": "SYSTEM", "mod_name": "bot"})
         logger.info(f"Bot logged in as: {self.user}", extra={"log_category": "SYSTEM", "mod_name": "bot"})
         logger.info(f"Bot ID: {self.user.id}", extra={"log_category": "SYSTEM", "mod_name": "bot"})
@@ -524,7 +590,8 @@ class PigPig(commands.Bot):
                 channel_info = f"channel_name: {channel.name},channel_id: {channel.id},channel_type: {str(channel.type)}"
                 guild_info['channels'].append(channel_info)
             data['guilds'].append(guild_info)
-            self.setup_logger_for_guild(guild.name)  # Set up logger for each server
+            # Use proper guild ID for logging setup
+            self.setup_logger_for_guild_id(str(guild.id), guild.name)  # Set up logger for each server using guild ID
         # Write data to JSON file
         with open('logs/guilds_and_channels.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
@@ -558,8 +625,8 @@ class PigPig(commands.Bot):
             - Uses "Bot" as guild name for logger if guild context unavailable
             - Prints to console in addition to logging to file
         """
-        # Get logger
-        logger = self.get_logger_for_guild("Bot")
+        # Use system logger for event handler errors
+        logger = get_system_logger()
 
         # Log error
         logger.error("Event handler error", extra={
@@ -574,7 +641,9 @@ class PigPig(commands.Bot):
             "error_details": traceback.format_exc()
         })
 
-        await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
+        error_info = sys.exc_info()[1]
+        if error_info and isinstance(error_info, Exception):
+            await func.report_error(error_info, f"on_error event: {event_method}")
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         """Handle errors in command execution.
@@ -605,7 +674,7 @@ class PigPig(commands.Bot):
         # Try to get logger through bot
         logger = None
         if hasattr(self, "get_logger_for_guild"):
-            guild_name = ctx.guild.name if getattr(ctx, "guild", None) else "DirectMessage"
+            guild_name = ctx.guild.name if ctx.guild else "DirectMessage"
             try:
                 logger = self.get_logger_for_guild(guild_name)
             except Exception:

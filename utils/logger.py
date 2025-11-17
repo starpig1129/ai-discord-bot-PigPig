@@ -37,9 +37,10 @@ class LoggerMixin:
             module_name: Name of the module using this logger
         """
         self._module_name = module_name or self.__class__.__name__
-        # Use the structured logger from logs.py system, with fallback for early startup
+        # Use the structured logger from logs.py system for SYSTEM logs (not guild-based)
+        # Module names should NOT be treated as guild IDs to prevent wrong directory structure
         try:
-            self._logger = setup_enhanced_logger(self._module_name)
+            self._logger = setup_enhanced_logger('system')
         except Exception:
             # Fallback to root logger if structured logger fails (e.g., during early startup)
             self._logger = logging.getLogger(self._module_name)
