@@ -142,19 +142,35 @@ class ColoredConsoleHandler(logging.StreamHandler):
             channel_name = getattr(record, 'channel_name', None)
             author_name = getattr(record, 'author_name', None)
             message_content = getattr(record, 'message_content', None)
+            before_content = getattr(record, 'before_content', None)
+            after_content = getattr(record, 'after_content', None)
+            content_changed = getattr(record, 'content_changed', None)
             
             # Add structured context if available (for MESSAGE categories)
             msg = base_msg
-            if log_category and 'MESSAGE' in log_category and any([channel_name, author_name, message_content]):
+            if log_category and 'MESSAGE' in log_category and any([channel_name, author_name, message_content, before_content, after_content]):
                 context_parts = []
                 if channel_name:
                     context_parts.append(f"CH:{channel_name}")
                 if author_name:
                     context_parts.append(f"USER:{author_name}")
-                if message_content is not None:
-                    # Truncate long messages for console display
-                    content_preview = message_content[:50] + "..." if len(message_content) > 50 else message_content
-                    context_parts.append(f"MSG:{content_preview}")
+                
+                # Handle MESSAGE_EDIT specifically
+                if log_category == 'MESSAGE_EDIT':
+                    if before_content is not None:
+                        before_preview = before_content[:30] + "..." if len(before_content) > 30 else before_content
+                        context_parts.append(f"BEFORE:{before_preview}")
+                    if after_content is not None:
+                        after_preview = after_content[:30] + "..." if len(after_content) > 30 else after_content
+                        context_parts.append(f"AFTER:{after_preview}")
+                    if content_changed is not None:
+                        context_parts.append(f"CHANGED:{str(content_changed).upper()}")
+                else:
+                    # Regular MESSAGE categories
+                    if message_content is not None:
+                        # Truncate long messages for console display
+                        content_preview = message_content[:50] + "..." if len(message_content) > 50 else message_content
+                        context_parts.append(f"MSG:{content_preview}")
                 
                 if context_parts:
                     msg = f"{base_msg} [{' | '.join(context_parts)}]"
@@ -283,17 +299,31 @@ class GuildBasedRotatingFileHandler(logging.Handler):
             channel_name = getattr(record, 'channel_name', None)
             author_name = getattr(record, 'author_name', None)
             message_content = getattr(record, 'message_content', None)
+            before_content = getattr(record, 'before_content', None)
+            after_content = getattr(record, 'after_content', None)
+            content_changed = getattr(record, 'content_changed', None)
             
             # Add structured context if available (for MESSAGE categories)
             msg = base_msg
-            if log_category and 'MESSAGE' in log_category and any([channel_name, author_name, message_content]):
+            if log_category and 'MESSAGE' in log_category and any([channel_name, author_name, message_content, before_content, after_content]):
                 context_parts = []
                 if channel_name:
                     context_parts.append(f"CH:{channel_name}")
                 if author_name:
                     context_parts.append(f"USER:{author_name}")
-                if message_content is not None:
-                    context_parts.append(f"MSG:{message_content}")
+                
+                # Handle MESSAGE_EDIT specifically
+                if log_category == 'MESSAGE_EDIT':
+                    if before_content is not None:
+                        context_parts.append(f"BEFORE:{before_content}")
+                    if after_content is not None:
+                        context_parts.append(f"AFTER:{after_content}")
+                    if content_changed is not None:
+                        context_parts.append(f"CHANGED:{str(content_changed).upper()}")
+                else:
+                    # Regular MESSAGE categories
+                    if message_content is not None:
+                        context_parts.append(f"MSG:{message_content}")
                 
                 if context_parts:
                     msg = f"{base_msg} [{' | '.join(context_parts)}]"

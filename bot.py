@@ -445,15 +445,30 @@ class PigPig(commands.Bot):
             self.setup_logger_for_guild_id(guild_id, guild_name)
             logger = self.get_logger_for_guild_id(guild_id, guild_name)
             
+            # Handle message content with proper categorization
+            before_content = before.content if before.content else "[NO_CONTENT]"
+            after_content = after.content if after.content else "[NO_CONTENT]"
+            
+            # Determine if content actually changed
+            content_changed = before_content != after_content
+            
+            # Log message edit with complete structured format using proper guild ID
             logger.info("Message edited", extra={
                 "log_category": "MESSAGE_EDIT",
                 "guild_id": guild_id,
-                "user_id": str(before.author.id),
-                "channel_name": getattr(before.channel, 'name', 'DM'),
                 "channel_id": str(before.channel.id),
-                "before_content": before.content,
-                "after_content": after.content,
-                "author_name": str(before.author)
+                "channel_name": getattr(before.channel, 'name', 'Unknown'),
+                "message_id": str(before.id),
+                "author_id": str(before.author.id),
+                "author_name": before.author.name,
+                "is_bot": before.author.bot,
+                "before_content": before_content,
+                "after_content": after_content,
+                "content_changed": content_changed,
+                "before_length": len(before.content) if before.content else 0,
+                "after_length": len(after.content) if after.content else 0,
+                "timestamp": before.created_at.isoformat(),
+                "edit_timestamp": after.edited_at.isoformat() if after.edited_at else None
             })
             
             channel_manager = self.get_cog('ChannelManager')
