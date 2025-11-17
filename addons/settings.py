@@ -51,7 +51,7 @@ logger.debug(f"addons.settings CONFIG_ROOT={CONFIG_ROOT}")
 
 
 class BaseConfig:
-    """對應 config/base.yaml 的設定物件"""
+    """Configuration object mapped from config/base.yaml"""
 
     def __init__(self, path: str = "config/base.yaml") -> None:
         self.path = path
@@ -60,7 +60,36 @@ class BaseConfig:
         self.activity: list = data.get("activity", [])
         self.ipc_server: dict = data.get("ipc_server", {})
         self.version: str = data.get("version", "")
-        self.logging: dict = data.get("logging", {})
+
+        # Logging configuration schema (merge defaults with provided values).
+        # The resulting `self.logging` is a plain dict so other modules (e.g. addons.logging_manager)
+        # can shallow-merge it with their defaults.
+        defaults = {
+            "console": {"enabled": True, "color": True},
+            "color_map": {
+                "level": {"ERROR": "red", "WARNING": "yellow", "INFO": "green", "DEBUG": "cyan"},
+                "source": {"system": "magenta", "external": "blue"},
+            },
+            "async": {"batch_size": 500, "flush_interval": 2.0},
+            "rotation": {"policy": "daily", "compress": True, "retention_days": 300},
+            "per_level_retention": {"INFO": 300, "WARNING": 300, "ERROR": 900},
+            "fsync_on_flush": False,
+            "log_base_path": "logs",
+        }
+        cfg = data.get("logging", {}) or {}
+        # Shallow merge top-level keys
+        merged = {**defaults, **cfg}
+        # Merge nested structures conservatively
+        merged["console"] = {**defaults["console"], **cfg.get("console", {})}
+        merged["color_map"] = {
+            "level": {**defaults["color_map"]["level"], **cfg.get("color_map", {}).get("level", {})},
+            "source": {**defaults["color_map"]["source"], **cfg.get("color_map", {}).get("source", {})},
+        }
+        merged["async"] = {**defaults["async"], **cfg.get("async", {})}
+        merged["rotation"] = {**defaults["rotation"], **cfg.get("rotation", {})}
+        merged["per_level_retention"] = {**defaults["per_level_retention"], **cfg.get("per_level_retention", {})}
+
+        self.logging: dict = merged
 
 
 class LLMConfig:

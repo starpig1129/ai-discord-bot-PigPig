@@ -40,56 +40,15 @@ from itertools import cycle
 from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
 from llm.orchestrator import Orchestrator
-from logs import TimedRotatingFileHandler
+from addons.logging import get_logger
 
 
 from addons.settings import base_config, memory_config
 from addons.tokens import tokens
 
 
-def setup_logger(server_name):
-    """Configure logging for a specific server.
-    
-    Sets up a logger with timed rotating file handler for a Discord server.
-    Suppresses INFO and DEBUG messages from third-party libraries while
-    maintaining INFO level logging for application-specific logs.
-    
-    Args:
-        server_name (str): The name of the Discord server to create logger for.
-        
-    Returns:
-        logging.Logger: Configured logger instance for the specified server.
-        
-    Note:
-        - Root logger is set to WARNING level to suppress third-party logs
-        - Application logger is set to INFO level
-        - Uses TimedRotatingFileHandler for log rotation
-        - Prevents duplicate handlers by checking existing handlers
-    """
-    # Set root logger default level to WARNING
-    # This suppresses INFO and DEBUG messages from loggers without explicit level settings
-    logging.getLogger().setLevel(logging.WARNING)
-
-    # Explicitly set log level to WARNING for specific third-party libraries
-    third_party_loggers = [
-        "faiss", "WDM", "sqlalchemy", "httpx", "google_genai",
-        "discord", "websockets", "cogs.memory", "gpt", "jieba"
-    ]
-    for logger_name in third_party_loggers:
-        logging.getLogger(logger_name).setLevel(logging.WARNING)
-
-    # Set up specific logger for our application (per guild)
-    logger = logging.getLogger(server_name)
-    logger.setLevel(logging.INFO)  # Application logs start from INFO level
-
-    # Ensure handler is added only once per logger to avoid duplicate logs
-    if not logger.handlers:
-        handler = TimedRotatingFileHandler(server_name)
-        formatter = logging.Formatter('%(asctime)s %(levelname)s:%(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        
-    return logger
+# Logging migrated to addons.logging_manager.get_logger
+# Per-guild logger creation is now performed via get_logger(server_id, source, channel).
 
 
 class PigPig(commands.Bot):
@@ -221,16 +180,19 @@ class PigPig(commands.Bot):
             return self.loggers[guild_name]
         
     def setup_logger_for_guild(self, guild_name):
-        """Set up logger for a guild if it doesn't exist.
-        
-        Args:
-            guild_name (str): Name of the guild to set up logger for.
-            
-        Note:
-            Only creates logger if one doesn't already exist for the guild.
-        """
+        """Set up logger for a guild if it doesn't exist."""
         if guild_name not in self.loggers:
-            self.loggers[guild_name] = setup_logger(guild_name)
+            try:
+                # Use the new logging manager factory
+                self.loggers[guild_name] = get_logger(server_id=guild_name, source="server")
+            except Exception as e:
+                # Report failure via project error reporting and fall back to a best-effort creation
+                try:
+                    asyncio.create_task(func.report_error(e, f"setup_logger_for_guild: {guild_name}"))
+                except Exception:
+                    print(f"Failed to create logger for {guild_name}: {e}")
+                    # Final fallback: create logger without additional context
+                    self.loggers[guild_name] = get_logger(server_id=guild_name, source="server")
         
     async def on_message(self, message: discord.Message, /) -> None:
         """Handle incoming Discord messages.
@@ -367,6 +329,16 @@ class PigPig(commands.Bot):
             - Prints success/failure for each cog load attempt
             - Initializes performance monitoring
         """
+        # Initialize logging system early to ensure background writer starts.
+        try:
+            # Create a system-level logger to ensure background writer & sinks are initialized.
+            self.system_logger = get_logger(server_id="Bot", source="system")
+        except Exception as e:
+            try:
+                asyncio.create_task(func.report_error(e, "bot.py/setup_hook/init_logging"))
+            except Exception:
+                print("Failed to initialize system logger:", e)
+
         # Loading all the modules in `cogs` folder
         for module in os.listdir(ROOT_DIR + '/cogs'):
             # Filter conditions:
