@@ -27,13 +27,20 @@ except Exception:  # pragma: no cover - defensive fallback
 
 # Load logging configuration from settings.base_config.logging if available.
 _LOG_CFG: Dict[str, Any] = {}
-try:
-    _LOG_CFG = getattr(settings, "base_config", None).logging or {}
-except Exception:
+# Safely obtain logging config whether base_config is an object or a dict.
+base_cfg = getattr(settings, "base_config", None)
+if isinstance(base_cfg, dict):
+    # base_config provided as a dict
+    _LOG_CFG = base_cfg.get("logging", {}) or {}
+elif base_cfg is not None:
+    # base_config provided as an object with attributes
     try:
-        _LOG_CFG = settings.base_config.logging  # type: ignore[attr-defined]
+        _LOG_CFG = getattr(base_cfg, "logging", {}) or {}
     except Exception:
         _LOG_CFG = {}
+else:
+    # No base_config found; fallback to empty
+    _LOG_CFG = {}
 
 # Defaults (match plan.md defaults)
 _DEFAULTS = {
@@ -192,10 +199,13 @@ class BackgroundWriter:
                 try:
                     ts = it.get("timestamp")
                     # parse date from ISO timestamp robustly
-                    try:
-                        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                        date_str = dt.strftime("%Y%m%d")
-                    except Exception:
+                    if isinstance(ts, str):
+                        try:
+                            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                            date_str = dt.strftime("%Y%m%d")
+                        except Exception:
+                            date_str = datetime.utcnow().strftime("%Y%m%d")
+                    else:
                         date_str = datetime.utcnow().strftime("%Y%m%d")
                     server = str(it.get("server_id", "unknown"))
                     level = it.get("level", "INFO")
@@ -261,10 +271,13 @@ class BackgroundWriter:
             grouped_final: Dict[str, List[str]] = {}
             for it in remaining:
                 ts = it.get("timestamp")
-                try:
-                    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                    date_str = dt.strftime("%Y%m%d")
-                except Exception:
+                if isinstance(ts, str):
+                    try:
+                        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                        date_str = dt.strftime("%Y%m%d")
+                    except Exception:
+                        date_str = datetime.utcnow().strftime("%Y%m%d")
+                else:
                     date_str = datetime.utcnow().strftime("%Y%m%d")
                 server = str(it.get("server_id", "unknown"))
                 level = it.get("level", "INFO")
@@ -431,17 +444,49 @@ class LoggerAdapter:
         return line
 
     # Convenience API methods
-    def info(self, message: str = "", exception: Optional[BaseException] = None, **event_fields: Any) -> None:
-        self._emit("INFO", message, exception, **event_fields)
-
-    def warning(self, message: str = "", exception: Optional[BaseException] = None, **event_fields: Any) -> None:
-        self._emit("WARNING", message, exception, **event_fields)
-
-    def error(self, message: str = "", exception: Optional[BaseException] = None, **event_fields: Any) -> None:
-        self._emit("ERROR", message, exception, **event_fields)
-
-    def debug(self, message: str = "", exception: Optional[BaseException] = None, **event_fields: Any) -> None:
-        self._emit("DEBUG", message, exception, **event_fields)
+    def info(self, message: Optional[str] = None, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
+        """Emit an INFO event.
+ 
+        Accept both calling styles used across the codebase:
+        - logger.info("text", user_id=..., action=..., ...)  (positional message)
+        - logger.info(user_id=..., action=..., message="text") (message in kwargs)
+        - logger.info("text", message="...") (prefer positional message and avoid duplicate)
+        """
+        # Normalize message from positional or event_fields, avoid duplicate 'message' key.
+        if message is None and "message" in event_fields:
+            msg = event_fields.pop("message")
+        else:
+            # If both provided, prefer positional 'message' and remove kwarg to avoid duplication.
+            event_fields.pop("message", None)
+            msg = message or ""
+        self._emit("INFO", msg, exception, **event_fields)
+ 
+    def warning(self, message: Optional[str] = None, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
+        """Emit a WARNING event (handles same calling conventions as info)."""
+        if message is None and "message" in event_fields:
+            msg = event_fields.pop("message")
+        else:
+            event_fields.pop("message", None)
+            msg = message or ""
+        self._emit("WARNING", msg, exception, **event_fields)
+ 
+    def error(self, message: Optional[str] = None, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
+        """Emit an ERROR event (handles same calling conventions as info)."""
+        if message is None and "message" in event_fields:
+            msg = event_fields.pop("message")
+        else:
+            event_fields.pop("message", None)
+            msg = message or ""
+        self._emit("ERROR", msg, exception, **event_fields)
+ 
+    def debug(self, message: Optional[str] = None, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
+        """Emit a DEBUG event (handles same calling conventions as info)."""
+        if message is None and "message" in event_fields:
+            msg = event_fields.pop("message")
+        else:
+            event_fields.pop("message", None)
+            msg = message or ""
+        self._emit("DEBUG", msg, exception, **event_fields)
 
 
 # Public API

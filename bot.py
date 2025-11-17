@@ -35,6 +35,7 @@ from function import func, ROOT_DIR
 import json
 import logging
 import asyncio
+from datetime import datetime, timezone
 from discord.ext import commands, tasks
 from itertools import cycle
 from cogs.music_lib.state_manager import StateManager
@@ -407,24 +408,65 @@ class PigPig(commands.Bot):
         print(f"Discord Version: {discord.__version__}")
         print(f"Python Version: {sys.version}")
         print("------------------")
-        data = {}
-        data['guilds'] = []
+        # Log guild and channel state using per-guild structured loggers.
         for guild in self.guilds:
-            guild_info = {
-                'guild_name': guild.name,'guild_id': guild.id,
-                'channels': []
-            }
+            # Ensure logger exists and obtain it
+            try:
+                self.setup_logger_for_guild(guild.name)
+                logger = self.loggers[guild.name]
+            except Exception as e:
+                # Report and continue if logger setup fails for this guild
+                try:
+                    asyncio.create_task(func.report_error(e, f"on_ready/setup_logger:{guild.name}"))
+                except Exception:
+                    print(f"Failed to setup logger for guild {guild.name}: {e}")
+                continue
+
+            # Build channel state list
+            channels = []
             for channel in guild.channels:
-                channel_info = f"channel_name: {channel.name},channel_id: {channel.id},channel_type: {str(channel.type)}"
-                guild_info['channels'].append(channel_info)
-            data['guilds'].append(guild_info)
-            self.setup_logger_for_guild(guild.name)  # Set up logger for each server
-        # Write data to JSON file
-        with open('logs/guilds_and_channels.json', 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-        print('update succesfully guilds_and_channels.json')
+                channels.append({
+                    "name": channel.name,
+                    "id": channel.id,
+                    "type": str(channel.type),
+                })
+
+            # Persist JSON file in the server root (logs/<guild_id>/guilds_and_channels.json)
+            try:
+                log_dir = os.path.join(ROOT_DIR, "logs", str(guild.id))
+                os.makedirs(log_dir, exist_ok=True)
+                out_path = os.path.join(log_dir, "guilds_and_channels.json")
+                payload = {
+                    "guild": {"id": guild.id, "name": guild.name},
+                    "channels": channels,
+                    "timestamp": datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                }
+                with open(out_path, "w", encoding="utf-8") as fh:
+                    json.dump(payload, fh, ensure_ascii=False, indent=2)
+            except Exception as e:
+                # Report and continue if write fails for this guild
+                try:
+                    asyncio.create_task(func.report_error(e, f"on_ready/write_guild_state:{guild.id}"))
+                except Exception:
+                    print(f"Failed to write guild state for {guild.id}: {e}")
+
+        # After writing per-guild JSONs, also write a root mapping file (logs/guilds_map.json)
+        try:
+            logs_root = os.path.join(ROOT_DIR, "logs")
+            os.makedirs(logs_root, exist_ok=True)
+            map_path = os.path.join(logs_root, "guilds_map.json")
+            guild_map = {g.name: g.id for g in self.guilds}
+            with open(map_path, "w", encoding="utf-8") as mf:
+                json.dump(guild_map, mf, ensure_ascii=False, indent=2)
+        except Exception as e:
+            try:
+                asyncio.create_task(func.report_error(e, "on_ready/write_guilds_map"))
+            except Exception:
+                print(f"Failed to write guilds_map.json: {e}")
+
+        # Update tokens client id
         tokens.client_id = self.user.id
-        
+
         # Start status update task
         if not self.change_status_task.is_running():
             self.change_status_task.start()
