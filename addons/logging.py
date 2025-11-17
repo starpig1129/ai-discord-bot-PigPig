@@ -1,15 +1,14 @@
 # addons/logging_manager.py
 # Core logging manager implementing structured NDJSON sinks and console rendering.
-#
-# English comments only. Conforms to project rules (use func.report_error for error reporting)
-# and loads configuration from addons.settings.
 
-import asyncio
 import json
 import os
 import threading
 import time
 import traceback
+import logging
+import sys
+import asyncio
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from queue import Empty, Full, Queue
@@ -44,34 +43,100 @@ else:
 
 # Defaults (match plan.md defaults)
 _DEFAULTS = {
-    "console": {"enabled": True, "color": True},
+    "console": {"enabled": True, "color": True, "level": "INFO"},
     "color_map": {
-        "level": {"ERROR": "red", "WARNING": "yellow", "INFO": "green", "DEBUG": "cyan"},
-        "source": {"system": "magenta", "external": "blue"},
+        "level": {"ERROR": "red", "WARNING": "yellow", "INFO": "green", "DEBUG": "cyan", "CRITICAL": "bright_red"},
+        "source": {"system": "magenta", "external": "blue", "server": "bright_blue"},
+        "fields": {
+            "timestamp": "bright_black",
+            "channel": "bright_black",
+            "user": "bright_black",
+            "action": "bright_cyan",
+            "message": "white"
+        }
     },
     "async": {"batch_size": 500, "flush_interval": 2.0},
     "rotation": {"policy": "daily", "compress": True, "retention_days": 300},
     "per_level_retention": {"INFO": 300, "WARNING": 300, "ERROR": 900},
     "fsync_on_flush": False,
     "log_base_path": "logs",
+    "use_emoji": True,  # Enable emoji indicators
 }
 
 # Merge defaults with provided config (shallow merge is sufficient for our keys)
 CONFIG = {**_DEFAULTS, **_LOG_CFG}
 CONFIG["console"] = {**_DEFAULTS["console"], **CONFIG.get("console", {})}
 CONFIG["color_map"] = {**_DEFAULTS["color_map"], **CONFIG.get("color_map", {})}
+CONFIG["color_map"]["fields"] = {**_DEFAULTS["color_map"]["fields"], **CONFIG.get("color_map", {}).get("fields", {})}
 CONFIG["async"] = {**_DEFAULTS["async"], **CONFIG.get("async", {})}
+
+
+def _check_color_support() -> bool:
+    """Enhanced check for terminal color support including Windows."""
+    # Check if stderr is a TTY
+    if not sys.stderr.isatty():
+        return False
+    
+    # Check TERM environment variable
+    term = os.environ.get("TERM", "")
+    if term in ("dumb", ""):
+        return False
+    
+    # Check for NO_COLOR environment variable (standard)
+    if os.environ.get("NO_COLOR"):
+        return False
+    
+    # Check for FORCE_COLOR
+    if os.environ.get("FORCE_COLOR"):
+        return True
+    
+    # Windows specific check
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            # Enable ANSI escape sequences on Windows 10+
+            # STD_OUTPUT_HANDLE = -11, ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+            handle = kernel32.GetStdHandle(-11)
+            mode = ctypes.c_ulong()
+            kernel32.GetConsoleMode(handle, ctypes.byref(mode))
+            mode.value |= 0x0004
+            kernel32.SetConsoleMode(handle, mode)
+            
+            # Also enable for stderr
+            handle_err = kernel32.GetStdHandle(-12)
+            mode_err = ctypes.c_ulong()
+            kernel32.GetConsoleMode(handle_err, ctypes.byref(mode_err))
+            mode_err.value |= 0x0004
+            kernel32.SetConsoleMode(handle_err, mode_err)
+            return True
+        except Exception:
+            # If Windows ANSI setup fails, disable colors
+            return False
+    
+    return True
+
 
 # Configure loguru console sink: simple message-only single-line output.
 # Remove existing handlers and add a minimal one to keep console rendering predictable.
 try:
     loguru_logger.remove()
+    # Load console preferences from CONFIG
+    console_level = CONFIG.get("console", {}).get("level", "INFO")
+    console_color = bool(CONFIG.get("console", {}).get("color", True))
+    # Detect whether the current stderr supports ANSI colors (a TTY). If not, avoid emitting ANSI.
+    _console_supports_ansi = _check_color_support()
+    _console_use_color = console_color and _console_supports_ansi
+    # Register sink with loguru; allow colorize only when terminal supports it.
     loguru_logger.add(
-        sink=lambda msg: print(msg, end=""),
+        sys.stderr,
         format="{message}",
-        colorize=True,
-        level="DEBUG",
+        colorize=False,  # We handle coloring manually
+        level=str(console_level).upper(),
     )
+    # Expose flags for runtime checks elsewhere in this module.
+    CONSOLE_SUPPORTS_ANSI = _console_supports_ansi
+    CONSOLE_COLOR_ENABLED = _console_use_color
 except Exception:
     # If configuring loguru fails, report and continue without raising.
     if func:
@@ -79,6 +144,8 @@ except Exception:
             asyncio.create_task(func.report_error(Exception("loguru init failed"), "addons/logging_manager.py/init"))
         except Exception:
             print("loguru init failed")
+    else:
+        print("loguru init failed")
 
 
 @dataclass
@@ -304,6 +371,38 @@ class LoggerAdapter:
     actual output to BackgroundWriter and loguru console renderer.
     """
 
+    # ANSI color codes mapping
+    _COLORS = {
+        "black": "\x1b[30m",
+        "red": "\x1b[31m",
+        "green": "\x1b[32m",
+        "yellow": "\x1b[33m",
+        "blue": "\x1b[34m",
+        "magenta": "\x1b[35m",
+        "cyan": "\x1b[36m",
+        "white": "\x1b[37m",
+        "bright_black": "\x1b[90m",
+        "bright_red": "\x1b[91m",
+        "bright_green": "\x1b[92m",
+        "bright_yellow": "\x1b[93m",
+        "bright_blue": "\x1b[94m",
+        "bright_magenta": "\x1b[95m",
+        "bright_cyan": "\x1b[96m",
+        "bright_white": "\x1b[97m",
+        "bold": "\x1b[1m",
+        "dim": "\x1b[2m",
+        "reset": "\x1b[0m",
+    }
+
+    # Emoji mapping for levels
+    _LEVEL_EMOJI = {
+        "DEBUG": "🔍",
+        "INFO": "✅",
+        "WARNING": "⚠️ ",
+        "ERROR": "❌",
+        "CRITICAL": "🚨"
+    }
+
     def __init__(
         self,
         server_id: str,
@@ -370,12 +469,13 @@ class LoggerAdapter:
             console_cfg = CONFIG.get("console", {})
             if console_cfg.get("enabled", True):
                 line = self._format_console_line(record)
-                if console_cfg.get("color", True):
-                    # apply color mapping
+                # Only emit colored ANSI sequences if both configured and the runtime supports it.
+                if console_cfg.get("color", True) and globals().get("CONSOLE_COLOR_ENABLED", False):
+                    # apply color mapping (now produces ANSI sequences)
                     colorized = self._colorize_line(record, line)
-                    # loguru will handle ANSI tags like <green>...</green>
                     loguru_logger.log(record.level, colorized)
                 else:
+                    # Emit plain text message to avoid raw tags or unsupported ANSI codes.
                     loguru_logger.log(record.level, line)
         except Exception as e:
             if func:
@@ -414,34 +514,112 @@ class LoggerAdapter:
                     print("exception dump error:", e)
 
     def _format_console_line(self, record: LogRecord) -> str:
-        """Create the single-line console representation described in plan.md."""
-        # [timestamp][level][source][channel_or_file][user_id] action=... message=...
-        parts = [
-            f"[{record.timestamp}]",
-            f"[{record.level}]",
-            f"[{record.source}]",
-            f"[{record.channel_or_file}]",
-            f"[{record.user_id}]",
-        ]
+        """Create enhanced console representation with simplified timestamp and optional emoji."""
+        # Simplify timestamp to HH:MM:SS only
+        try:
+            dt = datetime.fromisoformat(record.timestamp.replace("Z", "+00:00"))
+            time_str = dt.strftime("%H:%M:%S")
+        except Exception:
+            time_str = record.timestamp[:8]  # Fallback to first 8 chars
+        
+        # Get emoji if enabled
+        emoji = ""
+        if CONFIG.get("use_emoji", True):
+            emoji = self._LEVEL_EMOJI.get(record.level, "📝") + " "
+        
+        # Build parts - only include non-empty fields
+        parts = [f"[{time_str}]", f"[{record.level}]", f"[{record.source}]"]
+        
+        if record.channel_or_file:
+            parts.append(f"[{record.channel_or_file}]")
+        if record.user_id:
+            parts.append(f"[{record.user_id}]")
+        
         header = "".join(parts)
-        action_part = f"action={record.action}" if record.action else "action="
-        msg_part = f"message={record.message}"
-        return f"{header} {action_part} {msg_part}"
+        
+        # Action and message
+        action_part = f"action={record.action}" if record.action else ""
+        msg_part = f"message={record.message}" if record.message else ""
+        
+        body = " ".join(filter(None, [action_part, msg_part]))
+        return f"{emoji}{header} {body}"
 
     def _colorize_line(self, record: LogRecord, line: str) -> str:
-        """Apply color tags according to CONFIG color_map for level and source."""
+        """Apply ANSI color codes to different parts of the log line for better readability."""
+        
         color_map = CONFIG.get("color_map", {})
         level_map = color_map.get("level", {})
         source_map = color_map.get("source", {})
-        level_color = level_map.get(record.level, "")
-        source_color = source_map.get(record.source, "")
-        # Wrap different segments in color tags if available.
-        # Priority: level color for the whole line; if absent, try source color.
-        if level_color:
-            return f"<{level_color}>{line}</{level_color}>"
-        if source_color:
-            return f"<{source_color}>{line}</{source_color}>"
-        return line
+        field_map = color_map.get("fields", {})
+        
+        # Get colors for different components
+        level_color = level_map.get(record.level, "white")
+        source_color = source_map.get(record.source, "cyan")
+        timestamp_color = field_map.get("timestamp", "bright_black")
+        channel_color = field_map.get("channel", "bright_black")
+        user_color = field_map.get("user", "bright_black")
+        action_color = field_map.get("action", "bright_cyan")
+        message_color = field_map.get("message", "white")
+        
+        # Helper to wrap text with color
+        def colorize(text: str, color_name: str) -> str:
+            color_code = self._COLORS.get(color_name.lower(), "")
+            if not color_code:
+                return text
+            return f"{color_code}{text}{self._COLORS['reset']}"
+        
+        try:
+            # Simplify timestamp to HH:MM:SS only
+            try:
+                dt = datetime.fromisoformat(record.timestamp.replace("Z", "+00:00"))
+                time_str = dt.strftime("%H:%M:%S")
+            except Exception:
+                time_str = record.timestamp[:8]
+            
+            # Get emoji if enabled
+            emoji = ""
+            if CONFIG.get("use_emoji", True):
+                emoji = self._LEVEL_EMOJI.get(record.level, "📝") + " "
+            
+            # Colorize each component
+            timestamp_colored = colorize(f"[{time_str}]", timestamp_color)
+            level_colored = colorize(f"[{record.level}]", level_color)
+            source_colored = colorize(f"[{record.source}]", source_color)
+            
+            # Optional fields
+            channel_colored = ""
+            if record.channel_or_file:
+                channel_colored = colorize(f"[{record.channel_or_file}]", channel_color)
+            
+            user_colored = ""
+            if record.user_id:
+                user_colored = colorize(f"[{record.user_id}]", user_color)
+            
+            # Build header
+            header_parts = [timestamp_colored, level_colored, source_colored]
+            if channel_colored:
+                header_parts.append(channel_colored)
+            if user_colored:
+                header_parts.append(user_colored)
+            
+            header = "".join(header_parts)
+            
+            # Action and message
+            action_part = ""
+            if record.action:
+                action_part = colorize(f"action={record.action}", action_color)
+            
+            msg_part = ""
+            if record.message:
+                msg_part = colorize(f"message={record.message}", message_color)
+            
+            body = " ".join(filter(None, [action_part, msg_part]))
+            
+            return f"{emoji}{header} {body}"
+        
+        except Exception:
+            # Fallback to simple coloring if parsing fails
+            return colorize(line, level_color or "white")
 
     # Convenience API methods
     def info(self, message: Optional[str] = None, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
@@ -498,3 +676,234 @@ def get_logger(server_id: Any, source: str = "server", channel: Optional[str] = 
     channel: optional channel or file name for context
     """
     return LoggerAdapter(server_id=server_id, source=source, channel=channel)
+
+
+class InterceptHandler(logging.Handler):
+    """Logging.Handler that redirects stdlib logging records into our structured logger.
+
+    It routes messages to get_logger(server_id='Bot', source=record.name) while avoiding
+    recursion from this module or loguru internals.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:  # type: ignore[override]
+        try:
+            # Avoid routing records that originate from our own logging facility or loguru internals.
+            name = getattr(record, "name", "")
+            if name.startswith("loguru") or name.startswith("addons.logging"):
+                return
+
+            # Map logging record to structured logger. Use "Bot" as the system server_id so
+            # third-party messages appear in the terminal in the same structured format.
+            try:
+                adapter = get_logger(server_id="Bot", source=name or "external")
+            except Exception as e:
+                # If obtaining adapter fails, fallback to printing but report via func.
+                if func:
+                    try:
+                        asyncio.create_task(func.report_error(e, "addons/logging.py/InterceptHandler/get_logger"))
+                    except Exception:
+                        print("InterceptHandler get_logger error:", e)
+                print(f"[InterceptHandler] {name}: {record.getMessage()}")
+                return
+
+            # Build extra context from the LogRecord where useful.
+            extra = {}
+            try:
+                args = getattr(record, "args", None)
+                # Only merge when args is a mapping/dict. Many libraries use a tuple or string
+                # for formatting arguments; attempting to update with those will raise type errors.
+                if isinstance(args, dict):
+                    extra.update(args)
+            except Exception:
+                # Best-effort: do not allow merging errors to break log emission.
+                pass
+            extra.update(
+                {
+                    "module": getattr(record, "module", ""),
+                    "funcName": getattr(record, "funcName", ""),
+                    "lineno": getattr(record, "lineno", 0),
+                }
+            )
+
+            # Capture exception object if available.
+            exc = None
+            try:
+                if record.exc_info:
+                    exc = record.exc_info[1]
+            except Exception:
+                exc = None
+
+            levelname = getattr(record, "levelname", "INFO").upper()
+            message = record.getMessage()
+
+            # Dispatch to adapter method if available; otherwise fallback to info.
+            try:
+                if levelname == "DEBUG":
+                    adapter.debug(message, exception=exc, **extra)
+                elif levelname in ("WARN", "WARNING"):
+                    adapter.warning(message, exception=exc, **extra)
+                elif levelname in ("ERROR", "CRITICAL"):
+                    adapter.error(message, exception=exc, **extra)
+                else:
+                    adapter.info(message, exception=exc, **extra)
+            except Exception as e:
+                # Report any failures when emitting intercepted records.
+                if func:
+                    try:
+                        asyncio.create_task(func.report_error(e, "addons/logging.py/InterceptHandler/emit"))
+                    except Exception:
+                        print("InterceptHandler emit report error:", e)
+                else:
+                    print("InterceptHandler emit error:", e)
+        except Exception as outer:
+            if func:
+                try:
+                    asyncio.create_task(func.report_error(outer, "addons/logging.py/InterceptHandler/outer"))
+                except Exception:
+                    print("InterceptHandler outer exception:", outer)
+            else:
+                print("InterceptHandler outer exception:", outer)
+
+
+def configure_std_logging() -> None:
+    """Configure the standard library logging to route through InterceptHandler and apply third-party levels.
+
+    This function:
+    - Removes existing handlers from the root logger.
+    - Adds InterceptHandler to capture stdlib logging and funnel it into our structured logger.
+    - Attempts to remove non-root handlers to avoid duplicate/unstructured outputs.
+    - Applies per-logger level overrides from settings.base_config.logging['third_party_levels'] if present.
+    """
+    try:
+        # Remove all existing handlers on the root logger to avoid duplicate outputs.
+        root = logging.getLogger()
+        for h in list(root.handlers):
+            root.removeHandler(h)
+
+        root.setLevel(logging.DEBUG)
+        root.addHandler(InterceptHandler())
+
+        # Best-effort: remove handlers from other existing loggers so they don't
+        # emit via their own StreamHandler. Set propagate=True so messages bubble
+        # to root (our InterceptHandler).
+        try:
+            manager = getattr(logging, "root").manager
+            for name, logger_obj in list(getattr(manager, "loggerDict", {}).items()):
+                try:
+                    # Some entries in loggerDict are PlaceHolder objects; ensure we have a Logger.
+                    if not isinstance(logger_obj, logging.Logger):
+                        continue
+                    # Avoid touching our own module or loguru internals
+                    if name.startswith("addons.logging") or name.startswith("loguru"):
+                        continue
+                    # Remove handlers attached directly to the logger.
+                    if getattr(logger_obj, "handlers", None):
+                        for h in list(logger_obj.handlers):
+                            try:
+                                logger_obj.removeHandler(h)
+                            except Exception:
+                                pass
+                    # Ensure messages propagate to root so InterceptHandler receives them.
+                    try:
+                        logger_obj.propagate = True
+                    except Exception:
+                        pass
+                except Exception:
+                    # Ignore per-logger failures; continue best-effort.
+                    continue
+        except Exception:
+            # If the logging manager introspection fails, continue without raising.
+            pass
+
+        # Apply configured levels for noisy third-party libraries.
+        third_party_levels = {}
+        try:
+            base_cfg = getattr(settings, "base_config", None)
+            if base_cfg is not None:
+                # base_cfg.logging may be a dict
+                cfg_dict = getattr(base_cfg, "logging", {}) or {}
+                third_party_levels = cfg_dict.get("third_party_levels", {}) or {}
+        except Exception:
+            third_party_levels = {}
+
+        for logger_name, lvl in (third_party_levels or {}).items():
+            try:
+                lg = logging.getLogger(logger_name)
+                lg.setLevel(str(lvl).upper())
+                # Remove handlers attached directly to the logger to avoid duplicate outputs,
+                # then ensure propagation to root so InterceptHandler receives the records.
+                try:
+                    # Prefer clear() where available
+                    if getattr(lg, "handlers", None) is not None:
+                        lg.handlers.clear()
+                except Exception:
+                    try:
+                        for h in list(getattr(lg, "handlers", []) or []):
+                            try:
+                                lg.removeHandler(h)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                try:
+                    lg.propagate = True
+                except Exception:
+                    pass
+                # Special-case: also clear common sqlalchemy sub-loggers to avoid duplicates
+                if logger_name == "sqlalchemy":
+                    try:
+                        for name in ("sqlalchemy.engine", "sqlalchemy.pool"):
+                            try:
+                                sub = logging.getLogger(name)
+                                if getattr(sub, "handlers", None) is not None:
+                                    sub.handlers.clear()
+                                sub.propagate = True
+                            except Exception:
+                                # best-effort per-sub-logger cleanup
+                                try:
+                                    sub = logging.getLogger(name)
+                                    for h in list(getattr(sub, "handlers", []) or []):
+                                        try:
+                                            sub.removeHandler(h)
+                                        except Exception:
+                                            pass
+                                    sub.propagate = True
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+            except Exception:
+                # best-effort only; report but do not raise.
+                if func:
+                    try:
+                        asyncio.create_task(
+                            func.report_error(
+                                Exception(f"Failed to set level for {logger_name}"),
+                                "addons/logging.py/configure_std_logging/level",
+                            )
+                        )
+                    except Exception:
+                        print(f"Failed to set level for {logger_name}")
+                else:
+                    print(f"Failed to set level for {logger_name}")
+    except Exception as e:
+        if func:
+            try:
+                asyncio.create_task(func.report_error(e, "addons/logging.py/configure_std_logging"))
+            except Exception:
+                print("configure_std_logging failed:", e)
+        else:
+            print("configure_std_logging failed:", e)
+
+
+# Perform configuration at import time so that third-party libraries' early logs are captured.
+try:
+    configure_std_logging()
+except Exception as e:
+    if func:
+        try:
+            asyncio.create_task(func.report_error(e, "addons/logging.py/module_init/configure_std_logging"))
+        except Exception:
+            print("Failed to run configure_std_logging at import:", e)
+    else:
+        print("Failed to run configure_std_logging at import:", e)

@@ -65,29 +65,81 @@ class BaseConfig:
         # The resulting `self.logging` is a plain dict so other modules (e.g. addons.logging_manager)
         # can shallow-merge it with their defaults.
         defaults = {
-            "console": {"enabled": True, "color": True},
+            "console": {"enabled": True, "color": True, "level": "INFO"},
             "color_map": {
-                "level": {"ERROR": "red", "WARNING": "yellow", "INFO": "green", "DEBUG": "cyan"},
-                "source": {"system": "magenta", "external": "blue"},
+                "level": {
+                    "ERROR": "red",
+                    "WARNING": "yellow",
+                    "INFO": "green",
+                    "DEBUG": "cyan",
+                    "CRITICAL": "bright_red"
+                },
+                "source": {
+                    "system": "magenta",
+                    "external": "blue",
+                    "server": "bright_blue"
+                },
+                "fields": {
+                    "timestamp": "bright_black",
+                    "channel": "bright_black",
+                    "user": "bright_black",
+                    "action": "bright_cyan",
+                    "message": "white"
+                }
             },
             "async": {"batch_size": 500, "flush_interval": 2.0},
             "rotation": {"policy": "daily", "compress": True, "retention_days": 300},
             "per_level_retention": {"INFO": 300, "WARNING": 300, "ERROR": 900},
             "fsync_on_flush": False,
             "log_base_path": "logs",
+            "use_emoji": True,  # Enable emoji indicators in console output
+            # Per-logger overrides to reduce noise from verbose third-party libraries.
+            # Example in YAML:
+            # logging:
+            #   third_party_levels:
+            #     sqlalchemy: WARNING
+            #     httpx: WARNING
+            "third_party_levels": {
+                # Default reduced-noise levels for common noisy third-party libraries.
+                # Users can override these in their CONFIG_ROOT/base.yaml under `logging.third_party_levels`.
+                "sqlalchemy": "WARNING",
+                "httpx": "WARNING",
+                "httpcore": "WARNING",
+                "urllib3": "WARNING",
+                "selenium": "WARNING",
+                "WDM": "INFO",
+                "discord": "INFO",
+            },
         }
+        
         cfg = data.get("logging", {}) or {}
+        
         # Shallow merge top-level keys
         merged = {**defaults, **cfg}
+        
         # Merge nested structures conservatively
         merged["console"] = {**defaults["console"], **cfg.get("console", {})}
+        
+        # Merge color_map with all three sub-sections: level, source, and fields
+        color_map_cfg = cfg.get("color_map", {})
         merged["color_map"] = {
-            "level": {**defaults["color_map"]["level"], **cfg.get("color_map", {}).get("level", {})},
-            "source": {**defaults["color_map"]["source"], **cfg.get("color_map", {}).get("source", {})},
+            "level": {**defaults["color_map"]["level"], **color_map_cfg.get("level", {})},
+            "source": {**defaults["color_map"]["source"], **color_map_cfg.get("source", {})},
+            "fields": {**defaults["color_map"]["fields"], **color_map_cfg.get("fields", {})},
         }
+        
         merged["async"] = {**defaults["async"], **cfg.get("async", {})}
         merged["rotation"] = {**defaults["rotation"], **cfg.get("rotation", {})}
         merged["per_level_retention"] = {**defaults["per_level_retention"], **cfg.get("per_level_retention", {})}
+        
+        # Merge third_party_levels (dict of logger name -> level)
+        merged["third_party_levels"] = {
+            **defaults.get("third_party_levels", {}),
+            **cfg.get("third_party_levels", {})
+        }
+        
+        # Preserve use_emoji setting
+        merged["use_emoji"] = cfg.get("use_emoji", defaults.get("use_emoji", True))
 
         self.logging: dict = merged
 

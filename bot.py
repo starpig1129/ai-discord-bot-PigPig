@@ -26,6 +26,20 @@ This module contains the main bot class and configuration for a Discord bot
 with music playback, message handling, and logging capabilities.
 """
 
+# Initialize stdlib logging interception early to capture third-party and legacy logging
+# This must run before noisy libraries are imported so their LogRecords are intercepted.
+try:
+    from addons.logging import configure_std_logging
+    configure_std_logging()
+except Exception as e:
+    # Best-effort error reporting via func.report_error if available, otherwise print.
+    try:
+        import asyncio
+        from function import func
+        asyncio.create_task(func.report_error(e, "bot.py/init/configure_std_logging"))
+    except Exception:
+        print("Failed to configure stdlib logging interception:", e)
+
 import discord
 import sys
 import os
