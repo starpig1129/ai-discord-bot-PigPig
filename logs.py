@@ -126,8 +126,36 @@ class ColoredConsoleHandler(logging.StreamHandler):
         """Emit log record to console with color support."""
         try:
             if self.simple_format:
-                # Simple format: just use the base formatter directly
-                msg = self.base_formatter.format(record)
+                # Simple format with enhanced message context
+                # Extract structured information from record
+                log_category = getattr(record, 'log_category', getattr(record, 'category', None))
+                guild_id = getattr(record, 'guild_id', None)
+                channel_name = getattr(record, 'channel_name', None)
+                author_name = getattr(record, 'author_name', None)
+                message_content = getattr(record, 'message_content', None)
+                
+                # Build enhanced message with structured info
+                base_msg = self.base_formatter.format(record)
+                
+                # Add structured context if available (for MESSAGE categories)
+                if log_category and 'MESSAGE' in log_category and any([channel_name, author_name]):
+                    context_parts = []
+                    # Note: guild_id is intentionally excluded from console display
+                    if channel_name:
+                        context_parts.append(f"CH:{channel_name}")
+                    if author_name:
+                        context_parts.append(f"USER:{author_name}")
+                    if message_content is not None:
+                        # Truncate long messages for console display
+                        content_preview = message_content[:50] + "..." if len(message_content) > 50 else message_content
+                        context_parts.append(f"MSG:{content_preview}")
+                    
+                    if context_parts:
+                        msg = f"{base_msg} [{' | '.join(context_parts)}]"
+                    else:
+                        msg = base_msg
+                else:
+                    msg = base_msg
             else:
                 # Enhanced format: add extra context
                 # Initialize extra context dictionary
@@ -239,7 +267,8 @@ class StructuredRotatingFileHandler(logging.Handler):
             
             # Extract or set defaults for structured logging
             # Use custom attribute names to avoid conflicts with LogRecord built-ins
-            extra_context['log_category'] = getattr(record, 'category', 'SYSTEM')
+            # IMPORTANT: Check log_category first, then category, to preserve original value
+            extra_context['log_category'] = getattr(record, 'log_category', getattr(record, 'category', 'SYSTEM'))
             extra_context['custom_module'] = getattr(record, 'mod_name',
                                                     getattr(record, 'module_name', record.name))
             # Extract function name with better fallback logic

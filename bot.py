@@ -273,48 +273,83 @@ class PigPig(commands.Bot):
             - Checks channel permissions and modes before processing
         """
         try:
-
-            if not message.guild or message.author.bot:
+            # Skip messages without guild context (DMs)
+            if not message.guild:
                 return
             
-            if self.message_tracker:
-                await self.message_tracker.track_message(message)
-            
+            # Set up guild-specific logging
             guild_name = message.guild.name
             self.setup_logger_for_guild(guild_name)
             logger = self.loggers[guild_name]
             
+            # Determine message category and log with complete structure
+            if message.author.bot:
+                # Bot messages (including empty content)
+                message_category = "BOT_MESSAGE"
+                message_type = "bot"
+                message_content = message.content if message.content else "[EMPTY_BOT_MESSAGE]"
+            else:
+                # User messages
+                if message.content:
+                    if message.content.strip():
+                        # Regular user message with content
+                        message_category = "USER_MESSAGE"
+                        message_type = "user"
+                        message_content = message.content
+                    else:
+                        # User message with only whitespace
+                        message_category = "EMPTY_USER_MESSAGE"
+                        message_type = "empty_user"
+                        message_content = "[WHITESPACE_ONLY]"
+                else:
+                    # User message with no content
+                    message_category = "EMPTY_USER_MESSAGE"
+                    message_type = "empty_user"
+                    message_content = "[NO_CONTENT]"
+            
+            # Log message with complete structured format
             logger.info("Message received", extra={
-                "log_category": "MESSAGE",
+                "log_category": message_category,
                 "guild_id": str(message.guild.id),
-                "user_id": str(message.author.id),
-                "channel_name": message.channel.name,
                 "channel_id": str(message.channel.id),
-                "message_content": message.content,
-                "author_name": message.author.name
+                "channel_name": getattr(message.channel, 'name', 'Unknown'),
+                "message_type": message_type,
+                "message_content": message_content,
+                "author_id": str(message.author.id),
+                "author_name": message.author.name,
+                "is_bot": message.author.bot,
+                "has_content": bool(message.content),
+                "content_length": len(message.content) if message.content else 0,
+                "message_id": str(message.id),
+                "timestamp": message.created_at.isoformat()
             })
             
+            # Track message in memory system if available (only for user messages)
+            if self.message_tracker and not message.author.bot:
+                await self.message_tracker.track_message(message)
             
-            await self.process_commands(message)
+            # Process commands (only for non-bot messages to avoid command conflicts)
+            if not message.author.bot:
+                await self.process_commands(message)
             
-            # Delegate message processing to MessageHandler
-            # Check if message should be handled by bot (e.g., @mention or in specific channel)
-            channel_manager = self.get_cog('ChannelManager')
-            if channel_manager:
-                guild_id = str(message.guild.id)
-                is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(message.channel, guild_id)
+            # Handle story mode channels and AI responses (only for user messages)
+            if not message.author.bot:
+                channel_manager = self.get_cog('ChannelManager')
+                if channel_manager:
+                    guild_id = str(message.guild.id)
+                    is_allowed, auto_response_enabled, channel_mode = channel_manager.is_allowed_channel(message.channel, guild_id)
 
-                # Check if it's a story mode channel
-                if channel_mode == 'story':
-                    story_manager_cog = self.get_cog('StoryManagerCog')
-                    if story_manager_cog:
-                        await story_manager_cog.handle_story_message(message)
-                    return  # In story mode, don't continue with general message processing
+                    # Check if it's a story mode channel
+                    if channel_mode == 'story':
+                        story_manager_cog = self.get_cog('StoryManagerCog')
+                        if story_manager_cog:
+                            await story_manager_cog.handle_story_message(message)
+                        return  # In story mode, don't continue with general message processing
 
-                # Only trigger handle_message if in allowed channel and mentioned or auto-response enabled
-                if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
-                    message_edit = await message.reply("...")
-                    await self.orchestrator.handle_message(self,message_edit, message, logger)
+                    # Only trigger AI response for allowed channels
+                    if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
+                        message_edit = await message.reply("...")
+                        await self.orchestrator.handle_message(self, message_edit, message, logger)
         except Exception as e:
             await func.report_error(e, f"on_message: {e}")
             
