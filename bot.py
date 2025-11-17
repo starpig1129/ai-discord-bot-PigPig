@@ -45,63 +45,7 @@ from logs import setup_enhanced_logger, TimedRotatingFileHandler, get_system_log
 from llm.orchestrator import Orchestrator
 
 
-from addons.settings import base_config, memory_config
-def setup_logger(server_name: str, level: str = "INFO") -> logging.Logger:
-    """Configure logging for a specific server following technical specifications.
-    
-    Sets up a logger with structured logging capabilities for Discord server.
-    Implements optimized third-party library suppression while maintaining proper
-    application logging levels and structured logging format.
-    
-    Args:
-        server_name (str): The name of the Discord server to create logger for.
-        level (str): Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        
-    Returns:
-        logging.Logger: logger instance with structured logging support
-        
-    Note:
-        - Root logger is set to ERROR level to suppress excessive third-party logs
-        - Optimized third-party library log suppression with granular control
-        - Structured logging with correlation IDs and context tracking
-        - Server isolation architecture with category-based filtering
-    """
-    # NOTE: Third-party library suppression is now handled in main.py BEFORE bot initialization
-    # This function now only sets up server-specific structured logging
-    # The comprehensive suppression in main.py prevents all standard format logs from third-party libraries
-    
-    # For any additional server-specific suppressions, add them here
-    additional_suppression = {
-        # Server-specific libraries that might need suppression
-        "cogs.memory": logging.WARNING,
-        "asyncio": logging.WARNING,
-        "uvloop": logging.WARNING,
-    }
-    
-    # Apply additional suppressions (main.py already handled the comprehensive list)
-    for lib_name, lib_level in additional_suppression.items():
-        lib_logger = logging.getLogger(lib_name)
-        lib_logger.setLevel(lib_level)
-        # Ensure no propagation to root logger to prevent duplicates
-        lib_logger.propagate = False
-    
-    # DO NOT set root logger here - it's already configured in main.py
-    # Root logger setup moved to main.py to prevent duplication
-    
-    # Set up structured logger for the guild
-    logger = setup_enhanced_logger(server_name, level)
-    
-    # Add structured logging category setup
-    logger.info(f" Logging system initialized for server: {server_name}", extra={
-        "log_category": "SYSTEM",
-        "mod_name": "bot_logger",
-        "guild_id": "N/A",
-        "user_id": "N/A",
-        "correlation_id": str(uuid.uuid4())[:8]
-    })
-    
-
-    return logger
+from addons.settings import base_config, memory_config, logging_config
 from addons.tokens import tokens
 
 
@@ -283,7 +227,7 @@ class PigPig(commands.Bot):
             Only creates logger if one doesn't already exist for the guild.
         """
         if guild_id not in self.loggers:
-            self.loggers[guild_id] = setup_logger(guild_id, level="INFO")
+            self.loggers[guild_id] = logging_config.get_logger(guild_id, guild_name, level="INFO")
         
     def setup_logger_for_guild(self, guild_name):
         """Set up logger for a guild if it doesn't exist.
@@ -304,10 +248,10 @@ class PigPig(commands.Bot):
                     break
         
         if guild_id and guild_id not in self.loggers:
-            self.loggers[guild_id] = setup_logger(guild_id, level="INFO")
+            self.loggers[guild_id] = logging_config.get_logger(guild_id, guild_name, level="INFO")
         elif not guild_id and guild_name not in self.loggers:
             # If no guild found, treat as system log
-            self.loggers[guild_name] = setup_logger(guild_name, level="INFO")
+            self.loggers[guild_name] = logging_config.get_logger(guild_name, guild_name, level="INFO")
         
     async def on_message(self, message: discord.Message, /) -> None:
         """Handle incoming Discord messages.

@@ -2,6 +2,8 @@ import yaml
 import asyncio
 import logging
 import os
+import sys
+import uuid
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -234,6 +236,365 @@ class MemoryConfig:
         # Message threshold for triggering memory processing
         self.message_threshold: int = data.get("message_threshold", 100)
 
+class LoggingConfig:
+    """Comprehensive logging configuration management system.
+    
+    This class consolidates all logging configuration including:
+    - Third-party library suppression rules
+    - Logger initialization methods
+    - Color configuration settings
+    - Format templates
+    - Root logger setup
+    - System and guild-specific logging
+    """
+    
+    def __init__(self):
+        """Initialize LoggingConfig with comprehensive suppression rules and settings."""
+        self.logger = logging.getLogger(__name__)
+        
+        # Third-party library suppression dictionary from main.py
+        self.third_party_suppression = {
+            # Database libraries - suppress completely to prevent standard format logs
+            "sqlalchemy.engine.Engine": logging.CRITICAL,  # CRITICAL to completely suppress
+            "sqlalchemy.engine.base": logging.CRITICAL,   # SQLAlchemy engine base
+            "sqlalchemy.engine": logging.CRITICAL,        # SQLAlchemy engine general
+            "sqlalchemy.pool": logging.CRITICAL,          # SQLAlchemy connection pool
+            "sqlalchemy.pool.impl": logging.CRITICAL,     # SQLAlchemy pool implementations
+            "sqlalchemy.dialects": logging.CRITICAL,      # SQLAlchemy dialects
+            "sqlalchemy.dialects.sqlite": logging.CRITICAL, # SQLite dialect
+            "sqlalchemy.dialects.mysql": logging.CRITICAL,  # MySQL dialect
+            "sqlalchemy.dialects.postgresql": logging.CRITICAL, # PostgreSQL dialect
+            "sqlalchemy.orm": logging.CRITICAL,           # SQLAlchemy ORM
+            "sqlalchemy.orm.session": logging.CRITICAL,   # SQLAlchemy ORM session
+            "sqlalchemy.orm.query": logging.CRITICAL,     # SQLAlchemy ORM query
+            "sqlalchemy.orm.mapper": logging.CRITICAL,    # SQLAlchemy ORM mapper
+            "sqlalchemy.sql": logging.CRITICAL,           # SQLAlchemy SQL compilation
+            "sqlalchemy.util": logging.CRITICAL,          # SQLAlchemy utilities
+            "sqlalchemy": logging.CRITICAL,               # Main SQLAlchemy logger
+            "alembic": logging.CRITICAL,                  # Database migrations
+            
+            # HTTP libraries - suppress completely
+            "httpx": logging.CRITICAL,  # CRITICAL to suppress HTTP request logs
+            "httpx.client": logging.CRITICAL,
+            "httpx._client": logging.CRITICAL,
+            "urllib3.connectionpool": logging.CRITICAL,
+            "urllib3.poolmanager": logging.CRITICAL,
+            "urllib3": logging.CRITICAL,
+            "urllib3.util": logging.CRITICAL,
+            "requests": logging.CRITICAL,
+            "requests.packages": logging.CRITICAL,
+            "requests.models": logging.CRITICAL,
+            "aiohttp": logging.CRITICAL,
+            "aiohttp.client": logging.CRITICAL,
+            "aiohttp.connector": logging.CRITICAL,
+            
+            # Web drivers - suppress completely
+            "WDM": logging.CRITICAL,  # CRITICAL to suppress WebDriver manager logs
+            "selenium": logging.CRITICAL,
+            "selenium.webdriver": logging.CRITICAL,
+            "selenium.common": logging.CRITICAL,
+            "webdriver": logging.CRITICAL,
+            "webdriver_manager": logging.CRITICAL,
+            
+            # System and utility libraries
+            "jieba": logging.CRITICAL,
+            "jieba.analyse": logging.CRITICAL,
+            "jieba.posseg": logging.CRITICAL,
+            "jieba.finalseg": logging.CRITICAL,
+            "pkg_resources": logging.CRITICAL,  # Suppress deprecation warnings
+            "setuptools": logging.CRITICAL,
+            "pip._internal": logging.CRITICAL,
+            "pip._internal.utils": logging.CRITICAL,
+            
+            # Discord and websockets - suppress verbose logs
+            "discord": logging.WARNING,
+            "discord.gateway": logging.WARNING,
+            "discord.http": logging.WARNING,
+            "discord.state": logging.WARNING,
+            "discord.client": logging.WARNING,
+            "discord.ext": logging.WARNING,
+            "discord.ext.commands": logging.WARNING,
+            "discord.ext.tasks": logging.CRITICAL,
+            "discord.voice_client": logging.WARNING,
+            "discord.message": logging.WARNING,
+            "discord.user": logging.WARNING,
+            "discord.guild": logging.WARNING,
+            "websockets": logging.WARNING,
+            "websockets.legacy": logging.WARNING,
+            "websockets.protocol": logging.WARNING,
+            "websockets.client": logging.WARNING,
+        }
+        
+        # Additional suppression from bot.py
+        self.additional_suppression = {
+            # Server-specific libraries that might need suppression
+            "cogs.memory": logging.WARNING,
+            "asyncio": logging.WARNING,
+            "uvloop": logging.WARNING,
+        }
+        
+        # Combined suppression rules
+        self._combined_suppression = {**self.third_party_suppression, **self.additional_suppression}
+        
+        # Additional database logger names for comprehensive suppression
+        self.db_logger_names = [
+            "sqlalchemy.engine.Engine",
+            "sqlalchemy.engine.base.Engine",
+            "sqlalchemy.engine.base.Connection",
+            "sqlalchemy.engine.base.Executable",
+            "sqlalchemy.engine.result",
+            "sqlalchemy.engine.strategies",
+            "sqlalchemy.pool.impl.QueuePool",
+            "sqlalchemy.pool.impl.LifoQueueProxy",
+            "sqlalchemy.pool.impl.StackedSharedProxy",
+            "sqlalchemy.pool.events",
+            "sqlalchemy.dialects.sqlite",
+            "sqlalchemy.dialects.mysql",
+            "sqlalchemy.dialects.postgresql",
+            "sqlalchemy.orm.session",
+            "sqlalchemy.orm.query",
+            "sqlalchemy.orm.mapper",
+            "sqlalchemy.orm.relationships",
+            "sqlalchemy.orm.attributes",
+            "sqlalchemy.orm.util",
+            "sqlalchemy.sql.elements",
+            "sqlalchemy.sql.selectable",
+            "sqlalchemy.sql.dml",
+            "sqlalchemy.sql.schema",
+            "sqlalchemy.sql.types",
+            "sqlalchemy.util.langhelpers",
+            "sqlalchemy.util.concurrency",
+        ]
+        
+        # Color configuration settings
+        self.enable_colored_logs = getattr(base_config, 'enable_colored_logs', True)
+        self.colored_logs_config = getattr(base_config, 'colored_logs_config', {})
+        
+        # Format templates
+        self.log_format = (
+            "[%(asctime)s] [%(levelname)s] [%(log_category)s] [%(custom_module)s] [%(function_name)s] "
+            "[GUILD:%(guild_id)s] [USER:%(user_id)s] %(message)s"
+        )
+        
+        self.enhanced_format = (
+            "[%(asctime)s] [%(levelname)s] [%(log_category)s] [%(custom_module)s] [%(function_name)s] "
+            "[GUILD:%(guild_id)s] [USER:%(user_id)s] [CID:%(correlation_id)s] "
+            "%(message)s%(extra_context)s"
+        )
+        
+        # Initialize color support
+        self._init_color_support()
+    
+    def _init_color_support(self):
+        """Initialize color support configuration."""
+        # Color codes for different log levels
+        self.level_colors = {
+            'DEBUG': '\033[90m',      # Gray
+            'INFO': '\033[92m',       # Green
+            'WARNING': '\033[93m',    # Yellow
+            'ERROR': '\033[91m',      # Red
+            'CRITICAL': '\033[95m',   # Magenta/Dark Red
+            'RESET': '\033[0m'        # Reset color
+        }
+        
+        # Color codes for different modules
+        self.module_colors = {
+            'bot': '\033[94m',        # Blue
+            'main': '\033[94m',
+            'startup': '\033[94m',
+            'cogs': '\033[96m',       # Cyan
+            'utils': '\033[96m',
+            'discord': '\033[95m',    # Magenta
+            'sqlalchemy': '\033[95m',
+            'httpx': '\033[95m',
+            'web': '\033[93m',        # Orange/Yellow for web services
+        }
+    
+    def suppress_third_party_logs(self):
+        """Apply comprehensive third-party library suppression.
+        
+        This method suppresses all third-party library logs to prevent
+        excessive logging noise while maintaining proper application logging levels.
+        """
+        # Apply suppression to ALL third-party loggers BEFORE setting up our handler
+        for lib_name, lib_level in self._combined_suppression.items():
+            lib_logger = logging.getLogger(lib_name)
+            lib_logger.setLevel(lib_level)
+            lib_logger.propagate = False  # Prevent propagation to root logger
+            
+            # Also suppress any child loggers
+            for handler in lib_logger.handlers[:]:
+                lib_logger.removeHandler(handler)
+        
+        # Additional comprehensive suppression for ALL database-related loggers
+        # This catches any SQLAlchemy sub-loggers that might not be explicitly listed
+        for db_logger_name in self.db_logger_names:
+            db_logger = logging.getLogger(db_logger_name)
+            db_logger.setLevel(logging.CRITICAL)
+            db_logger.propagate = False
+            while db_logger.handlers:
+                db_logger.removeHandler(db_logger.handlers[0])
+        
+        self.logger.debug("Applied comprehensive third-party library suppression")
+    
+    def setup_root_logger(self):
+        """Set up the root logger with proper configuration."""
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        root_logger.handlers.clear()  # Clear ALL existing handlers first
+        
+        self.logger.debug("Root logger configured successfully")
+    
+    def setup_startup_logger(self):
+        """Set up startup logger for initial logging before full system is ready."""
+        startup_logger = logging.getLogger("STARTUP")
+        startup_logger.setLevel(logging.WARNING)  # Only show warnings and errors for startup
+        startup_logger.propagate = False  # Prevent propagation to root logger
+        
+        # Add ONLY the colored console handler to startup logger with SIMPLE format
+        try:
+            from logs import ColoredConsoleHandler
+            console_handler = ColoredConsoleHandler(enable_colored_logs=self.enable_colored_logs, simple_format=True)
+            startup_logger.addHandler(console_handler)
+            self.logger.debug("Startup logger configured successfully")
+        except ImportError:
+            self.logger.warning("ColoredConsoleHandler not available for startup logger")
+        
+        return startup_logger
+    
+    def setup_guild_logger(self, guild_id: str, guild_name: Optional[str] = None, level: str = "INFO") -> logging.Logger:
+        """Configure logging for a specific guild following technical specifications.
+        
+        Sets up a logger with structured logging capabilities for Discord server.
+        Implements optimized third-party library suppression while maintaining proper
+        application logging levels and structured logging format.
+        
+        Args:
+            guild_id: Discord guild ID for logger identification
+            guild_name: Discord guild name for configuration tracking
+            level: Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+            
+        Returns:
+            logging.Logger: logger instance with structured logging support
+            
+        Note:
+            - Root logger suppression is handled separately
+            - Structured logging with correlation IDs and context tracking
+            - Guild isolation architecture with category-based filtering
+        """
+        try:
+            from logs import setup_enhanced_logger
+            
+            # Set up structured logger for the guild
+            logger = setup_enhanced_logger(guild_id, guild_name, level, self.enable_colored_logs)
+            
+            # Add structured logging category setup
+            logger.info(f"Logging system initialized for guild: {guild_id}", extra={
+                "log_category": "SYSTEM",
+                "mod_name": "bot_logger",
+                "guild_id": guild_id,
+                "user_id": "N/A",
+                "correlation_id": str(uuid.uuid4())[:8]
+            })
+            
+            self.logger.debug(f"Guild logger setup completed for guild: {guild_id}")
+            return logger
+            
+        except ImportError:
+            # Fallback if logs module is not available
+            logger = logging.getLogger(f"guild_{guild_id}")
+            logger.setLevel(getattr(logging, level.upper()))
+            
+            # Clear existing handlers
+            if logger.hasHandlers():
+                logger.handlers.clear()
+            
+            # Add console handler if enabled
+            if self.enable_colored_logs and hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+                try:
+                    from logs import ColoredConsoleHandler
+                    console_handler = ColoredConsoleHandler(enable_colored_logs=True, simple_format=True)
+                    logger.addHandler(console_handler)
+                except ImportError:
+                    pass
+            
+            return logger
+    
+    def setup_logging_system(self):
+        """Initialize the entire logging system.
+        
+        This is the main entry point for setting up the complete logging configuration
+        including third-party suppression, root logger setup, and startup logger.
+        
+        Returns:
+            logging.Logger: Startup logger instance for early logging
+        """
+        self.logger.info("Initializing comprehensive logging system...")
+        
+        # Step 1: Apply comprehensive third-party suppression
+        self.suppress_third_party_logs()
+        
+        # Step 2: Set up root logger
+        self.setup_root_logger()
+        
+        # Step 3: Set up startup logger
+        startup_logger = self.setup_startup_logger()
+        
+        self.logger.info("Comprehensive logging system initialized successfully")
+        return startup_logger
+    
+    def get_logger(self, guild_id: str, guild_name: Optional[str] = None, level: str = "INFO") -> logging.Logger:
+        """Get or create a logger for a specific guild.
+        
+        This is the unified API for getting loggers throughout the application.
+        
+        Args:
+            guild_id: Discord guild ID
+            guild_name: Discord guild name for configuration tracking
+            level: Minimum log level
+            
+        Returns:
+            logging.Logger: Configured logger instance
+        """
+        return self.setup_guild_logger(guild_id, guild_name, level)
+    
+    def get_system_logger(self) -> logging.Logger:
+        """Get system-level logger for non-guild events."""
+        return self.setup_guild_logger('system', 'System Logs')
+    
+    def apply_custom_suppression(self, suppression_rules: Dict[str, int]):
+        """Apply custom suppression rules in addition to defaults.
+        
+        Args:
+            suppression_rules: Dictionary of logger names to suppression levels
+        """
+        for lib_name, lib_level in suppression_rules.items():
+            lib_logger = logging.getLogger(lib_name)
+            lib_logger.setLevel(lib_level)
+            lib_logger.propagate = False
+        
+        self.logger.debug(f"Applied custom suppression rules: {suppression_rules}")
+    
+    def is_colored_logging_enabled(self) -> bool:
+        """Check if colored logging is enabled."""
+        return self.enable_colored_logs
+    
+    def get_log_format(self, enhanced: bool = False) -> str:
+        """Get the log format template.
+        
+        Args:
+            enhanced: If True, return enhanced format with correlation ID
+            
+        Returns:
+            Log format string
+        """
+        return self.enhanced_format if enhanced else self.log_format
+    
+    def cleanup(self):
+        """Cleanup logging resources if needed."""
+        # This could be expanded to handle cleanup of loggers, handlers, etc.
+        self.logger.debug("LoggingConfig cleanup completed")
+
 try:
     base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")
 except Exception as e:
@@ -290,6 +651,18 @@ except Exception as e:
     except Exception:
         print(f"初始化 MemoryConfig 時發生錯誤: {e}")
     memory_config = MemoryConfig(f"{CONFIG_ROOT}/memory.yaml")
+
+try:
+    # Global LoggingConfig instance
+    logging_config = LoggingConfig()
+except Exception as e:
+    try:
+        from function import func
+        asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
+    except Exception:
+        print(f"初始化 LoggingConfig 時發生錯誤: {e}")
+    logging_config = LoggingConfig()
+
 __all__ = [
     "BaseConfig",
     "base_config",
@@ -303,4 +676,6 @@ __all__ = [
     "prompt_config",
     "MemoryConfig",
     "memory_config",
+    "LoggingConfig",
+    "logging_config",
 ]
