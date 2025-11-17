@@ -1,0 +1,272 @@
+# Centralized Logging Configuration
+# This file consolidates all hardcoded logging configurations from the system
+# Referenced in 日誌系統整合分析報告.md for detailed structure specifications
+
+# ==============================================================================
+# SYSTEM CORE CONFIGURATION
+# ==============================================================================
+system:
+  log_base_dir: "logs"
+  cleanup_threshold_days: 30
+  inactive_threshold_hours: 24
+  correlation_id_length: 8
+  enable_console_logging: false
+  root_logger_level: "INFO"
+  startup_logger_level: "WARNING"
+
+# ==============================================================================
+# FORMAT TEMPLATES
+# ==============================================================================
+formats:
+  standard: |
+    [%(asctime)s] [%(levelname)s] [%(log_category)s] [%(custom_module)s] [%(function_name)s] [GUILD:%(guild_id)s] [USER:%(user_id)s] %(message)s
+  enhanced: |
+    [%(asctime)s] [%(levelname)s] [%(log_category)s] [%(custom_module)s] [%(function_name)s] [GUILD:%(guild_id)s] [USER:%(user_id)s] [CID:%(correlation_id)s] %(message)s%(extra_context)s
+  simple: |
+    [%(levelname)s] %(message)s
+
+# ==============================================================================
+# COLOR CONFIGURATION
+# ==============================================================================
+colors:
+  levels:
+    DEBUG: '\033[90m'      # Gray
+    INFO: '\033[92m'       # Green
+    WARNING: '\033[93m'    # Yellow
+    ERROR: '\033[91m'      # Red
+    CRITICAL: '\033[95m'   # Magenta/Dark Red
+    RESET: '\033[0m'       # Reset color
+  modules:
+    bot: '\033[94m'        # Blue
+    main: '\033[94m'       # Blue
+    startup: '\033[94m'    # Blue
+    cogs: '\033[96m'       # Cyan
+    utils: '\033[96m'      # Cyan
+    discord: '\033[95m'    # Magenta
+    sqlalchemy: '\033[95m' # Magenta
+    httpx: '\033[95m'      # Magenta
+    web: '\033[93m'        # Orange/Yellow for web services
+
+# ==============================================================================
+# THIRD-PARTY SUPPRESSION RULES
+# ==============================================================================
+suppression:
+  critical:
+    # Database libraries - suppress completely to prevent standard format logs
+    - sqlalchemy.engine.Engine
+    - sqlalchemy.engine.base
+    - sqlalchemy.engine
+    - sqlalchemy.pool
+    - sqlalchemy.pool.impl
+    - sqlalchemy.dialects
+    - sqlalchemy.dialects.sqlite
+    - sqlalchemy.dialects.mysql
+    - sqlalchemy.dialects.postgresql
+    - sqlalchemy.orm
+    - sqlalchemy.orm.session
+    - sqlalchemy.orm.query
+    - sqlalchemy.orm.mapper
+    - sqlalchemy.sql
+    - sqlalchemy.util
+    - sqlalchemy
+    - alembic
+    
+    # HTTP libraries - suppress completely
+    - httpx
+    - httpx.client
+    - httpx._client
+    - urllib3.connectionpool
+    - urllib3.poolmanager
+    - urllib3
+    - urllib3.util
+    - requests
+    - requests.packages
+    - requests.models
+    - aiohttp
+    - aiohttp.client
+    - aiohttp.connector
+    
+    # Web drivers - suppress completely
+    - WDM
+    - selenium
+    - selenium.webdriver
+    - selenium.common
+    - webdriver
+    - webdriver_manager
+    
+    # System and utility libraries
+    - jieba
+    - jieba.analyse
+    - jieba.posseg
+    - jieba.finalseg
+    - pkg_resources
+    - setuptools
+    - pip._internal
+    - pip._internal.utils
+    
+    # Additional database logger names for comprehensive suppression
+    - sqlalchemy.engine.base.Engine
+    - sqlalchemy.engine.base.Connection
+    - sqlalchemy.engine.base.Executable
+    - sqlalchemy.engine.result
+    - sqlalchemy.engine.strategies
+    - sqlalchemy.pool.impl.QueuePool
+    - sqlalchemy.pool.impl.LifoQueueProxy
+    - sqlalchemy.pool.impl.StackedSharedProxy
+    - sqlalchemy.pool.events
+    - sqlalchemy.orm.session
+    - sqlalchemy.orm.query
+    - sqlalchemy.orm.mapper
+    - sqlalchemy.orm.relationships
+    - sqlalchemy.orm.attributes
+    - sqlalchemy.orm.util
+    - sqlalchemy.sql.elements
+    - sqlalchemy.sql.selectable
+    - sqlalchemy.sql.dml
+    - sqlalchemy.sql.schema
+    - sqlalchemy.sql.types
+    - sqlalchemy.util.langhelpers
+    - sqlalchemy.util.concurrency
+    
+    # Discord extension tasks (completely suppress)
+    - discord.ext.tasks
+  
+  warning:
+    # Discord and websockets - suppress verbose logs
+    - discord
+    - discord.gateway
+    - discord.http
+    - discord.state
+    - discord.client
+    - discord.ext
+    - discord.ext.commands
+    - discord.voice_client
+    - discord.message
+    - discord.user
+    - discord.guild
+    - websockets
+    - websockets.legacy
+    - websockets.protocol
+    - websockets.client
+    
+    # Additional suppression for server-specific libraries
+    - cogs.memory
+    - asyncio
+    - uvloop
+
+# ==============================================================================
+# LOG CATEGORIES MAPPING
+# ==============================================================================
+categories:
+  system: "SYSTEM"
+  user_action: "USER_ACTION"
+  performance: "PERFORMANCE"
+  error: "ERROR"
+  critical: "CRITICAL"
+  message: "MESSAGE"
+  message_edit: "MESSAGE_EDIT"
+  bot_message: "BOT_MESSAGE"
+  command_error: "COMMAND_ERROR"
+
+# ==============================================================================
+# ENHANCED CONFIGURATION
+# ==============================================================================
+enhancement:
+  # Database logger names for comprehensive suppression (extracted from hardcoded lists)
+  db_logger_names:
+    - "sqlalchemy.engine.Engine"
+    - "sqlalchemy.engine.base.Engine"
+    - "sqlalchemy.engine.base.Connection"
+    - "sqlalchemy.engine.base.Executable"
+    - "sqlalchemy.engine.result"
+    - "sqlalchemy.engine.strategies"
+    - "sqlalchemy.pool.impl.QueuePool"
+    - "sqlalchemy.pool.impl.LifoQueueProxy"
+    - "sqlalchemy.pool.impl.StackedSharedProxy"
+    - "sqlalchemy.pool.events"
+    - "sqlalchemy.dialects.sqlite"
+    - "sqlalchemy.dialects.mysql"
+    - "sqlalchemy.dialects.postgresql"
+    - "sqlalchemy.orm.session"
+    - "sqlalchemy.orm.query"
+    - "sqlalchemy.orm.mapper"
+    - "sqlalchemy.orm.relationships"
+    - "sqlalchemy.orm.attributes"
+    - "sqlalchemy.orm.util"
+    - "sqlalchemy.sql.elements"
+    - "sqlalchemy.sql.selectable"
+    - "sqlalchemy.sql.dml"
+    - "sqlalchemy.sql.schema"
+    - "sqlalchemy.sql.types"
+    - "sqlalchemy.util.langhelpers"
+    - "sqlalchemy.util.concurrency"
+  
+  # Default values extracted from hardcoded implementation
+  defaults:
+    log_base_dir: "logs"
+    cleanup_days: 30
+    inactive_hours: 24
+    correlation_id_length: 8
+    guild_log_dir_pattern: "{log_base_dir}/guild_{guild_id}"
+    log_file_pattern: "bot_{date}.log"
+    current_date_format: "%Y%m%d"
+    cutoff_timestamp_calculation: "datetime.now().timestamp() - (30 * 24 * 60 * 60)"
+
+# ==============================================================================
+# BACKWARD COMPATIBILITY MAPPING
+# ==============================================================================
+legacy:
+  # Map old hardcoded attribute names to new YAML config paths
+  attribute_mapping:
+    # From LoggingConfig.__init__ hardcoded values
+    "third_party_suppression": "suppression.critical_to_warning_map"
+    "level_colors": "colors.levels"
+    "module_colors": "colors.modules"
+    "log_format": "formats.standard"
+    "enhanced_format": "formats.enhanced"
+    
+    # From setup methods
+    "enable_colored_logs": "system.enable_console_logging"
+    "colored_logs_config": "colors"
+    
+  # Deprecated values preserved for compatibility
+  deprecated:
+    suppress_third_party_logs_method: "Use suppression configuration instead"
+    setup_root_logger_method: "Use system configuration instead"
+    setup_startup_logger_method: "Use system configuration instead"
+
+# ==============================================================================
+# VALIDATION RULES
+# ==============================================================================
+validation:
+  required_sections:
+    - "system"
+    - "formats"
+    - "colors"
+    - "suppression"
+    - "categories"
+  
+  required_system_keys:
+    - "log_base_dir"
+    - "cleanup_threshold_days"
+    - "correlation_id_length"
+  
+  required_format_keys:
+    - "standard"
+    - "enhanced"
+  
+  required_color_keys:
+    - "levels"
+    - "modules"
+  
+  # Value constraints
+  constraints:
+    correlation_id_length:
+      min: 4
+      max: 32
+    cleanup_threshold_days:
+      min: 1
+      max: 365
+    inactive_threshold_hours:
+      min: 1
+      max: 168
