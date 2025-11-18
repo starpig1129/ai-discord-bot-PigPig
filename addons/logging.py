@@ -573,8 +573,8 @@ class LoggerAdapter:
         header = "".join(parts)
         
         # Action and message
-        action_part = f"action={record.action}" if record.action else ""
-        msg_part = f"message={record.message}" if record.message else ""
+        action_part = f"{record.action}" if record.action else ""
+        msg_part = f"{record.message}" if record.message else ""
         
         body = " ".join(filter(None, [action_part, msg_part]))
         return f"{emoji}{header} {body}"
@@ -642,11 +642,11 @@ class LoggerAdapter:
             # Action and message
             action_part = ""
             if record.action:
-                action_part = colorize(f"action={record.action}", action_color)
+                action_part = colorize(f"{record.action}", action_color)
             
             msg_part = ""
             if record.message:
-                msg_part = colorize(f"message={record.message}", message_color)
+                msg_part = colorize(f"{record.message}", message_color)
             
             body = " ".join(filter(None, [action_part, msg_part]))
             
