@@ -1,6 +1,8 @@
 # inspire by https://github.com/pyliaorachel/resurrecting-the-dead-chinese
 
 import os, sys
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='jieba._compat')
 import jieba
 import numpy as np
 import torch
