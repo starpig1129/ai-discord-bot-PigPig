@@ -1,8 +1,12 @@
 import json
 import os
-import logging
+from addons.logging import get_logger
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Module-level logger
+log = get_logger(server_id="Bot", source=__name__)
+
 class Function:
     def __init__(self):
         self.bot = None
@@ -12,11 +16,11 @@ class Function:
 
     async def report_error(self, error: Exception, details: str = None):
         if not self.bot:
-            print("錯誤：Function class中的bot實例未設置。")
+            log.error("Function.bot instance is not set; cannot send error report.", action="report_error")
             return
         import traceback
         import discord
-        logging.error(f"error: {error} details: {details}", exc_info=error)
+        log.error(message=f"error: {error} details: {details}", exception=error, action="report_error")
         traceback_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
 
         embed = discord.Embed(

@@ -47,7 +47,6 @@ import traceback
 import update
 from function import func, ROOT_DIR
 import json
-import logging
 import asyncio
 from datetime import datetime, timezone
 from discord.ext import commands, tasks
@@ -56,6 +55,9 @@ from cogs.music_lib.state_manager import StateManager
 from cogs.music_lib.ui_manager import UIManager
 from llm.orchestrator import Orchestrator
 from addons.logging import get_logger
+
+# Module-level logger for bot module
+log = get_logger(server_id="Bot", source=__name__)
 
 
 from addons.settings import base_config, memory_config
@@ -242,8 +244,9 @@ class PigPig(commands.Bot):
             guild_name = message.guild.name
             self.setup_logger_for_guild(guild_name)
             logger = self.loggers[guild_name]
+            bound_log = logger.bind(server_id=str(message.guild.id), user_id=str(message.author.id))
             
-            logger.info(f'收到訊息: {message.content} (來自:伺服器:{message.guild},頻道:{message.channel.name},{message.author.name})')
+            bound_log.info(message=message.content, channel_or_file=str(message.channel.name), action="receive_message")
             
             
             await self.process_commands(message)
@@ -265,7 +268,7 @@ class PigPig(commands.Bot):
                 # Only trigger handle_message if in allowed channel and mentioned or auto-response enabled
                 if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
                     message_edit = await message.reply("...")
-                    await self.orchestrator.handle_message(self,message_edit, message, logger)
+                    await self.orchestrator.handle_message(self, message_edit, message, bound_log)
         except Exception as e:
             await func.report_error(e, f"on_message: {e}")
             
@@ -296,8 +299,11 @@ class PigPig(commands.Bot):
                 return
             
             logger = self.get_logger_for_guild(before.guild.name)
-            logger.info(
-                f"訊息修改: 原訊息({before.content}) 新訊息({after.content}) 頻道:{before.channel.name}, 作者:{before.author}"
+            bound_log = logger.bind(server_id=str(before.guild.id), user_id=str(before.author.id))
+            bound_log.info(
+                message=f"原訊息={before.content} 新訊息={after.content}",
+                channel_or_file=str(before.channel.name),
+                action="edit_message",
             )
             
             guild_id = str(after.guild.id)
@@ -367,10 +373,12 @@ class PigPig(commands.Bot):
                 not module.startswith('.')):
                 try:
                     await self.load_extension(f"cogs.{module[:-3]}")
-                    print(f"Loaded {module[:-3]}")
+                    logger = getattr(self, "system_logger", log)
+                    logger.info(f"Loaded {module[:-3]}")
                 except Exception as e:
-                    print(f"Failed to load {module[:-3]}: {e}")
-                    print(traceback.format_exc())
+                    logger = getattr(self, "system_logger", log)
+                    logger.error(f"Failed to load {module[:-3]}", exception=e)
+                    logger.error(traceback.format_exc())
 
         # Initialize core services
         self.orchestrator = Orchestrator(self)
@@ -415,13 +423,14 @@ class PigPig(commands.Bot):
             - Initializes logger for each guild the bot is in
             - Starts periodic status updates if not already running
         """
-        print("------------------")
-        print(f"Logging As {self.user}")
-        print(f"Bot ID: {self.user.id}")
-        print("------------------")
-        print(f"Discord Version: {discord.__version__}")
-        print(f"Python Version: {sys.version}")
-        print("------------------")
+        logger = getattr(self, "system_logger", log)
+        logger.info("------------------")
+        logger.info(f"Logging As {self.user}")
+        logger.info(f"Bot ID: {self.user.id}")
+        logger.info("------------------")
+        logger.info(f"Discord Version: {discord.__version__}")
+        logger.info(f"Python Version: {sys.version}")
+        logger.info("------------------")
         # Log guild and channel state using per-guild structured loggers.
         for guild in self.guilds:
             # Ensure logger exists and obtain it
@@ -511,8 +520,6 @@ class PigPig(commands.Bot):
         # Log error
         logger.error(f"事件 '{event_method}' 發生錯誤")
         logger.error(traceback.format_exc())
-        print(f"事件 '{event_method}' 發生錯誤")
-        print(traceback.format_exc())
 
         await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
 
@@ -555,8 +562,6 @@ class PigPig(commands.Bot):
         if logger:
             logger.error(f"指令 '{ctx.command}' 發生錯誤: {error}")
             logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
-        print(f"指令 '{ctx.command}' 發生錯誤: {error}")
-        print("".join(traceback.format_exception(type(error), error, error.__traceback__)))
 
         await func.report_error(error, f"on_command_error: {ctx.command}")
 
@@ -565,9 +570,9 @@ class PigPig(commands.Bot):
             await ctx.send("error on command execution.")
         except Exception as e:
             if logger:
-                logger.exception("回覆錯誤訊息時發生例外")
+                logger.error("Failed replying error message", exception=e)
             else:
-                print(f"回覆錯誤訊息時發生例外: {e}")
+                log.error(f"Failed replying error message: {e}", exception=e)
             await func.report_error(ctx, error)
             
     async def send_error_report(self, embed: discord.Embed):
@@ -613,6 +618,8 @@ class PigPig(commands.Bot):
                 loop = asyncio.get_running_loop()
                 await loop.shutdown_default_executor()
             except Exception as e:
-                print(f"Error occurred while shutting down default executor: {e}")
+                logger = getattr(self, "system_logger", log)
+                logger.error(f"Error occurred while shutting down default executor: {e}", exception=e)
         except Exception as e:
-            print(f"Error occurred while closing bot: {e}")
+            logger = getattr(self, "system_logger", log)
+            logger.error(f"Error occurred while closing bot: {e}", exception=e)
