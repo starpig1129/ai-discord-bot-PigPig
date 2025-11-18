@@ -1296,23 +1296,23 @@ class SystemPromptManager:
         try:
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
-        asyncio.create_task(func.report_error(e, f"Error saving guild config {guild_id}"))
-        self.logger.error(f"保存伺服器配置失敗 {guild_id}: {e}")
+        except Exception as e:
+            lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
+            asyncio.create_task(func.report_error(e, f"Error saving guild config {guild_id}"))
+            self.logger.error(f"保存伺服器配置失敗 {guild_id}: {e}")
+            
+            error_message = f"無法保存配置: {str(e)}"
+            if lang_manager and guild_id:
+                try:
+                    error_message = lang_manager.translate(
+                        guild_id,
+                        "commands", "system_prompt",
+                        "errors", "operation_failed"
+                    ).format(error=str(e))
+                except Exception:
+                    pass
         
-        error_message = f"無法保存配置: {str(e)}"
-        if lang_manager and guild_id:
-            try:
-                error_message = lang_manager.translate(
-                    guild_id,
-                    "commands", "system_prompt",
-                    "errors", "operation_failed"
-                ).format(error=str(e))
-            except Exception:
-                pass
-        
-        raise ConfigurationError(error_message, str(config_file))
+            raise ConfigurationError(error_message, str(config_file))
     
     def _get_default_config(self) -> Dict[str, Any]:
         """取得預設配置"""
