@@ -1,0 +1,31 @@
+{
+    "errors": {
+        "world_not_found": "The world {world_name} could not be found.",
+        "gm_plan_failed": "Failed to generate the game master's plan.",
+        "world_load_failed": "Failed to load the world {world_name}.",
+        "characters_load_failed": "Failed to load the characters.",
+        "first_scene_failed": "Failed to generate the first scene."
+    },
+    "labels": {
+        "with": "with",
+        "relationships": "Relationships",
+        "date": "Date",
+        "time": "Time",
+        "location": "Location"
+    },
+    "start_scene": {
+        "title": "Story Started",
+        "description": "A new story '{world_name}' has begun!",
+        "world_background": "World Background",
+        "no_background": "No background information available.",
+        "participants": "Participants",
+        "none": "None",
+        "footer": "Type something to continue the story!"
+    },
+    "dialogue": {
+        "no_substitute": "No character could be substituted for '{speaker}'."
+    },
+    "intervene": {
+        "no_active_story": "There is no active story in this channel. Unable to intervene."
+    }
+}

@@ -1,0 +1,31 @@
+{
+    "errors": {
+        "world_not_found": "世界 {world_name} が見つかりません。",
+        "gm_plan_failed": "ゲームマスターのプランを生成できませんでした。",
+        "world_load_failed": "世界 {world_name} の読み込みに失敗しました。",
+        "characters_load_failed": "キャラクターの読み込みに失敗しました。",
+        "first_scene_failed": "最初のシーンを生成できませんでした。"
+    },
+    "labels": {
+        "with": "と",
+        "relationships": "関係",
+        "date": "日付",
+        "time": "時間",
+        "location": "場所"
+    },
+    "start_scene": {
+        "title": "ストーリー開始",
+        "description": "新しいストーリー「{world_name}」が始まりました！",
+        "world_background": "世界の背景",
+        "no_background": "利用可能な背景情報はありません。",
+        "participants": "参加者",
+        "none": "なし",
+        "footer": "何かを入力してストーリーを続けましょう！"
+    },
+    "dialogue": {
+        "no_substitute": "「{speaker}」の代替キャラクターが見つかりませんでした。"
+    },
+    "intervene": {
+        "no_active_story": "このチャンネルには現在アクティブなストーリーがあります。介入できません。"
+    }
+}

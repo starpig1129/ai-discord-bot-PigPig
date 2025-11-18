@@ -1,0 +1,31 @@
+{
+    "errors": {
+        "world_not_found": "找不到世界 {world_name}。",
+        "gm_plan_failed": "无法生成游戏主持人的计划。",
+        "world_load_failed": "无法加载世界 {world_name}。",
+        "characters_load_failed": "无法加载角色。",
+        "first_scene_failed": "无法生成第一个场景。"
+    },
+    "labels": {
+        "with": "与",
+        "relationships": "关系",
+        "date": "日期",
+        "time": "时间",
+        "location": "地点"
+    },
+    "start_scene": {
+        "title": "故事开始",
+        "description": "新故事「{world_name}」已经开始！",
+        "world_background": "世界背景",
+        "no_background": "没有可用的背景资讯。",
+        "participants": "参与者",
+        "none": "无",
+        "footer": "输入一些内容来继续故事吧！"
+    },
+    "dialogue": {
+        "no_substitute": "无法为「{speaker}」找到替换角色。"
+    },
+    "intervene": {
+        "no_active_story": "此频道目前没有正在进行的故事情节。无法进行干预。"
+    }
+}
