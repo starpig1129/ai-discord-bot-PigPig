@@ -1,12 +1,19 @@
 {
-    "memory": {
-        "name": "memory",
-        "description": "内存管理命令",
-        "force_update": {
-            "responses": {
+    "commands": {
+        "memory": {
+            "force_update": {
                 "starting": "开始强制更新记忆...",
-                "post_vectorization": "向量化完成，正在更新索引...",
-                "success": "强制更新完成"
+                "not_text_channel": "此命令必须在文字频道中使用。",
+                "success": "强制更新完成",
+                "error": "强制更新记忆失败，已记录错误。"
+            },
+            "search": {
+                "searching": "正在搜索情境记忆...",
+                "no_parameters": "请至少提供一个搜索参数（vector_query、keyword_query、user_id或channel_id）。",
+                "results_found": "找到{len}条相关记忆：\n\n",
+                "no_results": "找不到符合条件的记忆。",
+                "not_implemented": "搜索功能尚未在存储后端实现。请联系开发者。",
+                "error": "搜索记忆时发生错误，已记录错误日志。"
             }
         }
     }

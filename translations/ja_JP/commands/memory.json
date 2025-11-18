@@ -1,12 +1,19 @@
 {
-    "memory": {
-        "name": "memory",
-        "description": "メモリ管理コマンド",
-        "force_update": {
-            "responses": {
+    "commands": {
+        "memory": {
+            "force_update": {
                 "starting": "強制メモリ更新を開始します...",
-                "post_vectorization": "ベクトル化後の処理中...",
-                "success": "強制更新が完了しました"
+                "not_text_channel": "このコマンドはテキストチャンネルで使用する必要があります。",
+                "success": "強制更新が完了しました",
+                "error": "強制更新が失敗しました、エラーがログに記録されました。"
+            },
+            "search": {
+                "searching": "Episodicメモリを検索中...",
+                "no_parameters": "少なくとも1つの検索パラメータ（vector_query、keyword_query、user_id、またはchannel_id）を提供してください。",
+                "results_found": "関連するメモリを{len}件見つかりました：\n\n",
+                "no_results": "一致するメモリが見つかりませんでした。",
+                "not_implemented": "検索機能はストレージバックエンドでまだ実装されていません。開発者にお問い合わせください。",
+                "error": "メモリ検索中にエラーが発生しました、エラーがログに記録されました。"
             }
         }
     }

@@ -1,22 +1,20 @@
 {
-    "memory": {
-        "name": "memory",
-        "description": "記憶體管理指令",
-        "force_update": {
-            "responses": {
+    "commands": {
+        "memory": {
+            "force_update": {
                 "starting": "正在強制更新此頻道的記憶...",
                 "not_text_channel": "此指令必須在文字頻道中使用。",
                 "success": "已成功觸發頻道記憶更新。",
                 "error": "強制更新記憶失敗，已記錄錯誤。"
+            },
+            "search": {
+                "searching": "正在搜尋情境記憶...",
+                "no_parameters": "請至少提供一個搜尋參數（vector_query、keyword_query、user_id 或 channel_id）。",
+                "results_found": "找到 {len} 筆相關記憶：\n\n",
+                "no_results": "找不到符合條件的記憶。",
+                "not_implemented": "搜尋功能尚未在儲存後端實現。請聯繫開發者。",
+                "error": "搜尋記憶時發生錯誤，已記錄錯誤日誌。"
             }
-        },
-        "search": {
-            "searching": "正在搜尋情境記憶...",
-            "no_parameters": "請至少提供一個搜尋參數（vector_query、keyword_query、user_id 或 channel_id）。",
-            "results_found": "找到 {len} 筆相關記憶：\n\n",
-            "no_results": "找不到符合條件的記憶。",
-            "not_implemented": "搜尋功能尚未在儲存後端實現。請聯繫開發者。",
-            "error": "搜尋記憶時發生錯誤，已記錄錯誤日誌。"
         }
     }
 }

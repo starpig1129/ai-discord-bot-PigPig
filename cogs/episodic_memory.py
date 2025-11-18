@@ -64,16 +64,16 @@ class EpisodicMemoryService(commands.Cog):
         # Fallback translations for memory commands
         arg_tuple = tuple(args)
         fallbacks: dict[tuple[str, ...], str] = {
-            ("commands", "memory", "force_update", "starting"): "正在強制更新此頻道的記憶...",
-            ("commands", "memory", "force_update", "not_text_channel"): "此指令必須在文字頻道中使用。",
-            ("commands", "memory", "force_update", "success"): "已成功觸發頻道記憶更新。",
-            ("commands", "memory", "force_update", "error"): "強制更新記憶失敗，已記錄錯誤。",
-            ("commands", "memory", "search", "searching"): "正在搜尋情境記憶...",
-            ("commands", "memory", "search", "no_parameters"): "請至少提供一個搜尋參數（vector_query、keyword_query、user_id 或 channel_id）。",
-            ("commands", "memory", "search", "results_found"): "找到 {len} 筆相關記憶：\n\n",
-            ("commands", "memory", "search", "no_results"): "找不到符合條件的記憶。",
-            ("commands", "memory", "search", "not_implemented"): "搜尋功能尚未在儲存後端實現。請聯繫開發者。",
-            ("commands", "memory", "search", "error"): "搜尋記憶時發生錯誤，已記錄錯誤日誌。"
+            ("commands", "memory", "force_update", "starting"): "Starting forced memory update...",
+            ("commands", "memory", "force_update", "not_text_channel"): "This command must be used in a text channel.",
+            ("commands", "memory", "force_update", "success"): "Force update completed",
+            ("commands", "memory", "force_update", "error"): "Force update failed, error has been logged.",
+            ("commands", "memory", "search", "searching"): "Searching episodic memory...",
+            ("commands", "memory", "search", "no_parameters"): "Please provide at least one search parameter (vector_query, keyword_query, user_id, or channel_id).",
+            ("commands", "memory", "search", "results_found"): "Found {len} related memories:\n\n",
+            ("commands", "memory", "search", "no_results"): "No matching memories found.",
+            ("commands", "memory", "search", "not_implemented"): "Search functionality is not yet implemented in the storage backend. Please contact the developer.",
+            ("commands", "memory", "search", "error"): "An error occurred while searching memory, error has been logged."
         }
         
         return fallbacks.get(arg_tuple, args[-1] if args else "Translation not found")
