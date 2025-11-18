@@ -13,13 +13,5 @@
       "error_unsupported_elements": "错误：表达式包含不支持的元素。",
       "error_general": "计算错误：无法解析或计算该表达式。"
     }
-  },
-  "responses": {
-    "processing": "正在计算中...",
-    "result": "计算结果: {result}",
-    "error_general": "计算错误: {error}",
-    "error_too_long": "表达式太长",
-    "error_undefined_function": "未定义的函数",
-    "error_unsupported_elements": "不支持的元素"
   }
 }

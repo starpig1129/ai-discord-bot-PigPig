@@ -13,13 +13,5 @@
       "error_unsupported_elements": "エラー：式にサポートされていない要素が含まれています。",
       "error_general": "計算エラー：式を解析または計算できません。"
     }
-  },
-  "responses": {
-    "processing": "計算中...",
-    "result": "結果: {result}",
-    "error_general": "計算エラー: {error}",
-    "error_too_long": "式が長すぎます",
-    "error_undefined_function": "未定義の関数",
-    "error_unsupported_elements": "サポートされていない要素"
   }
 }

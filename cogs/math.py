@@ -55,7 +55,7 @@ class MathCalculatorCog(commands.Cog):
         
         if message_to_edit is not None:
             processing_message = self.lang_manager.translate(
-                guild_id, "commands", "calculate", "responses", "processing"
+                guild_id, "commands", "math", "responses", "processing"
             ) if self.lang_manager else "計算中..."
             await safe_edit_message(message_to_edit, processing_message)
         try:
@@ -160,7 +160,7 @@ class MathCalculatorCog(commands.Cog):
                 # 清楚錯誤：未找到可計算的表達式
                 if self.lang_manager:
                     return self.lang_manager.translate(
-                        guild_id, "responses", "error", error="未找到可計算的表達式"
+                        guild_id, "commands", "math", "responses", "error_general", error="未找到可計算的表達式"
                     )
                 else:
                     return "錯誤：未找到可計算的表達式。"
@@ -168,7 +168,7 @@ class MathCalculatorCog(commands.Cog):
             # 長度限制（以抽取後的表達式為準）
             if len(extracted) > 200:
                 error_message = self.lang_manager.translate(
-                    guild_id, "commands", "calculate", "responses", "error_too_long"
+                    guild_id, "commands", "math", "responses", "error_too_long"
                 ) if self.lang_manager else "錯誤：表達式過長，請縮短後再試。"
                 return error_message
 
@@ -188,7 +188,7 @@ class MathCalculatorCog(commands.Cog):
             from sympy.core.function import UndefinedFunction
             if sympy_expr.has(UndefinedFunction):
                 error_message = self.lang_manager.translate(
-                    guild_id, "commands", "calculate", "responses", "error_undefined_function"
+                    guild_id, "commands", "math", "responses", "error_undefined_function"
                 ) if self.lang_manager else "錯誤：表達式包含未定義的函數。"
                 return error_message
 
@@ -196,7 +196,7 @@ class MathCalculatorCog(commands.Cog):
             unsafe_types = (sympy.Symbol, sympy.Function)
             if sympy_expr.has(*unsafe_types):
                 error_message = self.lang_manager.translate(
-                    guild_id, "commands", "calculate", "responses", "error_unsupported_elements"
+                    guild_id, "commands", "math", "responses", "error_unsupported_elements"
                 ) if self.lang_manager else "錯誤：表達式包含不支持的元素。"
                 return error_message
 
@@ -212,7 +212,7 @@ class MathCalculatorCog(commands.Cog):
             
             # 使用翻譯系統格式化結果訊息
             result_message = self.lang_manager.translate(
-                guild_id, "commands", "calculate", "responses", "result",
+                guild_id, "commands", "math", "responses", "result",
                 expression=expression, result=result_str
             ) if self.lang_manager else f'計算結果: {expression} = {result_str}'
             
@@ -221,7 +221,7 @@ class MathCalculatorCog(commands.Cog):
             await func.report_error(e, f"An error occurred during calculation in cogs/math.py")
             log.error("Calculation error", exception=e)
             error_message = self.lang_manager.translate(
-                guild_id, "commands", "calculate", "responses", "error_general"
+                guild_id, "commands", "math", "responses", "error_general"
             ) if self.lang_manager else "計算錯誤：無法解析或計算該表達式。"
             return error_message
 
