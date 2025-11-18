@@ -9,10 +9,12 @@ import json
 import zipfile
 import shutil
 import asyncio
-import logging
+from addons.logging import get_logger
 from datetime import datetime
 from typing import Dict, Any, Optional
 from discord.ext import tasks
+# module-level logger
+log = get_logger(server_id="Bot", source=__name__)
 
 from .checker import VersionChecker
 from .downloader import UpdateDownloader
@@ -67,7 +69,8 @@ class UpdateLogger:
     
     def __init__(self, log_dir: str = "data/update_logs"):
         self.log_dir = log_dir
-        self.logger = logging.getLogger(__name__)
+        # use addons logging for update subsystem
+        self.logger = get_logger(server_id="Bot", source=__name__)
         os.makedirs(log_dir, exist_ok=True)
         self.log_file = os.path.join(log_dir, "update_history.json")
         self.current_log = None
@@ -137,7 +140,8 @@ class UpdateManager:
             bot: Discord Bot 實例
         """
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        # bind to system server id for update subsystem
+        self.logger = get_logger(server_id="Bot", source=__name__)
         
         # 載入配置
         self.update_settings = update_config

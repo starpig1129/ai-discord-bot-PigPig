@@ -8,11 +8,13 @@ import os
 import aiohttp
 import zipfile
 import hashlib
-import logging
+from addons.logging import get_logger
 from datetime import datetime
 from typing import Callable, Optional, Awaitable
 from function import func
 import asyncio
+# module-level logger
+log = get_logger(server_id="Bot", source=__name__)
 
 
 class UpdateDownloader:
@@ -26,7 +28,8 @@ class UpdateDownloader:
             download_dir: 下載目錄路徑
         """
         self.download_dir = download_dir
-        self.logger = logging.getLogger(__name__)
+        # bind to system server id
+        self.logger = get_logger(server_id="Bot", source=__name__)
         os.makedirs(download_dir, exist_ok=True)
     
     async def download_update(self, 

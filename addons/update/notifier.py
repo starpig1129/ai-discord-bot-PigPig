@@ -6,11 +6,13 @@ Discord 通知系統模組
 
 import os
 import discord
-import logging
+from addons.logging import get_logger
 from datetime import datetime
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from function import func
+# module-level logger
+log = get_logger(server_id="Bot", source=__name__)
 
 
 class DiscordNotifier:
@@ -24,7 +26,8 @@ class DiscordNotifier:
             bot: Discord Bot 實例
         """
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        # use system-scoped logger for notifier
+        self.logger = get_logger(server_id="Bot", source=__name__)
         load_dotenv()
         self.owner_id = int(os.getenv("BOT_OWNER_ID", 0))
         
@@ -399,7 +402,7 @@ class QuickUpdateView(discord.ui.View):
         # 檢查是否為 Bot 擁有者
         load_dotenv()
         owner_id = int(os.getenv("BOT_OWNER_ID", 0))
-        logger = logging.getLogger(__name__)
+        logger = get_logger(server_id="Bot", source=__name__)
         
         if owner_id == 0:
             logger.error("Bot 擁有者未配置")

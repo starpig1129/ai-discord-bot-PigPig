@@ -1,9 +1,13 @@
 import os
 import asyncio
+from addons.logging import get_logger
 
 from dotenv import load_dotenv
 
 load_dotenv()
+log = get_logger(server_id="Bot", source=__name__)
+# keep compatibility variable name used elsewhere (if any)
+logger = log
 
 
 class TOKENS:
@@ -74,8 +78,8 @@ class TOKENS:
                         )
                     )
                 except Exception:
-                    # fallback 到 stdout（保險處理）
-                    print(f"警告：{api_name} 未設定，可能影響相關功能")
+                    # fallback log when func is unavailable
+                    logger.warning(f"警告：{api_name} 未設定，可能影響相關功能")
 
         # 若有缺失或無效的環境變數，使用 func.report_error 回報後終止
         if missing_vars or invalid_vars:
@@ -90,7 +94,7 @@ class TOKENS:
                 from function import func
                 asyncio.create_task(func.report_error(Exception(error_msg), "addons/tokens.py/_validate_environment_variables"))
             except Exception:
-                print(error_msg)
+                logger.error(error_msg)
 
             # 明確終止程式，避免繼續在缺少必要設定的情況下執行
             raise SystemExit(1)
@@ -106,7 +110,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/tokens.py/module_init"))
     except Exception:
-        print(f"初始化 TOKENS 時發生錯誤: {e}")
+        logger.error(f"初始化 TOKENS 時發生錯誤: {e}")
     tokens = None
 
 __all__ = ["TOKENS", "tokens"]

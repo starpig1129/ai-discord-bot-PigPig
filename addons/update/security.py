@@ -7,13 +7,17 @@
 import os
 import json
 import shutil
-import logging
+from addons.logging import get_logger
 import discord
 from datetime import datetime
 from typing import List, Optional
 from dotenv import load_dotenv
 from function import func
 import asyncio
+
+# module-level logger
+log = get_logger(server_id="Bot", source=__name__)
+logger = log
 
 
 class UpdatePermissionChecker:
@@ -23,7 +27,7 @@ class UpdatePermissionChecker:
         """初始化權限檢查器"""
         load_dotenv()
         self.bot_owner_id = int(os.getenv("BOT_OWNER_ID", 0))
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="Bot", source=__name__)
         
         if self.bot_owner_id == 0:
             self.logger.warning("BOT_OWNER_ID 未設定或無效，更新功能將無法使用")
@@ -78,7 +82,7 @@ class BackupManager:
             backup_dir: 備份目錄路徑
         """
         self.backup_dir = backup_dir
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="Bot", source=__name__)
         os.makedirs(backup_dir, exist_ok=True)
     
     def create_backup(self, protected_files: Optional[List[str]] = None) -> str:
@@ -431,7 +435,7 @@ class ConfigProtector:
     
     def __init__(self):
         """初始化配置保護器"""
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="Bot", source=__name__)
         self.protected_files = [
             "settings.json", ".env", "data/dialogue_history.json",
             "data/channel_configs/", "data/user_data/", "data/update_config.json"

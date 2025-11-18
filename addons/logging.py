@@ -24,25 +24,12 @@ try:
 except Exception:  # pragma: no cover - defensive fallback
     func = None
 
-# Load logging configuration from settings.base_config.logging if available.
+# Placeholder for logging configuration; real values are loaded from addons.settings.BaseConfig
 _LOG_CFG: Dict[str, Any] = {}
-# Safely obtain logging config whether base_config is an object or a dict.
-base_cfg = getattr(settings, "base_config", None)
-if isinstance(base_cfg, dict):
-    # base_config provided as a dict
-    _LOG_CFG = base_cfg.get("logging", {}) or {}
-elif base_cfg is not None:
-    # base_config provided as an object with attributes
-    try:
-        _LOG_CFG = getattr(base_cfg, "logging", {}) or {}
-    except Exception:
-        _LOG_CFG = {}
-else:
-    # No base_config found; fallback to empty
-    _LOG_CFG = {}
 
-# Defaults (match plan.md defaults)
-_DEFAULTS = {
+# Minimal internal defaults — prefer user-provided settings from addons.settings.BaseConfig.
+# Keep these minimal to avoid duplicating the full default schema defined in BaseConfig.
+_MINIMAL_DEFAULTS = {
     "console": {"enabled": True, "color": True, "level": "INFO"},
     "color_map": {
         "level": {"ERROR": "red", "WARNING": "yellow", "INFO": "green", "DEBUG": "cyan", "CRITICAL": "bright_red"},
@@ -52,23 +39,21 @@ _DEFAULTS = {
             "channel": "bright_black",
             "user": "bright_black",
             "action": "bright_cyan",
-            "message": "white"
-        }
+            "message": "white",
+        },
     },
     "async": {"batch_size": 500, "flush_interval": 2.0},
-    "rotation": {"policy": "daily", "compress": True, "retention_days": 300},
-    "per_level_retention": {"INFO": 300, "WARNING": 300, "ERROR": 900},
-    "fsync_on_flush": False,
     "log_base_path": "logs",
-    "use_emoji": True,  # Enable emoji indicators
+    "use_emoji": False,
 }
-
-# Merge defaults with provided config (shallow merge is sufficient for our keys)
-CONFIG = {**_DEFAULTS, **_LOG_CFG}
-CONFIG["console"] = {**_DEFAULTS["console"], **CONFIG.get("console", {})}
-CONFIG["color_map"] = {**_DEFAULTS["color_map"], **CONFIG.get("color_map", {})}
-CONFIG["color_map"]["fields"] = {**_DEFAULTS["color_map"]["fields"], **CONFIG.get("color_map", {}).get("fields", {})}
-CONFIG["async"] = {**_DEFAULTS["async"], **CONFIG.get("async", {})}
+# Initialize CONFIG with minimal defaults; real configuration is loaded later by load_config_from_settings()
+CONFIG: Dict[str, Any] = dict(_MINIMAL_DEFAULTS)
+# Ensure nested keys exist for safe access before load_config_from_settings is called.
+CONFIG.setdefault("console", {}).setdefault("enabled", True)
+CONFIG.setdefault("console", {}).setdefault("color", True)
+CONFIG.setdefault("console", {}).setdefault("level", "INFO")
+CONFIG.setdefault("color_map", {}).setdefault("fields", {})
+CONFIG.setdefault("async", {})
 
 
 def _check_color_support() -> bool:
@@ -117,35 +102,85 @@ def _check_color_support() -> bool:
     return True
 
 
-# Configure loguru console sink: simple message-only single-line output.
-# Remove existing handlers and add a minimal one to keep console rendering predictable.
-try:
-    loguru_logger.remove()
-    # Load console preferences from CONFIG
-    console_level = CONFIG.get("console", {}).get("level", "INFO")
-    console_color = bool(CONFIG.get("console", {}).get("color", True))
-    # Detect whether the current stderr supports ANSI colors (a TTY). If not, avoid emitting ANSI.
+# Previously we attempted to read settings at import time which caused a race
+# with addons.settings (circular import). Instead, provide explicit functions
+# that load the logging config from addons.settings.base_config and initialize
+# the loguru console sink. addons.settings will call these after it instantiates
+# BaseConfig so CONFIG_ROOT is respected and user-provided defaults are applied.
+_LOG_CFG = _LOG_CFG or {}
+
+# Runtime flags (populated by load_config_from_settings)
+CONSOLE_SUPPORTS_ANSI = False
+CONSOLE_COLOR_ENABLED = False
+
+def load_config_from_settings() -> None:
+    """Load logging configuration from addons.settings.base_config and merge with defaults.
+
+    This function should be called by addons.settings after it successfully
+    constructs BaseConfig from CONFIG_ROOT so user configuration is applied.
+    """
+    global _LOG_CFG, CONFIG, CONSOLE_SUPPORTS_ANSI, CONSOLE_COLOR_ENABLED
+    try:
+        base_cfg = getattr(settings, "base_config", None)
+        if isinstance(base_cfg, dict):
+            _LOG_CFG = base_cfg.get("logging", {}) or {}
+        elif base_cfg is not None:
+            try:
+                _LOG_CFG = getattr(base_cfg, "logging", {}) or {}
+            except Exception:
+                _LOG_CFG = {}
+        else:
+            _LOG_CFG = {}
+    except Exception:
+        _LOG_CFG = {}
+
+    # Merge minimal defaults with provided config (shallow merge)
+    CONFIG = {**_MINIMAL_DEFAULTS, **_LOG_CFG} if "_MINIMAL_DEFAULTS" in globals() else {**_LOG_CFG}
+    CONFIG["console"] = {**_MINIMAL_DEFAULTS.get("console", {}), **CONFIG.get("console", {})}
+    CONFIG["color_map"] = {**_MINIMAL_DEFAULTS.get("color_map", {}), **CONFIG.get("color_map", {})}
+    CONFIG["color_map"]["fields"] = {
+        **_MINIMAL_DEFAULTS.get("color_map", {}).get("fields", {}),
+        **CONFIG.get("color_map", {}).get("fields", {}),
+    }
+    CONFIG["async"] = {**_MINIMAL_DEFAULTS.get("async", {}), **CONFIG.get("async", {})}
+    # Ensure use_emoji respects user config in LOG_CFG, otherwise fall back to minimal default
+    CONFIG["use_emoji"] = _LOG_CFG.get("use_emoji", _MINIMAL_DEFAULTS.get("use_emoji", False))
+
+    # Update color support flags
     _console_supports_ansi = _check_color_support()
-    _console_use_color = console_color and _console_supports_ansi
-    # Register sink with loguru; allow colorize only when terminal supports it.
-    loguru_logger.add(
-        sys.stderr,
-        format="{message}",
-        colorize=False,  # We handle coloring manually
-        level=str(console_level).upper(),
-    )
-    # Expose flags for runtime checks elsewhere in this module.
     CONSOLE_SUPPORTS_ANSI = _console_supports_ansi
-    CONSOLE_COLOR_ENABLED = _console_use_color
-except Exception:
-    # If configuring loguru fails, report and continue without raising.
-    if func:
-        try:
-            asyncio.create_task(func.report_error(Exception("loguru init failed"), "addons/logging_manager.py/init"))
-        except Exception:
+    CONSOLE_COLOR_ENABLED = bool(CONFIG.get("console", {}).get("color", True)) and _console_supports_ansi
+
+def init_loguru_console() -> None:
+    """Initialize or reconfigure the loguru console sink based on current CONFIG.
+
+    Call this after load_config_from_settings() so the console format and color
+    options come from the user's configuration.
+    """
+    try:
+        # Remove existing handlers to avoid duplicate output.
+        loguru_logger.remove()
+        # Load console preferences from CONFIG
+        console_level = CONFIG.get("console", {}).get("level", "INFO")
+        console_color = bool(CONFIG.get("console", {}).get("color", True))
+        # Format string may be provided by config; fall back to minimal message-only format.
+        console_format = CONFIG.get("console", {}).get("format", "{message}")
+        colorize = bool(console_color) and CONSOLE_SUPPORTS_ANSI
+        loguru_logger.add(
+            sys.stderr,
+            format=console_format,
+            colorize=colorize,
+            level=str(console_level).upper(),
+        )
+    except Exception:
+        # If configuring loguru fails, report and continue without raising.
+        if func:
+            try:
+                asyncio.create_task(func.report_error(Exception("loguru init failed"), "addons/logging.py/init_loguru_console"))
+            except Exception:
+                print("loguru init failed")
+        else:
             print("loguru init failed")
-    else:
-        print("loguru init failed")
 
 
 @dataclass
@@ -665,6 +700,21 @@ class LoggerAdapter:
             event_fields.pop("message", None)
             msg = message or ""
         self._emit("DEBUG", msg, exception, **event_fields)
+    
+    def exception(self, message: Optional[str] = None, **event_fields: Any) -> None:
+        """Log an ERROR-level event with the current exception traceback (like logging.exception)."""
+        # Capture the current exception (if any) and forward it as 'exception' to _emit.
+        try:
+            exc = sys.exc_info()[1]
+        except Exception:
+            exc = None
+        if message is None and "message" in event_fields:
+            msg = event_fields.pop("message")
+        else:
+            event_fields.pop("message", None)
+            msg = message or ""
+        # Use ERROR level and include the captured exception object so stack trace is emitted
+        self._emit("ERROR", msg, exc, **event_fields)
 
 
 # Public API

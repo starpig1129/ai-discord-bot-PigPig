@@ -5,11 +5,13 @@
 """
 
 import aiohttp
-import logging
+from addons.logging import get_logger
 from typing import Dict, Optional
 import update
 from function import func
 import asyncio
+# module-level logger
+log = get_logger(server_id="Bot", source=__name__)
 
 
 class VersionChecker:
@@ -27,7 +29,8 @@ class VersionChecker:
             "https://api.github.com/repos/starpig1129/ai-discord-bot-PigPig/releases/latest"
         )
         self.current_version = self._get_current_version()
-        self.logger = logging.getLogger(__name__)
+        # bind to a system-level server id to ensure server context exists
+        self.logger = get_logger(server_id="Bot", source=__name__)
     
     def _get_current_version(self) -> str:
         """

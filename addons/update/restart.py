@@ -9,7 +9,7 @@ import os
 import sys
 import json
 import asyncio
-import logging
+from addons.logging import get_logger
 import subprocess
 import shutil
 import time
@@ -17,6 +17,8 @@ import platform
 from datetime import datetime
 from typing import Dict, Any, Optional
 from function import func
+# module-level logger
+log = get_logger(server_id="Bot", source=__name__)
 
 
 class SimpleRestartManager:
@@ -31,7 +33,8 @@ class SimpleRestartManager:
             restart_config: 重啟配置
         """
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        # use system-scoped logger for restart manager
+        self.logger = get_logger(server_id="Bot", source=__name__)
         
         # 簡化的重啟配置
         default_config = {

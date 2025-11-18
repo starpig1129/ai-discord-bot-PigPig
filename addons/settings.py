@@ -1,11 +1,14 @@
 import yaml
 import asyncio
-import logging
+from addons.logging import get_logger
 import os
 from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+# module-level logger must be available before CONFIG_ROOT is evaluated
+log = get_logger(server_id="Bot", source=__name__)
+logger = log
 
 def _load_yaml_file(path: str) -> dict:
     """安全讀取 YAML 檔案，失敗時使用 func.report_error 回報並回傳空 dict"""
@@ -18,7 +21,7 @@ def _load_yaml_file(path: str) -> dict:
             from function import func
             asyncio.create_task(func.report_error(e, "addons/settings.py/_load_yaml_file"))
         except Exception:
-            print(f"載入 YAML 檔案失敗 ({path}): {e}")
+            logger.error(f"載入 YAML 檔案失敗 ({path}): {e}")
         return {}
 
 def _get_config_root() -> str:
@@ -40,14 +43,14 @@ def _get_config_root() -> str:
                 func.report_error(Exception("CONFIG_ROOT environment variable not set"), "addons/settings.py/_get_config_root")
             )
         except Exception:
-            logging.getLogger(__name__).warning("CONFIG_ROOT environment variable not set; defaulting to './base_configs'")
+            # fallback to module logger
+            logger.warning("CONFIG_ROOT environment variable not set; defaulting to './base_configs'")
         return "./base_configs"
 
 # Evaluate CONFIG_ROOT at module import time so the module-level config loaders
 # below use the configured root directory.
 CONFIG_ROOT = _get_config_root()
-logger = logging.getLogger(__name__)
-logger.debug(f"addons.settings CONFIG_ROOT={CONFIG_ROOT}")
+logger.info(f"addons.settings CONFIG_ROOT={CONFIG_ROOT}")
 
 
 class BaseConfig:
@@ -92,7 +95,7 @@ class BaseConfig:
             "per_level_retention": {"INFO": 300, "WARNING": 300, "ERROR": 900},
             "fsync_on_flush": False,
             "log_base_path": "logs",
-            "use_emoji": True,  # Enable emoji indicators in console output
+            "use_emoji": False,  # Enable emoji indicators in console output
             # Per-logger overrides to reduce noise from verbose third-party libraries.
             # Example in YAML:
             # logging:
@@ -197,7 +200,7 @@ class PromptConfig:
         try:
             from llm.prompting.manager import get_prompt_manager
 
-            logger = logging.getLogger(__name__)
+            logger = get_logger(server_id="Bot", source=__name__)
             config_file = f"{self.path}/{agent_name}.yaml"
             logger.debug(f"PromptConfig.get_system_prompt: loading config_file={config_file}")
 
@@ -271,7 +274,7 @@ class PromptConfig:
                 asyncio.create_task(func.report_error(e, f"loading {agent_name} system prompt"))
             except Exception:
                 # 若報錯機制不可用，記錄本地日誌以便診斷
-                logger = logging.getLogger(__name__)
+                logger = get_logger(server_id="Bot", source=__name__)
                 logger.exception(f"Error loading {agent_name} system prompt: {e}")
             return ''
 
@@ -319,8 +322,28 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        print(f"初始化 BaseConfig 時發生錯誤: {e}")
+        logger.error(f"初始化 BaseConfig 時發生錯誤: {e}")
     base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")
+
+# After BaseConfig is created from CONFIG_ROOT, inform the logging module
+# to reload logging configuration and initialize the console sink so that
+# CONFIG_ROOT-based settings are respected (avoids circular import races).
+try:
+    import addons.logging as logging_module
+    try:
+        logging_module.load_config_from_settings()
+        logging_module.init_loguru_console()
+        logger.debug("Applied logging configuration from CONFIG_ROOT via addons.logging")
+    except Exception as inner_e:
+        try:
+            from function import func
+            asyncio.create_task(func.report_error(inner_e, "addons/settings.py/apply_logging_config"))
+        except Exception:
+            logger.warning(f"Failed to apply logging config from CONFIG_ROOT: {inner_e}")
+except Exception:
+    # If importing addons.logging fails here, continue silently; the module was likely
+    # already imported earlier and will pick up the configuration on next reload.
+    pass
 
 try:
     llm_config = LLMConfig(f"{CONFIG_ROOT}/llm.yaml")
@@ -329,7 +352,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        print(f"初始化 LLMConfig 時發生錯誤: {e}")
+        logger.error(f"初始化 LLMConfig 時發生錯誤: {e}")
     llm_config = LLMConfig(f"{CONFIG_ROOT}/llm.yaml")
 
 try:
@@ -339,7 +362,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        print(f"初始化 UpdateConfig 時發生錯誤: {e}")
+        logger.error(f"初始化 UpdateConfig 時發生錯誤: {e}")
     update_config = UpdateConfig(f"{CONFIG_ROOT}/update.yaml")
 try:
     music_config = MusicConfig(f"{CONFIG_ROOT}/music.yaml")
@@ -348,7 +371,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        print(f"初始化 MusicConfig 時發生錯誤: {e}")
+        logger.error(f"初始化 MusicConfig 時發生錯誤: {e}")
     music_config = MusicConfig(f"{CONFIG_ROOT}/music.yaml")
 try:
     prompt_config = PromptConfig(f"{CONFIG_ROOT}/prompt")
@@ -357,7 +380,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        print(f"初始化 PromptConfig 時發生錯誤: {e}")
+        logger.error(f"初始化 PromptConfig 時發生錯誤: {e}")
     prompt_config = PromptConfig(f"{CONFIG_ROOT}/prompt")
 try:
     memory_config = MemoryConfig(f"{CONFIG_ROOT}/memory.yaml")
@@ -366,7 +389,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        print(f"初始化 MemoryConfig 時發生錯誤: {e}")
+        logger.error(f"初始化 MemoryConfig 時發生錯誤: {e}")
     memory_config = MemoryConfig(f"{CONFIG_ROOT}/memory.yaml")
 __all__ = [
     "BaseConfig",
