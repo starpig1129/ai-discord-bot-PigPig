@@ -27,9 +27,12 @@ including preferences, display names, and interaction rules stored in a database
 """
 
 import json
-import logging
+from addons.logging import get_logger
 import re
 from typing import Any, Dict, List, Optional, Union, cast
+
+# Module-level logger
+log = get_logger(server_id="Bot", source=__name__)
 
 import discord
 from discord import app_commands
@@ -131,7 +134,7 @@ class UserDataCog(commands.Cog):
         self.bot = bot
         self.user_manager = user_manager
         self.lang_manager: Optional[LanguageManager] = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
 
     async def cog_load(self) -> None:
         """Initializes language manager and user manager when cog loads."""
@@ -454,16 +457,16 @@ class UserDataCog(commands.Cog):
                     # Create a minimal user record so downstream logic (and DB constraints) have a row to work with.
                     created = await self.user_manager.update_user_activity(user_id, display_name)
                     if created:
-                        self.logger.info("Initialized user record for %s", user_id)
+                        self.logger.info(f"Initialized user record for {user_id}")
                         # Attempt to fetch the freshly created record for the AI merge step.
                         try:
                             existing_data = await self.user_manager.get_user_info(user_id)
                         except Exception as e:
-                            self.logger.warning("Re-fetch after init failed for %s: %s", user_id, e)
+                            self.logger.warning(f"Re-fetch after init failed for {user_id}: {e}")
                     else:
-                        self.logger.warning("Initialization of user record returned False for %s", user_id)
+                        self.logger.warning(f"Initialization of user record returned False for {user_id}")
                 except Exception as e:
-                    self.logger.error("Failed to initialize user record for %s: %s", user_id, e)
+                    self.logger.error(f"Failed to initialize user record for {user_id}: {e}", exception=e)
                     try:
                         await func.report_error(e, f"Failed to initialize user record (user: {user_id})")
                     except Exception:

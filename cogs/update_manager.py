@@ -7,7 +7,9 @@ Discord 更新管理 Cog
 import discord
 from discord.ext import commands
 from discord import app_commands
-import logging
+from addons.logging import get_logger
+log = get_logger(source=__name__, server_id="system")
+logger = log
 from typing import Optional
 import asyncio
 
@@ -27,7 +29,7 @@ class UpdateManagerCog(commands.Cog):
             bot: Discord Bot 實例
         """
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
         
         # 初始化更新管理器
         try:

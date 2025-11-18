@@ -1,10 +1,13 @@
 import sqlite3
 import json
 import os
-import logging
+from addons.logging import get_logger
 from pathlib import Path
 from typing import Optional, List
 import threading
+
+# Module-level logger
+log = get_logger(server_id="Bot", source=__name__)
 
 from .models import StoryWorld, StoryCharacter, StoryInstance, PlayerRelationship
 
@@ -16,7 +19,7 @@ class CharacterDB:
         self.db_path = Path("data/story/characters.db")
         self._initialized = False
         self._lock = threading.Lock()
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
         os.makedirs(self.db_path.parent, exist_ok=True)
         self.logger.info(f"CharacterDB instance created, Path: {self.db_path}")
 
@@ -207,7 +210,7 @@ class StoryDB:
         self.guild_id = guild_id
         self._initialized = False
         self._lock = threading.Lock()
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
         os.makedirs(self.db_path.parent, exist_ok=True)
         self.logger.info(f"StoryDB instance created - Guild: {guild_id}, Path: {self.db_path}")
 

@@ -1,12 +1,14 @@
-import logging
+from addons.logging import get_logger
 from .models import StoryInstance, GMActionPlan
+
+log = get_logger(server_id="Bot", source=__name__)
 
 class StoryStateManager:
     """Manages story state updates based on structured GM Action Plans."""
 
     def __init__(self, bot):
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
 
     async def update_state_from_gm_plan(
         self, instance: StoryInstance, gm_plan: GMActionPlan

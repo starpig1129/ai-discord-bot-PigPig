@@ -1,5 +1,4 @@
 import os
-import logging as logger
 import subprocess
 import asyncio
 import yt_dlp
@@ -8,6 +7,9 @@ import random
 import re
 from youtube_search import YoutubeSearch
 from addons.settings import music_config
+from addons.logging import get_logger
+
+log = get_logger(source=__name__, server_id="system")
 
 async def check_ffmpeg(ffmpeg_path='/usr/bin/ffmpeg'):
     try:
@@ -16,7 +18,7 @@ async def check_ffmpeg(ffmpeg_path='/usr/bin/ffmpeg'):
         )
         return True
     except (subprocess.SubprocessError, FileNotFoundError):
-        logger.error(f"FFmpeg 無法使用或運作異常: {ffmpeg_path}")
+        log.error(f"FFmpeg 無法使用或運作異常: {ffmpeg_path}")
         return False
 
 class YouTubeManager:
@@ -26,7 +28,7 @@ class YouTubeManager:
             self.settings = music_config
             self.ffmpeg_config = self.settings.ffmpeg
         except Exception as e:
-            logger.error(f"載入 FFmpeg 設定失敗，使用預設值: {e}")
+            log.error(f"載入 FFmpeg 設定失敗，使用預設值: {e}")
             self.ffmpeg_config = self._get_default_ffmpeg_config()
     
     def _get_default_ffmpeg_config(self) -> dict:
@@ -136,7 +138,7 @@ class YouTubeManager:
                 
             return results if results else []
         except Exception as e:
-            logger.error(f"YouTube 搜尋失敗: {e}")
+            log.error(f"YouTube 搜尋失敗: {e}")
             return []
 
     async def download_playlist(self, url, folder, interaction):
@@ -162,7 +164,7 @@ class YouTubeManager:
 
             cookies_path = self.settings.youtube_cookies_path
             if os.path.exists(cookies_path):
-                logger.info(f"使用 Cookies 檔案: {cookies_path}")
+                log.info(f"使用 Cookies 檔案: {cookies_path}")
                 ydl_opts['cookiefile'] = cookies_path
 
             async def extract_info():
@@ -171,7 +173,7 @@ class YouTubeManager:
             
             info_dict = await extract_info()
             if 'entries' not in info_dict:
-                logger.error("[音樂] 無法取得播放清單資訊")
+                log.error("[音樂] 無法取得播放清單資訊")
                 return None, "無法取得播放清單資訊"
 
             video_infos = []
@@ -208,7 +210,7 @@ class YouTubeManager:
             return video_infos, None
 
         except Exception as e:
-            logger.error(f"[音樂] 播放清單下載失敗: {e}")
+            log.error(f"[音樂] 播放清單下載失敗: {e}")
             return None, "播放清單下載失敗"
 
     async def get_video_info_without_download(self, url, interaction):
@@ -231,7 +233,7 @@ class YouTubeManager:
 
             cookies_path = self.settings.youtube_cookies_path
             if os.path.exists(cookies_path):
-                logger.info(f"使用 Cookies 檔案: {cookies_path}")
+                log.info(f"使用 Cookies 檔案: {cookies_path}")
                 ydl_opts['cookiefile'] = cookies_path
 
             async def extract_info():
@@ -242,7 +244,7 @@ class YouTubeManager:
             is_live = info_dict.get('is_live', False)
 
             if not is_live and info_dict.get('duration', 0) > self.time_limit:
-                logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
+                log.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
                 return None, "影片時長過長！超過 30 分鐘"
 
             video_info = {
@@ -262,7 +264,7 @@ class YouTubeManager:
             return video_info, None
 
         except Exception as e:
-            logger.error(f"[音樂] 取得影片資訊失敗: {e}")
+            log.error(f"[音樂] 取得影片資訊失敗: {e}")
             return None, "取得影片資訊失敗"
 
     async def download_audio(self, url, folder, interaction):
@@ -271,17 +273,17 @@ class YouTubeManager:
             output_template = os.path.join(folder, '%(id)s')
             
             if not await asyncio.to_thread(os.access, folder, os.W_OK):
-                logger.error(f"無法寫入下載目錄: {folder}")
+                log.error(f"無法寫入下載目錄: {folder}")
                 return None, "無法寫入下載目錄"
 
             try:
                 statvfs = await asyncio.to_thread(os.statvfs, folder)
                 available_space = statvfs.f_frsize * statvfs.f_bavail
                 if available_space < 100 * 1024 * 1024:
-                    logger.error(f"磁碟空間不足: {folder}")
+                    log.error(f"磁碟空間不足: {folder}")
                     return None, "磁碟空間不足"
             except Exception as e:
-                logger.error(f"檢查磁碟空間失敗: {e}")
+                log.error(f"檢查磁碟空間失敗: {e}")
                 
             ytdlp_config = self.ffmpeg_config.get('ytdlp_options', {})
             http_headers = self.ffmpeg_config.get('http_headers', {})
@@ -305,7 +307,7 @@ class YouTubeManager:
                 'socket_timeout': ytdlp_config.get('socket_timeout', 300),
                 'retries': ytdlp_config.get('retries', 10),
                 'verbose': False,
-                'progress_hooks': [lambda d: logger.debug(f"下載進度: {d.get('status', 'unknown')} - {d.get('_percent_str', '0%')}")],
+                'progress_hooks': [lambda d: log.debug(f"下載進度: {d.get('status', 'unknown')} - {d.get('_percent_str', '0%')}")],
                 'merge_output_format': self.ffmpeg_config.get('audio_codec', 'mp3'),
                 'concurrent_fragment_downloads': ytdlp_config.get('concurrent_fragment_downloads', 1),
                 'file_access_retries': ytdlp_config.get('file_access_retries', 5),
@@ -331,10 +333,10 @@ class YouTubeManager:
 
             cookies_path = self.settings.youtube_cookies_path
             if os.path.exists(cookies_path):
-                logger.info(f"使用 Cookies 檔案: {cookies_path}")
+                log.info(f"使用 Cookies 檔案: {cookies_path}")
                 ydl_opts['cookiefile'] = cookies_path
 
-            logger.info(f"[音樂] 開始下載 (伺服器 ID: {interaction.guild.id}): {url} 到 {folder}")
+            log.info(f"[音樂] 開始下載 (伺服器 ID: {interaction.guild.id}): {url} 到 {folder}")
 
             async def extract_info():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -344,7 +346,7 @@ class YouTubeManager:
             is_live = info_dict.get('is_live', False)
 
             if is_live:
-                logger.info(f"[音樂] 偵測到直播影片 (伺服器 ID: {interaction.guild.id}): {url}")
+                log.info(f"[音樂] 偵測到直播影片 (伺服器 ID: {interaction.guild.id}): {url}")
                 
                 best_audio_url = None
                 if 'formats' in info_dict:
@@ -376,12 +378,12 @@ class YouTubeManager:
                 return video_info, None
 
             if info_dict.get('duration', 0) > self.time_limit:
-                logger.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
+                log.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
                 return None, "影片時長過長！超過 30 分鐘"
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
-                    logger.info(f"[音樂] 正在開始下載 (伺服器 ID: {interaction.guild.id}): {url}")
+                    log.info(f"[音樂] 正在開始下載 (伺服器 ID: {interaction.guild.id}): {url}")
                     
                     max_retries = 3
                     retry_count = 0
@@ -390,13 +392,13 @@ class YouTubeManager:
                     while retry_count < max_retries:
                         try:
                             await asyncio.to_thread(ydl.download, [url])
-                            logger.info(f"[音樂] 下載完成 (伺服器 ID: {interaction.guild.id}): {url}")
+                            log.info(f"[音樂] 下載完成 (伺服器 ID: {interaction.guild.id}): {url}")
                             break
                         except yt_dlp.utils.DownloadError as e:
                             error_msg = str(e).lower()
                             
                             if 'signature' in error_msg or '403' in error_msg:
-                                logger.warning(f"[音樂] 簽名提取失敗，嘗試使用 Android 客戶端...")
+                                log.warning(f"[音樂] 簽名提取失敗，嘗試使用 Android 客戶端...")
                                 ydl_opts['extractor_args'] = {
                                     'youtube': {'player_client': ['android_music']}
                                 }
@@ -408,7 +410,7 @@ class YouTubeManager:
                                 retry_count += 1
                                 if retry_count >= max_retries:
                                     return None, "網絡連接超時，請稍後再試"
-                                logger.warning(f"[音樂] 網絡錯誤，重試 {retry_count}/{max_retries}")
+                                log.warning(f"[音樂] 網絡錯誤，重試 {retry_count}/{max_retries}")
                                 await asyncio.sleep(5)
                                 continue
                             
@@ -427,7 +429,7 @@ class YouTubeManager:
                             retry_count += 1
                             if retry_count >= max_retries:
                                 raise last_error
-                            logger.warning(f"[音樂] 下載失敗，重試 {retry_count}/{max_retries}: {str(e)}")
+                            log.warning(f"[音樂] 下載失敗，重試 {retry_count}/{max_retries}: {str(e)}")
                             await asyncio.sleep(2)
                     
                     file_path = os.path.join(folder, f"{info_dict['id']}.mp3")
@@ -467,7 +469,7 @@ class YouTubeManager:
                     return video_info, None
 
                 except Exception as e:
-                    logger.error(f"[音樂] 下載過程發生錯誤: {str(e)}")
+                    log.error(f"[音樂] 下載過程發生錯誤: {str(e)}")
                     try:
                         partial_file = os.path.join(folder, f"{info_dict['id']}")
                         
@@ -480,14 +482,14 @@ class YouTubeManager:
                             clean_file(f"{partial_file}.mp3")
                         )
                     except Exception as cleanup_error:
-                        logger.error(f"[音樂] 無法清理部分下載檔案: {str(cleanup_error)}")
+                        log.error(f"[音樂] 無法清理部分下載檔案: {str(cleanup_error)}")
                     raise
 
         except yt_dlp.utils.DownloadError as e:
-            logger.error(f"[音樂] yt-dlp 下載錯誤: {e}")
+            log.error(f"[音樂] yt-dlp 下載錯誤: {e}")
             return None, f"下載失敗: {str(e)}"
         except Exception as e:
-            logger.error(f"[音樂] 下載失敗: {e}")
+            log.error(f"[音樂] 下載失敗: {e}")
             return None, "下載失敗，請稍後再試"
 
     def get_thumbnail_url(self, video_id):
@@ -527,7 +529,7 @@ class YouTubeManager:
             return processed
 
         if author and author != '未知上傳者':
-            logger.info(f"策略一: 搜尋藝人 '{author}' 的歌曲...")
+            log.info(f"策略一: 搜尋藝人 '{author}' 的歌曲...")
             try:
                 clean_author = re.sub(r'\s*-\s*(topic|vevo|official).*$', '', author, flags=re.IGNORECASE).strip()
                 
@@ -553,13 +555,13 @@ class YouTubeManager:
                                               min(num_to_add - len(top_half), 
                                                   len(author_results) - num_to_add // 2))
                     final_results.extend(top_half + random_half)
-                    logger.info(f"策略一找到 {len(final_results)} 首歌曲")
+                    log.info(f"策略一找到 {len(final_results)} 首歌曲")
 
             except Exception as e:
-                logger.error(f"策略一失敗: {e}")
+                log.error(f"策略一失敗: {e}")
 
         if len(final_results) < limit:
-            logger.info("策略二: 使用標題關鍵字搜尋...")
+            log.info("策略二: 使用標題關鍵字搜尋...")
             try:
                 clean_title = re.sub(r'\s*[\(\[].*?(official|video|lyric|mv|audio|4k|hd|music|visualizer).*?[\)\]]', 
                                    '', title, flags=re.IGNORECASE).strip()
@@ -569,7 +571,7 @@ class YouTubeManager:
                 
                 if keywords:
                     search_query = ' '.join(keywords)
-                    logger.info(f"使用關鍵字搜尋: '{search_query}'")
+                    log.info(f"使用關鍵字搜尋: '{search_query}'")
                     
                     results = await self.search_videos(search_query, max_results=15)
                     title_results = process_search_results(results)
@@ -577,13 +579,13 @@ class YouTubeManager:
                     if title_results:
                         num_to_add = min(limit - len(final_results), len(title_results))
                         final_results.extend(random.sample(title_results, num_to_add))
-                        logger.info(f"策略二新增 {num_to_add} 首歌曲")
+                        log.info(f"策略二新增 {num_to_add} 首歌曲")
 
             except Exception as e:
-                logger.error(f"策略二失敗: {e}")
+                log.error(f"策略二失敗: {e}")
 
         if len(final_results) < limit:
-            logger.info("策略三: 使用 YouTube 推薦...")
+            log.info("策略三: 使用 YouTube 推薦...")
             try:
                 ydl_opts = {
                     'format': 'bestaudio/best',
@@ -634,14 +636,14 @@ class YouTubeManager:
                         num_to_add = min(limit - len(final_results), len(yt_dlp_results))
                         if num_to_add > 0:
                             final_results.extend(random.sample(yt_dlp_results, num_to_add))
-                            logger.info(f"策略三新增 {num_to_add} 首歌曲")
+                            log.info(f"策略三新增 {num_to_add} 首歌曲")
             
             except Exception as e:
-                logger.error(f"策略三失敗: {e}")
+                log.error(f"策略三失敗: {e}")
 
         if final_results:
-            logger.info(f"總共找到 {len(final_results)} 首相關歌曲")
+            log.info(f"總共找到 {len(final_results)} 首相關歌曲")
             return final_results, None
         else:
-            logger.warning(f"未找到任何相關歌曲 (video_id: {video_id})")
+            log.warning(f"未找到任何相關歌曲 (video_id: {video_id})")
             return [], "找不到相關影片"

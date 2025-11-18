@@ -6,7 +6,7 @@
 
 import discord
 from typing import Optional, Dict, Any, Callable, List
-import logging
+from addons.logging import get_logger
 
 from .manager import SystemPromptManager
 from .permissions import PermissionValidator
@@ -38,7 +38,7 @@ class SystemPromptMainView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.manager = manager
         self.permission_validator = permission_validator
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(source=__name__, server_id="system")
 
         # 建立主要功能按鈕
         self._setup_main_buttons()
@@ -239,7 +239,7 @@ class SystemPromptSetView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.manager = manager
         self.permission_validator = permission_validator
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(source=__name__, server_id="system")
 
         self.add_item(SystemPromptScopeButton(
             label="頻道特定", emoji="📢", style=discord.ButtonStyle.primary, scope="channel", row=0
@@ -322,7 +322,7 @@ class EditModeSelectionView(discord.ui.View):
         self.target_channel = target_channel
         self.scope_text = scope_text
         self.guild = guild # Store guild
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(source=__name__, server_id="system")
 
         self.add_item(EditModeButton(
             label="直接編輯提示",
@@ -559,7 +559,7 @@ class SystemPromptViewOptionsView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.manager = manager
         self.permission_validator = permission_validator
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(source=__name__, server_id="system")
 
         self.add_item(SystemPromptViewButton(
             label="當前頻道有效提示", emoji="📢", style=discord.ButtonStyle.primary, view_type="current", row=0
@@ -679,7 +679,7 @@ class ModuleEditView(discord.ui.View):
         self.scope = scope
         self.target_channel = target_channel
         self.scope_text = scope_text
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(source=__name__, server_id="system")
         self.selected_scope = scope # Initialize selected_scope
 
         if scope and scope_text:

@@ -1,6 +1,7 @@
 import re
-import logging
 from datetime import datetime
+from typing import Optional
+from addons.logging import get_logger
 
 import discord
 from discord.ext import commands
@@ -12,7 +13,7 @@ from langchain.agents.middleware import ModelCallLimitMiddleware
 from function import func
 from llm.model_manager import ModelManager
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+log = get_logger(source=__name__, server_id="system")
 
 
 class SummarizerCog(commands.Cog):
@@ -57,11 +58,11 @@ class SummarizerCog(commands.Cog):
         persona="設定 AI 的總結人設 (例如：一位專業的會議記錄員)",
         only_me="是否只有你看得到這則摘要 (預設為否，即公開)"
     )
-    async def summarize(self, interaction: discord.Interaction, limit: int = 100, persona: str = None, only_me: bool = False):
+    async def summarize(self, interaction: discord.Interaction, limit: int = 100, persona: Optional[str] = None, only_me: bool = False):
         await interaction.response.defer(ephemeral=only_me, thinking=True)
 
         try:
-            logging.info(f"開始為頻道 {interaction.channel.name} 擷取最多 {limit} 則訊息。")
+            log.info(f"開始為頻道 {interaction.channel.name if hasattr(interaction.channel, 'name') else 'unknown'} 擷取最多 {limit} 則訊息。")
             history = [msg async for msg in interaction.channel.history(limit=limit)]
             dialogue_history_reversed = []
             source_mapping = {}
@@ -92,7 +93,7 @@ class SummarizerCog(commands.Cog):
                 # 檢查字元數限制
                 content_len = len(formatted_content)
                 if current_char_count + content_len > self.MAX_CHAR_COUNT:
-                    logging.warning(f"達到字元數上限 {self.MAX_CHAR_COUNT}。停止收集訊息。")
+                    log.warning(f"達到字元數上限 {self.MAX_CHAR_COUNT}。停止收集訊息。")
                     break
 
                 current_char_count += content_len
@@ -117,7 +118,7 @@ class SummarizerCog(commands.Cog):
             {f"請注意：本次摘要請使用「{persona}」的語氣和角度來撰寫。" if persona else ""}
             """
             user_instruction = "請根據我提供的對話歷史紀錄，開始進行摘要。"
-            logging.info(f"正在調用語言模型生成摘要... (分析 {human_msg_count} 則人類訊息，總輸入 {current_char_count} 字元)")
+            log.info(f"正在調用語言模型生成摘要... (分析 {human_msg_count} 則人類訊息，總輸入 {current_char_count} 字元)")
 
             # 建立 agent（維持 create_agent，但傳入 SystemMessage 作為系統角色）
             model, fallback = ModelManager().get_model("summarize_model")
@@ -139,7 +140,7 @@ class SummarizerCog(commands.Cog):
             response = await summarize_agent.ainvoke({"messages": messages})
 
             full_summary = response["messages"][-1].content
-            logging.info("摘要生成完畢，開始進行後處理。")
+            log.info("摘要生成完畢，開始進行後處理。")
 
             def replace_with_link(match):
                 ids = re.findall(r'MSG-\d+', match.group(0))
@@ -161,7 +162,7 @@ class SummarizerCog(commands.Cog):
             main_embed.set_footer(text=footer_text)
             await interaction.followup.send(embed=main_embed)
             if len(summary_chunks) > 1:
-                logging.info(f"摘要過長，將其分割成 {len(summary_chunks)} 則訊息發送。")
+                log.info(f"摘要過長，將其分割成 {len(summary_chunks)} 則訊息發送。")
                 for i, chunk in enumerate(summary_chunks[1:], 1):
                     continuation_embed = discord.Embed(description=chunk, color=discord.Color.blue())
                     continuation_embed.set_footer(text=f"摘要接續... (第 {i+1}/{len(summary_chunks)} 頁)")

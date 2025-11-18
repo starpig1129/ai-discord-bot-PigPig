@@ -4,13 +4,16 @@ from discord import app_commands
 import json
 import os
 import time
-import logging
+from addons.logging import get_logger
 from datetime import datetime
 from typing import Optional, Dict, List, Any, Tuple
 from .language_manager import LanguageManager
 from addons.tokens import tokens
 from function import func
 import asyncio
+
+# Module-level logger. Use "Bot" as default server_id for module-level events.
+log = get_logger(server_id="Bot", source=__name__)
 
 class ChannelManager(commands.Cog):
     def __init__(self, bot):

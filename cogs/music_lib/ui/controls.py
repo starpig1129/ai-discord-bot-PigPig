@@ -1,10 +1,12 @@
 import discord
 import asyncio
-import logging as logger
 from typing import Optional
 from .progress import ProgressDisplay
 from cogs.language_manager import LanguageManager
 from ..queue_manager import PlayMode
+from addons.logging import get_logger
+
+log = get_logger(source=__name__, server_id="system")
 
 class MusicControlView(discord.ui.View):
     def __init__(self, interaction: discord.Interaction, *,
@@ -147,7 +149,7 @@ class MusicControlView(discord.ui.View):
             try:
                 await self.message.edit(view=self)
             except Exception as e:
-                logger.error(f"Failed to update button state: {e}")
+                log.error(f"Failed to update button state: {e}")
 
     def start_progress_updater(self, duration: int):
         # 如果是直播，則不啟動進度更新器
@@ -203,7 +205,7 @@ class MusicControlView(discord.ui.View):
                             self.message = new_message
                             last_message_refresh = current_time
                         except Exception as e:
-                            logger.error(f"刷新訊息失敗: {e}")
+                            log.error(f"刷新訊息失敗: {e}")
                             break
                     
                     # Update progress bar
@@ -225,12 +227,12 @@ class MusicControlView(discord.ui.View):
                                             pass
                                         self.message = new_message
                                         last_update = current_time
-                                        logger.info("Successfully recreated message in update_progress")
+                                        log.info("Successfully recreated message in update_progress")
                                     except Exception as inner_e:
-                                        logger.error(f"Failed to recreate message in update_progress: {inner_e}")
+                                        log.error(f"Failed to recreate message in update_progress: {inner_e}")
                                         break
                                 else:
-                                    logger.error(f"更新進度條位置失敗: {e}")
+                                    log.error(f"更新進度條位置失敗: {e}")
                     
                     await asyncio.sleep(1)
             finally:
@@ -238,11 +240,11 @@ class MusicControlView(discord.ui.View):
                 if hasattr(self, 'update_task'):
                     self.update_task = None
         except Exception as e:
-            logger.error(f"Progress update error: {e}")
+            log.error(f"Progress update error: {e}")
             try:
                 await self.update_button_state()
             except Exception as view_error:
-                logger.error(f"Failed to update button state after error: {view_error}")
+                log.error(f"Failed to update button state after error: {view_error}")
 
     async def update_embed(self, interaction: discord.Interaction, title: str, color: discord.Color = discord.Color.blue()):
         """Update the embed with error handling and message recreation"""
@@ -266,16 +268,16 @@ class MusicControlView(discord.ui.View):
                             await message.delete()
                         except (discord.errors.NotFound, discord.errors.Forbidden):
                             pass
-                        logger.info("Successfully recreated message")
+                        log.info("Successfully recreated message")
                         return new_message
                     except Exception as inner_e:
-                        logger.error(f"Failed to recreate message: {inner_e}")
+                        log.error(f"Failed to recreate message: {inner_e}")
                         return None
                 else:
-                    logger.error(f"Failed to update embed: {e}")
+                    log.error(f"Failed to update embed: {e}")
                     return None
             except Exception as e:
-                logger.error(f"Unexpected error in update_embed: {e}")
+                log.error(f"Unexpected error in update_embed: {e}")
                 return None
 
         new_message = await try_edit_or_recreate(self.message, self.current_embed, self)

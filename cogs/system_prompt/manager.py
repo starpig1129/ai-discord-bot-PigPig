@@ -7,13 +7,13 @@
 import json
 import os
 import time
-import logging
 import re
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 
 import discord
+from addons.logging import get_logger
 
 from .exceptions import (
     SystemPromptError,
@@ -157,7 +157,7 @@ class SystemPromptManager:
             bot: Discord 機器人實例
         """
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
         self.cache = SystemPromptCache()
         self.validator = PromptValidator()
         self.permission_validator = PermissionValidator(bot)

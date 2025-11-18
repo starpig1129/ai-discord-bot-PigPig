@@ -25,12 +25,15 @@ from discord.ext import commands
 from discord import app_commands
 import json
 import requests
-import logging
+from addons.logging import get_logger
 import random
 from typing import Optional
 from addons.tokens import tokens
 from .language_manager import LanguageManager
 from function import func
+
+# Module-level logger
+log = get_logger(server_id="Bot", source=__name__)
 
 class GifTools(commands.Cog):
     """GIF 搜尋與管理工具。"""
@@ -40,7 +43,7 @@ class GifTools(commands.Cog):
         self.tenor_api_key = tokens.tenor_api_key
         if not self.tenor_api_key:
             raise ValueError("TENOR_API_KEY not found in environment variables")
-        self.logger = logging.getLogger('gif_tools')
+        self.logger = log
         self.lang_manager: Optional[LanguageManager] = None
 
     async def cog_load(self):

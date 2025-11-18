@@ -189,16 +189,18 @@ class InternetSearchCog(commands.Cog):
                 except Exception:
                     # 保底：忽略發送失敗，避免中斷後續流程
                     pass
-                import logging
-                logging.getLogger(__name__).info("internet_search: 原始訊息已不存在，已改為發送新訊息。")
+                from addons.logging import get_logger
+                log = get_logger(source=__name__, server_id="system")
+                log.info("internet_search: Original message not found, sending new message instead.")
         
         # 將外部傳入的 search_type 正規化，支援 'web' 作為一般網頁搜尋別名
         normalized_type = (search_type or "").strip().lower()
         if normalized_type == "web":
             # 將 'web' 對應到現有的一般搜尋邏輯
             normalized_type = "general"
-            import logging
-            logging.getLogger(__name__).info("internet_search: 收到 search_type='web'，已映射為 'general'。")
+            from addons.logging import get_logger
+            log = get_logger(source=__name__, server_id="system")
+            log.info("internet_search: Received search_type='web', mapped to 'general'.")
         else:
             # 若非已知型別，保留原字串，後續落入未知類型處理
             pass

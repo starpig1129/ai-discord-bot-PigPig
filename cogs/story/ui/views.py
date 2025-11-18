@@ -1,7 +1,9 @@
 from __future__ import annotations
 import discord
 from discord.ext import commands
-import logging
+from addons.logging import get_logger
+log = get_logger(source=__name__, server_id="system")
+logger = log
 from typing import List, Optional, TYPE_CHECKING
 
 from ..models import StoryInstance, StoryWorld, StoryCharacter
@@ -30,7 +32,7 @@ class InitialStoryView(discord.ui.View):
         self.channel_id = channel_id
         self.guild_id = guild_id
         self.selected_world: Optional[str] = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
         
     async def on_timeout(self):
         """視圖超時處理"""
@@ -248,7 +250,7 @@ class ActiveStoryView(discord.ui.View):
         super().__init__(timeout=None)
         self.story_manager = manager
         self.story_instance = story_instance
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
         
         # 根據故事狀態設定按鈕的初始狀態
         self._update_pause_button_state()
@@ -474,7 +476,7 @@ class NPCSelectView(discord.ui.View):
         """
         非同步工廠方法，用於創建和填充 NPCSelectView。
         """
-        logger = logging.getLogger(__name__)
+        logger = log
         logger.info(f"[DEBUG] NPCSelectView.create 開始 - guild_id: {interaction.guild_id}, user_id: {interaction.user.id}")
         
         bot = manager.bot
@@ -562,7 +564,7 @@ class NPCSelectView(discord.ui.View):
         self.initial_time = initial_time
         self.initial_location = initial_location
         self.characters = characters
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
 
         # 設定 min/max values
         min_val = 1  # 至少要選一個，預設就是旁白

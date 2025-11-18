@@ -5,11 +5,11 @@
 """
 
 import json
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+from addons.logging import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(source=__name__, server_id="system")
 
 class SystemPromptDataValidator:
     """系統提示數據驗證器"""
@@ -65,7 +65,7 @@ class SystemPromptDataValidator:
                         result['issues'].append("模組數據格式不正確")
                         result['is_consistent'] = False
                     
-                    logger.info(f"驗證結果: 頻道 {channel_id} 配置一致性 = {result['is_consistent']}")
+                    log.info(f"驗證結果: 頻道 {channel_id} 配置一致性 = {result['is_consistent']}")
                 else:
                     result['issues'].append(f"頻道 {channel_id} 配置不存在")
                     result['is_consistent'] = False
@@ -77,7 +77,7 @@ class SystemPromptDataValidator:
             error_msg = f"驗證過程發生錯誤: {str(e)}"
             result['issues'].append(error_msg)
             result['is_consistent'] = False
-            logger.error(error_msg)
+            log.error(error_msg)
         
         return result
     
@@ -96,7 +96,7 @@ class SystemPromptDataValidator:
             validation_result = self.validate_config_consistency(guild_id, channel_id)
             
             if validation_result['is_consistent']:
-                logger.info("數據已一致，無需修復")
+                log.info("數據已一致，無需修復")
                 return True
             
             # 執行修復邏輯
@@ -115,19 +115,19 @@ class SystemPromptDataValidator:
                     from datetime import datetime
                     if not channel_config.get('updated_at'):
                         channel_config['updated_at'] = datetime.now().isoformat()
-                        logger.info("修復：添加缺少的 updated_at 時間戳")
+                        log.info("修復：添加缺少的 updated_at 時間戳")
                     
                     # 保存修復後的配置
                     with open(config_file, 'w', encoding='utf-8') as f:
                         json.dump(config, f, ensure_ascii=False, indent=2)
                     
-                    logger.info("數據修復完成")
+                    log.info("數據修復完成")
                     return True
             
             return False
             
         except Exception as e:
-            logger.error(f"修復數據時發生錯誤: {e}")
+            log.error(f"修復數據時發生錯誤: {e}")
             return False
     
     def get_module_comparison(self, guild_id: str, channel_id: str, 

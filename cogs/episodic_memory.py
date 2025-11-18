@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from addons.logging import get_logger
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, List, Any
 
@@ -21,7 +21,7 @@ from cogs.memory.services.message_tracker import MessageTracker
 if TYPE_CHECKING:
     from bot import PigPig
 
-log = logging.getLogger(__name__)
+log = get_logger(server_id="Bot", source=__name__)
 
 class EpisodicMemoryService(commands.Cog):
     """

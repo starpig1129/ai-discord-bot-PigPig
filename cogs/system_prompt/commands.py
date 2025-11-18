@@ -7,10 +7,10 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import logging
 from typing import Optional, Dict, Any, List
 import asyncio
 import functools
+from addons.logging import get_logger
 
 from .manager import SystemPromptManager
 from .permissions import PermissionValidator
@@ -59,7 +59,10 @@ def handle_system_prompt_error(func):
                 )
         except Exception as e:
             await func.report_error(e, "System prompt operation error")
-            logging.error(f"系統提示操作錯誤: {str(e)}")
+            # Create local logger for error context
+            local_log = get_logger(source=__name__, server_id="system")
+            bound_log = local_log.bind(server_id=str(interaction.guild_id) if interaction.guild else "system", user_id=str(interaction.user.id))
+            bound_log.error(f"System prompt operation error: {str(e)}")
             if not interaction.response.is_done():
                 await interaction.response.send_message(
                     "❌ 系統錯誤，請稍後再試", ephemeral=True
@@ -82,7 +85,7 @@ class SystemPromptCommands(commands.Cog):
             bot: Discord 機器人實例
         """
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(source=__name__, server_id="system")
         self.manager = SystemPromptManager(bot)
         
         # 設定語言管理器

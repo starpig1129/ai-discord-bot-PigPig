@@ -1,7 +1,9 @@
 import discord
-import logging as logger
 from typing import Optional
 from cogs.language_manager import LanguageManager
+from addons.logging import get_logger
+
+log = get_logger(source=__name__, server_id="system")
 
 class SongSelectView(discord.ui.View):
     def __init__(self, player, results, interaction):
@@ -65,11 +67,11 @@ class SongSelectView(discord.ui.View):
                         )
                         await channel.send(embed=embed)
                 except Exception as inner_e:
-                    logger.error(f"Failed to send timeout message: {inner_e}")
+                    log.error(f"Failed to send timeout message: {inner_e}")
             else:
-                logger.error(f"Failed to handle timeout: {e}")
+                log.error(f"Failed to handle timeout: {e}")
         except Exception as e:
-            logger.error(f"Unexpected error in timeout handler: {e}")
+            log.error(f"Unexpected error in timeout handler: {e}")
 
 class SongSelectMenu(discord.ui.Select):
     def __init__(self, results, view):
@@ -121,7 +123,7 @@ class SongSelectMenu(discord.ui.Select):
             # Get the view instance that contains this select menu
             view = self.view
             if not view:
-                logger.error("Song selection view not found")
+                log.error("Song selection view not found")
                 raise ValueError("View not found")
                 
             # Acknowledge the interaction first
@@ -182,7 +184,7 @@ class SongSelectMenu(discord.ui.Select):
                 await view.player.play_next(interaction)
                 
         except Exception as e:
-            logger.error(f"Song selection error: {e}")
+            log.error(f"Song selection error: {e}")
             try:
                 error_message = self.view_parent._translate_music("select", "error")
                 error_embed = discord.Embed(title=error_message, color=discord.Color.red())
@@ -191,4 +193,4 @@ class SongSelectMenu(discord.ui.Select):
                 else:
                     await interaction.followup.send(embed=error_embed)
             except Exception as send_error:
-                logger.error(f"Failed to send error message: {send_error}")
+                log.error(f"Failed to send error message: {send_error}")

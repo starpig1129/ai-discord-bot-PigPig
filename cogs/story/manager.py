@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
-import logging
+from addons.logging import get_logger
+log = get_logger(source=__name__, server_id="system")
+logger = log
 import random
 from typing import Dict, List, Optional, Any, cast, TypeVar, Type
 import aiohttp
@@ -43,7 +45,7 @@ class StoryManager:
     def __init__(self, bot: commands.Bot, cog: commands.Cog, system_prompt_manager: SystemPromptManager):
         self.bot = bot
         self.cog = cog
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
         self.system_prompt_manager = system_prompt_manager
         self._initialized = False
         self.db_instances: Dict[int, StoryDB] = {}

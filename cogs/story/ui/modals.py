@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
-import logging
+from addons.logging import get_logger
+log = get_logger(server_id="system", source=__name__)
+logger = log
 import typing
 from typing import Optional
 
@@ -22,7 +24,7 @@ class WorldCreateModal(discord.ui.Modal):
         self.story_manager = manager
         self.story_db = manager._get_db(guild_id)
         self.guild_id = guild_id
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
 
     world_name = discord.ui.TextInput(
         label="世界名稱",
@@ -144,7 +146,7 @@ class CharacterCreateModal(discord.ui.Modal):
         self.story_manager = manager
         self.character_db = manager.character_db
         self.guild_id = guild_id
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
 
         self.character_name = discord.ui.TextInput(
             label="角色名稱",
@@ -267,7 +269,7 @@ class StoryStartModal(discord.ui.Modal):
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.world_name = world_name
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
 
     initial_date = discord.ui.TextInput(
         label="初始日期 (選填)",
@@ -378,7 +380,7 @@ class InterventionModal(discord.ui.Modal):
     def __init__(self, manager: "StoryManager"):
         super().__init__(title="🎬 故事干預指令")
         self.manager = manager
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
 
     intervention_text = discord.ui.TextInput(
         label="給導演的指示",

@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
-import logging
+from addons.logging import get_logger
+log = get_logger(source=__name__, server_id="system")
+logger = log
 from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel, Field
 from enum import Enum
@@ -17,7 +19,7 @@ class StoryPromptEngine:
 
     def __init__(self, bot: commands.Bot, system_prompt_manager: "SystemPromptManager"):
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
         self.system_prompt_manager = system_prompt_manager
         self.language_manager: Optional[LanguageManager] = self.bot.get_cog('LanguageManager')
         self.language_map = {

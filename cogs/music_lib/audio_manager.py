@@ -1,6 +1,8 @@
 import os
 import asyncio
-import logging as logger
+from addons.logging import get_logger
+log = get_logger(source=__name__, server_id="system")
+logger = log
 from discord import FFmpegPCMAudio
 from typing import Dict, Any
 
@@ -36,10 +38,10 @@ class AudioManager:
         try:
             if os.path.exists(file_path):
                 await asyncio.to_thread(os.remove, file_path)
-                if logger.getLogger().isEnabledFor(logger.DEBUG):
-                    logger.debug(f"[音樂] 伺服器 ID： {guild_id}, 刪除檔案成功！")
+                if logger.isEnabledFor(logger.DEBUG):
+                    logger.debug(f"[音樂] Guild ID: {guild_id}, file deletion successful!")
         except Exception as e:
-            logger.warning(f"[音樂] 伺服器 ID： {guild_id}, 刪除檔案失敗： {e}")
+            logger.warning(f"[音樂] Guild ID: {guild_id}, file deletion failed: {e}")
             
     async def cleanup_guild_files(self, guild_id: int, folder: str):
         """Clean up all audio files for a guild"""

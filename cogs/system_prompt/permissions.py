@@ -5,8 +5,8 @@
 """
 
 import discord
-import logging
 from typing import Dict, List, Optional
+from addons.logging import get_logger
 from .exceptions import PermissionError
 from function import func
 from addons.tokens import tokens
@@ -24,7 +24,7 @@ class PermissionValidator:
             bot: Discord 機器人實例
         """
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(source=__name__, server_id="system")
     
     def can_modify_channel_prompt(self, user: discord.Member, 
                                  channel: discord.TextChannel,

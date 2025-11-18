@@ -6,8 +6,8 @@
 
 import discord
 from discord.ext import commands
-import logging
 from typing import Optional
+from addons.logging import get_logger
 
 from .system_prompt.manager import SystemPromptManager
 from .system_prompt.commands import SystemPromptCommands
@@ -26,7 +26,7 @@ class SystemPromptManagerCog(commands.Cog):
             bot: Discord 機器人實例
         """
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(source=__name__, server_id="system")
         
         # 初始化核心組件
         self.manager = SystemPromptManager(bot)

@@ -35,6 +35,10 @@ from llm.utils.media import image_to_base64
 from .language_manager import LanguageManager
 from llm.utils.send_message import safe_edit_message
 from function import func
+from addons.logging import get_logger
+
+# Module-level logger. Use "Bot" as default server_id for module-level events.
+log = get_logger(server_id="Bot", source=__name__)
 
 
 class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):

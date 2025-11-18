@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
-import logging
+from addons.logging import get_logger
+log = get_logger(source=__name__, server_id="system")
+logger = log
 import typing
 from typing import Optional
 
@@ -25,7 +27,7 @@ class UIManager:
         self.story_manager = story_manager
         self.character_db = story_manager.character_db
         self.system_prompt_manager = system_prompt_manager
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
         
     async def show_main_menu(self, interaction: discord.Interaction):
         """

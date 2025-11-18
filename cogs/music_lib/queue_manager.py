@@ -3,7 +3,9 @@ import os
 import random
 from typing import List, Dict, Any, Tuple, Optional
 from enum import Enum
-import logging as logger
+from addons.logging import get_logger
+log = get_logger(source=__name__, server_id="system")
+logger = log
 
 class PlayMode(Enum):
     NO_LOOP = "no_loop"

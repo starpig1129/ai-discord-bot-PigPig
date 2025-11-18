@@ -3,12 +3,14 @@ from discord.ext import commands
 from discord import app_commands
 import json
 import os
-import logging
 import asyncio
 from functools import lru_cache
 from typing import Optional, Dict, Any, List, Set, Tuple
 from pathlib import Path
+from addons.logging import get_logger
 from function import func
+
+log = get_logger(source=__name__, server_id="system")
 
 class TranslationCache:
     """Multi-layer cache for translations with LRU eviction"""
@@ -67,7 +69,7 @@ class LanguageManager(commands.Cog):
         # 確保配置目錄存在
         os.makedirs(self.config_dir, exist_ok=True)
         
-        self.logger = logging.getLogger(__name__)
+        self.logger = log
         self.default_lang = "zh_TW"  # 預設使用繁體中文
         
         # 新的資料結構：lang -> file_key -> path -> value

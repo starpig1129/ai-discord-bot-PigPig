@@ -3,7 +3,9 @@ import os
 import discord
 from discord.ext import commands
 from discord import app_commands
-import logging as logger
+from addons.logging import get_logger
+log = get_logger(source=__name__, server_id="system")
+logger = log
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 

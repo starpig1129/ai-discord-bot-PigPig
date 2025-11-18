@@ -35,6 +35,10 @@ from .language_manager import LanguageManager
 from llm.utils.send_message import safe_edit_message
 from function import func
 import asyncio
+from addons.logging import get_logger
+
+# Module-level logger
+log = get_logger(server_id="Bot", source=__name__)
 
 class MathCalculatorCog(commands.Cog):
     def __init__(self, bot):
@@ -204,7 +208,7 @@ class MathCalculatorCog(commands.Cog):
             if '.' in result_str:
                 result_str = result_str.rstrip('0').rstrip('.')
 
-            print(f'計算結果: {expression} = {result_str}')
+            log.info(f'計算結果: {expression} = {result_str}')
             
             # 使用翻譯系統格式化結果訊息
             result_message = self.lang_manager.translate(
@@ -215,7 +219,7 @@ class MathCalculatorCog(commands.Cog):
             return result_message
         except Exception as e:
             await func.report_error(e, f"An error occurred during calculation in cogs/math.py")
-            print(f"計算錯誤: {str(e)}")
+            log.error("Calculation error", exception=e)
             error_message = self.lang_manager.translate(
                 guild_id, "commands", "calculate", "responses", "error_general"
             ) if self.lang_manager else "計算錯誤：無法解析或計算該表達式。"

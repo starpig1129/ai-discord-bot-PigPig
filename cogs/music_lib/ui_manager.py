@@ -1,10 +1,12 @@
 import asyncio
 import discord
-import logging as logger
 from typing import Optional, Dict, Any
 from .ui.controls import MusicControlView
 from .ui.progress import ProgressDisplay
 from cogs.language_manager import LanguageManager
+from addons.logging import get_logger
+
+log = get_logger(server_id="system", source=__name__)
 
 class UIManager:
     def __init__(self, bot=None):
@@ -112,7 +114,7 @@ class UIManager:
             return message
             
         except Exception as e:
-            logger.error(f"更新播放器UI失敗: {e}")
+            log.error(f"更新播放器UI失敗: {e}")
             raise
 
     def _create_player_embed(self, item: Dict[str, Any], youtube_manager, guild_id: str = None) -> discord.Embed:

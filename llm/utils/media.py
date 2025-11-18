@@ -1,5 +1,5 @@
 import io
-import logging
+from addons.logging import get_logger
 from PIL import Image
 from pdf2image import convert_from_bytes
 from decord import VideoReader, cpu
@@ -11,8 +11,7 @@ MAX_NUM_FRAMES = 16  # if cuda OOM set a smaller number
 TARGET_IMAGE_SIZE = (224, 224)  # 設置目標圖像大小
 
 # 設置日誌
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+log = get_logger(source=__name__, server_id="system")
 
 def standardize_image(image, target_size=TARGET_IMAGE_SIZE):
     return image.resize(target_size)
@@ -49,7 +48,7 @@ async def encode_video(video_data):
                 frame_idx = uniform_sample(frame_idx, MAX_NUM_FRAMES)
             frames = vr.get_batch(frame_idx).asnumpy()
             frames = [standardize_image(Image.fromarray(v.astype('uint8'))) for v in frames]
-        logger.info(f'Extracted and standardized {len(frames)} frames from video')
+        log.info(f'Extracted and standardized {len(frames)} frames from video')
         return frames
     except Exception as e:
         await func.report_error(e, "Video encoding failed")
@@ -84,30 +83,30 @@ async def process_attachment_data(message):
                         if is_valid_image(standardized_image):
                             all_image_data.append(standardized_image)
                             processed_files.append(f"圖片: {attachment.filename}")
-                            logger.info(f"Processed image: {attachment.filename}")
+                            log.info(f"Processed image: {attachment.filename}")
                         else:
-                            logger.warning(f"Invalid image size after standardization: {attachment.filename}")
+                            log.warning(f"Invalid image size after standardization: {attachment.filename}")
 
                     elif attachment.filename.lower().endswith('.pdf'):
                         pdf_images = safe_process_pdf(file_data)
                         valid_pdf_images = [img for img in pdf_images if is_valid_image(img)]
                         all_image_data.extend(valid_pdf_images)
                         processed_files.append(f"PDF: {attachment.filename} (處理了 {len(valid_pdf_images)} 頁)")
-                        logger.info(f"Processed PDF: {attachment.filename}, extracted {len(valid_pdf_images)} valid pages")
+                        log.info(f"Processed PDF: {attachment.filename}, extracted {len(valid_pdf_images)} valid pages")
 
                     elif attachment.filename.lower().endswith(supported_video_formats):
                         video_frames = await encode_video(file_data)
                         valid_video_frames = [frame for frame in video_frames if is_valid_image(frame)]
                         all_image_data.extend(valid_video_frames)
                         processed_files.append(f"影片: {attachment.filename} (處理了 {len(valid_video_frames)} 幀)")
-                        logger.info(f"Processed video: {attachment.filename}, extracted {len(valid_video_frames)} valid frames")
+                        log.info(f"Processed video: {attachment.filename}, extracted {len(valid_video_frames)} valid frames")
 
                     else:
-                        logger.warning(f"Unsupported file format: {attachment.filename}")
+                        log.warning(f"Unsupported file format: {attachment.filename}")
 
                 except Exception as e:
                     await func.report_error(e, f"Processing attachment {attachment.filename} failed")
-
+                    log.error(f"Error processing attachment {attachment.filename}: {e}")
         if not all_image_data:
             return "沒有找到可處理的圖像、影片或PDF附件，或處理過程中出現錯誤。"
 
