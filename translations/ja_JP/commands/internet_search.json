@@ -20,7 +20,8 @@
       "unknown_type": "未知の検索タイプ：{type}",
       "no_videos_found": "関連動画が見つかりません、他のキーワードを試してください。",
       "youtube_result": "YouTube検索結果：\nタイトル：{title}\nチャンネル：{channel}\n視聴回数：{views}\nリンク：{url}",
-      "search_failed": "検索失敗、他のキーワードを試してください。エラー：{error}"
+      "search_failed": "検索失敗、他のキーワードを試してください。エラー：{error}",
+      "search_complete": "検索完了"
     },
     "errors": {
       "search_failed": "検索失敗：{error}",
@@ -35,17 +36,5 @@
       "eat_no_food": "そのような食べ物はありません",
       "eat_system_error": "元々{keyword}を推奨しようとしましたが、申し訳ありませんがシステムエラーですQQ: {error}"
     }
-  },
-  "responses": {
-    "searching": "検索中...",
-    "search_complete": "検索完了",
-    "search_failed": "検索に失敗しました",
-    "no_videos_found": "動画が見つかりません",
-    "youtube_result": "YouTube検索結果",
-    "unknown_type": "不明なタイプ"
-  },
-  "errors": {
-    "eat_no_food": "食べ物情報が見つかりません",
-    "eat_system_error": "食事システムエラー"
   }
 }

@@ -20,7 +20,8 @@
       "unknown_type": "未知的搜索类型：{type}",
       "no_videos_found": "未找到相关视频，请尝试其他关键词。",
       "youtube_result": "YouTube搜索结果：\n标题：{title}\n发布者：{channel}\n观看次数：{views}\n链接：{url}",
-      "search_failed": "搜索失败，请尝试其他关键词。错误：{error}"
+      "search_failed": "搜索失败，请尝试其他关键词。错误：{error}",
+      "search_complete": "搜索完成"
     },
     "errors": {
       "search_failed": "搜索失败：{error}",
@@ -35,17 +36,5 @@
       "eat_no_food": "没有这种食物哦",
       "eat_system_error": "原本想推荐你吃 {keyword}，但很抱歉系统出错了QQ: {error}"
     }
-  },
-  "responses": {
-    "searching": "正在搜索中...",
-    "search_complete": "搜索完成",
-    "search_failed": "搜索失败",
-    "no_videos_found": "找不到影片",
-    "youtube_result": "YouTube 搜索结果",
-    "unknown_type": "未知类型"
-  },
-  "errors": {
-    "eat_no_food": "没有找到食物资讯",
-    "eat_system_error": "饮食系统错误"
   }
 }

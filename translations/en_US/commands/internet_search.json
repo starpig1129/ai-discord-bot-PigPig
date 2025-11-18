@@ -20,7 +20,8 @@
       "unknown_type": "Unknown search type: {type}",
       "no_videos_found": "No related videos found, please try other keywords.",
       "youtube_result": "YouTube search result:\nTitle: {title}\nChannel: {channel}\nViews: {views}\nLink: {url}",
-      "search_failed": "Search failed, please try other keywords. Error: {error}"
+      "search_failed": "Search failed, please try other keywords. Error: {error}",
+      "search_complete": "Search complete"
     },
     "errors": {
       "search_failed": "Search failed: {error}",
@@ -35,17 +36,5 @@
       "eat_no_food": "No such food",
       "eat_system_error": "Originally wanted to recommend {keyword}, but sorry system error QQ: {error}"
     }
-  },
-  "responses": {
-    "searching": "Searching...",
-    "search_complete": "Search complete",
-    "search_failed": "Search failed",
-    "no_videos_found": "No videos found",
-    "youtube_result": "YouTube search results",
-    "unknown_type": "Unknown type"
-  },
-  "errors": {
-    "eat_no_food": "No food information found",
-    "eat_system_error": "Food system error"
   }
 }
