@@ -1,60 +1,48 @@
 {
-  "set_channel_mode": {
-    "name": "set_channel_mode",
-    "description": "Set channel response mode",
+  "set_server_mode": {
     "choices": {
       "unrestricted": "Unrestricted",
       "whitelist": "Whitelist",
       "blacklist": "Blacklist"
     },
     "responses": {
-      "success": "Channel response mode set to: {mode}"
+      "success": "Server response mode set to: {mode}"
+    }
+  },
+  "set_channel_mode": {
+    "choices": {
+      "default": "Default (Follow Server)",
+      "story": "Story Mode"
+    },
+    "responses": {
+      "success": "Channel {channel} mode set to: {mode}",
+      "reset": "Channel {channel} mode reset to default (follow server).",
+      "already_default": "Channel {channel} is already using default mode."
     }
   },
   "add_channel": {
-    "name": "add_channel",
-    "description": "Add channel to whitelist or blacklist",
     "choices": {
       "whitelist": "Whitelist",
-      "blacklist": "Blacklist",
-      "list_type": {
-        "value": "List Type"
-      }
+      "blacklist": "Blacklist"
     },
     "responses": {
-      "success": "Channel added successfully",
-      "already_exists": "Channel already exists in list"
+      "success": "Channel {channel} added to {list_type}",
+      "already_exists": "Channel {channel} already exists in {list_type}"
     }
   },
   "remove_channel": {
-    "name": "remove_channel",
-    "description": "Remove channel from whitelist or blacklist",
     "choices": {
       "whitelist": "Whitelist",
-      "blacklist": "Blacklist",
-      "list_type": {
-        "value": "List Type"
-      }
+      "blacklist": "Blacklist"
     },
     "responses": {
-      "success": "Channel removed successfully",
-      "not_found": "Channel not found in list"
+      "success": "Channel {channel} removed from {list_type}",
+      "not_found": "Channel {channel} not found in {list_type}"
     }
   },
   "auto_response": {
-    "name": "auto_response",
-    "description": "Set channel auto response",
     "responses": {
-      "success": "Auto response configured"
+      "success": "Channel {channel} auto response set to: {enabled}"
     }
-  },
-  "responses": {
-    "success": "Auto response configured successfully"
-  },
-  "choices": {
-    "list_type": {
-      "value": "List Type"
-    }
-  },
-  "name": "auto_response"
+  }
 }

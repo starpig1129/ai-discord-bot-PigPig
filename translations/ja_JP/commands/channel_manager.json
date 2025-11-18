@@ -1,60 +1,48 @@
 {
-  "set_channel_mode": {
-    "name": "set_channel_mode",
-    "description": "チャンネル応答モードを設定",
+  "set_server_mode": {
     "choices": {
       "unrestricted": "無制限",
       "whitelist": "ホワイトリスト",
       "blacklist": "ブラックリスト"
     },
     "responses": {
-      "success": "チャンネル応答モードを{mode}に設定しました"
+      "success": "サーバーの応答モードを{mode}に設定しました"
+    }
+  },
+  "set_channel_mode": {
+    "choices": {
+      "default": "デフォルト（サーバーに従う）",
+      "story": "ストーリーモード"
+    },
+    "responses": {
+      "success": "チャンネル{channel}のモードを{mode}に設定しました",
+      "reset": "チャンネル{channel}のモードをデフォルト（サーバーに従う）にリセットしました。",
+      "already_default": "チャンネル{channel}はすでにデフォルトモードを使用しています。"
     }
   },
   "add_channel": {
-    "name": "add_channel",
-    "description": "ホワイトリストまたはブラックリストにチャンネルを追加",
     "choices": {
       "whitelist": "ホワイトリスト",
-      "blacklist": "ブラックリスト",
-      "list_type": {
-        "value": "リストタイプ"
-      }
+      "blacklist": "ブラックリスト"
     },
     "responses": {
-      "success": "チャンネルが正常に追加されました",
-      "already_exists": "チャンネルはすでにリストに存在します"
+      "success": "チャンネル{channel}を{list_type}に追加しました",
+      "already_exists": "チャンネル{channel}はすでに{list_type}に存在します"
     }
   },
   "remove_channel": {
-    "name": "remove_channel",
-    "description": "ホワイトリストまたはブラックリストからチャンネルを削除",
     "choices": {
       "whitelist": "ホワイトリスト",
-      "blacklist": "ブラックリスト",
-      "list_type": {
-        "value": "リストタイプ"
-      }
+      "blacklist": "ブラックリスト"
     },
     "responses": {
-      "success": "チャンネルが正常に削除されました",
-      "not_found": "リストにチャンネルが見つかりません"
+      "success": "チャンネル{channel}を{list_type}から削除しました",
+      "not_found": "チャンネル{channel}が{list_type}に見つかりません"
     }
   },
   "auto_response": {
-    "name": "auto_response",
-    "description": "チャンネル自動応答を設定",
     "responses": {
-      "success": "自動応答が設定されました"
+      "success": "チャンネル{channel}の自動応答を{enabled}に設定しました"
     }
-  },
-  "responses": {
-    "success": "自動応答の設定に成功しました"
-  },
-  "choices": {
-    "list_type": {
-      "value": "リストタイプ"
-    }
-  },
-  "name": "auto_response"
+  }
 }

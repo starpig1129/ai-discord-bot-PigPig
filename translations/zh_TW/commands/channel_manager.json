@@ -1,60 +1,48 @@
 {
-  "set_channel_mode": {
-    "name": "set_channel_mode",
-    "description": "設定頻道回應模式",
+  "set_server_mode": {
     "choices": {
       "unrestricted": "無限制",
       "whitelist": "白名單",
       "blacklist": "黑名單"
     },
     "responses": {
-      "success": "已將頻道回應模式設定為：{mode}"
+      "success": "已將伺服器回應模式設定為：{mode}"
+    }
+  },
+  "set_channel_mode": {
+    "choices": {
+      "default": "預設（遵從伺服器）",
+      "story": "故事模式"
+    },
+    "responses": {
+      "success": "已將頻道 {channel} 的模式設定為：{mode}",
+      "reset": "已將頻道 {channel} 的模式重設為預設（遵從伺服器）。",
+      "already_default": "頻道 {channel} 已經在使用預設模式。"
     }
   },
   "add_channel": {
-    "name": "add_channel",
-    "description": "新增頻道到白名單或黑名單",
     "choices": {
       "whitelist": "白名單",
-      "blacklist": "黑名單",
-      "list_type": {
-        "value": "清單類型"
-      }
+      "blacklist": "黑名單"
     },
     "responses": {
-      "success": "頻道已成功新增",
-      "already_exists": "頻道已存在於清單中"
+      "success": "頻道 {channel} 已新增到 {list_type}",
+      "already_exists": "頻道 {channel} 已存在於 {list_type} 中"
     }
   },
   "remove_channel": {
-    "name": "remove_channel",
-    "description": "移除頻道從白名單或黑名單",
     "choices": {
       "whitelist": "白名單",
-      "blacklist": "黑名單",
-      "list_type": {
-        "value": "清單類型"
-      }
+      "blacklist": "黑名單"
     },
     "responses": {
-      "success": "頻道已成功移除",
-      "not_found": "在清單中找不到該頻道"
+      "success": "頻道 {channel} 已從 {list_type} 移除",
+      "not_found": "在 {list_type} 中找不到頻道 {channel}"
     }
   },
   "auto_response": {
-    "name": "auto_response",
-    "description": "設定頻道自動回覆",
     "responses": {
-      "success": "自動回應已設定"
+      "success": "頻道 {channel} 自動回覆設定為：{enabled}"
     }
-  },
-  "responses": {
-    "success": "自動回覆設定成功"
-  },
-  "choices": {
-    "list_type": {
-      "value": "清單類型"
-    }
-  },
-  "name": "auto_response"
+  }
 }
