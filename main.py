@@ -83,11 +83,9 @@ if __name__ == "__main__":
                         # Acquire structured logger for main module
                         log = get_logger(server_id="Bot", source=__name__)
                         if latest_version != current_version:
-                            log.warning(
-                                f"Your PigPig Bot is not up-to-date! The latest version is {latest_version} "
-                                f"and you are currently running version {current_version}. "
-                                f"Run `python update.py -l` to update your bot!"
-                            )
+                            log.warning(f"The latest version is {latest_version} ")
+                            log.warning(f"and you are currently running version {current_version}. ")
+                            log.warning(f"Run `python update.py -l` to update your bot!")
                         else:
                             log.info(f"Your PigPig Bot is up-to-date! - {latest_version}")
                                 

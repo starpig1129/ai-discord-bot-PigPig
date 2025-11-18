@@ -93,7 +93,7 @@ class DatabaseConnection:
                             self.logger.debug("Commit after schema.create_tables failed or unnecessary: %s", commit_exc)
                         try:
                             tables = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-                            self.logger.info("DB schema verified for %s; tables: %s", str(self.db_path), tables)
+                            self.logger.debug("DB schema verified for %s; tables: %s", str(self.db_path), tables)
                         except Exception as list_exc:
                             self.logger.debug("Unable to list tables after schema creation: %s", list_exc)
                     except Exception as se:
