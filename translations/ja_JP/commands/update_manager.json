@@ -1,0 +1,164 @@
+{
+    "permissions": {
+        "no_permission": "❌ このコマンドを使用する権限がありません",
+        "owner_only_update": "❌ 更新の実行はボットの所有者のみ可能です",
+        "owner_only_config": "❌ 更新設定の構成はボットの所有者のみ可能です"
+    },
+    "system": {
+        "not_initialized": "❌ 更新システムが適切に初期化されていません",
+        "busy": "⚠️ 更新進行中",
+        "busy_description": "更新システムが使用中です。現在のステータス: {status}",
+        "idle": {
+            "title": "💤 更新システムアイドル中",
+            "description": "自動更新システムが正常に動作しています"
+        },
+        "checking": {
+            "title": "🔍 更新を確認中",
+            "description": "GitHubから最新バージョンを取得中..."
+        },
+        "downloading": {
+            "title": "⬇️ 更新をダウンロード中",
+            "description": "ダウンロード進行状況: {progress}%"
+        },
+        "updating": {
+            "title": "🔄 更新中",
+            "description": "更新進行状況: {progress}%"
+        },
+        "restarting": {
+            "title": "🔄 再起動中",
+            "description": "ボットが再起動中です..."
+        },
+        "error": {
+            "title": "❌ システムエラー",
+            "description": "エラー: {error}"
+        },
+        "unknown": {
+            "title": "❓ 不明なステータス",
+            "description": "ステータス: {status}"
+        }
+    },
+    "commands": {
+        "check_update": {
+            "title": "🔍 バージョンチェック結果",
+            "current_version": "現在のバージョン",
+            "latest_version": "最新バージョン",
+            "available": {
+                "status": "🆕 新しいバージョンが利用可能です",
+                "published_at": "发布时间"
+            },
+            "up_to_date": {
+                "status": "✅ 既に最新バージョンです"
+            },
+            "error": {
+                "title": "❌ チェック失敗",
+                "description": "更新の確認中にエラーが発生しました。開発者に報告されました。"
+            }
+        },
+        "update_now": {
+            "no_update_needed": {
+                "title": "ℹ️ 更新は不要です",
+                "description": "既に最新バージョンです。更新は不要です。強制更新するには `force: True` パラメータを使用してください。"
+            },
+            "confirm": {
+                "title": "⚠️ 更新確認",
+                "description": "`{current_version}` から `{latest_version}` に更新してもよろしいですか？",
+                "warning": "更新中にボットが再起動します"
+            },
+            "force_confirm": {
+                "title": "⚠️ 強制更新確認",
+                "description": "強制更新を実行してもよろしいですか？",
+                "warning": "強制更新により現在のバージョンが上書きされる可能性があります"
+            },
+            "error": {
+                "title": "❌ 更新失敗",
+                "description": "更新の準備中にエラーが発生しました。開発者に報告されました。"
+            }
+        },
+        "update_status": {
+            "error": {
+                "title": "❌ ステータスクエリ失敗",
+                "description": "ステータスの取得中にエラーが発生しました。開発者に報告されました。"
+            }
+        },
+        "update_config": {
+            "title": "⚙️ 更新システム構成",
+            "description": "構成するオプションを選択してください:",
+            "auto_update": "自動更新",
+            "check_interval": "チェック間隔",
+            "require_confirmation": "確認が必要",
+            "enabled": "✅ 有効",
+            "disabled": "❌ 無効",
+            "hours": "{hours}時間"
+        }
+    },
+    "views": {
+        "update_action": {
+            "update_now": {
+                "label": "今すぐ更新",
+                "style": "success",
+                "emoji": "🚀"
+            },
+            "remind_later": {
+                "label": "後で確認",
+                "style": "secondary",
+                "emoji": "⏰"
+            },
+            "confirm": {
+                "title": "⚠️ 更新確認",
+                "description": "今すぐ更新を実行してもよろしいですか？",
+                "warning": "更新中にボットが再起動します"
+            },
+            "reminded": {
+                "title": "⏰ リマインダー設定済み",
+                "description": "次回更新確認時に再度お知らせします。"
+            }
+        },
+        "update_confirm": {
+            "confirm": {
+                "label": "更新を確認",
+                "style": "danger",
+                "emoji": "✅"
+            },
+            "cancel": {
+                "label": "キャンセル",
+                "style": "secondary",
+                "emoji": "❌"
+            },
+            "starting": {
+                "title": "🔄 更新開始",
+                "description": "更新プロセスが開始されました。詳細な進行状況はDMでご確認ください。\n\n⚠️ **ボットを閉じないでください。更新完了後に自動的に再起動します。**",
+                "color": "blue"
+            },
+            "cancelled": {
+                "title": "❌ 更新キャンセル",
+                "description": "更新操作がキャンセルされました。"
+            },
+            "failed": {
+                "title": "❌ 更新失敗",
+                "description": "更新プロセス中にエラーが発生しました: {error}"
+            },
+            "backup": {
+                "name": "バックアップ情報",
+                "value": "システムはバックアップにロールバックされました: `{backup_id}`"
+            }
+        },
+        "update_config": {
+            "toggle_auto_update": {
+                "label": "自動更新の切替",
+                "style": "primary",
+                "emoji": "🔄"
+            },
+            "set_check_interval": {
+                "label": "チェック間隔の設定",
+                "style": "secondary",
+                "emoji": "⏱️"
+            },
+            "in_development": "⚠️ 構成機能は開発中です..."
+        }
+    },
+    "fields": {
+        "operation": "現在の操作",
+        "last_check": "最後の確認",
+        "auto_update": "自動更新"
+    }
+}

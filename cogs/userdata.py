@@ -317,7 +317,7 @@ class UserDataCog(commands.Cog):
             if not self.user_manager:
                 return self._translate(
                     guild_id,
-                    "system", "userdata", "errors", "sqlite_not_available",
+                    "commands", "userdata", "errors", "sqlite_not_available",
                     fallback_key="sqlite_not_available"
                 )
 
@@ -366,7 +366,7 @@ class UserDataCog(commands.Cog):
             
             return self._translate(
                 guild_id,
-                "system", "userdata", "errors", "database_error",
+                "commands", "userdata", "errors", "database_error",
                 fallback_key="database_error",
                 error=str(e)
             )
@@ -444,7 +444,7 @@ class UserDataCog(commands.Cog):
             if not self.user_manager:
                 return self._translate(
                     guild_id,
-                    "system", "userdata", "errors", "sqlite_not_available",
+                    "commands", "userdata", "errors", "sqlite_not_available",
                     fallback_key="sqlite_not_available"
                 )
 
@@ -488,7 +488,7 @@ class UserDataCog(commands.Cog):
                 
                 return self._translate(
                     guild_id,
-                    "system", "userdata", "errors", "ai_processing_failed",
+                    "commands", "userdata", "errors", "ai_processing_failed",
                     fallback_key="ai_processing_failed",
                     error=str(e)
                 )
@@ -526,7 +526,7 @@ class UserDataCog(commands.Cog):
                 
                 return self._translate(
                     guild_id,
-                    "system", "userdata", "errors", "update_failed",
+                    "commands", "userdata", "errors", "update_failed",
                     fallback_key="update_failed",
                     error="Database operation failed"
                 )
@@ -540,7 +540,7 @@ class UserDataCog(commands.Cog):
             
             return self._translate(
                 guild_id,
-                "system", "userdata", "errors", "database_error",
+                "commands", "userdata", "errors", "database_error",
                 fallback_key="database_error",
                 error=str(e)
             )
@@ -629,7 +629,7 @@ class UserDataCog(commands.Cog):
         if not self.user_manager:
             return self._translate(
                 guild_id,
-                "system", "userdata", "errors", "sqlite_not_available",
+                "commands", "userdata", "errors", "sqlite_not_available",
                 fallback_key="sqlite_not_available"
             )
         
@@ -657,7 +657,7 @@ class UserDataCog(commands.Cog):
             if not user_data or not user_data.strip():
                 return self._translate(
                     guild_id,
-                    "commands", "userdata", "errors", "no_data_provided",
+                    "commands", "userdata", "responses", "no_data_provided",
                     fallback_key="no_data_provided"
                 )
             return await self._save_user_data(
@@ -706,7 +706,7 @@ class UserDataCog(commands.Cog):
             if not user_id:
                 return self._translate(
                     guild_id,
-                    "system", "userdata", "errors", "invalid_user",
+                    "commands", "userdata", "errors", "invalid_user",
                     fallback_key="invalid_user"
                 )
 
@@ -727,7 +727,7 @@ class UserDataCog(commands.Cog):
             self.logger.warning(f"Invalid or not found user_id {user_id}: {e}")
             return self._translate(
                 guild_id,
-                "system", "userdata", "errors", "invalid_user",
+                "commands", "userdata", "errors", "invalid_user",
                 fallback_key="invalid_user"
             )
         except Exception as e:
@@ -741,7 +741,7 @@ class UserDataCog(commands.Cog):
             
             return self._translate(
                 guild_id,
-                "system", "userdata", "errors", "analysis_failed",
+                "commands", "userdata", "errors", "analysis_failed",
                 fallback_key="analysis_failed",
                 error=str(e)
             )

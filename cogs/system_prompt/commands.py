@@ -120,37 +120,59 @@ class SystemPromptCommands(commands.Cog):
             permission_validator=self.permission_validator
         )
 
-        # 建立主選單 Embed
-        embed = discord.Embed(
-            title="🤖 系統提示管理",
-            description="歡迎使用統一系統提示管理介面！請選擇要執行的功能：",
-            color=discord.Color.blue()
-        )
-
-        # 添加功能說明
-        embed.add_field(
-            name="🔧 主要功能",
-            value=(
+        # 取得翻譯文字
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        lang_manager = self.bot.get_cog("LanguageManager")
+        
+        if lang_manager:
+            title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "main_menu", "title")
+            description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "main_menu", "description")
+            main_functions_title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "main_menu", "main_functions_title")
+            main_functions_description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "main_menu", "main_functions_description")
+            usage_title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "main_menu", "usage_title")
+            usage_description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "main_menu", "usage_description")
+            footer = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "main_menu", "footer")
+        else:
+            # 降級到預設值
+            title = "🤖 系統提示管理"
+            description = "歡迎使用統一系統提示管理介面！請選擇要執行的功能："
+            main_functions_title = "🔧 主要功能"
+            main_functions_description = (
                 "• **設定提示** - 設定頻道或伺服器系統提示\n"
                 "• **查看配置** - 查看當前系統提示配置\n"
                 "• **模組編輯** - 編輯特定 YAML 模組\n"
                 "• **複製提示** - 複製系統提示到其他頻道\n"
                 "• **移除提示** - 移除已設定的系統提示\n"
                 "• **重置設定** - 重置系統提示配置"
-            ),
+            )
+            usage_title = "📋 使用說明"
+            usage_description = (
+                "點擊下方按鈕來執行對應功能。\n"
+                "系統支援三層繼承機制：YAML 基礎 → 伺服器預設 → 頻道特定"
+            )
+            footer = "提示：所有操作都會進行權限檢查，確保安全性"
+
+        # 建立主選單 Embed
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=discord.Color.blue()
+        )
+
+        # 添加功能說明
+        embed.add_field(
+            name=main_functions_title,
+            value=main_functions_description,
             inline=False
         )
 
         embed.add_field(
-            name="📋 使用說明",
-            value=(
-                "點擊下方按鈕來執行對應功能。\n"
-                "系統支援三層繼承機制：YAML 基礎 → 伺服器預設 → 頻道特定"
-            ),
+            name=usage_title,
+            value=usage_description,
             inline=False
         )
 
-        embed.set_footer(text="提示：所有操作都會進行權限檢查，確保安全性")
+        embed.set_footer(text=footer)
 
         # 發送主選單
         await interaction.response.send_message(

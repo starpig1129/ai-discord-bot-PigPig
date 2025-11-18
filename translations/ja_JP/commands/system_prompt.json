@@ -154,7 +154,12 @@
             "timeout": "操作タイムアウト、再試行してください",
             "modal_error": "リクエスト処理エラー: {error}",
             "unknown_error": "未知のエラーが発生しました、後で再試行してください",
-            "modules_unavailable": "モジュールリストを取得できません: {error}"
+            "modules_unavailable": "モジュールリストを取得できません: {error}",
+            "server_only": "この機能はサーバー内でのみ使用できます",
+            "text_channel_only": "この機能はテキストチャンネル内でのみ使用できます",
+            "operation_cancelled": "操作がキャンセルされました",
+            "no_channels_available": "コピー可能な利用可能なチャンネルがありません",
+            "internal_error": "内部エラー、後で再試行してください"
         },
         "modules": {
             "descriptions": {
@@ -199,12 +204,17 @@
                 "loaded": "✅ 編集ベースとしてデフォルト内容をロードしました",
                 "loading_failed": "⚠️ デフォルト内容のロードに失敗、空白から開始します",
                 "effective_prompt_loaded": "📝 現在の有効な完全システムプロンプトをロードしました",
-                "module_default_loaded": "📦 {module}モジュールのデフォルト内容をロードしました"
+                "module_default_loaded": "📦 {module}モジュールのデフォルト内容をロードしました",
+                "channel_prompt_loaded": "チャンネル特定システムプロンプトをベースとしてロードしました",
+                "server_prompt_loaded": "サーバーデフォルトシステムプロンプトをベースとしてロードしました"
             },
             "editing": {
                 "based_on_current": "現在の有効なシステムプロンプトに基づいて編集中...",
                 "based_on_default": "{module}モジュールのデフォルト内容に基づいて編集中...",
-                "from_scratch": "新しい内容を入力してください..."
+                "from_scratch": "新しい内容を入力してください...",
+                "channel_specific_edit": "チャンネル特定システムプロンプトを編集中...",
+                "server_default_edit": "サーバーデフォルトシステムプロンプトを編集中...",
+                "current_effective_edit": "現在の有効なシステムプロンプトを編集中（変数フォーマット復元済み）..."
             },
             "guidance": {
                 "first_time_edit": "🎯 初回編集ヒント：デフォルト内容に基づいて修正できます",

@@ -1,0 +1,164 @@
+{
+    "permissions": {
+        "no_permission": "❌ You don't have permission to use this command",
+        "owner_only_update": "❌ Only the bot owner can perform updates",
+        "owner_only_config": "❌ Only the bot owner can configure update settings"
+    },
+    "system": {
+        "not_initialized": "❌ Update system not properly initialized",
+        "busy": "⚠️ Update in progress",
+        "busy_description": "Update system is busy, current status: {status}",
+        "idle": {
+            "title": "💤 Update System Idle",
+            "description": "Auto-update system running normally"
+        },
+        "checking": {
+            "title": "🔍 Checking for Updates",
+            "description": "Querying latest version from GitHub..."
+        },
+        "downloading": {
+            "title": "⬇️ Downloading Update",
+            "description": "Download progress: {progress}%"
+        },
+        "updating": {
+            "title": "🔄 Updating",
+            "description": "Update progress: {progress}%"
+        },
+        "restarting": {
+            "title": "🔄 Restarting",
+            "description": "Bot is restarting..."
+        },
+        "error": {
+            "title": "❌ System Error",
+            "description": "Error: {error}"
+        },
+        "unknown": {
+            "title": "❓ Unknown Status",
+            "description": "Status: {status}"
+        }
+    },
+    "commands": {
+        "check_update": {
+            "title": "🔍 Version Check Results",
+            "current_version": "Current Version",
+            "latest_version": "Latest Version",
+            "available": {
+                "status": "🆕 New version available",
+                "published_at": "Published at"
+            },
+            "up_to_date": {
+                "status": "✅ Already latest version"
+            },
+            "error": {
+                "title": "❌ Check Failed",
+                "description": "An error occurred while checking for updates, reported to developer."
+            }
+        },
+        "update_now": {
+            "no_update_needed": {
+                "title": "ℹ️ No Update Needed",
+                "description": "Already latest version, no update needed. Use `force: True` parameter to force update."
+            },
+            "confirm": {
+                "title": "⚠️ Update Confirmation",
+                "description": "Are you sure you want to update from `{current_version}` to `{latest_version}`?",
+                "warning": "The bot will restart during the update process"
+            },
+            "force_confirm": {
+                "title": "⚠️ Force Update Confirmation",
+                "description": "Are you sure you want to perform a force update?",
+                "warning": "Force update may overwrite current version"
+            },
+            "error": {
+                "title": "❌ Update Failed",
+                "description": "An error occurred while preparing the update, reported to developer."
+            }
+        },
+        "update_status": {
+            "error": {
+                "title": "❌ Status Query Failed",
+                "description": "An error occurred while getting status, reported to developer."
+            }
+        },
+        "update_config": {
+            "title": "⚙️ Update System Configuration",
+            "description": "Please select the option to configure:",
+            "auto_update": "Auto Update",
+            "check_interval": "Check Interval",
+            "require_confirmation": "Require Confirmation",
+            "enabled": "✅ Enabled",
+            "disabled": "❌ Disabled",
+            "hours": "{hours}hours"
+        }
+    },
+    "views": {
+        "update_action": {
+            "update_now": {
+                "label": "Update Now",
+                "style": "success",
+                "emoji": "🚀"
+            },
+            "remind_later": {
+                "label": "Remind Later",
+                "style": "secondary",
+                "emoji": "⏰"
+            },
+            "confirm": {
+                "title": "⚠️ Update Confirmation",
+                "description": "Are you sure you want to update immediately?",
+                "warning": "The bot will restart during the update process"
+            },
+            "reminded": {
+                "title": "⏰ Reminder Set",
+                "description": "Will remind you next time checking for updates."
+            }
+        },
+        "update_confirm": {
+            "confirm": {
+                "label": "Confirm Update",
+                "style": "danger",
+                "emoji": "✅"
+            },
+            "cancel": {
+                "label": "Cancel",
+                "style": "secondary",
+                "emoji": "❌"
+            },
+            "starting": {
+                "title": "🔄 Starting Update",
+                "description": "Update process has started, please check DM for detailed progress.\n\n⚠️ **Please don't close the bot, it will restart automatically after update.**",
+                "color": "blue"
+            },
+            "cancelled": {
+                "title": "❌ Update Cancelled",
+                "description": "Update operation has been cancelled."
+            },
+            "failed": {
+                "title": "❌ Update Failed",
+                "description": "An error occurred during the update process: {error}"
+            },
+            "backup": {
+                "name": "Backup Information",
+                "value": "System has been rolled back to backup: `{backup_id}`"
+            }
+        },
+        "update_config": {
+            "toggle_auto_update": {
+                "label": "Toggle Auto Update",
+                "style": "primary",
+                "emoji": "🔄"
+            },
+            "set_check_interval": {
+                "label": "Set Check Interval",
+                "style": "secondary",
+                "emoji": "⏱️"
+            },
+            "in_development": "⚠️ Configuration feature under development..."
+        }
+    },
+    "fields": {
+        "operation": "Current Operation",
+        "last_check": "Last Check",
+        "auto_update": "Auto Update"
+    }
+}

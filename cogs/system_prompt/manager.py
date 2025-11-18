@@ -115,31 +115,48 @@ class PromptValidator:
         
         # 基本格式檢查
         if not content.strip():
-            raise ValidationError("系統提示不能為空", "content")
+            lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
+            guild_id = getattr(self.bot, 'current_guild_id', None)
+            raise ValidationError("系統提示不能為空", "content", lang_manager, guild_id)
         
         # 檢查潛在的注入攻擊
         for pattern in self.DANGEROUS_PATTERNS:
             if re.search(pattern, content, re.IGNORECASE):
-                raise UnsafeContentError(pattern)
+                lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
+                guild_id = getattr(self.bot, 'current_guild_id', None)
+                raise UnsafeContentError(pattern, lang_manager, guild_id)
         
         return True, ""
     
-    def validate_modules(self, modules: Dict[str, str]) -> Tuple[bool, str]:
+    def validate_modules(self, modules: Dict[str, str], guild_id: Optional[str] = None) -> Tuple[bool, str]:
         """
         驗證模組設定
         
         Args:
             modules: 模組字典
+            guild_id: 伺服器 ID（可選）
             
         Returns:
             (是否有效, 錯誤訊息)
         """
         if len(modules) > self.MAX_MODULE_COUNT:
-            raise ValidationError(f"模組數量過多，最多 {self.MAX_MODULE_COUNT} 個")
+            lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
+            raise ValidationError(
+                f"模組數量過多，最多 {self.MAX_MODULE_COUNT} 個",
+                "modules",
+                lang_manager,
+                guild_id
+            )
         
         for module_name, module_content in modules.items():
             if not isinstance(module_content, str):
-                raise ValidationError(f"模組 '{module_name}' 的內容必須是字串")
+                lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
+                raise ValidationError(
+                    f"模組 '{module_name}' 的內容必須是字串",
+                    f"module_{module_name}",
+                    lang_manager,
+                    guild_id
+                )
             
             self.validate_prompt_content(module_content)
         
@@ -486,8 +503,10 @@ class SystemPromptManager:
             system_prompts = config.get('system_prompts', {})
             channels = system_prompts.get('channels', {})
             
+            lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
+            
             if channel_id not in channels:
-                raise PromptNotFoundError('channel', channel_id)
+                raise PromptNotFoundError('channel', channel_id, lang_manager, guild_id)
             
             del channels[channel_id]
             
@@ -501,8 +520,21 @@ class SystemPromptManager:
             return True
             
         except Exception as e:
+            lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
             asyncio.create_task(func.report_error(e, "Error removing channel system prompt"))
             self.logger.error(f"移除頻道系統提示時發生錯誤: {e}")
+            
+            error_message = "移除失敗"
+            if lang_manager and guild_id:
+                try:
+                    error_message = lang_manager.translate(
+                        guild_id,
+                        "commands", "system_prompt",
+                        "errors", "operation_failed"
+                    ).format(error=str(e))
+                except Exception:
+                    pass
+            
             raise SystemPromptError(f"移除失敗: {str(e)}")
     
     def remove_server_prompt(self, guild_id: str) -> bool:
@@ -519,8 +551,10 @@ class SystemPromptManager:
             config = self._load_guild_config(guild_id)
             
             system_prompts = config.get('system_prompts', {})
+            lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
+            
             if not system_prompts.get('server_level'):
-                raise PromptNotFoundError('server', guild_id)
+                raise PromptNotFoundError('server', guild_id, lang_manager, guild_id)
             
             system_prompts['server_level'] = {}
             
@@ -534,8 +568,21 @@ class SystemPromptManager:
             return True
             
         except Exception as e:
+            lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
             asyncio.create_task(func.report_error(e, "Error removing server system prompt"))
             self.logger.error(f"移除伺服器系統提示時發生錯誤: {e}")
+            
+            error_message = "移除失敗"
+            if lang_manager and guild_id:
+                try:
+                    error_message = lang_manager.translate(
+                        guild_id,
+                        "commands", "system_prompt",
+                        "errors", "operation_failed"
+                    ).format(error=str(e))
+                except Exception:
+                    pass
+            
             raise SystemPromptError(f"移除失敗: {str(e)}")
     
     def copy_channel_prompt(self, source_guild: str, source_channel: str,
@@ -558,8 +605,10 @@ class SystemPromptManager:
             source_prompts = source_config.get('system_prompts', {})
             source_channels = source_prompts.get('channels', {})
             
+            lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
+            
             if source_channel not in source_channels:
-                raise PromptNotFoundError('channel', source_channel)
+                raise PromptNotFoundError('channel', source_channel, lang_manager, source_guild)
             
             source_data = source_channels[source_channel].copy()
             
@@ -592,8 +641,21 @@ class SystemPromptManager:
             return True
             
         except Exception as e:
+            lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
             asyncio.create_task(func.report_error(e, "Error copying channel prompt"))
             self.logger.error(f"複製頻道提示時發生錯誤: {e}")
+            
+            error_message = "複製失敗"
+            if lang_manager and target_guild:
+                try:
+                    error_message = lang_manager.translate(
+                        target_guild,
+                        "commands", "system_prompt",
+                        "errors", "operation_failed"
+                    ).format(error=str(e))
+                except Exception:
+                    pass
+            
             raise SystemPromptError(f"複製失敗: {str(e)}")
     
     def get_available_modules(self) -> List[str]:
@@ -1234,10 +1296,23 @@ class SystemPromptManager:
         try:
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            asyncio.create_task(func.report_error(e, f"Error saving guild config {guild_id}"))
-            self.logger.error(f"保存伺服器配置失敗 {guild_id}: {e}")
-            raise ConfigurationError(f"無法保存配置: {str(e)}", str(config_file))
+    except Exception as e:
+        lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
+        asyncio.create_task(func.report_error(e, f"Error saving guild config {guild_id}"))
+        self.logger.error(f"保存伺服器配置失敗 {guild_id}: {e}")
+        
+        error_message = f"無法保存配置: {str(e)}"
+        if lang_manager and guild_id:
+            try:
+                error_message = lang_manager.translate(
+                    guild_id,
+                    "commands", "system_prompt",
+                    "errors", "operation_failed"
+                ).format(error=str(e))
+            except Exception:
+                pass
+        
+        raise ConfigurationError(error_message, str(config_file))
     
     def _get_default_config(self) -> Dict[str, Any]:
         """取得預設配置"""

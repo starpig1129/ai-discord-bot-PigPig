@@ -154,7 +154,12 @@
             "timeout": "Operation timeout, please retry",
             "modal_error": "Error processing request: {error}",
             "unknown_error": "Unknown error occurred, please try again later",
-            "modules_unavailable": "Unable to retrieve module list: {error}"
+            "modules_unavailable": "Unable to retrieve module list: {error}",
+            "server_only": "This function can only be used within a server",
+            "text_channel_only": "This function can only be used in text channels",
+            "operation_cancelled": "Operation cancelled",
+            "no_channels_available": "No available channels for copying",
+            "internal_error": "Internal error, please try again later"
         },
         "modules": {
             "descriptions": {
@@ -199,12 +204,17 @@
                 "loaded": "✅ Loaded default content as editing base",
                 "loading_failed": "⚠️ Failed to load default content, starting from blank",
                 "effective_prompt_loaded": "📝 Loaded current effective full system prompt",
-                "module_default_loaded": "📦 Loaded default content for {module} module"
+                "module_default_loaded": "📦 Loaded default content for {module} module",
+                "channel_prompt_loaded": "Loaded channel-specific system prompt as base",
+                "server_prompt_loaded": "Loaded server default system prompt as base"
             },
             "editing": {
                 "based_on_current": "Editing based on current effective system prompt...",
                 "based_on_default": "Editing based on default content for {module} module...",
-                "from_scratch": "Please enter new content..."
+                "from_scratch": "Please enter new content...",
+                "channel_specific_edit": "Editing channel-specific system prompt...",
+                "server_default_edit": "Editing server default system prompt...",
+                "current_effective_edit": "Editing current effective system prompt (variable format restored)..."
             },
             "guidance": {
                 "first_time_edit": "🎯 First time editing tip: You can modify based on default content",

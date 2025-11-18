@@ -148,28 +148,47 @@ class SystemPromptModal(discord.ui.Modal):
             prompt_content = self.prompt_input.value.strip()
             
             if not prompt_content:
-                await interaction.response.send_message(
-                    "❌ 系統提示內容不能為空", 
-                    ephemeral=True
-                )
+                # Get language manager for error messages
+                guild_id = str(interaction.guild.id) if interaction.guild else "system"
+                lang_manager = interaction.client.get_cog("LanguageManager") if hasattr(interaction.client, 'get_cog') else None
+                
+                if lang_manager:
+                    error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "validation", "prompt_empty")
+                else:
+                    error_msg = "❌ 系統提示內容不能為空"
+                
+                await interaction.response.send_message(error_msg, ephemeral=True)
                 return
             
             if self.callback_func:
                 await self.callback_func(interaction, prompt_content)
             else:
-                await interaction.response.send_message(
-                    "✅ 系統提示已設定",
-                    ephemeral=True
-                )
+                # Get language manager for success message
+                guild_id = str(interaction.guild.id) if interaction.guild else "system"
+                lang_manager = interaction.client.get_cog("LanguageManager") if hasattr(interaction.client, 'get_cog') else None
+                
+                if lang_manager:
+                    success_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "messages", "success", "set")
+                else:
+                    success_msg = "✅ 系統提示已設定"
+                
+                await interaction.response.send_message(success_msg, ephemeral=True)
                 
         except Exception as e:
             await func.report_error(e, "Error processing Modal submission")
             self.logger.error(f"處理 Modal 提交時發生錯誤: {e}")
             if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    f"❌ 處理請求時發生錯誤: {str(e)}",
-                    ephemeral=True
-                )
+                # Get language manager for error messages
+                guild_id = str(interaction.guild.id) if interaction.guild else "system"
+                lang_manager = interaction.client.get_cog("LanguageManager") if hasattr(interaction.client, 'get_cog') else None
+                
+                if lang_manager:
+                    error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "modal_error")
+                    formatted_error = error_msg.format(error=str(e))
+                else:
+                    formatted_error = f"❌ 處理請求時發生錯誤: {str(e)}"
+                
+                await interaction.response.send_message(formatted_error, ephemeral=True)
     
     async def on_error(self, interaction: discord.Interaction, error: Exception):
         """處理 Modal 錯誤"""
@@ -287,28 +306,49 @@ class SystemPromptModuleModal(discord.ui.Modal):
             module_content = self.module_input.value.strip()
             
             if not module_content:
-                await interaction.response.send_message(
-                    f"❌ {self.module_name} 模組內容不能為空",
-                    ephemeral=True
-                )
+                # Get language manager for error messages
+                guild_id = str(interaction.guild.id) if interaction.guild else "system"
+                lang_manager = interaction.client.get_cog("LanguageManager") if hasattr(interaction.client, 'get_cog') else None
+                
+                if lang_manager:
+                    error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "validation", "module_empty")
+                    formatted_error = error_msg.format(module=self.module_name)
+                else:
+                    formatted_error = f"❌ {self.module_name} 模組內容不能為空"
+                
+                await interaction.response.send_message(formatted_error, ephemeral=True)
                 return
             
             if self.callback_func:
                 await self.callback_func(interaction, self.module_name, module_content)
             else:
-                await interaction.response.send_message(
-                    f"✅ {self.module_name} 模組已設定",
-                    ephemeral=True
-                )
+                # Get language manager for success message
+                guild_id = str(interaction.guild.id) if interaction.guild else "system"
+                lang_manager = interaction.client.get_cog("LanguageManager") if hasattr(interaction.client, 'get_cog') else None
+                
+                if lang_manager:
+                    success_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "messages", "success", "set")
+                    formatted_success = success_msg.format(scope=f"{self.module_name} 模組")
+                else:
+                    formatted_success = f"✅ {self.module_name} 模組已設定"
+                
+                await interaction.response.send_message(formatted_success, ephemeral=True)
                 
         except Exception as e:
             await func.report_error(e, "Error processing module Modal submission")
             self.logger.error(f"處理模組 Modal 提交時發生錯誤: {e}")
             if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    f"❌ 設定模組時發生錯誤: {str(e)}",
-                    ephemeral=True
-                )
+                # Get language manager for error messages
+                guild_id = str(interaction.guild.id) if interaction.guild else "system"
+                lang_manager = interaction.client.get_cog("LanguageManager") if hasattr(interaction.client, 'get_cog') else None
+                
+                if lang_manager:
+                    error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "operation_failed")
+                    formatted_error = error_msg.format(error=str(e))
+                else:
+                    formatted_error = f"❌ 設定模組時發生錯誤: {str(e)}"
+                
+                await interaction.response.send_message(formatted_error, ephemeral=True)
 
 
 class ConfirmationView(discord.ui.View):

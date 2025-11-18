@@ -18,22 +18,16 @@
       "data_not_found": "User <@{user_id}> data not found.",
       "data_updated": "Updated user <@{user_id}> data: {data}",
       "data_created": "Created data for user <@{user_id}>: {data}",
-      "invalid_action": "Invalid action. Please use 'read' or 'save'."
+      "invalid_action": "Invalid action. Please use 'read' or 'save'.",
+      "no_data_provided": "You didn't tell me what to remember."
+    },
+    "errors": {
+      "sqlite_not_available": "Personal memory system not initialized",
+      "database_error": "Database operation failed",
+      "invalid_user": "Invalid user",
+      "analysis_failed": "Analysis failed",
+      "ai_processing_failed": "AI processing failed",
+      "update_failed": "Update failed"
     }
-  },
-  "errors": {
-    "sqlite_not_available": "Personal memory system not initialized",
-    "database_error": "Database operation failed",
-    "invalid_user": "Invalid user",
-    "analysis_failed": "Analysis failed",
-    "ai_processing_failed": "AI processing failed",
-    "no_data_provided": "No data provided",
-    "update_failed": "Update failed"
-  },
-  "responses": {
-    "message_key": "Message key",
-    "response_key": "Response key",
-    "invalid_action": "Invalid action",
-    "data_not_found": "Data not found"
   }
 }

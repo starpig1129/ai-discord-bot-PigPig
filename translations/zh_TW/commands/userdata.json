@@ -18,22 +18,16 @@
       "data_not_found": "找不到用戶 <@{user_id}> 的資料。",
       "data_updated": "已更新用戶 <@{user_id}> 的資料：{data}",
       "data_created": "已為用戶 <@{user_id}> 創建資料：{data}",
-      "invalid_action": "無效的操作。請使用 '讀取' 或 '保存'。"
+      "invalid_action": "無效的操作。請使用 '讀取' 或 '保存'。",
+      "no_data_provided": "你沒有告訴我需要記住什麼。"
+    },
+    "errors": {
+      "sqlite_not_available": "個人記憶系統尚未初始化",
+      "database_error": "資料庫操作失敗",
+      "invalid_user": "無效的使用者",
+      "analysis_failed": "分析失敗",
+      "ai_processing_failed": "AI 處理失敗",
+      "update_failed": "更新失敗"
     }
-  },
-  "errors": {
-    "sqlite_not_available": "個人記憶系統尚未初始化",
-    "database_error": "資料庫操作失敗",
-    "invalid_user": "無效的使用者",
-    "analysis_failed": "分析失敗",
-    "ai_processing_failed": "AI 處理失敗",
-    "no_data_provided": "未提供資料",
-    "update_failed": "更新失敗"
-  },
-  "responses": {
-    "message_key": "訊息鍵",
-    "response_key": "回覆鍵",
-    "invalid_action": "無效的操作",
-    "data_not_found": "找不到資料"
   }
 }

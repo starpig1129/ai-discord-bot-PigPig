@@ -70,15 +70,28 @@ class ConfigurationError(SystemPromptError):
 class ContentTooLongError(ValidationError):
     """內容過長錯誤"""
     
-    def __init__(self, max_length: int, current_length: int):
+    def __init__(self, max_length: int, current_length: int, lang_manager=None, guild_id=None):
         """
         初始化內容過長錯誤
         
         Args:
             max_length: 最大允許長度
             current_length: 當前內容長度
+            lang_manager: 語言管理器（可選）
+            guild_id: 伺服器 ID（可選）
         """
         message = f"內容過長（當前 {current_length} 字元，最大 {max_length} 字元）"
+        
+        if lang_manager and guild_id:
+            try:
+                message = lang_manager.translate(
+                    guild_id,
+                    "commands", "system_prompt",
+                    "errors", "prompt_too_long"
+                ).format(length=current_length, max=max_length)
+            except Exception:
+                pass  # 使用預設訊息
+        
         super().__init__(message, "content")
         self.max_length = max_length
         self.current_length = current_length
@@ -87,29 +100,57 @@ class ContentTooLongError(ValidationError):
 class ChannelNotFoundError(SystemPromptError):
     """頻道未找到錯誤"""
     
-    def __init__(self, channel_id: str):
+    def __init__(self, channel_id: str, lang_manager=None, guild_id=None):
         """
         初始化頻道未找到錯誤
         
         Args:
             channel_id: 頻道 ID
+            lang_manager: 語言管理器（可選）
+            guild_id: 伺服器 ID（可選）
         """
-        super().__init__(f"找不到頻道 ID: {channel_id}", "CHANNEL_NOT_FOUND")
+        message = f"找不到頻道 ID: {channel_id}"
+        
+        if lang_manager and guild_id:
+            try:
+                message = lang_manager.translate(
+                    guild_id,
+                    "commands", "system_prompt",
+                    "errors", "channel_not_found"
+                ).format(channel_id=channel_id)
+            except Exception:
+                pass  # 使用預設訊息
+        
+        super().__init__(message, "CHANNEL_NOT_FOUND")
         self.channel_id = channel_id
 
 
 class PromptNotFoundError(SystemPromptError):
     """系統提示未找到錯誤"""
     
-    def __init__(self, scope: str, target_id: str):
+    def __init__(self, scope: str, target_id: str, lang_manager=None, guild_id=None):
         """
         初始化系統提示未找到錯誤
         
         Args:
             scope: 範圍（channel/server）
             target_id: 目標 ID
+            lang_manager: 語言管理器（可選）
+            guild_id: 伺服器 ID（可選）
         """
-        super().__init__(f"未找到 {scope} {target_id} 的系統提示", "PROMPT_NOT_FOUND")
+        message = f"未找到 {scope} {target_id} 的系統提示"
+        
+        if lang_manager and guild_id:
+            try:
+                message = lang_manager.translate(
+                    guild_id,
+                    "commands", "system_prompt",
+                    "errors", "prompt_not_found"
+                ).format(scope=scope, target_id=target_id)
+            except Exception:
+                pass  # 使用預設訊息
+        
+        super().__init__(message, "PROMPT_NOT_FOUND")
         self.scope = scope
         self.target_id = target_id
 
@@ -117,15 +158,29 @@ class PromptNotFoundError(SystemPromptError):
 class OperationTimeoutError(SystemPromptError):
     """操作超時錯誤"""
     
-    def __init__(self, operation: str, timeout_seconds: float):
+    def __init__(self, operation: str, timeout_seconds: float, lang_manager=None, guild_id=None):
         """
         初始化操作超時錯誤
         
         Args:
             operation: 操作名稱
             timeout_seconds: 超時秒數
+            lang_manager: 語言管理器（可選）
+            guild_id: 伺服器 ID（可選）
         """
-        super().__init__(f"操作 '{operation}' 超時（{timeout_seconds}秒）", "OPERATION_TIMEOUT")
+        message = f"操作 '{operation}' 超時（{timeout_seconds}秒）"
+        
+        if lang_manager and guild_id:
+            try:
+                message = lang_manager.translate(
+                    guild_id,
+                    "commands", "system_prompt",
+                    "errors", "timeout"
+                ).format(operation=operation, timeout=timeout_seconds)
+            except Exception:
+                pass  # 使用預設訊息
+        
+        super().__init__(message, "OPERATION_TIMEOUT")
         self.operation = operation
         self.timeout_seconds = timeout_seconds
 
@@ -133,26 +188,54 @@ class OperationTimeoutError(SystemPromptError):
 class ModuleNotFoundError(SystemPromptError):
     """模組未找到錯誤"""
     
-    def __init__(self, module_name: str):
+    def __init__(self, module_name: str, lang_manager=None, guild_id=None):
         """
         初始化模組未找到錯誤
         
         Args:
             module_name: 模組名稱
+            lang_manager: 語言管理器（可選）
+            guild_id: 伺服器 ID（可選）
         """
-        super().__init__(f"未找到模組: {module_name}", "MODULE_NOT_FOUND")
+        message = f"未找到模組: {module_name}"
+        
+        if lang_manager and guild_id:
+            try:
+                message = lang_manager.translate(
+                    guild_id,
+                    "commands", "system_prompt",
+                    "errors", "modules_unavailable"
+                ).format(module=module_name)
+            except Exception:
+                pass  # 使用預設訊息
+        
+        super().__init__(message, "MODULE_NOT_FOUND")
         self.module_name = module_name
 
 
 class UnsafeContentError(ValidationError):
     """不安全內容錯誤"""
     
-    def __init__(self, detected_pattern: str):
+    def __init__(self, detected_pattern: str, lang_manager=None, guild_id=None):
         """
         初始化不安全內容錯誤
         
         Args:
             detected_pattern: 檢測到的危險模式
+            lang_manager: 語言管理器（可選）
+            guild_id: 伺服器 ID（可選）
         """
-        super().__init__(f"檢測到不安全的內容模式: {detected_pattern}", "content")
+        message = f"檢測到不安全的內容模式: {detected_pattern}"
+        
+        if lang_manager and guild_id:
+            try:
+                message = lang_manager.translate(
+                    guild_id,
+                    "commands", "system_prompt",
+                    "errors", "validation_failed"
+                ).format(error=f"檢測到不安全的內容模式: {detected_pattern}")
+            except Exception:
+                pass  # 使用預設訊息
+        
+        super().__init__(message, "content")
         self.detected_pattern = detected_pattern
