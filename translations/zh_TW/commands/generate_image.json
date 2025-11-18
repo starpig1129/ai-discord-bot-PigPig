@@ -6,32 +6,17 @@
       "prompt": "用於生成或編輯圖片的提示文字"
     },
     "responses": {
-      "image_generated": "已生成圖片",
+      "image_generated": "圖片生成成功",
       "gemini_error": "Gemini API 錯誤：{error}",
       "all_methods_failed": "所有圖片生成方式都失敗了，請稍後再試。",
       "general_error": "生成圖片時發生錯誤：{error}",
-      "local_model_processing": "使用本地模型生成中...",
-      "local_model_complete": "本地模型完成生成！"
+      "local_model_processing": "使用本地模型生成圖片中...",
+      "local_model_complete": "本地模型圖片生成完成"
     },
     "errors": {
-      "generation_error": "圖片生成過程出現錯誤：{error}",
-      "local_model_error": "本地模型生成錯誤：{error}",
-      "image_processing_error": "圖片處理錯誤：{error}",
-      "api_error": "API 請求錯誤：{error}",
-      "gemini_generation_error": "Gemini API 生成錯誤：{error}"
+      "gemini_generation_error": "Gemini 圖片生成錯誤",
+      "image_processing_error": "圖片處理錯誤",
+      "local_model_error": "本地模型錯誤"
     }
-  },
-  "responses": {
-    "all_methods_failed": "所有圖片生成方法都失敗了",
-    "local_model_processing": "使用本地模型生成圖片中...",
-    "local_model_complete": "本地模型圖片生成完成",
-    "image_generated": "圖片生成成功",
-    "gemini_error": "Gemini 圖片生成錯誤: {error}",
-    "general_error": "圖片生成錯誤: {error}"
-  },
-  "errors": {
-    "gemini_generation_error": "Gemini 圖片生成錯誤",
-    "image_processing_error": "圖片處理錯誤",
-    "local_model_error": "本地模型錯誤"
   }
 }

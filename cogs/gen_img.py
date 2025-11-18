@@ -143,7 +143,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
             except Exception as e:
                 await func.report_error(e, "Gemini generation process failed")
                 error_message = self.lang_manager.translate(
-                    guild_id, "commands", "generate_image", "responses", "gemini_error", error=str(e)
+                    guild_id, "commands", "generate_image", "errors", "gemini_generation_error", error=str(e)
                 )
                 print(error_message)
 
