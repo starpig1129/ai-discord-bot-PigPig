@@ -21,8 +21,8 @@ class HelpCog(commands.Cog):
         guild_id = str(interaction.guild_id)
         
         # 獲取本地化的標題和描述
-        title = self.lang_manager.translate(guild_id, "general", "help_title") or "指令幫助"
-        description = self.lang_manager.translate(guild_id, "general", "help_description") or "顯示所有可用指令的詳細資訊"
+        title = self.lang_manager.translate(guild_id, "commands", "help", "help_title") or "指令幫助"
+        description = self.lang_manager.translate(guild_id, "commands", "help", "help_description") or "顯示所有可用指令的詳細資訊"
         
         embed = discord.Embed(
             title=title,
