@@ -159,6 +159,8 @@
     "fields": {
         "operation": "当前操作",
         "last_check": "上次检查",
-        "auto_update": "自动更新"
+        "auto_update": "自动更新",
+        "status": "状态",
+        "warning": "警告"
     }
 }

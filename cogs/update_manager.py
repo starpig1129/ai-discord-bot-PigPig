@@ -110,9 +110,10 @@ class UpdateManagerCog(commands.Cog):
             
             if result.get("update_available"):
                 status_label = self._get_translation(guild_id, "commands", "check_update", "available", "status")
+                status_field_name = self._get_translation(guild_id, "fields", "status")
                 embed.add_field(
-                    name="狀態", 
-                    value=status_label, 
+                    name=status_field_name,
+                    value=status_label,
                     inline=False
                 )
                 embed.color = discord.Color.green()
@@ -120,8 +121,8 @@ class UpdateManagerCog(commands.Cog):
                 if result.get("published_at"):
                     published_at_label = self._get_translation(guild_id, "commands", "check_update", "available", "published_at")
                     embed.add_field(
-                        name=published_at_label, 
-                        value=result["published_at"], 
+                        name=published_at_label,
+                        value=result["published_at"],
                         inline=True
                     )
                 
@@ -133,9 +134,10 @@ class UpdateManagerCog(commands.Cog):
                     await interaction.followup.send(embed=embed)
             else:
                 status_label = self._get_translation(guild_id, "commands", "check_update", "up_to_date", "status")
+                status_field_name = self._get_translation(guild_id, "fields", "status")
                 embed.add_field(
-                    name="狀態", 
-                    value=status_label, 
+                    name=status_field_name,
+                    value=status_label,
                     inline=False
                 )
                 await interaction.followup.send(embed=embed)
@@ -216,7 +218,8 @@ class UpdateManagerCog(commands.Cog):
                     color=discord.Color.orange()
                 )
                 warning_label = self._get_translation(guild_id, "commands", "update_now", "confirm", "warning")
-                embed.add_field(name="注意", value=warning_label, inline=False)
+                warning_field_name = self._get_translation(guild_id, "fields", "warning")
+                embed.add_field(name=warning_field_name, value=warning_label, inline=False)
                 
             else:
                 # 強制更新確認
@@ -229,7 +232,8 @@ class UpdateManagerCog(commands.Cog):
                     color=discord.Color.red()
                 )
                 force_warning = self._get_translation(guild_id, "commands", "update_now", "force_confirm", "warning")
-                embed.add_field(name="警告", value=force_warning, inline=False)
+                warning_field_name = self._get_translation(guild_id, "fields", "warning")
+                embed.add_field(name=warning_field_name, value=force_warning, inline=False)
             
             await interaction.followup.send(embed=embed, view=view)
             
@@ -405,7 +409,7 @@ class UpdateActionView(discord.ui.View):
         self.guild_id = guild_id
         self.get_translation = get_translation_func
     
-    @discord.ui.button(label="立即更新", style=discord.ButtonStyle.success, emoji="🚀")
+    @discord.ui.button(label="Update Now", style=discord.ButtonStyle.success, emoji="🚀")
     async def update_now(self, interaction: discord.Interaction, button: discord.ui.Button):
         """立即更新按鈕"""
         # 創建確認視圖
@@ -418,11 +422,12 @@ class UpdateActionView(discord.ui.View):
             color=discord.Color.orange()
         )
         warning_label = self.get_translation(self.guild_id, "views", "update_action", "confirm", "warning")
-        embed.add_field(name="注意", value=warning_label, inline=False)
+        warning_field_name = self.get_translation(self.guild_id, "fields", "warning")
+        embed.add_field(name=warning_field_name, value=warning_label, inline=False)
         
         await interaction.response.edit_message(embed=embed, view=view)
     
-    @discord.ui.button(label="稍後提醒", style=discord.ButtonStyle.secondary, emoji="⏰")
+    @discord.ui.button(label="Remind Later", style=discord.ButtonStyle.secondary, emoji="⏰")
     async def remind_later(self, interaction: discord.Interaction, button: discord.ui.Button):
         """稍後提醒按鈕"""
         reminded_title = self.get_translation(self.guild_id, "views", "update_action", "reminded", "title")
@@ -446,7 +451,7 @@ class UpdateConfirmView(discord.ui.View):
         self.get_translation = get_translation_func
         self.force = force
     
-    @discord.ui.button(label="確認更新", style=discord.ButtonStyle.danger, emoji="✅")
+    @discord.ui.button(label="Confirm Update", style=discord.ButtonStyle.danger, emoji="✅")
     async def confirm_update(self, interaction: discord.Interaction, button: discord.ui.Button):
         """確認更新按鈕"""
         await interaction.response.defer()
@@ -463,7 +468,7 @@ class UpdateConfirmView(discord.ui.View):
         # 在背景執行更新
         asyncio.create_task(self._execute_update(interaction))
     
-    @discord.ui.button(label="取消", style=discord.ButtonStyle.secondary, emoji="❌")
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
     async def cancel_update(self, interaction: discord.Interaction, button: discord.ui.Button):
         """取消更新按鈕"""
         cancelled_title = self.get_translation(self.guild_id, "views", "update_confirm", "cancelled", "title")
@@ -528,14 +533,14 @@ class UpdateConfigView(discord.ui.View):
         self.guild_id = guild_id
         self.get_translation = get_translation_func
     
-    @discord.ui.button(label="開關自動更新", style=discord.ButtonStyle.primary, emoji="🔄")
+    @discord.ui.button(label="Toggle Auto Update", style=discord.ButtonStyle.primary, emoji="🔄")
     async def toggle_auto_update(self, interaction: discord.Interaction, button: discord.ui.Button):
         """切換自動更新開關"""
         # 這裡實現配置切換邏輯
         in_dev_msg = self.get_translation(self.guild_id, "views", "update_config", "in_development")
         await interaction.response.send_message(in_dev_msg, ephemeral=True)
     
-    @discord.ui.button(label="設定檢查間隔", style=discord.ButtonStyle.secondary, emoji="⏱️")
+    @discord.ui.button(label="Set Check Interval", style=discord.ButtonStyle.secondary, emoji="⏱️")
     async def set_check_interval(self, interaction: discord.Interaction, button: discord.ui.Button):
         """設定檢查間隔"""
         in_dev_msg = self.get_translation(self.guild_id, "views", "update_config", "in_development")

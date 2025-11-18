@@ -6,13 +6,19 @@
 
 import discord
 from discord.ext import commands
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from addons.logging import get_logger
 
 from .system_prompt.manager import SystemPromptManager
 from .system_prompt.commands import SystemPromptCommands
 from .system_prompt.permissions import PermissionValidator
 from function import func
+
+# 避免循環導入的類型檢查
+if TYPE_CHECKING:
+    from .language_manager import LanguageManager
+else:
+    LanguageManager = None
 
 
 class SystemPromptManagerCog(commands.Cog):
@@ -35,14 +41,52 @@ class SystemPromptManagerCog(commands.Cog):
         # 初始化命令組件
         self.commands_cog = SystemPromptCommands(bot)
         
+        # 語言管理器將在 cog_load 中初始化
+        self.language_manager = None
+        
         self.logger.info("系統提示管理模組已初始化")
+    
+    def _get_language_manager(self):
+        """安全地取得語言管理器實例"""
+        if self.language_manager is None:
+            self.language_manager = self.bot.get_cog('LanguageManager')
+        return self.language_manager
+    
+    def _translate(self, guild_id: str, *keys):
+        """安全的翻譯方法，使用 getattr 避免類型檢查問題"""
+        lang_manager = self._get_language_manager()
+        if not lang_manager:
+            # 回退到預設字串
+            fallback_map = {
+                ("commands", "system_prompt", "manager", "status", "title"): "🤖 System Prompt Module Status",
+                ("commands", "system_prompt", "manager", "status", "cache_status"): "Cache Status",
+                ("commands", "system_prompt", "manager", "status", "cache_items"): "Cache Items",
+                ("commands", "system_prompt", "manager", "status", "modules_count"): "Modules Count",
+                ("commands", "system_prompt", "manager", "status", "components_status"): "Components Status",
+                ("commands", "system_prompt", "manager", "status", "system_prompt_manager"): "SystemPromptManager",
+                ("commands", "system_prompt", "manager", "status", "permission_validator"): "PermissionValidator",
+                ("commands", "system_prompt", "manager", "status", "system_prompt_commands"): "SystemPromptCommands",
+                ("commands", "system_prompt", "manager", "status", "error_message"): "Error occurred while viewing status",
+                ("commands", "system_prompt", "manager", "cache", "success_message_all"): "Successfully cleared all system prompt cache",
+                ("commands", "system_prompt", "manager", "cache", "success_message_guild"): "Successfully cleared system prompt cache for server {guild_id}",
+                ("commands", "system_prompt", "manager", "cache", "error_message"): "Error occurred while clearing cache"
+            }
+            key_tuple = tuple(keys)
+            return fallback_map.get(key_tuple, f"[Missing translation: {'.'.join(keys)}]")
+        
+        # 使用 getattr 來調用 translate 方法
+        translate_method = getattr(lang_manager, 'translate', None)
+        if translate_method:
+            return translate_method(guild_id, *keys)
+        else:
+            return f"[Translation method not available]"
     
     async def cog_load(self):
         """Cog 載入時的初始化"""
         try:
             # 載入命令 Cog
             await self.bot.add_cog(self.commands_cog)
-            self.logger.info("系統提示命令模組已載入")
+            self.logger.info("System prompt command module loaded")
             
         except Exception as e:
             await func.report_error(e, "loading system prompt commands cog")
@@ -53,7 +97,7 @@ class SystemPromptManagerCog(commands.Cog):
         try:
             # 卸載命令 Cog
             await self.bot.remove_cog(self.commands_cog.__class__.__name__)
-            self.logger.info("系統提示命令模組已卸載")
+            self.logger.info("System prompt command module unloaded")
             
         except Exception as e:
             await func.report_error(e, "unloading system prompt commands cog")
@@ -136,7 +180,7 @@ class SystemPromptManagerCog(commands.Cog):
             config = self.manager._get_default_config()
             self.manager._save_guild_config(str(guild.id), config)
             
-            self.logger.info(f"為新伺服器 {guild.name} ({guild.id}) 初始化系統提示配置")
+            self.logger.info(f"Initialized system prompt configuration for new server {guild.name} ({guild.id})")
             
         except Exception as e:
             await func.report_error(e, "initializing config for new guild")
@@ -148,7 +192,7 @@ class SystemPromptManagerCog(commands.Cog):
             # 清除該伺服器的快取
             self.manager.clear_cache(str(guild.id))
             
-            self.logger.info(f"已清除伺服器 {guild.name} ({guild.id}) 的系統提示快取")
+            self.logger.info(f"Cleared system prompt cache for server {guild.name} ({guild.id})")
             
         except Exception as e:
             await func.report_error(e, "clearing server cache on guild remove")
@@ -156,38 +200,49 @@ class SystemPromptManagerCog(commands.Cog):
     @commands.command(name="system_prompt_status", hidden=True)
     @commands.is_owner()
     async def system_prompt_status(self, ctx):
-        """查看系統提示模組狀態（機器人擁有者專用）"""
+        """View system prompt module status (bot owner only)"""
         try:
+            # Get translated strings using safe method
+            title = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "title")
+            cache_status = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "cache_status")
+            cache_items = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "cache_items")
+            modules_count = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "modules_count")
+            components_status = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "components_status")
+            system_prompt_manager = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "system_prompt_manager")
+            permission_validator = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "permission_validator")
+            system_prompt_commands = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "system_prompt_commands")
+            error_message = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "error_message")
+            
             embed = discord.Embed(
-                title="🤖 系統提示模組狀態",
+                title=title,
                 color=discord.Color.blue()
             )
             
-            # 快取統計
+            # Cache statistics
             cache_size = len(self.manager.cache.cache)
             embed.add_field(
-                name="快取狀態",
-                value=f"快取項目數: {cache_size}",
+                name=cache_status,
+                value=f"{cache_items}: {cache_size}",
                 inline=True
             )
             
-            # 模組狀態
+            # Module status
             available_modules = self.manager.get_available_modules()
             embed.add_field(
-                name="可用模組",
-                value=f"模組數量: {len(available_modules)}",
+                name=modules_count,
+                value=f"{modules_count}: {len(available_modules)}",
                 inline=True
             )
             
-            # 組件狀態
-            components_status = []
-            components_status.append("✅ SystemPromptManager")
-            components_status.append("✅ PermissionValidator")
-            components_status.append("✅ SystemPromptCommands")
+            # Component status
+            components_status_text = []
+            components_status_text.append(f"✅ {system_prompt_manager}")
+            components_status_text.append(f"✅ {permission_validator}")
+            components_status_text.append(f"✅ {system_prompt_commands}")
             
             embed.add_field(
-                name="組件狀態",
-                value="\n".join(components_status),
+                name=components_status,
+                value="\n".join(components_status_text),
                 inline=False
             )
             
@@ -195,23 +250,30 @@ class SystemPromptManagerCog(commands.Cog):
             
         except Exception as e:
             await func.report_error(e, "getting system prompt status")
-            await ctx.send(f"❌ 查看狀態時發生錯誤: {str(e)}")
+            error_msg = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "status", "error_message")
+            await ctx.send(f"❌ {error_msg}: {str(e)}")
     
     @commands.command(name="system_prompt_clear_cache", hidden=True)
     @commands.is_owner()
     async def clear_system_prompt_cache(self, ctx, guild_id: Optional[str] = None):
-        """清除系統提示快取（機器人擁有者專用）"""
+        """Clear system prompt cache (bot owner only)"""
         try:
+            # Get translated strings using safe method
+            success_message_all = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "cache", "success_message_all")
+            success_message_guild = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "cache", "success_message_guild")
+            error_message = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "cache", "error_message")
+            
             if guild_id:
                 self.manager.clear_cache(guild_id)
-                await ctx.send(f"✅ 已清除伺服器 {guild_id} 的系統提示快取")
+                await ctx.send(f"✅ {success_message_guild.format(guild_id=guild_id)}")
             else:
                 self.manager.clear_cache()
-                await ctx.send("✅ 已清除所有系統提示快取")
+                await ctx.send(f"✅ {success_message_all}")
             
         except Exception as e:
             await func.report_error(e, "clearing system prompt cache")
-            await ctx.send(f"❌ 清除快取時發生錯誤: {str(e)}")
+            error_msg = self._translate(str(ctx.guild.id), "commands", "system_prompt", "manager", "cache", "error_message")
+            await ctx.send(f"❌ {error_msg}: {str(e)}")
 
 
 async def setup(bot):

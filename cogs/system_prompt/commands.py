@@ -28,49 +28,49 @@ def handle_system_prompt_error(func):
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any):
         interaction = args[1] if len(args) > 1 else kwargs.get('interaction')
+        # 取得語言管理器
+        lang_manager = interaction.client.get_cog("LanguageManager")
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        
         try:
             return await func(*args, **kwargs)
         except PermissionError as e:
+            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "permission_denied") if lang_manager else "權限不足"
+            full_message = f"❌ {error_msg}" if not str(e) else f"❌ {error_msg}: {str(e)}"
+            
             if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    f"❌ 權限不足：{str(e)}", ephemeral=True
-                )
+                await interaction.response.send_message(full_message, ephemeral=True)
             else:
-                await interaction.followup.send(
-                    f"❌ 權限不足：{str(e)}", ephemeral=True
-                )
+                await interaction.followup.send(full_message, ephemeral=True)
         except ValidationError as e:
+            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "validation_failed") if lang_manager else "驗證失敗"
+            full_message = f"❌ {error_msg}: {str(e)}"
+            
             if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    f"❌ 驗證失敗：{str(e)}", ephemeral=True
-                )
+                await interaction.response.send_message(full_message, ephemeral=True)
             else:
-                await interaction.followup.send(
-                    f"❌ 驗證失敗：{str(e)}", ephemeral=True
-                )
+                await interaction.followup.send(full_message, ephemeral=True)
         except SystemPromptError as e:
+            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "operation_failed") if lang_manager else "操作失敗"
+            full_message = f"❌ {error_msg}: {str(e)}"
+            
             if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    f"❌ 操作失敗：{str(e)}", ephemeral=True
-                )
+                await interaction.response.send_message(full_message, ephemeral=True)
             else:
-                await interaction.followup.send(
-                    f"❌ 操作失敗：{str(e)}", ephemeral=True
-                )
+                await interaction.followup.send(full_message, ephemeral=True)
         except Exception as e:
             await func.report_error(e, "System prompt operation error")
             # Create local logger for error context
             local_log = get_logger(source=__name__, server_id="system")
             bound_log = local_log.bind(server_id=str(interaction.guild_id) if interaction.guild else "system", user_id=str(interaction.user.id))
             bound_log.error(f"System prompt operation error: {str(e)}")
+            
+            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "system_error") if lang_manager else "系統錯誤，請稍後再試"
+            
             if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    "❌ 系統錯誤，請稍後再試", ephemeral=True
-                )
+                await interaction.response.send_message(f"❌ {error_msg}", ephemeral=True)
             else:
-                await interaction.followup.send(
-                    "❌ 系統錯誤，請稍後再試", ephemeral=True
-                )
+                await interaction.followup.send(f"❌ {error_msg}", ephemeral=True)
     return wrapper
 
 
@@ -133,24 +133,24 @@ class SystemPromptCommands(commands.Cog):
             usage_description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "main_menu", "usage_description")
             footer = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "main_menu", "footer")
         else:
-            # 降級到預設值
-            title = "🤖 系統提示管理"
-            description = "歡迎使用統一系統提示管理介面！請選擇要執行的功能："
-            main_functions_title = "🔧 主要功能"
+            # 降級到預設值（使用英文回退）
+            title = "🤖 System Prompt Management"
+            description = "Welcome to the unified system prompt management interface! Please select the function to execute:"
+            main_functions_title = "🔧 Main Functions"
             main_functions_description = (
-                "• **設定提示** - 設定頻道或伺服器系統提示\n"
-                "• **查看配置** - 查看當前系統提示配置\n"
-                "• **模組編輯** - 編輯特定 YAML 模組\n"
-                "• **複製提示** - 複製系統提示到其他頻道\n"
-                "• **移除提示** - 移除已設定的系統提示\n"
-                "• **重置設定** - 重置系統提示配置"
+                "• **Set Prompt** - Set channel or server system prompts\n"
+                "• **View Config** - View current system prompt configuration\n"
+                "• **Module Edit** - Edit specific YAML modules\n"
+                "• **Copy Prompt** - Copy system prompts to other channels\n"
+                "• **Remove Prompt** - Remove configured system prompts\n"
+                "• **Reset Config** - Reset system prompt configuration"
             )
-            usage_title = "📋 使用說明"
+            usage_title = "📋 Usage Instructions"
             usage_description = (
-                "點擊下方按鈕來執行對應功能。\n"
-                "系統支援三層繼承機制：YAML 基礎 → 伺服器預設 → 頻道特定"
+                "Click the buttons below to execute corresponding functions.\n"
+                "System supports 3-layer inheritance: YAML base → server default → channel specific"
             )
-            footer = "提示：所有操作都會進行權限檢查，確保安全性"
+            footer = "Note: All operations include permission checks for security"
 
         # 建立主選單 Embed
         embed = discord.Embed(

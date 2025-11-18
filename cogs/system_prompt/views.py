@@ -45,17 +45,21 @@ class SystemPromptMainView(discord.ui.View):
 
     def _setup_main_buttons(self):
         """設定主要功能按鈕"""
+        
+        # Get language manager for button labels
+        lang_manager = self.manager.language_manager if hasattr(self.manager, 'language_manager') else None
+        guild_id = "system"  # Default fallback
 
         # 第一列：基本功能
         self.add_item(SystemPromptFunctionButton(
-            label="編輯提示",
+            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "set_prompt") if lang_manager else "Set Prompt",
             emoji="✏️",
             style=discord.ButtonStyle.primary,
             function="set",
             row=0
         ))
         self.add_item(SystemPromptFunctionButton(
-            label="查看配置",
+            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "view_config") if lang_manager else "View Config",
             emoji="👁️",
             style=discord.ButtonStyle.secondary,
             function="view",
@@ -64,28 +68,28 @@ class SystemPromptMainView(discord.ui.View):
 
         # 第二列：管理功能
         self.add_item(SystemPromptFunctionButton(
-            label="複製提示",
+            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "copy_prompt") if lang_manager else "Copy Prompt",
             emoji="📋",
             style=discord.ButtonStyle.secondary,
             function="copy",
             row=1
         ))
         self.add_item(SystemPromptFunctionButton(
-            label="移除提示",
+            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "remove_prompt") if lang_manager else "Remove Prompt",
             emoji="🗑️",
             style=discord.ButtonStyle.danger,
             function="remove",
             row=1
         ))
         self.add_item(SystemPromptFunctionButton(
-            label="重置設定",
+            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "reset_config") if lang_manager else "Reset Config",
             emoji="🔄",
             style=discord.ButtonStyle.danger,
             function="reset",
             row=1
         ))
         self.add_item(SystemPromptFunctionButton(
-            label="重載配置",
+            label="Reload Config",  # Keep as fallback, not in translation
             emoji="🔩",
             style=discord.ButtonStyle.secondary,
             function="reload",
@@ -111,81 +115,124 @@ class SystemPromptMainView(discord.ui.View):
 
         except Exception as e:
             self.logger.error(f"處理功能 {function} 時發生錯誤: {e}", exc_info=True)
+            lang_manager = interaction.client.get_cog("LanguageManager")
+            guild_id = str(interaction.guild.id) if interaction.guild else "system"
+            
+            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "operation_failed") if lang_manager else "Operation failed"
+            full_message = f"❌ {error_msg}: {str(e)}"
+            
             if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    f"❌ 操作失敗：{str(e)}", ephemeral=True
-                )
+                await interaction.response.send_message(full_message, ephemeral=True)
             else:
-                await interaction.followup.send(
-                    f"❌ 操作失敗：{str(e)}", ephemeral=True
-                )
+                await interaction.followup.send(full_message, ephemeral=True)
 
 
     async def _handle_set_function(self, interaction: discord.Interaction):
         """處理設定提示功能"""
+        lang_manager = interaction.client.get_cog("LanguageManager")
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        
         view = SystemPromptSetView(
             manager=self.manager,
             permission_validator=self.permission_validator
         )
+        
+        # Get localized text
+        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "set_prompt_title") if lang_manager else "⚙️ System Prompt Setting"
+        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "set_prompt_description") if lang_manager else "Please select the scope to configure"
+        
         embed = discord.Embed(
-            title="⚙️ 設定系統提示",
-            description="請選擇要設定的範圍",
+            title=title,
+            description=description,
             color=discord.Color.blue()
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_view_function(self, interaction: discord.Interaction):
         """處理查看配置功能"""
+        lang_manager = interaction.client.get_cog("LanguageManager")
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        
         view = SystemPromptViewOptionsView(
             manager=self.manager,
             permission_validator=self.permission_validator
         )
+        
+        # Get localized text
+        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "view_options_title") if lang_manager else "👁️ System Prompt Configuration View"
+        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "view_options_description") if lang_manager else "Please select viewing options"
+        
         embed = discord.Embed(
-            title="👁️ 查看系統提示配置",
-            description="請選擇查看選項",
+            title=title,
+            description=description,
             color=discord.Color.green()
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_copy_function(self, interaction: discord.Interaction):
         """處理複製提示功能"""
+        lang_manager = interaction.client.get_cog("LanguageManager")
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        
         if not interaction.guild:
-            await interaction.response.send_message("❌ 此功能僅限伺服器內使用。", ephemeral=True)
+            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "server_only") if lang_manager else "This feature is only available in servers."
+            await interaction.response.send_message(f"❌ {error_msg}", ephemeral=True)
             return
         view = SystemPromptCopyView(
             manager=self.manager,
             permission_validator=self.permission_validator,
             guild=interaction.guild
         )
+        
+        # Get localized text
+        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "copy_prompt_title") if lang_manager else "📋 System Prompt Copy"
+        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "copy_prompt_description") if lang_manager else "Please select source and target channels"
+        
         embed = discord.Embed(
-            title="📋 複製系統提示",
-            description="請選擇來源和目標頻道",
+            title=title,
+            description=description,
             color=discord.Color.blue()
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_remove_function(self, interaction: discord.Interaction):
         """處理移除提示功能"""
+        lang_manager = interaction.client.get_cog("LanguageManager")
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        
         view = SystemPromptRemoveView(
             manager=self.manager,
             permission_validator=self.permission_validator
         )
+        
+        # Get localized text
+        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "remove_prompt_title") if lang_manager else "🗑️ System Prompt Removal"
+        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "remove_prompt_description") if lang_manager else "Please select the scope to remove"
+        
         embed = discord.Embed(
-            title="🗑️ 移除系統提示",
-            description="請選擇要移除的範圍",
+            title=title,
+            description=description,
             color=discord.Color.red()
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_reset_function(self, interaction: discord.Interaction):
         """處理重置設定功能"""
+        lang_manager = interaction.client.get_cog("LanguageManager")
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        
         view = SystemPromptResetView(
             manager=self.manager,
             permission_validator=self.permission_validator
         )
+        
+        # Get localized text
+        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "reset_config_title") if lang_manager else "🔄 System Prompt Reset"
+        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "reset_config_description") if lang_manager else "Please select the scope to reset"
+        
         embed = discord.Embed(
-            title="🔄 重置系統提示",
-            description="請選擇要重置的範圍",
+            title=title,
+            description=description,
             color=discord.Color.orange()
         )
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)

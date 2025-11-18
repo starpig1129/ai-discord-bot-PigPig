@@ -126,11 +126,11 @@ class ReminderCog(commands.Cog):
                 await interaction.edit_original_response(content=error_msg)
             return error_msg
 
-    @app_commands.command(name="remind", description="設置一個提醒")
+    @app_commands.command(name="remind", description="Sets a reminder")
     @app_commands.describe(
-        time="提醒時間（例如：10分鐘後，或 2023年12月31日20:00:00）",
-        message="提醒內容",
-        user="要提醒的用戶（可選，默認為自己）"
+        time="When to remind (e.g., in 10 minutes, or at 2023-12-31 20:00:00)",
+        message="The content of the reminder",
+        user="The user to remind (optional, defaults to yourself)"
     )
     async def remind(self, interaction: discord.Interaction, time: str, message: str, user: discord.User = None):
         await interaction.response.defer(ephemeral=True)

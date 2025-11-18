@@ -159,6 +159,8 @@
     "fields": {
         "operation": "現在の操作",
         "last_check": "最後の確認",
-        "auto_update": "自動更新"
+        "auto_update": "自動更新",
+        "status": "ステータス",
+        "warning": "警告"
     }
 }

@@ -159,6 +159,8 @@
     "fields": {
         "operation": "Current Operation",
         "last_check": "Last Check",
-        "auto_update": "Auto Update"
+        "auto_update": "Auto Update",
+        "status": "Status",
+        "warning": "Warning"
     }
 }

@@ -17,9 +17,9 @@ class SystemPromptModal(discord.ui.Modal):
     """系統提示設定的 Modal 對話框"""
     
     def __init__(self,
-                 title: str = "設定系統提示",
-                 prompt_label: str = "系統提示內容",
-                 prompt_placeholder: str = "請輸入系統提示內容...",
+                 title: str = None,
+                 prompt_label: str = None,
+                 prompt_placeholder: str = None,
                  initial_value: str = "",
                  callback_func: Optional[Callable] = None,
                  manager=None,
@@ -31,9 +31,9 @@ class SystemPromptModal(discord.ui.Modal):
         初始化 Modal 對話框
         
         Args:
-            title: Modal 標題
-            prompt_label: 提示輸入框標籤
-            prompt_placeholder: 提示輸入框佔位文字
+            title: Modal 標題（如果未提供，將使用本地化）
+            prompt_label: 提示輸入框標籤（如果未提供，將使用本地化）
+            prompt_placeholder: 提示輸入框佔位文字（如果未提供，將使用本地化）
             initial_value: 初始值
             callback_func: 回調函式
             manager: SystemPromptManager 實例
@@ -42,6 +42,17 @@ class SystemPromptModal(discord.ui.Modal):
             show_default_content: 是否顯示預設內容
             **kwargs: 其他參數
         """
+        # 獲取本地化文字，帶有降級機制
+        if manager and hasattr(manager, 'language_manager') and manager.language_manager and guild_id:
+            title = title or manager.language_manager.translate(guild_id, "commands", "system_prompt", "ui", "modals", "system_prompt", "title")
+            prompt_label = prompt_label or manager.language_manager.translate(guild_id, "commands", "system_prompt", "ui", "modals", "system_prompt", "prompt_label")
+            prompt_placeholder = prompt_placeholder or manager.language_manager.translate(guild_id, "commands", "system_prompt", "ui", "modals", "system_prompt", "prompt_placeholder")
+        
+        # 降級到預設值
+        title = title or "System Prompt Setting"
+        prompt_label = prompt_label or "System Prompt Content"
+        prompt_placeholder = prompt_placeholder or "Please enter system prompt content..."
+        
         super().__init__(title=title, **kwargs)
         self.callback_func = callback_func
         self.manager = manager
@@ -61,16 +72,17 @@ class SystemPromptModal(discord.ui.Modal):
                     channels = system_prompts.get('channels', {})
                     if channel_id in channels:
                         initial_value = channels[channel_id].get('prompt', '')
-                        if initial_value:
-                            prompt_placeholder = "編輯頻道特定的系統提示..."
-                            self.logger.info(f"已載入頻道提示作為預設內容，長度: {len(initial_value)}")
+                        if initial_value and manager.language_manager:
+                            prompt_placeholder = manager.language_manager.translate(guild_id, "commands", "system_prompt", "user_experience", "editing", "channel_specific_edit")
+                        self.logger.info(f"已載入頻道提示作為預設內容，長度: {len(initial_value)}")
                 
                 # 如果還沒有內容，嘗試伺服器級別提示
                 if not initial_value:
                     server_level = system_prompts.get('server_level', {})
                     if server_level.get('prompt'):
                         initial_value = server_level['prompt']
-                        prompt_placeholder = "編輯伺服器預設的系統提示..."
+                        if manager.language_manager:
+                            prompt_placeholder = manager.language_manager.translate(guild_id, "commands", "system_prompt", "user_experience", "editing", "server_default_edit")
                         self.logger.info(f"已載入伺服器提示作為預設內容，長度: {len(initial_value)}")
                 
                 # 最後降級到有效提示，但要還原變數占位符
@@ -79,7 +91,8 @@ class SystemPromptModal(discord.ui.Modal):
                     if effective_prompt:
                         # 還原變數占位符
                         initial_value = self._restore_variable_placeholders(effective_prompt, manager)
-                        prompt_placeholder = "基於當前有效的系統提示進行編輯（已還原變數格式）..."
+                        if manager.language_manager:
+                            prompt_placeholder = manager.language_manager.translate(guild_id, "commands", "system_prompt", "user_experience", "editing", "current_effective_edit")
                         self.logger.info(f"已載入有效提示並還原變數格式，長度: {len(initial_value)}")
                         
             except Exception as e:
@@ -90,7 +103,11 @@ class SystemPromptModal(discord.ui.Modal):
         if initial_value and len(initial_value) > 4000:
             self.logger.warning(f"Initial content too long ({len(initial_value)} chars), truncating to 4000 chars")
             initial_value = initial_value[:4000]
-            prompt_placeholder += " (內容已截斷以符合 Discord 限制)"
+            if manager and hasattr(manager, 'language_manager') and manager.language_manager and guild_id:
+                truncation_warning = manager.language_manager.translate(guild_id, "commands", "system_prompt", "errors", "content_too_long")
+                prompt_placeholder = f"{prompt_placeholder} ({truncation_warning.format(length='4000', max='4000')})"
+            else:
+                prompt_placeholder += " (內容已截斷以符合 Discord 限制)"
         
         # 系統提示輸入框
         self.prompt_input = discord.ui.TextInput(

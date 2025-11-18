@@ -146,15 +146,18 @@
             "permission_denied": "この操作を実行する権限がありません",
             "channel_permission_denied": "このチャンネルのシステムプロンプトを管理する権限がありません",
             "server_permission_denied": "サーバーレベルのシステムプロンプトを管理する権限がありません",
-            "prompt_not_found": "システムプロンプトが見つかりません",
-            "channel_not_found": "指定されたチャンネルが見つかりません",
+            "prompt_not_found": "{scope} {target_id} のシステムプロンプトが見つかりません",
+            "channel_not_found": "チャンネルIDが見つかりません: {channel_id}",
             "validation_failed": "検証失敗：{error}",
             "operation_failed": "操作失敗：{error}",
             "system_error": "システムエラー、後で再試行してください",
-            "timeout": "操作タイムアウト、再試行してください",
+            "timeout": "操作 '{operation}' タイムアウト（{timeout}秒）",
             "modal_error": "リクエスト処理エラー: {error}",
             "unknown_error": "未知のエラーが発生しました、後で再試行してください",
-            "modules_unavailable": "モジュールリストを取得できません: {error}",
+            "modules_unavailable": "モジュールが見つかりません: {module}",
+            "configuration_error": "設定エラー",
+            "content_too_long": "内容が長すぎます（現在{length}文字、最大{max}文字）",
+            "unsafe_content": "安全でないコンテンツパターンが検出されました: {error}",
             "server_only": "この機能はサーバー内でのみ使用できます",
             "text_channel_only": "この機能はテキストチャンネル内でのみ使用できます",
             "operation_cancelled": "操作がキャンセルされました",
@@ -220,6 +223,24 @@
                 "first_time_edit": "🎯 初回編集ヒント：デフォルト内容に基づいて修正できます",
                 "module_explanation": "💭 このモジュールは{description}を担当します",
                 "inheritance_info": "🔗 この設定は{scope}に影響します"
+            }
+        },
+        "manager": {
+            "status": {
+                "title": "🤖 システムプロンプトモジュール状態",
+                "cache_status": "キャッシュ状態",
+                "cache_items": "キャッシュ項目数",
+                "modules_count": "モジュール数",
+                "components_status": "コンポーネント状態",
+                "system_prompt_manager": "SystemPromptManager",
+                "permission_validator": "PermissionValidator",
+                "system_prompt_commands": "SystemPromptCommands",
+                "error_message": "状態表示中にエラーが発生しました"
+            },
+            "cache": {
+                "success_message_all": "すべてのシステムプロンプトキャッシュを正常にクリアしました",
+                "success_message_guild": "サーバー {guild_id} のシステムプロンプトキャッシュを正常にクリアしました",
+                "error_message": "キャッシュクリア中にエラーが発生しました"
             }
         }
     }

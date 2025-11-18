@@ -146,15 +146,18 @@
             "permission_denied": "You do not have permission to perform this operation",
             "channel_permission_denied": "You do not have permission to manage this channel's system prompt",
             "server_permission_denied": "You do not have permission to manage server-level system prompt",
-            "prompt_not_found": "System prompt not found",
-            "channel_not_found": "Specified channel not found",
+            "prompt_not_found": "System prompt not found for {scope} {target_id}",
+            "channel_not_found": "Channel ID not found: {channel_id}",
             "validation_failed": "Validation failed: {error}",
             "operation_failed": "Operation failed: {error}",
             "system_error": "System error, please try again later",
-            "timeout": "Operation timeout, please retry",
+            "timeout": "Operation '{operation}' timeout ({timeout}s)",
             "modal_error": "Error processing request: {error}",
             "unknown_error": "Unknown error occurred, please try again later",
-            "modules_unavailable": "Unable to retrieve module list: {error}",
+            "modules_unavailable": "Module not found: {module}",
+            "configuration_error": "Configuration error",
+            "content_too_long": "Content too long (current {length} characters, max {max} characters)",
+            "unsafe_content": "Unsafe content pattern detected: {error}",
             "server_only": "This function can only be used within a server",
             "text_channel_only": "This function can only be used in text channels",
             "operation_cancelled": "Operation cancelled",
@@ -220,6 +223,24 @@
                 "first_time_edit": "🎯 First time editing tip: You can modify based on default content",
                 "module_explanation": "💭 This module is responsible for: {description}",
                 "inheritance_info": "🔗 This setting will affect: {scope}"
+            }
+        },
+        "manager": {
+            "status": {
+                "title": "🤖 System Prompt Module Status",
+                "cache_status": "Cache Status",
+                "cache_items": "Cache Items",
+                "modules_count": "Modules Count",
+                "components_status": "Components Status",
+                "system_prompt_manager": "SystemPromptManager",
+                "permission_validator": "PermissionValidator",
+                "system_prompt_commands": "SystemPromptCommands",
+                "error_message": "Error occurred while viewing status"
+            },
+            "cache": {
+                "success_message_all": "Successfully cleared all system prompt cache",
+                "success_message_guild": "Successfully cleared system prompt cache for server {guild_id}",
+                "error_message": "Error occurred while clearing cache"
             }
         }
     }

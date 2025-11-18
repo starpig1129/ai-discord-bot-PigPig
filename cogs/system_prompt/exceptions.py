@@ -25,46 +25,94 @@ class SystemPromptError(Exception):
 class PermissionError(SystemPromptError):
     """權限不足錯誤"""
     
-    def __init__(self, message: str = "權限不足", required_permission: Optional[str] = None):
+    def __init__(self, message: Optional[str] = None, required_permission: Optional[str] = None,
+                 lang_manager=None, guild_id: Optional[str] = None):
         """
         初始化權限錯誤
         
         Args:
-            message: 錯誤訊息
+            message: 錯誤訊息（如果為 None，將使用本地化訊息）
             required_permission: 所需權限（可選）
+            lang_manager: 語言管理器（可選）
+            guild_id: 伺服器 ID（可選）
         """
+        if message is None:
+            message = self._get_localized_message("permission_denied", lang_manager, guild_id)
+        
         super().__init__(message, "PERMISSION_DENIED")
         self.required_permission = required_permission
+    
+    def _get_localized_message(self, key: str, lang_manager, guild_id: Optional[str]) -> str:
+        """獲取本地化訊息"""
+        if lang_manager and guild_id:
+            try:
+                return lang_manager.translate(guild_id, "commands", "system_prompt", "errors", key)
+            except Exception:
+                pass
+        return "您沒有權限執行此操作"
 
 
 class ValidationError(SystemPromptError):
     """驗證失敗錯誤"""
     
-    def __init__(self, message: str = "驗證失敗", field: Optional[str] = None):
+    def __init__(self, message: Optional[str] = None, field: Optional[str] = None,
+                 lang_manager=None, guild_id: Optional[str] = None):
         """
         初始化驗證錯誤
         
         Args:
-            message: 錯誤訊息
+            message: 錯誤訊息（如果為 None，將使用本地化訊息）
             field: 驗證失敗的欄位（可選）
+            lang_manager: 語言管理器（可選）
+            guild_id: 伺服器 ID（可選）
         """
+        if message is None:
+            message = self._get_localized_message("validation_failed", lang_manager, guild_id, field)
+        
         super().__init__(message, "VALIDATION_FAILED")
         self.field = field
+    
+    def _get_localized_message(self, key: str, lang_manager, guild_id: Optional[str], field: Optional[str] = None) -> str:
+        """獲取本地化訊息"""
+        if lang_manager and guild_id:
+            try:
+                base_message = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", key)
+                if field:
+                    return base_message.format(field=field)
+                return base_message
+            except Exception:
+                pass
+        return "驗證失敗"
 
 
 class ConfigurationError(SystemPromptError):
     """配置錯誤"""
     
-    def __init__(self, message: str = "配置錯誤", config_path: Optional[str] = None):
+    def __init__(self, message: Optional[str] = None, config_path: Optional[str] = None,
+                 lang_manager=None, guild_id: Optional[str] = None):
         """
         初始化配置錯誤
         
         Args:
-            message: 錯誤訊息
+            message: 錯誤訊息（如果為 None，將使用本地化訊息）
             config_path: 配置路徑（可選）
+            lang_manager: 語言管理器（可選）
+            guild_id: 伺服器 ID（可選）
         """
+        if message is None:
+            message = self._get_localized_message("configuration_error", lang_manager, guild_id)
+        
         super().__init__(message, "CONFIGURATION_ERROR")
         self.config_path = config_path
+    
+    def _get_localized_message(self, key: str, lang_manager, guild_id: Optional[str]) -> str:
+        """獲取本地化訊息"""
+        if lang_manager and guild_id:
+            try:
+                return lang_manager.translate(guild_id, "commands", "system_prompt", "errors", key)
+            except Exception:
+                pass
+        return "配置錯誤"
 
 
 class ContentTooLongError(ValidationError):
