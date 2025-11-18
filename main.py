@@ -28,6 +28,7 @@ from bot import PigPig
 from addons import base_config, tokens
 from addons.update import VersionChecker
 from addons.settings import update_config
+from addons.logging import get_logger
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -79,19 +80,25 @@ if __name__ == "__main__":
                         current_version = version_checker.get_current_version()
                         latest_version = result.get("latest_version", current_version)
                         
+                        # Acquire structured logger for main module
+                        log = get_logger(server_id="Bot", source=__name__)
                         if latest_version != current_version:
-                            print(f"\033[93mYour PigPig Bot is not up-to-date! The latest version is {latest_version} "
-                                  f"and you are currently running version {current_version}\n"
-                                  f"Run `python update.py -l` to update your bot!\033[0m")
+                            log.warning(
+                                f"Your PigPig Bot is not up-to-date! The latest version is {latest_version} "
+                                f"and you are currently running version {current_version}. "
+                                f"Run `python update.py -l` to update your bot!"
+                            )
                         else:
-                            print(f"\033[92mYour PigPig Bot is up-to-date! - {latest_version}\033[0m")
-                            
+                            log.info(f"Your PigPig Bot is up-to-date! - {latest_version}")
+                                
                     except Exception as e:
                         # Log error but don't block startup
                         try:
                             asyncio.create_task(func.report_error(e, "main.py/version_check"))
-                            print("\033[91mVersion check failed, but startup continues...\033[0m")
+                            log = get_logger(server_id="Bot", source=__name__)
+                            log.error("Version check failed, but startup continues...")
                         except Exception:
+                            # Fallback to stderr print if logging fails
                             print(f"\033[91mVersion check failed: {e}\033[0m")
                 
                 # Run the async check
@@ -113,7 +120,8 @@ if __name__ == "__main__":
     
     # Ensure we have a valid token
     if not tokens.token:
-        print("\033[91mError: Bot token not found. Please check your .env file.\033[0m")
+        log = get_logger(server_id="Bot", source=__name__)
+        log.error("Error: Bot token not found. Please check your .env file.")
         exit(1)
     
     try:

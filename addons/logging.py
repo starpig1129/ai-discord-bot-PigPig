@@ -946,6 +946,13 @@ def configure_std_logging() -> None:
             print("configure_std_logging failed:", e)
 
 
+# Ensure loguru default handlers are removed as early as possible to avoid verbose initial formatting.
+try:
+    loguru_logger.remove()
+except Exception:
+    # best-effort: ignore errors during early removal
+    pass
+
 # Perform configuration at import time so that third-party libraries' early logs are captured.
 try:
     configure_std_logging()

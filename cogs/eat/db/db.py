@@ -7,7 +7,7 @@ URI = "sqlite:///./data/eatdatabase.sqlite"
 
 class DB:
     def __init__(self) -> None:
-        self.engine = create_engine(URI, echo=True, future=True)
+        self.engine = create_engine(URI, echo=False, future=True)
         Base.metadata.create_all(self.engine)
 
     def getKeywords(self) -> list: 

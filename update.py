@@ -112,11 +112,14 @@ class UpdateCLI:
             
             if with_message:
                 if latest_version == current_version:
-                    print(f"\033[92mYour PigPig Bot is up-to-date! - {latest_version}\033[0m")
+                    self.logger.info(f"Your PigPig Bot is up-to-date! - {latest_version}")
                 else:
-                    print(f"\033[93mYour PigPig Bot is not up-to-date! The latest version is {latest_version} "
-                          f"and you are currently running version {current_version}\n"
-                          f"Run `python update.py -l` to update your bot!\033[0m")
+                    # Use structured logging so the message is handled by the logging system
+                    self.logger.warning(
+                        f"Your PigPig Bot is not up-to-date! The latest version is {latest_version} "
+                        f"and you are currently running version {current_version}. "
+                        f"Run `python update.py -l` to update your bot!"
+                    )
             
             return latest_version
             
