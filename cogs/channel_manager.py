@@ -108,8 +108,26 @@ class ChannelManager(commands.Cog):
         config["mode"] = mode.value
         self.save_config(guild_id, config)
         
-        # This part can be simplified or use the translation system as before
-        await interaction.response.send_message(f"已將 **整個伺服器** 的回應模式設定為：{mode.name}")
+        if self.lang_manager:
+            mode_name = self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "set_server_mode",
+                "choices",
+                mode.value
+            )
+            response = self.lang_manager.translate(
+                guild_id,
+                "commands",
+                "set_server_mode",
+                "responses",
+                "success",
+                mode=mode_name
+            )
+        else:
+            response = f"已將 **整個伺服器** 的回應模式設定為：{mode.name}"
+
+        await interaction.response.send_message(response)
 
     @app_commands.command(name="set_channel_mode", description="為特定頻道設定特殊模式 (例如：故事模式)")
     @app_commands.describe(channel="要設定的頻道", mode="要為此頻道設定的模式")
