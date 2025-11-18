@@ -183,8 +183,9 @@ class BotInfo(commands.Cog):
 
             bot_status = getattr(bot, 'status', discord.Status.offline)
             status_text = status_indicators.get(bot_status, status_unknown)
+            status_prefix = self.lang_manager.translate(guild_id, "commands", "botinfo", "footer", "status_prefix") if self.lang_manager else "Status: "
             main_embed.set_footer(
-                text=f"狀態: {status_text}",
+                text=f"{status_prefix}{status_text}",
                 icon_url=avatar_url
             )
 

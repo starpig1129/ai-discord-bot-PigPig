@@ -1,5 +1,4 @@
 {
-  "botinfo": {
     "name": "botinfo",
     "description": "Show bot detailed information",
     "title": "🤖 Bot Information Overview",
@@ -30,36 +29,8 @@
       "dnd": "🔴 Do Not Disturb",
       "offline": "⚫ Offline",
       "unknown": "❓ Unknown"
-    }
-  },
-  "title": "Bot Info",
-  "description": "Show detailed information and statistics about the bot",
-  "fields": {
-    "basic_stats": {
-      "name": "Basic Statistics",
-      "servers": "Servers",
-      "users": "Users",
-      "text_channels": "Text Channels",
-      "voice_channels": "Voice Channels",
-      "loaded_cogs": "Loaded Extensions"
     },
-    "performance": {
-      "name": "Performance",
-      "latency": "Latency",
-      "memory_usage": "Memory Usage",
-      "uptime": "Uptime"
-    },
-    "cogs": {
-      "name": "Extensions",
-      "commands": "Commands",
-      "no_cogs": "No extensions loaded"
+    "footer":{
+      "status_prefix":"Status: "
     }
-  },
-  "status": {
-    "online": "Online",
-    "idle": "Idle",
-    "dnd": "Do Not Disturb",
-    "offline": "Offline",
-    "unknown": "Unknown"
   }
-}

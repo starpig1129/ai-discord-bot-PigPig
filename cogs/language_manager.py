@@ -10,6 +10,11 @@ from pathlib import Path
 from addons.logging import get_logger
 from function import func
 
+
+class MissingTranslationError(Exception):
+    """Custom exception for missing translation keys"""
+    pass
+
 log = get_logger(source=__name__, server_id="system")
 
 class TranslationCache:
@@ -164,12 +169,12 @@ class LanguageManager(commands.Cog):
                 # 建立路徑映射
                 path_parts = file_key.split(os.sep)
                 
-                # 為每個路徑層級建立索引
+                # 為每個路徑層級建立索引，包括複合路徑
                 for i in range(1, len(path_parts) + 1):
                     partial_key = "/".join(path_parts[:i])
                     self.file_index[lang_code][partial_key] = file_key
                 
-                # 特殊處理：直接檔名映射
+                # 標準路徑映射
                 self.file_index[lang_code][file_key] = file_key
                 
                 self.logger.debug(f"Indexed translation file: {lang_code}/{file_key}")
@@ -208,13 +213,6 @@ class LanguageManager(commands.Cog):
         Returns:
             File path or None if not found
         """
-        if not path_parts:
-            return None
-        
-        # 移除 commands 前綴（如果存在）
-        if len(path_parts) > 0 and path_parts[0] == "commands":
-            path_parts = path_parts[1:]
-        
         if not path_parts:
             return None
         
@@ -292,7 +290,7 @@ class LanguageManager(commands.Cog):
                 return None
         return result
     
-    def _find_translation_with_fallback(self, lang: str, path_parts: List[str]) -> str:
+    def _find_translation_with_fallback(self, lang: str, path_parts: List[str]) -> Tuple[bool, str]:
         """Find translation with multi-layer fallback mechanism
         
         Args:
@@ -300,38 +298,43 @@ class LanguageManager(commands.Cog):
             path_parts: Path parts to the translation key
             
         Returns:
-            Translated string or fallback value
+            Tuple of (found: bool, translated_string: str)
         """
         if not path_parts:
-            return "TRANSLATION_NOT_FOUND"
+            return False, "TRANSLATION_NOT_FOUND"
         
         # 1. 嘗試精確匹配
         result = self._exact_match_search(lang, path_parts)
         if result:
-            return result
+            return True, result
         
         # 2. 嘗試部分匹配
         result = self._partial_match_search(lang, path_parts)
         if result:
-            return result
+            return True, result
         
         # 3. 向 common.json 回退
         result = self._common_fallback_search(lang, path_parts)
         if result:
-            return result
+            return True, result
         
         # 4. 返回備用值
-        return path_parts[-1] if path_parts else "TRANSLATION_NOT_FOUND"
+        return False, path_parts[-1] if path_parts else "TRANSLATION_NOT_FOUND"
     
     def _exact_match_search(self, lang: str, path_parts: List[str]) -> Optional[str]:
         """嘗試在對應檔案中進行精確匹配"""
         file_path = self._resolve_translation_file(lang, *path_parts)
         
-        if file_path and file_path in self.translations.get(lang, {}):
-            translation_data = self.translations[lang][file_path]
-            result = self._traverse_path(translation_data, path_parts)
-            if isinstance(result, str):
-                return result
+        if file_path:
+            # 確保檔案已載入
+            if file_path not in self.translations.get(lang, {}):
+                self._load_translation_file(lang, file_path)
+            
+            if file_path in self.translations.get(lang, {}):
+                translation_data = self.translations[lang][file_path]
+                result = self._traverse_path(translation_data, path_parts)
+                if isinstance(result, str):
+                    return result
         
         return None
     
@@ -440,6 +443,7 @@ class LanguageManager(commands.Cog):
         - Multi-layer cache system
         - Lazy loading of translation files
         - Path resolution with fallback mechanism
+        - Enhanced error logging for missing translations
         
         Args:
             guild_id: Server ID
@@ -447,7 +451,7 @@ class LanguageManager(commands.Cog):
             **kwargs: Formatting parameters
             
         Returns:
-            str: Translated text
+            str: Translated text or formatted error message if translation not found
         """
         try:
             # 處理初始化期間的特殊情況
@@ -471,13 +475,21 @@ class LanguageManager(commands.Cog):
                 return self._format_result(cached_result, kwargs)
             
             # 執行翻譯查找
-            result = self._find_translation_with_fallback(lang, path_parts)
+            translation_found, result = self._find_translation_with_fallback(lang, path_parts)
+            
+            # Enhanced error logging for missing translations
+            if not translation_found:
+                self._log_missing_translation(guild_id, lang, path_parts, args)
+                # Return formatted error message instead of fallback
+                formatted_error = f"[Translation not found: {'.'.join(path_parts)}]"
+                return self._format_result(formatted_error, kwargs)
             
             # 格式化結果
             formatted_result = self._format_result(result, kwargs)
             
-            # 快取結果
-            self._translation_cache.put(cache_key, result)
+            # 快取結果 (only cache successful translations)
+            if translation_found:
+                self._translation_cache.put(cache_key, result)
             
             return formatted_result
             
@@ -544,6 +556,50 @@ class LanguageManager(commands.Cog):
         # 預載入 common.json（如果尚未載入）
         if lang not in self._loaded_files or ("common" not in [f[1] for f in self._loaded_files if f[0] == lang]):
             self._request_file_load(lang, "common")
+    
+    def _log_missing_translation(self, guild_id: str, lang: str, path_parts: List[str], original_args: tuple):
+        """Log detailed information about missing translations for debugging purposes
+        
+        Args:
+            guild_id: The guild/server ID that triggered the translation request
+            lang: The language code that was being used
+            path_parts: The translation key path parts
+            original_args: The original arguments passed to translate method
+        """
+        # Attempt to extract cog name from the original arguments
+        cog_name = "unknown"
+        if len(original_args) > 1 and isinstance(original_args[0], str):
+            # Check if first argument looks like a cog name (common patterns)
+            first_arg = original_args[0]
+            if first_arg in ['commands', 'system', 'common', 'errors', 'botinfo', 'help']:
+                cog_name = first_arg
+            elif len(original_args) > 1:
+                # Try second argument as potential cog name
+                second_arg = original_args[1]
+                if isinstance(second_arg, str) and len(second_arg) > 0:
+                    cog_name = second_arg
+        
+        # Create the full translation key path
+        translation_key = ".".join(path_parts)
+        
+        # Log the missing translation with detailed context
+        self.logger.warning(
+            f"Translation key not found: "
+            f"guild_id={guild_id}, "
+            f"key='{translation_key}', "
+            f"language='{lang}', "
+            f"cog_name='{cog_name}'"
+        )
+        
+        # Also use func.report_error for consistency and traceability
+        error_msg = (
+            f"Missing translation: guild_id={guild_id}, "
+            f"key='{translation_key}', language='{lang}', cog_name='{cog_name}'"
+        )
+        
+        # Create and report the translation error for consistency
+        translation_error = MissingTranslationError(error_msg)
+        asyncio.create_task(func.report_error(translation_error, "missing translation key"))
 
     @app_commands.command(
         name="set_language",

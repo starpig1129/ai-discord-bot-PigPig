@@ -1,10 +1,5 @@
 {
   "responses": {
     "current": "当前语言：{language}"
-  },
-  "current_language": {
-    "responses": {
-      "current": "当前语言：{language}"
-    }
   }
 }
