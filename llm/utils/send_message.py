@@ -346,6 +346,17 @@ async def _process_token_stream(
         # Send any remaining content
         if pending_content:
             await update_message()
+            
+        # Fallback: If no content was displayed but we have raw result,
+        # it means the model likely forgot the <som> tags.
+        if not display_content and message_result and message_result.strip():
+            _logger.warning("Model output content without <som> tags. Applying fallback.")
+            pending_content = message_result
+            await update_message()
+            
+        # Check if we have any content after all processing
+        if not message_result or not message_result.strip():
+            raise ValueError("Generated response is empty")
         
         return message_result, current_message
     
