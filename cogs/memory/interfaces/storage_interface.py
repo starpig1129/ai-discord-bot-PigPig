@@ -58,13 +58,22 @@ class EpisodicStorageInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def update_channel_memory_state(self, channel_id: int, message_count: int, start_message_id: int) -> None:
+    async def update_channel_memory_state(
+        self, 
+        channel_id: int, 
+        message_count: int, 
+        start_message_id: int,
+        last_summary_timestamp: Optional[float] = None,
+        last_summary_text: Optional[str] = None
+    ) -> None:
         """Update the memory state for a specific channel.
         
         Args:
             channel_id (int): The channel ID to update state for.
             message_count (int): The new message count.
             start_message_id (int): The start message ID.
+            last_summary_timestamp (Optional[float]): Timestamp of last summary.
+            last_summary_text (Optional[str]): Text of last summary.
         """
         raise NotImplementedError
 

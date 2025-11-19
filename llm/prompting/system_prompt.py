@@ -30,9 +30,7 @@ def get_channel_system_prompt(
   """
   try:
       _logger.debug(
-          "Getting channel system prompt - channel: %s, guild: %s",
-          channel_id,
-          guild_id,
+          f"Getting channel system prompt - channel: {channel_id}, guild: {guild_id}"
       )
       
       # Get bot instance
@@ -47,8 +45,7 @@ def get_channel_system_prompt(
       
       if not system_prompt_cog:
           _logger.warning(
-              "SystemPromptManagerCog unavailable, cannot get channel %s prompt",
-              channel_id,
+              f"SystemPromptManagerCog unavailable, cannot get channel {channel_id} prompt"
           )
           return ""
       
@@ -57,9 +54,9 @@ def get_channel_system_prompt(
       # Clear cache to ensure latest data
       try:
           manager.cache.invalidate(guild_id, channel_id)
-          _logger.debug("Cleared channel cache: %s:%s", guild_id, channel_id)
+          _logger.debug(f"Cleared channel cache: {guild_id}:{channel_id}")
       except Exception as cache_error:
-          _logger.warning("Failed to clear channel cache: %s", cache_error)
+          _logger.warning(f"Failed to clear channel cache: {cache_error}")
       
       # Get effective prompt with three-tier inheritance
       effective_prompt = manager.get_effective_prompt(
@@ -73,14 +70,12 @@ def get_channel_system_prompt(
       source = effective_prompt.get("source", "unknown")
       
       _logger.info(
-          "Channel system prompt - source: %s, channel: %s",
-          source,
-          channel_id,
+          f"Channel system prompt - source: {source}, channel: {channel_id}"
       )
       
       # Handle different sources
       if source in ["channel", "server"]:
-          _logger.info("Using %s level custom prompt", source)
+          _logger.info(f"Using {source} level custom prompt")
           return prompt
       
       if source == "yaml":

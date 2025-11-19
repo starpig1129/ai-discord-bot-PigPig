@@ -314,6 +314,8 @@ class MemoryConfig:
 
         # Message threshold for triggering memory processing
         self.message_threshold: int = data.get("message_threshold", 100)
+        # Time threshold for triggering memory processing (in seconds)
+        self.time_threshold: int = data.get("time_threshold", 3600)
 
 try:
     base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")

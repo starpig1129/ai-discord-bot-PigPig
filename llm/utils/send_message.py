@@ -108,8 +108,7 @@ async def safe_edit_message(
             return True
         except discord.errors.NotFound:
             _logger.warning(
-                'Message not found during edit attempt %d',
-                attempt + 1
+                f'Message not found during edit attempt {attempt + 1}'
             )
             return False
         except discord.errors.HTTPException as exc:
@@ -202,8 +201,7 @@ def _get_processing_message(
         )
     except Exception:
         _logger.error(
-            'LanguageManager.translate failed, using default %s message',
-            message_type
+            f'LanguageManager.translate failed, using default {message_type} message'
         )
         return default_messages.get(message_type, '處理中...')
 
@@ -278,7 +276,7 @@ async def _process_token_stream(
                     pending_content = ''
                     return
             except Exception as e:
-                _logger.error('Failed to send continuation message: %s', e)
+                _logger.error(f'Failed to send continuation message: {e}')
                 pending_content = ''
                 return
         
@@ -352,13 +350,13 @@ async def _process_token_stream(
         return message_result, current_message
     
     except Exception as exc:
-        _logger.error('Error in token stream processing: %s', exc)
+        _logger.error(f'Error in token stream processing: {exc}')
         # Try to send any accumulated content before raising
         if pending_content:
             try:
                 await update_message()
             except Exception as update_exc:
-                _logger.error('Failed to send final update: %s', update_exc)
+                _logger.error(f'Failed to send final update: {update_exc}')
         raise
 
 
@@ -399,7 +397,7 @@ async def send_message(
             guild_id = str(message.guild.id)
             lang = lang_manager.get_server_lang(guild_id)
             converter = get_converter(lang)
-            _logger.info('Using language: %s for guild: %s', lang, guild_id)
+            _logger.info(f'Using language: {lang} for guild: {guild_id}')
     
     # Ensure there's an initial message to edit
     current_message = message_to_edit
@@ -427,7 +425,7 @@ async def send_message(
 
     except Exception as exc:
         await func.report_error(exc, 'Error generating GPT response')
-        _logger.error('Error generating GPT response: %s', exc)
+        _logger.error(f'Error generating GPT response: {exc}')
         
         error_message = '不知道該怎麼回覆你了...'  # Default error message
         
@@ -442,6 +440,6 @@ async def send_message(
             else:
                 await _safe_send_message(channel, error_message)
         except Exception as send_exc:
-            _logger.error('Failed to send error message: %s', send_exc)
+            _logger.error(f'Failed to send error message: {send_exc}')
 
         return error_message

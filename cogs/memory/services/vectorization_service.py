@@ -98,11 +98,12 @@ class VectorizationService:
         """
         fragments = []
         
-        for event_summary in event_summaries:
+        for idx, event_summary in enumerate(event_summaries, start=1):
             try:
                 # Create metadata from EventSummary
+                # Use enumeration to ensure uniqueness when start_id == end_id
                 metadata = {
-                    "fragment_id": f"event-{event_summary.metadata.start_message_id}-{event_summary.metadata.end_message_id}-{event_summary.query_keywords}",
+                    "fragment_id": f"{event_summary.metadata.start_message_id}-{event_summary.metadata.end_message_id}-{idx}",
                     "keywords": event_summary.query_keywords,
                     "source_message_ids": [event_summary.metadata.start_message_id, event_summary.metadata.end_message_id],
                     "jump_url": f"https://discord.com/channels/{event_summary.metadata.guild_id}/{event_summary.metadata.channel_id}/{event_summary.metadata.start_message_id}",
@@ -116,7 +117,7 @@ class VectorizationService:
                 }
                 
                 frag = MemoryFragment(
-                    id=str(event_summary.metadata.start_message_id),
+                    id=event_summary.metadata.start_message_id,
                     content=event_summary.query_value,
                     query_key=event_summary.query_key,
                     metadata=metadata,

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from function import func
 from addons.settings import MemoryConfig
+from datetime import datetime
 
 from cogs.memory.interfaces.storage_interface import StorageInterface
 from cogs.memory.services.event_summarization_service import EventSummarizationService, EventSummary
@@ -67,7 +68,12 @@ class MessageTracker:
             
             if channel_state is None:
                 # Initialize new channel state
-                await self.storage.update_channel_memory_state(channel_id, 1, message.id)
+                await self.storage.update_channel_memory_state(
+                    channel_id, 
+                    1, 
+                    message.id,
+                    last_summary_timestamp=message.created_at.timestamp()
+                )
             else:
                 # Update existing channel state
                 new_message_count = channel_state['message_count'] + 1
@@ -82,6 +88,17 @@ class MessageTracker:
                         asyncio.create_task(self._process_channel_memory(message.channel))
                     else:
                         logger.warning(f"Skipping memory processing for non-text channel {channel_id}")
+                else:
+                    # Check time threshold
+                    last_summary_timestamp = channel_state.get('last_summary_timestamp', 0.0)
+                    current_time = message.created_at.timestamp()
+                    # Default time threshold: 1 hour (3600 seconds) if not in settings
+                    time_threshold = getattr(self.settings, 'time_threshold', 3600)
+                    
+                    if current_time - last_summary_timestamp > time_threshold and new_message_count > 0:
+                         logger.info(f"Time threshold reached for channel {channel_id} (last: {last_summary_timestamp}), triggering memory processing")
+                         if isinstance(message.channel, discord.TextChannel):
+                            asyncio.create_task(self._process_channel_memory(message.channel))
                 
         except Exception as e:
             await func.report_error(e, f"Failed to track message {message.id}")
@@ -138,7 +155,15 @@ class MessageTracker:
             
             # Call event summarization
             messages_to_process = all_messages
-            event_summaries = await summarization_service.summarize_events(messages_to_process)
+            # Get previous summary for context
+            channel_state = await self.storage.get_channel_memory_state(channel.id)
+            previous_summary = channel_state.get("last_summary_text", "") if channel_state else ""
+
+            # Summarize events
+            event_summaries = await summarization_service.summarize_events(
+                messages_to_process, 
+                previous_summary=previous_summary
+            )
             
             # Check if event summaries is empty
             if not event_summaries:
@@ -164,10 +189,16 @@ class MessageTracker:
             logger.info(f"Successfully submitted {len(event_summaries)} event summaries from channel {channel.id} to vectorization service")
             
             # Update channel memory state for next processing cycle
+            # Update channel memory state for next processing cycle
+            # Combine all summaries into one text for the next context
+            combined_summary = "\n".join([s.query_value for s in event_summaries])
+            
             await self.storage.update_channel_memory_state(
                 channel_id=channel.id,
                 message_count=0,
-                start_message_id=messages_to_process[-1].id
+                start_message_id=messages_to_process[-1].id,
+                last_summary_timestamp=datetime.now().timestamp(),
+                last_summary_text=combined_summary
             )
             
             # Log successful update of channel memory state

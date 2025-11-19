@@ -67,20 +67,12 @@ def _discover_tools_package() -> Iterable[Any]:
     # 非破壞性 debug 日誌：紀錄是否存在 llm/tools.py 與 llm/tools/ 資料夾
     try:
         logger.debug(
-            "llm.tools debug: tools_py exists=%s, tools_dir exists=%s, pkg_dir=%s",
-            os.path.isfile(tools_py),
-            os.path.isdir(pkg_dir),
-            pkg_dir,
+            f"llm.tools debug: tools_py exists={os.path.isfile(tools_py)}, "
+            f"tools_dir exists={os.path.isdir(pkg_dir)}, pkg_dir={pkg_dir}"
         )
     except Exception:
-        # 若 logger 尚未正確建立，回退到 print（不改變程式行為）
-        try:
-            logger.debug(
-                f"[llm.tools debug] tools_py exists={os.path.isfile(tools_py)}, "
-                f"tools_dir exists={os.path.isdir(pkg_dir)}, pkg_dir={pkg_dir}"
-            )
-        except Exception:
-            pass
+        # 若 logger 尚未正確建立,回退到 print(不改變程式行為)
+        pass
 
     if not os.path.isdir(pkg_dir):
         return []
@@ -140,7 +132,7 @@ def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List
     tools: List[Any] = []
     mod_name = getattr(mod, "__name__", repr(mod))
     try:
-        logger.debug("llm.tools: collecting tools from module %s", mod_name)
+        logger.debug(f"llm.tools: collecting tools from module {mod_name}")
         # 1) module-level get_tools 優先
         module_get_fn = getattr(mod, "get_tools", None)
         if callable(module_get_fn):
@@ -170,9 +162,8 @@ def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List
                         tools.append(item)
                         try:
                             logger.debug(
-                                "llm.tools: module %s provided tool %s",
-                                mod_name,
-                                getattr(item, "name", getattr(item, "__name__", repr(item))),
+                                f"llm.tools: module {mod_name} provided tool "
+                                f"{getattr(item, 'name', getattr(item, '__name__', repr(item)))}"
                             )
                         except Exception:
                             pass
@@ -213,10 +204,8 @@ def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List
                             tools.append(item)
                             try:
                                 logger.debug(
-                                    "llm.tools: %s.%s.get_tools -> %s",
-                                    mod_name,
-                                    name,
-                                    getattr(item, "name", getattr(item, "__name__", repr(item))),
+                                    f"llm.tools: {mod_name}.{name}.get_tools -> "
+                                    f"{getattr(item, 'name', getattr(item, '__name__', repr(item)))}"
                                 )
                             except Exception:
                                 pass

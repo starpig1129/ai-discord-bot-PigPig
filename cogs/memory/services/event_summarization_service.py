@@ -38,6 +38,12 @@ class EventMetadata:
     event_type: Optional[str] = None
 
 
+class Entity(BaseModel):
+    """Represents an entity extracted from the conversation."""
+    name: str = Field(..., description="The name of the entity (person, place, organization, concept, etc.).")
+    type: str = Field(..., description="The type of the entity (e.g., Person, Location, Organization, Topic).")
+    description: str = Field(..., description="A brief description of the entity based on the conversation context.")
+
 class MemoryFragment(BaseModel):
     """Represents a single, distinct memory extracted from a conversation.
 
@@ -76,6 +82,10 @@ class MemoryFragment(BaseModel):
         ...,
         description="The ID of the last message in the conversation that is part of this memory. This corresponds to the 'id' field in the provided conversation history (e.g., 1, 2, 3).",
     )
+    entities: List[Entity] = Field(
+        default_factory=list,
+        description="A list of entities (people, places, concepts) identified in this memory fragment.",
+    )
 
 class MemoryFragmentList(BaseModel):
     """A list of MemoryFragment objects, representing all significant events extracted from a conversation.
@@ -93,6 +103,7 @@ class EventSummary:
     query_key: str
     query_keywords: List[str]
     query_value: str
+    entities: List[Dict[str, str]]
     metadata: EventMetadata
 
 
@@ -191,12 +202,13 @@ class EventSummarizationService:
                 log.exception("func.report_error failed")
             return None
 
-    async def summarize_events(self, messages: List[discord.Message]) -> List[EventSummary]:
+    async def summarize_events(self, messages: List[discord.Message], previous_summary: str = "") -> List[EventSummary]:
         """
         Process a list of messages and extract event summaries using LLM.
         
         Args:
             messages: List of Discord messages to process
+            previous_summary: Summary of previous events for context
             
         Returns:
             List of EventSummary objects representing extracted events
@@ -211,7 +223,7 @@ class EventSummarizationService:
             # Process each group into event summaries
             event_summaries = []
             for message_group in grouped_messages:
-                summary_list = await self._process_message_group(message_group)
+                summary_list = await self._process_message_group(message_group, previous_summary)
                 if summary_list:
                     event_summaries.extend(summary_list)
             
@@ -240,12 +252,13 @@ class EventSummarizationService:
         log.debug(f"Grouping {len(messages)} messages as single event (initial implementation)")
         return [messages]
 
-    async def _process_message_group(self, messages: List[discord.Message]) -> Optional[List[EventSummary]]:
+    async def _process_message_group(self, messages: List[discord.Message], previous_summary: str = "") -> Optional[List[EventSummary]]:
         """
         Process a group of messages into an event summary using LLM.
         
         Args:
             messages: Group of related Discord messages
+            previous_summary: Context from previous events
             
         Returns:
             EventSummary object or None if processing failed
@@ -259,7 +272,7 @@ class EventSummarizationService:
             message_data = await self._prepare_message_data(messages)
             
             # Get LLM response using the episodic memory extractor
-            llm_response = await self._get_llm_summary(message_data)
+            llm_response = await self._get_llm_summary(message_data, previous_summary)
             
             if not llm_response:
                 log.warning("No LLM response received for message group")
@@ -296,19 +309,19 @@ class EventSummarizationService:
             message_dict = {
                 "id": index,
                 "author": message.author.display_name or message.author.name,
-                "timestamp": timestamp,
                 "content": message.content or ""  # Handle empty content
             }
             message_data.append(message_dict)
         
         return message_data
 
-    async def _get_llm_summary(self, message_data: List[Dict[str, Any]]) -> Optional[MemoryFragmentList]:
+    async def _get_llm_summary(self, message_data: List[Dict[str, Any]], previous_summary: str = "") -> Optional[MemoryFragmentList]:
         """
         Get event summary from LLM using the episodic memory extractor prompt with structured output.
         
         Args:
             message_data: Prepared message data for LLM processing
+            previous_summary: Context from previous events
             
         Returns:
             MemoryFragmentList object or None if failed
@@ -324,7 +337,7 @@ class EventSummarizationService:
             
             # Prepare the system and user prompts
             system_prompt = self._get_system_prompt()
-            user_prompt = self._get_user_prompt_with_messages(message_data)
+            user_prompt = self._get_user_prompt_with_messages(message_data, previous_summary)
             
             # Create the agent with structured output
             log.debug("Creating agent with structured output for episodic memory extraction")
@@ -391,19 +404,26 @@ class EventSummarizationService:
                     "record of significant moments from a dialogue."
                 )
 
-    def _get_user_prompt_with_messages(self, message_data: List[Dict[str, Any]]) -> str:
+    def _get_user_prompt_with_messages(self, message_data: List[Dict[str, Any]], previous_summary: str = "") -> str:
         """
         Get the user prompt with the prepared message data.
         
         Args:
             message_data: Prepared message data
+            previous_summary: Context from previous events
             
         Returns:
             User prompt string with message data
         """
         try:
             messages_text = json.dumps(message_data, ensure_ascii=False, indent=2)
+            
+            context_text = ""
+            if previous_summary:
+                context_text = f"Previous Context:\n{previous_summary}\n\n"
+                
             return (
+                f"{context_text}"
                 f"Process the following conversation history:\n\n{messages_text}\n\n"
             )
         except Exception as e:
@@ -439,10 +459,21 @@ class EventSummarizationService:
             # Create metadata from message group
             metadata = self._create_event_metadata(messages,memory_fragment)
             
+            # Extract entities
+            entities = []
+            if hasattr(memory_fragment, 'entities'):
+                for entity in memory_fragment.entities:
+                    entities.append({
+                        "name": entity.name,
+                        "type": entity.type,
+                        "description": entity.description
+                    })
+            
             return EventSummary(
                 query_key=query_key,
                 query_keywords=query_keywords,
                 query_value=query_value,
+                entities=entities,
                 metadata=metadata
             )
             

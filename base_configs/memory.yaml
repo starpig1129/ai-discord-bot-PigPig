@@ -30,3 +30,7 @@ provider_options:
 vector_search_k: 5
 keyword_search_k: 3
 message_threshold: 100 # Number of messages to trigger memory processing
+
+# Time threshold for triggering memory processing (in seconds)
+# Default: 3600 (1 hour)
+time_threshold: 3600

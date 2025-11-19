@@ -7,6 +7,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Module-level logger
 log = get_logger(server_id="Bot", source=__name__)
 
+
 class Function:
     def __init__(self):
         self.bot = None
@@ -20,8 +21,16 @@ class Function:
             return
         import traceback
         import discord
-        log.error(message=f"error: {error} details: {details}", exception=error, action="report_error")
-        traceback_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+        
+        # Only pass exception parameter if error is actually an Exception object
+        if isinstance(error, BaseException):
+            log.error(message=f"error: {error} details: {details}", exception=error, action="report_error")
+            traceback_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+        else:
+            # If error is not an Exception (e.g., a string), log without exception parameter
+            log.error(message=f"error: {error} details: {details}", action="report_error")
+            traceback_str = f"No traceback available (error is {type(error).__name__}, not Exception)"
+
 
         embed = discord.Embed(
             title="錯誤報告",
