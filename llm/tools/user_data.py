@@ -262,26 +262,21 @@ class UserMemoryTools:
                                 except discord.NotFound:
                                     # user does not exist / was deleted - not an exception to escalate
                                     logger.warning(
-                                        "fetch_user: unknown user %s",
-                                        int_id,
+                                        f"fetch_user: unknown user {int_id}",
                                         extra={"provided_user_id": user_id}
                                     )
                                     fetched_user = None
                                 except discord.HTTPException as he:
                                     # transient HTTP error - report and continue with fallback
                                     logger.warning(
-                                        "fetch_user HTTP error for %s: %s",
-                                        int_id,
-                                        he,
+                                        f"fetch_user HTTP error for {int_id}: {he}",
                                         extra={"provided_user_id": user_id}
                                     )
                                     await func.report_error(he, f"Failed to fetch user {int_id}")
                                 except Exception as e:
                                     # unexpected error - log and report
                                     logger.exception(
-                                        "Unexpected error fetching user %s: %s",
-                                        int_id,
-                                        e
+                                        f"Unexpected error fetching user {int_id}: {e}"
                                     )
                                     await func.report_error(e, f"Failed to fetch user {int_id}")
                         # If we obtained a user object, prefer its display_name/name
@@ -294,9 +289,7 @@ class UserMemoryTools:
                     except Exception as fetch_err:
                         # Ensure any unexpected outer errors are at least warned; report for observability.
                         logger.warning(
-                            "Failed to fetch display_name for user %s: %s",
-                            effective_id,
-                            fetch_err,
+                            f"Failed to fetch display_name for user {effective_id}: {fetch_err}",
                             extra={"provided_user_id": user_id}
                         )
                         try:

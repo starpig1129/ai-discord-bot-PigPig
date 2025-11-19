@@ -524,21 +524,37 @@ class LoggerAdapter:
         # If an exception object passed, also send a structured error record
         if exception is not None:
             try:
-                exc_text = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
-                # Attach stack trace into extra and write an ERROR-level follow-up record
-                exc_record = LogRecord(
-                    timestamp=datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
-                    level="ERROR",
-                    source=self.source,
-                    server_id=self.server_id,
-                    channel_or_file=str(channel_or_file),
-                    user_id=str(user_id) if user_id is not None else "",
-                    action="exception",
-                    message=str(full_message),
-                    trace_id=trace_id,
-                    extra={"exception": exc_text},
-                )
-                self._writer.enqueue(self.server_id, exc_record.level, exc_record.to_json_line(), exc_record.timestamp)
+                if isinstance(exception, BaseException):
+                    exc_text = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
+                    # Attach stack trace into extra and write an ERROR-level follow-up record
+                    exc_record = LogRecord(
+                        timestamp=datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                        level="ERROR",
+                        source=self.source,
+                        server_id=self.server_id,
+                        channel_or_file=str(channel_or_file),
+                        user_id=str(user_id) if user_id is not None else "",
+                        action="exception",
+                        message=str(full_message),
+                        trace_id=trace_id,
+                        extra={"exception": exc_text},
+                    )
+                    self._writer.enqueue(self.server_id, exc_record.level, exc_record.to_json_line(), exc_record.timestamp)
+                else:
+                    # Gracefully handle non-exception objects passed as exception (e.g. from printf-style calls)
+                    warn_record = LogRecord(
+                        timestamp=datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                        level="WARNING",
+                        source=self.source,
+                        server_id=self.server_id,
+                        channel_or_file=str(channel_or_file),
+                        user_id=str(user_id) if user_id is not None else "",
+                        action="logging_misuse",
+                        message=f"Invalid exception argument passed to logger: {exception!r}",
+                        trace_id=trace_id,
+                        extra={"invalid_exception_arg": str(exception)},
+                    )
+                    self._writer.enqueue(self.server_id, warn_record.level, warn_record.to_json_line(), warn_record.timestamp)
             except Exception as e:
                 if func:
                     try:
@@ -701,13 +717,22 @@ class LoggerAdapter:
             msg = message or ""
         self._emit("DEBUG", msg, exception, **event_fields)
     
-    def exception(self, message: Optional[str] = None, **event_fields: Any) -> None:
+    def exception(self, message: Optional[str] = None, *args: Any, **event_fields: Any) -> None:
         """Log an ERROR-level event with the current exception traceback (like logging.exception)."""
         # Capture the current exception (if any) and forward it as 'exception' to _emit.
         try:
             exc = sys.exc_info()[1]
         except Exception:
             exc = None
+        
+        # Handle potential printf-style formatting if args are present
+        if args and message:
+            try:
+                message = message % args
+            except Exception:
+                # If formatting fails, just append args to message to preserve info
+                message = f"{message} {args}"
+
         if message is None and "message" in event_fields:
             msg = event_fields.pop("message")
         else:
