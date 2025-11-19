@@ -3,7 +3,6 @@
 Handles SQLite connection lifecycle, thread-safe access, and error reporting.
 """
 import asyncio
-import logging
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -13,6 +12,7 @@ from typing import Dict, Optional, Union
 from function import func
 from ..exceptions import DatabaseError
 from . import schema
+from addons.logging import get_logger
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from bot import PigPig
@@ -30,7 +30,7 @@ class DatabaseConnection:
         self.db_path = Path(db_path)
         self.bot = bot
         self._loop = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
         self._lock = threading.RLock()
         self._connections: Dict[int, sqlite3.Connection] = {}
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, cast, TypeVar, Type
 from datetime import timezone
@@ -17,9 +16,10 @@ from langchain_core.messages import HumanMessage
 
 from function import func
 from addons.settings import MemoryConfig, prompt_config
+from addons.logging import get_logger
 from llm.model_manager import ModelManager
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 T = TypeVar('T', bound=BaseModel)
 

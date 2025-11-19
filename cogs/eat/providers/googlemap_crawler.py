@@ -1,6 +1,5 @@
 import os
 import random
-import logging
 import platform
 from time import sleep
 from selenium import webdriver

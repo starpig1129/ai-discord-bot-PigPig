@@ -1,247 +1,245 @@
 {
-    "system_prompt": {
-        "name": "system_prompt",
-        "description": "系统提示词管理 - 统一接口",
-        "ui": {
-            "main_menu": {
-                "title": "🤖 系统提示词管理",
-                "description": "欢迎使用统一系统提示词管理接口！请选择要执行的功能：",
-                "main_functions_title": "🔧 主要功能",
-                "main_functions_description": "• **提示词设置** - 设置频道或服务器系统提示词\n• **设置显示** - 显示当前系统提示词设置\n• **模块编辑** - 编辑特定的YAML模块\n• **提示词复制** - 将系统提示词复制到其他频道\n• **提示词删除** - 删除已设置的系统提示词\n• **设置重置** - 重置系统提示词设置",
-                "usage_title": "📋 使用说明",
-                "usage_description": "请点击下方按钮执行相应功能。\n系统支持3层继承：YAML基础 → 服务器默认值 → 频道特定",
-                "footer": "注意：所有操作都会为安全起见进行权限检查"
+    "name": "system_prompt",
+    "description": "系统提示词管理 - 统一接口",
+    "ui": {
+        "main_menu": {
+            "title": "🤖 系统提示词管理",
+            "description": "欢迎使用统一系统提示词管理接口！请选择要执行的功能：",
+            "main_functions_title": "🔧 主要功能",
+            "main_functions_description": "• **提示词设置** - 设置频道或服务器系统提示词\n• **设置显示** - 显示当前系统提示词设置\n• **模块编辑** - 编辑特定的YAML模块\n• **提示词复制** - 将系统提示词复制到其他频道\n• **提示词删除** - 删除已设置的系统提示词\n• **设置重置** - 重置系统提示词设置",
+            "usage_title": "📋 使用说明",
+            "usage_description": "请点击下方按钮执行相应功能。\n系统支持3层继承：YAML基础 → 服务器默认值 → 频道特定",
+            "footer": "注意：所有操作都会为安全起见进行权限检查"
+        },
+        "buttons": {
+            "set_prompt": "提示词设置",
+            "view_config": "设置显示",
+            "module_edit": "模块编辑",
+            "copy_prompt": "提示词复制",
+            "remove_prompt": "提示词删除",
+            "reset_config": "设置重置",
+            "back_to_main": "返回主菜单",
+            "channel_specific": "频道特定",
+            "server_default": "服务器默认",
+            "channel_module": "频道模块",
+            "server_module": "服务器模块",
+            "current_channel": "当前频道",
+            "show_inheritance": "显示继承",
+            "remove_channel_prompt": "删除频道提示词",
+            "remove_server_prompt": "删除服务器提示词",
+            "reset_current_channel": "重置当前频道",
+            "reset_server_default": "重置服务器默认",
+            "reset_all_settings": "重置所有设置",
+            "execute_copy": "执行复制",
+            "confirm": "确认",
+            "confirm_remove": "删除确认",
+            "confirm_reset": "重置确认",
+            "confirm_copy": "复制确认",
+            "cancel": "取消",
+            "edit": "编辑",
+            "preview": "预览"
+        },
+        "menus": {
+            "set_prompt_title": "⚙️ 系统提示词设置",
+            "set_prompt_description": "请选择要设置的范围",
+            "view_options_title": "👁️ 系统提示词设置显示",
+            "view_options_description": "请选择显示选项",
+            "module_edit_title": "📦 模块编辑",
+            "module_edit_description": "请选择要编辑的模块和范围",
+            "module_scope_title": "📦 {scope}模块编辑",
+            "module_scope_description": "请选择要编辑的模块",
+            "copy_prompt_title": "📋 系统提示词复制",
+            "copy_prompt_description": "请选择源频道和目标频道",
+            "remove_prompt_title": "🗑️ 系统提示词删除",
+            "remove_prompt_description": "请选择要删除的范围",
+            "reset_config_title": "🔄 系统提示词重置",
+            "reset_config_description": "请选择要重置的范围"
+        },
+        "modals": {
+            "system_prompt": {
+                "title": "系统提示词设置",
+                "title_channel": "频道 #{channel} 系统提示词设置",
+                "title_server": "服务器默认系统提示词设置",
+                "title_edit": "系统提示词编辑",
+                "prompt_label": "系统提示词内容",
+                "prompt_placeholder": "请输入系统提示词内容..."
             },
-            "buttons": {
-                "set_prompt": "提示词设置",
-                "view_config": "设置显示",
-                "module_edit": "模块编辑",
-                "copy_prompt": "提示词复制",
-                "remove_prompt": "提示词删除",
-                "reset_config": "设置重置",
-                "back_to_main": "返回主菜单",
-                "channel_specific": "频道特定",
-                "server_default": "服务器默认",
-                "channel_module": "频道模块",
-                "server_module": "服务器模块",
-                "current_channel": "当前频道",
-                "show_inheritance": "显示继承",
-                "remove_channel_prompt": "删除频道提示词",
-                "remove_server_prompt": "删除服务器提示词",
-                "reset_current_channel": "重置当前频道",
-                "reset_server_default": "重置服务器默认",
-                "reset_all_settings": "重置所有设置",
-                "execute_copy": "执行复制",
-                "confirm": "确认",
-                "confirm_remove": "删除确认",
-                "confirm_reset": "重置确认",
-                "confirm_copy": "复制确认",
-                "cancel": "取消",
-                "edit": "编辑",
-                "preview": "预览"
-            },
-            "menus": {
-                "set_prompt_title": "⚙️ 系统提示词设置",
-                "set_prompt_description": "请选择要设置的范围",
-                "view_options_title": "👁️ 系统提示词设置显示",
-                "view_options_description": "请选择显示选项",
-                "module_edit_title": "📦 模块编辑",
-                "module_edit_description": "请选择要编辑的模块和范围",
-                "module_scope_title": "📦 {scope}模块编辑",
-                "module_scope_description": "请选择要编辑的模块",
-                "copy_prompt_title": "📋 系统提示词复制",
-                "copy_prompt_description": "请选择源频道和目标频道",
-                "remove_prompt_title": "🗑️ 系统提示词删除",
-                "remove_prompt_description": "请选择要删除的范围",
-                "reset_config_title": "🔄 系统提示词重置",
-                "reset_config_description": "请选择要重置的范围"
-            },
-            "modals": {
-                "system_prompt": {
-                    "title": "系统提示词设置",
-                    "title_channel": "频道 #{channel} 系统提示词设置",
-                    "title_server": "服务器默认系统提示词设置",
-                    "title_edit": "系统提示词编辑",
-                    "prompt_label": "系统提示词内容",
-                    "prompt_placeholder": "请输入系统提示词内容..."
-                },
-                "module_prompt": {
-                    "title": "模块设置: {module}",
-                    "prompt_label": "{module}模块内容",
-                    "prompt_placeholder": "请输入{module}模块内容..."
-                }
-            },
-            "selectors": {
-                "channel_placeholder": "选择频道",
-                "from_channel_placeholder": "选择源频道",
-                "to_channel_placeholder": "选择目标频道",
-                "module_placeholder": "选择要编辑的模块",
-                "module_description": "编辑{module}模块"
-            },
-            "embeds": {
-                "system_prompt_title": "🤖 系统提示词设置",
-                "preview_title": "🔍 系统提示词预览",
-                "modules_title": "📦 可用模块列表"
+            "module_prompt": {
+                "title": "模块设置: {module}",
+                "prompt_label": "{module}模块内容",
+                "prompt_placeholder": "请输入{module}模块内容..."
             }
         },
-        "messages": {
-            "success": {
-                "set": "✅ 系统提示词设置成功",
-                "set_description": "已成功为{scope}设置系统提示词",
-                "remove": "✅ 删除成功",
-                "remove_description": "已成功删除{scope}的系统提示词",
-                "copy": "✅ 复制成功",
-                "copy_description": "已成功将系统提示词从#{from_channel}复制到#{to_channel}",
-                "reset": "✅ 重置成功",
-                "reset_description": "已成功重置{scope}系统提示词设置",
-                "operation_confirmed": "✅ 操作已确认",
-                "operation_cancelled": "❌ 操作已取消"
-            },
-            "info": {
-                "scope_channel": "频道 #{channel}",
-                "scope_server": "服务器默认",
-                "scope_all": "全部",
-                "content_length": "内容长度",
-                "created_by": "创建者",
-                "source": "来源",
-                "source_yaml": "YAML基础提示词",
-                "source_server": "服务器默认 + YAML",
-                "source_channel": "频道特定 + 服务器默认 + YAML",
-                "source_cache": "缓存",
-                "prompt_length": "{length}字符",
-                "language": "语言",
-                "channel": "频道",
-                "inheritance_title": "继承层级",
-                "inheritance_yaml": "🔹 YAML基础提示词",
-                "inheritance_server": "🔸 服务器默认提示词",
-                "inheritance_channel": "🔸 频道特定提示词",
-                "inheritance_none": "仅YAML基础",
-                "modules_description": "以下是可覆盖的YAML系统提示词模块：",
-                "modules_usage": "在设置系统提示词时，您可以使用模块覆盖功能来定制特定模块",
-                "modules_none": "没有可用的模块",
-                "preview_content": "内容",
-                "preview_source": "来源",
-                "preview_length": "长度"
-            },
-            "confirm": {
-                "remove_channel": "是否要删除频道 #{channel} 的系统提示词？",
-                "remove_server": "是否要删除服务器默认系统提示词？",
-                "reset_channel": "是否要重置频道 #{channel} 的系统提示词？",
-                "reset_server": "是否要重置服务器默认系统提示词？",
-                "reset_all": "是否要重置所有系统提示词设置？\n⚠️ 此操作不可撤销！",
-                "copy_simple": "将系统提示词从#{from_channel}复制到#{to_channel}",
-                "copy_overwrite": "将系统提示词从#{from_channel}复制到#{to_channel}\n⚠️ 目标频道已存在系统提示词，将被覆盖",
-                "title_remove": "⚠️ 删除确认",
-                "title_reset": "⚠️ 重置确认",
-                "title_copy": "🔄 复制确认"
-            },
-            "validation": {
-                "prompt_empty": "❌ 系统提示词内容不能为空",
-                "prompt_too_long": "❌ 系统提示词过长（最多4000字符），当前{length}字符",
-                "same_channel": "❌ 源频道和目标频道不能相同",
-                "module_empty": "❌ {module}模块内容不能为空"
-            }
+        "selectors": {
+            "channel_placeholder": "选择频道",
+            "from_channel_placeholder": "选择源频道",
+            "to_channel_placeholder": "选择目标频道",
+            "module_placeholder": "选择要编辑的模块",
+            "module_description": "编辑{module}模块"
         },
-        "errors": {
-            "permission_denied": "您没有权限执行此操作",
-            "channel_permission_denied": "您没有权限管理此频道的系统提示词",
-            "server_permission_denied": "您没有权限管理服务器级别的系统提示词",
-            "prompt_not_found": "未找到{scope} {target_id}的系统提示词",
-            "channel_not_found": "找不到频道ID: {channel_id}",
-            "validation_failed": "验证失败：{error}",
-            "operation_failed": "操作失败：{error}",
-            "system_error": "系统错误，请稍后重试",
-            "timeout": "操作 '{operation}' 超时（{timeout}秒）",
-            "modal_error": "处理请求时出错: {error}",
-            "unknown_error": "发生了未知错误，请稍后重试",
-            "modules_unavailable": "找不到模块: {module}",
-            "configuration_error": "配置错误",
-            "content_too_long": "内容过长（当前{length}字符，最大{max}字符）",
-            "unsafe_content": "检测到不安全的内容模式: {error}",
-            "server_only": "此功能只能在服务器内使用",
-            "text_channel_only": "此功能只能在文本频道内使用",
-            "operation_cancelled": "操作已取消",
-            "no_channels_available": "没有可用的频道进行复制",
-            "internal_error": "内部错误，请稍后重试"
+        "embeds": {
+            "system_prompt_title": "🤖 系统提示词设置",
+            "preview_title": "🔍 系统提示词预览",
+            "modules_title": "📦 可用模块列表"
+        }
+    },
+    "messages": {
+        "success": {
+            "set": "✅ 系统提示词设置成功",
+            "set_description": "已成功为{scope}设置系统提示词",
+            "remove": "✅ 删除成功",
+            "remove_description": "已成功删除{scope}的系统提示词",
+            "copy": "✅ 复制成功",
+            "copy_description": "已成功将系统提示词从#{from_channel}复制到#{to_channel}",
+            "reset": "✅ 重置成功",
+            "reset_description": "已成功重置{scope}系统提示词设置",
+            "operation_confirmed": "✅ 操作已确认",
+            "operation_cancelled": "❌ 操作已取消"
         },
-        "modules": {
-            "descriptions": {
-                "base": "定义AI的基本身份和核心指令，包含机器人名称、创建者信息等基础设置",
-                "personality": "设置AI的个性特征和表现风格，包括幽默、礼貌、语言风格等",
-                "answering_principles": "规定AI的问答基本原则，包括优先级处理、信息来源标注等",
-                "language": "设置AI的语言偏好和表现，包括主要语言、风格要素、响应长度等",
-                "professionalism": "定义AI在专业话题上的表现标准，平衡幽默和专业性",
-                "interaction": "设置AI的交互模式，包括对话风格、专注度管理等等",
-                "formatting": "规定在Discord环境下的格式化规则，包括Markdown语法、提及格式等",
-                "professional_personality": "集成专业化和个性化设置，创造专业且有个性的AI表现"
-            },
-            "select_descriptions": {
-                "base": "基本身份和核心指令",
-                "personality": "个性特征和表现风格",
-                "answering_principles": "问答的基本原则",
-                "language": "语言偏好和表现",
-                "professionalism": "专业话题的表现标准",
-                "interaction": "交互模式和对话风格",
-                "formatting": "Discord格式化规则",
-                "professional_personality": "专业个性化设置"
-            },
-            "modules_select_descriptions": {
-                "base": "基本身份和核心指令",
-                "personality": "个性特征和表现风格",
-                "answering_principles": "问答的基本原则",
-                "language": "语言偏好和表现",
-                "professionalism": "专业话题的表现标准",
-                "interaction": "交互模式和对话风格",
-                "formatting": "Discord格式化规则",
-                "professional_personality": "专业个性化设置"
-            },
-            "help": {
-                "title": "📦 模块说明",
-                "description": "以下模块可以单独编辑以自定义AI的行为：",
-                "usage_tip": "💡 提示：编辑模块时会显示默认内容作为参考",
-                "inheritance_note": "⚠️ 注意：模块编辑会覆盖对应的YAML模块内容"
-            }
+        "info": {
+            "scope_channel": "频道 #{channel}",
+            "scope_server": "服务器默认",
+            "scope_all": "全部",
+            "content_length": "内容长度",
+            "created_by": "创建者",
+            "source": "来源",
+            "source_yaml": "YAML基础提示词",
+            "source_server": "服务器默认 + YAML",
+            "source_channel": "频道特定 + 服务器默认 + YAML",
+            "source_cache": "缓存",
+            "prompt_length": "{length}字符",
+            "language": "语言",
+            "channel": "频道",
+            "inheritance_title": "继承层级",
+            "inheritance_yaml": "🔹 YAML基础提示词",
+            "inheritance_server": "🔸 服务器默认提示词",
+            "inheritance_channel": "🔸 频道特定提示词",
+            "inheritance_none": "仅YAML基础",
+            "modules_description": "以下是可覆盖的YAML系统提示词模块：",
+            "modules_usage": "在设置系统提示词时，您可以使用模块覆盖功能来定制特定模块",
+            "modules_none": "没有可用的模块",
+            "preview_content": "内容",
+            "preview_source": "来源",
+            "preview_length": "长度"
         },
-        "user_experience": {
-            "default_content": {
-                "loaded": "✅ 已加载默认内容作为编辑基础",
-                "loading_failed": "⚠️ 默认内容加载失败，从空白开始",
-                "effective_prompt_loaded": "📝 已加载当前有效的完整系统提示词",
-                "module_default_loaded": "📦 已加载{module}模块的默认内容",
-                "channel_prompt_loaded": "已加载频道特定系统提示词作为基础",
-                "server_prompt_loaded": "已加载服务器默认系统提示词作为基础"
-            },
-            "editing": {
-                "based_on_current": "正在编辑当前有效的系统提示词...",
-                "based_on_default": "正在编辑{module}模块的默认内容...",
-                "from_scratch": "请输入新内容...",
-                "channel_specific_edit": "正在编辑频道特定系统提示词...",
-                "server_default_edit": "正在编辑服务器默认系统提示词...",
-                "current_effective_edit": "正在编辑当前有效的系统提示词（已恢复变量格式）..."
-            },
-            "guidance": {
-                "first_time_edit": "🎯 首次编辑提示：可以基于默认内容进行修改",
-                "module_explanation": "💭 此模块负责{description}",
-                "inheritance_info": "🔗 此设置影响{scope}"
-            }
+        "confirm": {
+            "remove_channel": "是否要删除频道 #{channel} 的系统提示词？",
+            "remove_server": "是否要删除服务器默认系统提示词？",
+            "reset_channel": "是否要重置频道 #{channel} 的系统提示词？",
+            "reset_server": "是否要重置服务器默认系统提示词？",
+            "reset_all": "是否要重置所有系统提示词设置？\n⚠️ 此操作不可撤销！",
+            "copy_simple": "将系统提示词从#{from_channel}复制到#{to_channel}",
+            "copy_overwrite": "将系统提示词从#{from_channel}复制到#{to_channel}\n⚠️ 目标频道已存在系统提示词，将被覆盖",
+            "title_remove": "⚠️ 删除确认",
+            "title_reset": "⚠️ 重置确认",
+            "title_copy": "🔄 复制确认"
         },
-        "manager": {
-            "status": {
-                "title": "🤖 系统提示词模块状态",
-                "cache_status": "缓存状态",
-                "cache_items": "缓存项目数",
-                "modules_count": "模块数",
-                "components_status": "组件状态",
-                "system_prompt_manager": "SystemPromptManager",
-                "permission_validator": "PermissionValidator",
-                "system_prompt_commands": "SystemPromptCommands",
-                "error_message": "显示状态时出错"
-            },
-            "cache": {
-                "success_message_all": "已成功清除所有系统提示词缓存",
-                "success_message_guild": "已成功清除服务器 {guild_id} 的系统提示词缓存",
-                "error_message": "清除缓存时出错"
-            }
+        "validation": {
+            "prompt_empty": "❌ 系统提示词内容不能为空",
+            "prompt_too_long": "❌ 系统提示词过长（最多4000字符），当前{length}字符",
+            "same_channel": "❌ 源频道和目标频道不能相同",
+            "module_empty": "❌ {module}模块内容不能为空"
+        }
+    },
+    "errors": {
+        "permission_denied": "您没有权限执行此操作",
+        "channel_permission_denied": "您没有权限管理此频道的系统提示词",
+        "server_permission_denied": "您没有权限管理服务器级别的系统提示词",
+        "prompt_not_found": "未找到{scope} {target_id}的系统提示词",
+        "channel_not_found": "找不到频道ID: {channel_id}",
+        "validation_failed": "验证失败：{error}",
+        "operation_failed": "操作失败：{error}",
+        "system_error": "系统错误，请稍后重试",
+        "timeout": "操作 '{operation}' 超时（{timeout}秒）",
+        "modal_error": "处理请求时出错: {error}",
+        "unknown_error": "发生了未知错误，请稍后重试",
+        "modules_unavailable": "找不到模块: {module}",
+        "configuration_error": "配置错误",
+        "content_too_long": "内容过长（当前{length}字符，最大{max}字符）",
+        "unsafe_content": "检测到不安全的内容模式: {error}",
+        "server_only": "此功能只能在服务器内使用",
+        "text_channel_only": "此功能只能在文本频道内使用",
+        "operation_cancelled": "操作已取消",
+        "no_channels_available": "没有可用的频道进行复制",
+        "internal_error": "内部错误，请稍后重试"
+    },
+    "modules": {
+        "descriptions": {
+            "base": "定义AI的基本身份和核心指令，包含机器人名称、创建者信息等基础设置",
+            "personality": "设置AI的个性特征和表现风格，包括幽默、礼貌、语言风格等",
+            "answering_principles": "规定AI的问答基本原则，包括优先级处理、信息来源标注等",
+            "language": "设置AI的语言偏好和表现，包括主要语言、风格要素、响应长度等",
+            "professionalism": "定义AI在专业话题上的表现标准，平衡幽默和专业性",
+            "interaction": "设置AI的交互模式，包括对话风格、专注度管理等等",
+            "formatting": "规定在Discord环境下的格式化规则，包括Markdown语法、提及格式等",
+            "professional_personality": "集成专业化和个性化设置，创造专业且有个性的AI表现"
+        },
+        "select_descriptions": {
+            "base": "基本身份和核心指令",
+            "personality": "个性特征和表现风格",
+            "answering_principles": "问答的基本原则",
+            "language": "语言偏好和表现",
+            "professionalism": "专业话题的表现标准",
+            "interaction": "交互模式和对话风格",
+            "formatting": "Discord格式化规则",
+            "professional_personality": "专业个性化设置"
+        },
+        "modules_select_descriptions": {
+            "base": "基本身份和核心指令",
+            "personality": "个性特征和表现风格",
+            "answering_principles": "问答的基本原则",
+            "language": "语言偏好和表现",
+            "professionalism": "专业话题的表现标准",
+            "interaction": "交互模式和对话风格",
+            "formatting": "Discord格式化规则",
+            "professional_personality": "专业个性化设置"
+        },
+        "help": {
+            "title": "📦 模块说明",
+            "description": "以下模块可以单独编辑以自定义AI的行为：",
+            "usage_tip": "💡 提示：编辑模块时会显示默认内容作为参考",
+            "inheritance_note": "⚠️ 注意：模块编辑会覆盖对应的YAML模块内容"
+        }
+    },
+    "user_experience": {
+        "default_content": {
+            "loaded": "✅ 已加载默认内容作为编辑基础",
+            "loading_failed": "⚠️ 默认内容加载失败，从空白开始",
+            "effective_prompt_loaded": "📝 已加载当前有效的完整系统提示词",
+            "module_default_loaded": "📦 已加载{module}模块的默认内容",
+            "channel_prompt_loaded": "已加载频道特定系统提示词作为基础",
+            "server_prompt_loaded": "已加载服务器默认系统提示词作为基础"
+        },
+        "editing": {
+            "based_on_current": "正在编辑当前有效的系统提示词...",
+            "based_on_default": "正在编辑{module}模块的默认内容...",
+            "from_scratch": "请输入新内容...",
+            "channel_specific_edit": "正在编辑频道特定系统提示词...",
+            "server_default_edit": "正在编辑服务器默认系统提示词...",
+            "current_effective_edit": "正在编辑当前有效的系统提示词（已恢复变量格式）..."
+        },
+        "guidance": {
+            "first_time_edit": "🎯 首次编辑提示：可以基于默认内容进行修改",
+            "module_explanation": "💭 此模块负责{description}",
+            "inheritance_info": "🔗 此设置影响{scope}"
+        }
+    },
+    "manager": {
+        "status": {
+            "title": "🤖 系统提示词模块状态",
+            "cache_status": "缓存状态",
+            "cache_items": "缓存项目数",
+            "modules_count": "模块数",
+            "components_status": "组件状态",
+            "system_prompt_manager": "SystemPromptManager",
+            "permission_validator": "PermissionValidator",
+            "system_prompt_commands": "SystemPromptCommands",
+            "error_message": "显示状态时出错"
+        },
+        "cache": {
+            "success_message_all": "已成功清除所有系统提示词缓存",
+            "success_message_guild": "已成功清除服务器 {guild_id} 的系统提示词缓存",
+            "error_message": "清除缓存时出错"
         }
     }
 }

@@ -82,7 +82,15 @@ class SystemPromptCache:
 
 class PromptValidator:
     """系統提示驗證器"""
-    
+    def __init__(self, bot: discord.Client):
+        """
+        初始化系統提示驗證器
+        
+        Args:
+            bot: Discord 機器人實例
+        """
+        self.bot = bot
+        
     MAX_PROMPT_LENGTH = 4000
     MAX_MODULE_COUNT = 10
     
@@ -176,7 +184,7 @@ class SystemPromptManager:
         self.bot = bot
         self.logger = get_logger(server_id="system", source=__name__)
         self.cache = SystemPromptCache()
-        self.validator = PromptValidator()
+        self.validator = PromptValidator(bot)
         self.permission_validator = PermissionValidator(bot)
         
         # 資料目錄路徑
@@ -1755,4 +1763,38 @@ class SystemPromptManager:
         except Exception as e:
             await func.report_error(e, "Failed to handle discord interaction cache issues")
             self.logger.error(f"handle_discord_interaction_cache_issues 失敗: {e}")
+    
+    def reload_all_configs(self) -> bool:
+        """
+        重新載入所有配置（用於 UI 介面）
+        
+        Returns:
+            是否重新載入成功
+        """
+        try:
+            self.logger.info("🔄 開始重新載入所有配置")
+            
+            # 清除所有快取
+            self.clear_cache()
+            
+            # 重新載入 YAML 配置
+            if self._prompt_manager:
+                if hasattr(self._prompt_manager, 'reload_prompts'):
+                    success = self._prompt_manager.reload_prompts()
+                    if not success:
+                        self.logger.warning("YAML 提示重新載入失敗")
+                else:
+                    # 如果沒有 reload_prompts 方法，嘗試重新初始化
+                    self._init_prompt_manager()
+            
+            # 重新初始化組件
+            self._reinitialize_components()
+            
+            self.logger.info("✅ 所有配置重新載入完成")
+            return True
+            
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "Error reloading all configs"))
+            self.logger.error(f"重新載入所有配置時發生錯誤: {e}")
+            return False
             return {'error': str(e), 'method': 'exception'}

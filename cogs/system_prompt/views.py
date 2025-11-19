@@ -848,7 +848,7 @@ class ModuleSelect(discord.ui.Select):
         self.channel = channel # This is the target channel for "channel" scope
         self.guild = guild
         self.scope_text = scope_text or ("伺服器預設" if scope == "server" else (f"頻道 #{channel.name}" if channel else "未知頻道"))
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
 
         if 'options' in kwargs and self.guild:
             self._update_option_descriptions()

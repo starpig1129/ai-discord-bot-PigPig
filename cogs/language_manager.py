@@ -132,7 +132,10 @@ class LanguageManager(commands.Cog):
                     try:
                         with open(item_path, 'r', encoding='utf-8') as f:
                             content = json.load(f)
-                            target_dict[file_key] = content
+                            if isinstance(content, dict) and file_key in content and len(content) == 1:
+                                target_dict[file_key] = content[file_key]
+                            else:
+                                target_dict[file_key] = content
                         self.logger.debug(f"Loaded translation file: {lang_code}/{os.path.relpath(item_path, os.path.join('translations', lang_code))}")
                     except Exception as e:
                         self.logger.error(f"Error loading translation file {item_path}: {e}")
