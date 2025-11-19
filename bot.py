@@ -178,11 +178,11 @@ class PigPig(commands.Bot):
             log.warning("Connection reset error while changing presence, retrying in 60 seconds...")
             await asyncio.sleep(60)
 
-    def get_logger_for_guild(self, guild_name):
+    def get_logger_for_guild(self, guild_id):
         """Get or create logger for a specific guild.
         
         Args:
-            guild_name (str): Name of the guild to get logger for.
+            guild_id (str): ID of the guild to get logger for.
             
         Returns:
             logging.Logger: Logger instance for the specified guild.
@@ -190,26 +190,28 @@ class PigPig(commands.Bot):
         Note:
             Creates a new logger if one doesn't exist for the guild.
         """
-        if guild_name in self.loggers:
-            return self.loggers[guild_name]
+        guild_id = str(guild_id)
+        if guild_id in self.loggers:
+            return self.loggers[guild_id]
         else:
-            self.setup_logger_for_guild(guild_name)
-            return self.loggers[guild_name]
+            self.setup_logger_for_guild(guild_id)
+            return self.loggers[guild_id]
         
-    def setup_logger_for_guild(self, guild_name):
+    def setup_logger_for_guild(self, guild_id):
         """Set up logger for a guild if it doesn't exist."""
-        if guild_name not in self.loggers:
+        guild_id = str(guild_id)
+        if guild_id not in self.loggers:
             try:
                 # Use the new logging manager factory
-                self.loggers[guild_name] = get_logger(server_id=guild_name, source="server")
+                self.loggers[guild_id] = get_logger(server_id=guild_id, source="server")
             except Exception as e:
                 # Report failure via project error reporting and fall back to a best-effort creation
                 try:
-                    asyncio.create_task(func.report_error(e, f"setup_logger_for_guild: {guild_name}"))
+                    asyncio.create_task(func.report_error(e, f"setup_logger_for_guild: {guild_id}"))
                 except Exception:
-                    log.error(f"Failed to create logger for {guild_name}: {e}")
+                    log.error(f"Failed to create logger for {guild_id}: {e}")
                     # Final fallback: create logger without additional context
-                    self.loggers[guild_name] = get_logger(server_id=guild_name, source="server")
+                    self.loggers[guild_id] = get_logger(server_id=guild_id, source="server")
         
     async def on_message(self, message: discord.Message, /) -> None:
         """Handle incoming Discord messages.
@@ -241,9 +243,9 @@ class PigPig(commands.Bot):
             if self.message_tracker:
                 await self.message_tracker.track_message(message)
             
-            guild_name = message.guild.name
-            self.setup_logger_for_guild(guild_name)
-            logger = self.loggers[guild_name]
+            guild_id = str(message.guild.id)
+            self.setup_logger_for_guild(guild_id)
+            logger = self.loggers[guild_id]
             bound_log = logger.bind(server_id=str(message.guild.id), user_id=str(message.author.id))
             
             bound_log.info(message=message.content, channel_or_file=str(message.channel.name), action="receive_message")
@@ -298,7 +300,7 @@ class PigPig(commands.Bot):
             if not before.guild or before.author.bot or not after.guild or after.author.bot:
                 return
             
-            logger = self.get_logger_for_guild(before.guild.name)
+            logger = self.get_logger_for_guild(str(before.guild.id))
             bound_log = logger.bind(server_id=str(before.guild.id), user_id=str(before.author.id))
             bound_log.info(
                 message=f"原訊息={before.content} 新訊息={after.content}",
@@ -436,14 +438,14 @@ class PigPig(commands.Bot):
         for guild in self.guilds:
             # Ensure logger exists and obtain it
             try:
-                self.setup_logger_for_guild(guild.name)
-                logger = self.loggers[guild.name]
+                self.setup_logger_for_guild(str(guild.id))
+                logger = self.loggers[str(guild.id)]
             except Exception as e:
                 # Report and continue if logger setup fails for this guild
                 try:
-                    asyncio.create_task(func.report_error(e, f"on_ready/setup_logger:{guild.name}"))
+                    asyncio.create_task(func.report_error(e, f"on_ready/setup_logger:{guild.id}"))
                 except Exception:
-                    log.error(f"Failed to setup logger for guild {guild.name}: {e}")
+                    log.error(f"Failed to setup logger for guild {guild.id}: {e}")
                 continue
 
             # Build channel state list
@@ -553,9 +555,9 @@ class PigPig(commands.Bot):
         # Try to get logger through bot
         logger = None
         if hasattr(self, "get_logger_for_guild"):
-            guild_name = ctx.guild.name if getattr(ctx, "guild", None) else "DirectMessage"
+            guild_id = str(ctx.guild.id) if getattr(ctx, "guild", None) else "DirectMessage"
             try:
-                logger = self.get_logger_for_guild(guild_name)
+                logger = self.get_logger_for_guild(guild_id)
             except Exception:
                 logger = None
 

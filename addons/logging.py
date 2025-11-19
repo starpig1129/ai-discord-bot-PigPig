@@ -322,7 +322,7 @@ class BackgroundWriter:
                 server, date_str, level = key.split("|", 2)
                 log_dir = os.path.join(CONFIG.get("log_base_path", "logs"), server, date_str)
                 os.makedirs(log_dir, exist_ok=True)
-                filename = os.path.join(log_dir, f"bot_log_{level}.jsonl")
+                filename = os.path.join(log_dir, f"{level.lower()}.jsonl")
                 attempt = 0
                 written = False
                 last_exc: Optional[Exception] = None
@@ -389,7 +389,7 @@ class BackgroundWriter:
                 server, date_str, level = key.split("|", 2)
                 log_dir = os.path.join(CONFIG.get("log_base_path", "logs"), server, date_str)
                 os.makedirs(log_dir, exist_ok=True)
-                filename = os.path.join(log_dir, f"bot_log_{level}.jsonl")
+                filename = os.path.join(log_dir, f"{level.lower()}.jsonl")
                 try:
                     with open(filename, "a", encoding="utf-8") as fh:
                         fh.write("\n".join(lines))
