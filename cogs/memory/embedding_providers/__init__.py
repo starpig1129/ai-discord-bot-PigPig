@@ -4,13 +4,12 @@
 
 import importlib
 import pkgutil
-import logging
 from typing import List, Callable, Optional
 
 # Ensure decorator is importable for provider modules (they will call it)
 from ..vector.manager import register_embedding_provider  # noqa: F401
-
-logger = logging.getLogger(__name__)
+from addons.logging import get_logger
+logger = get_logger(server_id="system", source=__name__)
 
 def _import_all_providers() -> None:
     """
@@ -22,9 +21,9 @@ def _import_all_providers() -> None:
         full_name = f"{package}.{name}"
         try:
             importlib.import_module(full_name)
-            logger.debug("Imported embedding provider module: %s", full_name)
+            logger.debug(f"Imported embedding provider module: {full_name}")
         except Exception as e:
-            logger.exception("Failed to import embedding provider %s: %s", full_name, e)
+            logger.exception(f"Failed to import embedding provider {full_name}: {e}")
 
 _import_all_providers()
 
@@ -45,5 +44,5 @@ def get_provider_factory(name: str) -> Optional[Callable]:
         registry = getattr(_vm, "_embedding_providers", {})
         return registry.get(name)
     except Exception:
-        logger.exception("Failed to get provider factory %s", name)
+        logger.exception(f"Failed to get provider factory {name}")
         return None

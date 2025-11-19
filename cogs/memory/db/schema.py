@@ -5,11 +5,10 @@ small migrations if needed.
 
 All comments and logs are written in English per project rules.
 """
-import logging
 import sqlite3
 from typing import Any
-
-logger = logging.getLogger(__name__)
+from addons.logging import get_logger
+logger = get_logger(server_id="system", source=__name__)
 
 
 def create_tables(conn: sqlite3.Connection) -> None:

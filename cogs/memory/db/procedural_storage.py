@@ -7,7 +7,6 @@ All error reporting uses func.report_error per project rules.
 from __future__ import annotations
 
 import json
-import logging
 import sqlite3
 import asyncio
 from datetime import datetime
@@ -16,8 +15,8 @@ from typing import Any, Dict, List, Optional
 from ..users.models import UserInfo
 from .connection import DatabaseConnection
 from function import func
-
-logger = logging.getLogger(__name__)
+from addons.logging import get_logger
+logger = get_logger(server_id="system", source=__name__)
 
 
 class ProceduralStorage:

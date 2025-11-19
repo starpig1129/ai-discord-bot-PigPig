@@ -6,10 +6,10 @@
 
 import discord
 from typing import Optional, Dict, Any, Callable, List
-import logging
 from function import func
 import asyncio
 
+from addons.logging import get_logger
 from .exceptions import ValidationError, ContentTooLongError
 
 
@@ -58,7 +58,7 @@ class SystemPromptModal(discord.ui.Modal):
         self.manager = manager
         self.channel_id = channel_id
         self.guild_id = guild_id
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
         
         # 如果沒有提供初始值且需要顯示預設內容，嘗試載入完整有效提示
         if not initial_value and show_default_content and manager and channel_id and guild_id:
@@ -259,7 +259,7 @@ class SystemPromptModuleModal(discord.ui.Modal):
         self.callback_func = callback_func
         self.manager = manager
         self.module_description = module_description
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
         
         # 如果沒有提供初始值且需要顯示預設內容，載入預設模組內容
         placeholder_text = f"請輸入 {module_name} 模組的內容..."
@@ -390,7 +390,7 @@ class ConfirmationView(discord.ui.View):
         super().__init__(timeout=timeout, **kwargs)
         self.result = None
         self.confirmed = False
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
         
         # 確認按鈕
         self.confirm_button = discord.ui.Button(
@@ -460,7 +460,7 @@ class ChannelSelectView(discord.ui.View):
         super().__init__(timeout=timeout, **kwargs)
         self.callback_func = callback_func
         self.selected_channel = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
         
         # 建立選項
         options = []
@@ -529,7 +529,7 @@ class ModuleSelectView(discord.ui.View):
         super().__init__(timeout=timeout, **kwargs)
         self.callback_func = callback_func
         self.selected_modules = []
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
         
         # 建立選項
         options = []
@@ -597,7 +597,7 @@ class SystemPromptView(discord.ui.View):
         super().__init__(timeout=timeout, **kwargs)
         self.prompt_data = prompt_data
         self.can_edit = can_edit
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
         
         if can_edit:
             # 編輯按鈕

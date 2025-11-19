@@ -5,10 +5,10 @@
 """
 
 import time
-import logging
 from typing import Dict, Any, Optional
 
-logger = logging.getLogger(__name__)
+from addons.logging import get_logger
+logger = get_logger(server_id="system", source=__name__)
 
 class CacheConsistencyChecker:
     """快取一致性檢查器"""

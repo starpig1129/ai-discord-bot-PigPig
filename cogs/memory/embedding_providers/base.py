@@ -1,14 +1,14 @@
 from typing import Optional
 import asyncio
-import logging
 
 from langchain_core.embeddings import Embeddings
 
 from ..vector.manager import register_embedding_provider
 from addons.settings import MemoryConfig
+from addons.logging import get_logger
 from function import func
 
-logger = logging.getLogger(__name__)
+logger = get_logger(server_id="system", source=__name__)
 
 
 @register_embedding_provider("base")

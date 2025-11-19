@@ -6,6 +6,7 @@
 
 import discord
 from typing import Optional, Dict, Any, Callable, List
+
 from addons.logging import get_logger
 
 from .manager import SystemPromptManager
@@ -1032,7 +1033,7 @@ class SystemPromptCopyView(discord.ui.View):
         self.manager = manager
         self.permission_validator = permission_validator
         self.guild = guild
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
 
         # Get visible text channels bot has permissions for
         text_channels = [
@@ -1071,7 +1072,7 @@ class SystemPromptRemoveView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.manager = manager
         self.permission_validator = permission_validator
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
 
         self.add_item(RemoveButton(
             label="移除當前頻道提示", emoji="📢", style=discord.ButtonStyle.danger, remove_type="channel", row=0
@@ -1091,7 +1092,7 @@ class SystemPromptResetView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.manager = manager
         self.permission_validator = permission_validator
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
 
         self.add_item(ResetButton(
             label="重置當前頻道", emoji="📢", style=discord.ButtonStyle.danger, reset_type="channel", row=0
@@ -1111,7 +1112,7 @@ class BackButton(discord.ui.Button):
     """返回主選單按鈕"""
     def __init__(self, row: int = 4): # Default row or specified
         super().__init__(label="返回主選單", emoji="🔙", style=discord.ButtonStyle.secondary, row=row)
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
 
     async def callback(self, interaction: discord.Interaction):
         """返回主選單"""
@@ -1143,7 +1144,7 @@ class ChannelSelect(discord.ui.Select):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.selected_channel_id: Optional[str] = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
 
 
     async def callback(self, interaction: discord.Interaction):
@@ -1163,7 +1164,7 @@ class CopyExecuteButton(discord.ui.Button):
     """執行複製按鈕"""
     def __init__(self, **kwargs):
         super().__init__(label="執行複製", emoji="📋", style=discord.ButtonStyle.success, **kwargs)
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
 
     async def callback(self, interaction: discord.Interaction):
         view: SystemPromptCopyView = self.view
@@ -1237,7 +1238,7 @@ class RemoveButton(discord.ui.Button):
     def __init__(self, remove_type: str, **kwargs):
         super().__init__(**kwargs)
         self.remove_type = remove_type
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
 
     async def callback(self, interaction: discord.Interaction):
         view: SystemPromptRemoveView = self.view
@@ -1324,7 +1325,7 @@ class ResetButton(discord.ui.Button):
     def __init__(self, reset_type: str, **kwargs):
         super().__init__(**kwargs)
         self.reset_type = reset_type
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="system", source=__name__)
 
     async def callback(self, interaction: discord.Interaction):
         view: SystemPromptResetView = self.view

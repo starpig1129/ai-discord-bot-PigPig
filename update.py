@@ -16,7 +16,6 @@ import os
 import sys
 import argparse
 import asyncio
-import logging
 from typing import Optional
 
 # Add current directory to path for imports
