@@ -266,6 +266,20 @@ class UserMemoryTools:
                                         extra={"provided_user_id": user_id}
                                     )
                                     fetched_user = None
+
+                                    # Fallback to message author if the provided ID is invalid/unknown
+                                    # This handles cases where LLM hallucinates an ID (e.g. Guild ID)
+                                    msg = getattr(runtime, "message", None)
+                                    if msg and getattr(msg, "author", None):
+                                        author_id = getattr(msg.author, "id", None)
+                                        if author_id and author_id != int_id:
+                                            logger.info(
+                                                f"Falling back to message author {author_id} after invalid user_id {int_id}",
+                                                extra={"original_id": int_id, "new_id": author_id}
+                                            )
+                                            effective_id = author_id
+                                            fetched_user = msg.author
+
                                 except discord.HTTPException as he:
                                     # transient HTTP error - report and continue with fallback
                                     logger.warning(
