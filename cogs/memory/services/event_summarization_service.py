@@ -70,11 +70,11 @@ class MemoryFragment(BaseModel):
     )
     start_message_id: int = Field(
         ...,
-        description="The ID of the first message in the conversation that is part of this memory.",
+        description="The ID of the first message in the conversation that is part of this memory. This corresponds to the 'id' field in the provided conversation history (e.g., 1, 2, 3).",
     )
     end_message_id: int = Field(
         ...,
-        description="The ID of the last message in the conversation that is part of this memory.",
+        description="The ID of the last message in the conversation that is part of this memory. This corresponds to the 'id' field in the provided conversation history (e.g., 1, 2, 3).",
     )
 
 class MemoryFragmentList(BaseModel):
@@ -289,11 +289,12 @@ class EventSummarizationService:
         """
         message_data = []
         
-        for message in messages:
+        for index, message in enumerate(messages, start=1):
             # Format timestamp as ISO string for LLM processing
             timestamp = message.created_at.replace(tzinfo=timezone.utc).isoformat()
             
             message_dict = {
+                "id": index,
                 "author": message.author.display_name or message.author.name,
                 "timestamp": timestamp,
                 "content": message.content or ""  # Handle empty content
@@ -486,37 +487,45 @@ class EventSummarizationService:
             EventMetadata object
         """
         try:
-            # Use message IDs from memory_fragment
-            start_message_id = memory_fragment.start_message_id
-            end_message_id = memory_fragment.end_message_id
+            # Use message IDs from memory_fragment (these are 1-based indices)
+            start_seq_id = memory_fragment.start_message_id
+            end_seq_id = memory_fragment.end_message_id
             
-            # Find the corresponding messages in the list
+            # Map sequence IDs back to real messages
+            # Note: sequence IDs are 1-based, so we subtract 1 for list index
             start_message = None
             end_message = None
+            
+            if 0 < start_seq_id <= len(messages):
+                start_message = messages[start_seq_id - 1]
+            
+            if 0 < end_seq_id <= len(messages):
+                end_message = messages[end_seq_id - 1]
+            
+            # If we couldn't find the exact messages by index, fallback to first and last
+            if not start_message:
+                start_message = messages[0] if messages else None
+            if not end_message:
+                end_message = messages[-1] if messages else None
+                
+            # Ensure start comes before end
+            if start_message and end_message and messages.index(start_message) > messages.index(end_message):
+                start_message, end_message = end_message, start_message
+
+            # Get the real Discord IDs
+            start_message_id = start_message.id if start_message else 0
+            end_message_id = end_message.id if end_message else 0
+            
+            # Collect messages in range
             messages_in_range = []
-            
-            for msg in messages:
-                if msg.id == start_message_id:
-                    start_message = msg
-                if msg.id == end_message_id:
-                    end_message = msg
-                # Include messages that are within the ID range
-                if start_message_id <= msg.id <= end_message_id:
-                    messages_in_range.append(msg)
-            
-            # If we couldn't find the exact messages, fallback to first and last by timestamp
-            if not start_message or not end_message:
-                sorted_messages = sorted(messages, key=lambda m: m.created_at)
-                start_message = start_message or sorted_messages[0]
-                end_message = end_message or sorted_messages[-1]
-                
-                # Update the memory_fragment with fallback message IDs
-                start_message_id = start_message.id
-                end_message_id = end_message.id
-                
-                # If we couldn't find messages in range, use all messages
-                if not messages_in_range:
-                    messages_in_range = sorted_messages
+            if start_message and end_message:
+                try:
+                    start_idx = messages.index(start_message)
+                    end_idx = messages.index(end_message)
+                    messages_in_range = messages[start_idx : end_idx + 1]
+                except ValueError:
+                    # Fallback if messages not found in list (shouldn't happen with indices)
+                    messages_in_range = messages
             
             # Collect unique user IDs from messages within the range
             user_ids = list(set(msg.author.id for msg in messages_in_range))
