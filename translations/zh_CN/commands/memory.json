@@ -1,6 +1,4 @@
 {
-    "commands": {
-        "memory": {
             "force_update": {
                 "starting": "开始强制更新记忆...",
                 "not_text_channel": "此命令必须在文字频道中使用。",
@@ -16,5 +14,3 @@
                 "error": "搜索记忆时发生错误，已记录错误日志。"
             }
         }
-    }
-}

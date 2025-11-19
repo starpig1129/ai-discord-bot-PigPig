@@ -1,20 +1,16 @@
 {
-    "commands": {
-        "memory": {
-            "force_update": {
-                "starting": "Starting forced memory update...",
-                "not_text_channel": "This command must be used in a text channel.",
-                "success": "Force update completed",
-                "error": "Force update failed, error has been logged."
-            },
-            "search": {
-                "searching": "Searching episodic memory...",
-                "no_parameters": "Please provide at least one search parameter (vector_query, keyword_query, user_id, or channel_id).",
-                "results_found": "Found {len} related memories:\n\n",
-                "no_results": "No matching memories found.",
-                "not_implemented": "Search functionality is not yet implemented in the storage backend. Please contact the developer.",
-                "error": "An error occurred while searching memory, error has been logged."
-            }
-        }
+    "force_update": {
+        "starting": "Starting forced memory update...",
+        "not_text_channel": "This command must be used in a text channel.",
+        "success": "Force update completed",
+        "error": "Force update failed, error has been logged."
+    },
+    "search": {
+        "searching": "Searching episodic memory...",
+        "no_parameters": "Please provide at least one search parameter (vector_query, keyword_query, user_id, or channel_id).",
+        "results_found": "Found {len} related memories:\n\n",
+        "no_results": "No matching memories found.",
+        "not_implemented": "Search functionality is not yet implemented in the storage backend. Please contact the developer.",
+        "error": "An error occurred while searching memory, error has been logged."
     }
 }
