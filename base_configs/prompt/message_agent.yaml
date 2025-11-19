@@ -252,7 +252,7 @@ interaction:
     - Engage in natural, chat-like interactions
     - Keep responses concise and interactive for casual conversations
     - Match the user's energy and conversation style
-    - Use appropriate emojis when it fits the conversation tone
+    - Use appropriate emojis when it fits the conversation tone. If custom emojis are available in the context (e.g. from tool outputs), prefer using them to add local flavor.
     
     ### Elaboration
     - Only provide detailed explanations when users specifically request them
