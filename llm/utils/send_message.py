@@ -377,7 +377,8 @@ async def send_message(
     message_to_edit: Optional[discord.Message],
     message: discord.Message,
     streamer: AsyncIterator,
-    update_interval: float = _UPDATE_INTERVAL
+    update_interval: float = _UPDATE_INTERVAL,
+    raise_exception: bool = False
 ) -> str:
     """Consumes a token stream and updates Discord messages with time-based updates.
     
@@ -391,6 +392,7 @@ async def send_message(
         message: Original Discord message for context and channel information.
         streamer: Token stream iterator (async or sync).
         update_interval: Time interval (seconds) between message updates.
+        raise_exception: If True, raise exception on failure instead of sending error message.
         
     Returns:
         Full message result string.
@@ -435,6 +437,9 @@ async def send_message(
         return message_result
 
     except Exception as exc:
+        if raise_exception:
+            raise exc
+            
         await func.report_error(exc, 'Error generating GPT response')
         _logger.error(f'Error generating GPT response: {exc}')
         

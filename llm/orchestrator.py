@@ -222,11 +222,38 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
             #print("Message Agent Messages:\n", messages_for_message_agent)
             
-            streamer = message_agent.astream(
-                {"messages": messages_for_message_agent},
-                stream_mode="messages",
-            )
-            message_result = await send_message(bot, message_edit, message, streamer)
+            # Retry loop for message generation to handle empty responses or transient errors
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    streamer = message_agent.astream(
+                        {"messages": messages_for_message_agent},
+                        stream_mode="messages",
+                    )
+                    
+                    # On last attempt, let send_message handle the error (send error msg to user)
+                    # For earlier attempts, raise exception to trigger retry
+                    should_raise = (attempt < max_retries - 1)
+                    
+                    message_result = await send_message(
+                        bot, 
+                        message_edit, 
+                        message, 
+                        streamer,
+                        raise_exception=should_raise
+                    )
+                    # If we get here, success!
+                    break
+                    
+                except Exception as e:
+                    logger.warning(f"Message generation attempt {attempt + 1}/{max_retries} failed: {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)  # Wait a bit before retry
+                    else:
+                        # This block should theoretically not be reached if raise_exception=False 
+                        # on the last attempt, as send_message would return the error string.
+                        # But if it does raise (e.g. critical error), re-raise it.
+                        raise
 
         except Exception as e:
             await asyncio.create_task(func.report_error(e, "message_agent failed"))
