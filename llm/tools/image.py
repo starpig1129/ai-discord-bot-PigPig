@@ -27,7 +27,7 @@ using the ImageGenerationCog.
 """
 
 import io
-import logging
+from addons.logging import get_logger
 from typing import Optional, TYPE_CHECKING
 
 import aiohttp
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 
 
 # Module-level logger
-_logger = logging.getLogger(__name__)
+_logger = get_logger(server_id="Bot", source="llm.tools.image")
 
 
 class ImageTools:
@@ -222,7 +222,7 @@ class ImageTools:
                     except Exception as e:
                         # Report conversion errors via func.report_error and log context
                         await func.report_error(e, "converting attachment to discord.File")
-                        logger.exception("Attachment conversion failed", extra={"attachment": att, "error": str(e)})
+                        logger.error("Attachment conversion failed", exception=e)
 
                 content = result.get("content")
                 if files:

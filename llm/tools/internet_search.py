@@ -26,7 +26,7 @@ This module provides LangChain-compatible tools for performing various types
 of internet searches using the InternetSearchCog.
 """
 
-import logging
+from addons.logging import get_logger
 import os
 import time
 from typing import Literal, TYPE_CHECKING
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 
 # Module-level logger
-_logger = logging.getLogger(__name__)
+_logger = get_logger(server_id="Bot", source="llm.tools.internet_search")
 
 
 class InternetSearchTools:
@@ -153,7 +153,7 @@ class InternetSearchTools:
             except Exception as e:  # pragma: no cover - external IO
                 duration = time.time() - start_ts
                 await func.report_error(e, f"Internet search for '{query}' of type '{search_type}' failed after {duration:.2f}s")
-                logger.exception("Internet search tool failed", exc_info=e)
+                logger.error("Internet search tool failed", exception=e)
                 return f"An unexpected error occurred during the search: {e}"
 
         return [internet_search]

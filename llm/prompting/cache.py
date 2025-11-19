@@ -1,5 +1,5 @@
 import threading
-import logging
+from addons.logging import get_logger
 from typing import Dict, Any, Optional, Set
 from datetime import datetime, timedelta
 from function import func
@@ -14,7 +14,7 @@ class PromptCache:
         self.precompiled_cache: Dict[str, str] = {}
         self.access_count: Dict[str, int] = {}
         self._lock = threading.RLock()
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="Bot", source="llm.prompting.cache")
         
     def get(self, key: str) -> Optional[Any]:
         """

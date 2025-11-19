@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import logging
+from addons.logging import get_logger
 from typing import Optional
 
 from .story.manager import StoryManager
@@ -21,7 +21,7 @@ class StoryManagerCog(commands.Cog, name="StoryManagerCog"):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="Bot", source="story_manager")
         self.system_prompt_manager: Optional[SystemPromptManager] = None
         self.story_manager: Optional[StoryManager] = None
         self.ui_manager: Optional[UIManager] = None

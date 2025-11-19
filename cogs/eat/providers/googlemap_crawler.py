@@ -16,8 +16,9 @@ import re
 import concurrent.futures
 import asyncio
 from function import func
+from addons.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(server_id="Bot", source="eat.crawler")
 
 # 定義一個用於從Google地圖爬取餐廳信息的類
 class GoogleMapCrawler:
@@ -46,7 +47,7 @@ class GoogleMapCrawler:
             selected = BeautifulSoup(html, "lxml")
         except Exception as e:
             asyncio.create_task(func.report_error(e, "cogs/eat/providers/googlemap_crawler.py/search/get_url"))
-            print('只有一個結果')
+            logger.warning('只有一個結果')
             url=f"https://www.google.com/maps/search/{keyword}餐廳"
             selected = BeautifulSoup(html, "lxml")
         # 提取餐廳的標題、評分、類別和地址

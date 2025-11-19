@@ -1,5 +1,5 @@
 import asyncio
-import logging
+from addons.logging import get_logger
 from typing import Dict, List, Optional, Any
 
 from llm.prompting.loader import PromptLoader
@@ -24,7 +24,7 @@ class PromptManager:
         self.builder = PromptBuilder()
         self.file_watcher = FileWatcher()
         
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="Bot", source="llm.prompting.manager")
         self._initialized = False
         
         # 初始化管理器

@@ -26,7 +26,7 @@ This module provides LangChain-compatible tools for setting reminders
 using the ReminderCog.
 """
 
-import logging
+from addons.logging import get_logger
 from typing import Optional, TYPE_CHECKING
 
 from langchain_core.tools import tool
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 
 # Module-level logger
-_logger = logging.getLogger(__name__)
+_logger = get_logger(server_id="Bot", source="llm.tools.reminder")
 
 
 class ReminderTools:

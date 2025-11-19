@@ -16,8 +16,9 @@ import pkgutil
 import importlib
 import asyncio
 import threading
-import logging
-logger = logging.getLogger(__name__)
+import threading
+from addons.logging import get_logger
+logger = get_logger(server_id="Bot", source="llm.tools_factory")
 
 from langchain_core.tools import StructuredTool,BaseTool
 from function import func
@@ -32,7 +33,7 @@ def _report_async(exc: Exception, ctx: str) -> None:
     try:
         asyncio.create_task(func.report_error(exc, ctx))
     except Exception:
-        print(f"[llm.tools] report_error failed: {exc} ({ctx})")
+        logger.error(f"[llm.tools] report_error failed: {exc} ({ctx})")
 
 
 def _compute_pkg_dir_mtime(pkg_dir: str) -> float:
@@ -74,7 +75,7 @@ def _discover_tools_package() -> Iterable[Any]:
     except Exception:
         # 若 logger 尚未正確建立，回退到 print（不改變程式行為）
         try:
-            print(
+            logger.debug(
                 f"[llm.tools debug] tools_py exists={os.path.isfile(tools_py)}, "
                 f"tools_dir exists={os.path.isdir(pkg_dir)}, pkg_dir={pkg_dir}"
             )

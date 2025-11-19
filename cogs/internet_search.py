@@ -49,6 +49,7 @@ from typing import Optional
 from .language_manager import LanguageManager
 from llm.utils.send_message import safe_edit_message
 from function import func
+from addons.logging import get_logger
 
 def install_driver():
     return ChromeDriverManager().install()
@@ -60,6 +61,7 @@ class InternetSearchCog(commands.Cog):
         self.train = Train(db=self.db)
         self.map = GoogleMapCrawler()
         self.lang_manager: Optional[LanguageManager] = None
+        self.logger = get_logger(server_id="Bot", source="internet_search")
 
     async def cog_load(self):
         """當 Cog 載入時初始化語言管理器"""
@@ -189,18 +191,14 @@ class InternetSearchCog(commands.Cog):
                 except Exception:
                     # 保底：忽略發送失敗，避免中斷後續流程
                     pass
-                from addons.logging import get_logger
-                log = get_logger(source=__name__, server_id="system")
-                log.info("internet_search: Original message not found, sending new message instead.")
+                self.logger.info("Original message not found, sending new message instead.")
         
         # 將外部傳入的 search_type 正規化，支援 'web' 作為一般網頁搜尋別名
         normalized_type = (search_type or "").strip().lower()
         if normalized_type == "web":
             # 將 'web' 對應到現有的一般搜尋邏輯
             normalized_type = "general"
-            from addons.logging import get_logger
-            log = get_logger(source=__name__, server_id="system")
-            log.info("internet_search: Received search_type='web', mapped to 'general'.")
+            self.logger.info("Received search_type='web', mapped to 'general'.")
         else:
             # 若非已知型別，保留原字串，後續落入未知類型處理
             pass
@@ -225,8 +223,7 @@ class InternetSearchCog(commands.Cog):
             return None
         else:
             # 未知的 search_type，回傳本地化錯誤訊息，並記錄警告以便診斷
-            import logging
-            logging.getLogger(__name__).warning(f"internet_search: 未知的搜索類型：{search_type}")
+            self.logger.warning(f"未知的搜索類型：{search_type}")
             error_message = self.lang_manager.translate(
                 guild_id,
                 "commands",
@@ -362,7 +359,7 @@ class InternetSearchCog(commands.Cog):
             
         except Exception as e:
             # Log the error but don't fail the entire search
-            print(f"Warning: Failed to extract sources from grounding metadata: {e}")
+            self.logger.warning(f"Failed to extract sources from grounding metadata: {e}")
             asyncio.create_task(func.report_error(e, f"google_search grounding metadata extraction: {e}"))
             return ""
 
@@ -381,7 +378,7 @@ class InternetSearchCog(commands.Cog):
                 )
                 service = Service(driver_path)
         except (concurrent.futures.TimeoutError, Exception) as e:
-            print(f"ChromeDriverManager timed out or failed: {e}, falling back to local driver")
+            self.logger.warning(f"ChromeDriverManager timed out or failed: {e}, falling back to local driver")
             await func.report_error(e, f"google_search ChromeDriverManager: {e}")
             chrome_driver_path = './chromedriverlinux64/chromedriver'
             service = Service(executable_path=chrome_driver_path)
@@ -439,8 +436,7 @@ class InternetSearchCog(commands.Cog):
             try:
                 await safe_edit_message(message_to_edit, content)
             except discord.errors.NotFound:
-                import logging
-                logging.getLogger(__name__).info("send_error_message: 臨時訊息不存在，略過文字訊息編輯。")
+                self.logger.info("send_error_message: 臨時訊息不存在，略過文字訊息編輯。")
 
     async def youtube_search(self, ctx, query, message_to_edit=None):
         try:
@@ -524,8 +520,7 @@ class InternetSearchCog(commands.Cog):
                 try:
                     await message_to_edit.edit(embed=embed, view=view)
                 except discord.errors.NotFound:
-                    import logging
-                    logging.getLogger(__name__).info("eat_search: 臨時訊息不存在，略過結果訊息編輯。")
+                    self.logger.info("eat_search: 臨時訊息不存在，略過結果訊息編輯。")
 
             self.train.genModel(str(ctx.guild.id))
             return None  

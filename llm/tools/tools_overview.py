@@ -12,7 +12,7 @@
 # Error reporting uses func.report_error to comply with project rules.
 import importlib
 import inspect
-import logging
+from addons.logging import get_logger
 import pkgutil
 from typing import Any, List
 
@@ -20,7 +20,7 @@ from langchain_core.tools import tool
 
 from function import func
 
-_logger = logging.getLogger(__name__)
+_logger = get_logger(server_id="Bot", source="llm.tools.tools_overview")
 
 
 class ToolsOverviewTools:

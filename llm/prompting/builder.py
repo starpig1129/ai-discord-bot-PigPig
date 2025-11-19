@@ -1,4 +1,4 @@
-import logging
+from addons.logging import get_logger
 from typing import List, Optional, Union
 import asyncio
 from function import func
@@ -7,7 +7,7 @@ class PromptBuilder:
     
     def __init__(self):
         """初始化建構器"""
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="Bot", source="llm.prompting.builder")
         
         # Module title mapping — align keys with YAML module names
         self.module_titles = {

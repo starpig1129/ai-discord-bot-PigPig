@@ -12,7 +12,7 @@ class DB:
 
     def getKeywords(self) -> list: 
         getCommand = select(Keywords.keyword)
-        print(getCommand)
+        # print(getCommand)
 
         with Session(self.engine) as session:
             result = session.execute(getCommand)
@@ -65,7 +65,7 @@ class DB:
             # print(f"Debug: record: {record}")
             record:SearchRecord = session.get(SearchRecord, id)
             
-            print(f"Debug: record: {record}")
+            # print(f"Debug: record: {record}")
 
             if record == None:
                 return False 

@@ -50,6 +50,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
         self.client = genai.Client(api_key=self.tokens.google_api_key)
         self.model_id = "timbrooks/instruct-pix2pix"
         self.conversation_history: Dict[int, List[Dict]] = {}
+        self.logger = get_logger(server_id="Bot", source="gen_img")
 
     async def cog_load(self):
         """Initialize the language manager when the cog is loaded"""
@@ -106,12 +107,12 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     try:
                         raw = image_buffer.read()
                         if not raw:
-                            print("[GenImg][WARN] image_buffer is empty (Gemini branch); treating as failure")
+                            self.logger.warning("image_buffer is empty (Gemini branch); treating as failure")
                             raise ValueError("empty_image_buffer")
                         b64 = base64.b64encode(raw).decode("utf-8")
                     except Exception as enc_err:
                         asyncio.create_task(func.report_error(enc_err, "Gemini image encoding failed"))
-                        print(f"[GenImg][ERROR] Gemini image encoding failed: {enc_err}")
+                        self.logger.error(f"Gemini image encoding failed: {enc_err}")
                         raise
 
                     success_message = self.lang_manager.translate(
@@ -132,7 +133,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                             }
                         ]
                     }
-                    print("[GenImg][INFO] Generation succeeded (Gemini branch); returning with attachment")
+                    self.logger.info("Generation succeeded (Gemini branch); returning with attachment")
                     return payload
                 elif response_text.strip():
 
@@ -145,7 +146,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                 error_message = self.lang_manager.translate(
                     guild_id, "commands", "generate_image", "errors", "gemini_generation_error", error=str(e)
                 )
-                print(error_message)
+                self.logger.error(error_message)
 
             if channel:
                 image_buffer = await self.generate_with_local_model(channel, prompt, guild_id=guild_id)
@@ -154,14 +155,14 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     try:
                         raw = image_buffer.read()
                         if not raw:
-                            print("[GenImg][WARN] image_buffer is empty (Local branch); treating as failure")
+                            self.logger.warning("image_buffer is empty (Local branch); treating as failure")
                             raise ValueError("empty_image_buffer")
                         b64 = base64.b64encode(raw).decode("utf-8")
                     except Exception as enc_err:
                         asyncio.create_task(func.report_error(enc_err, "Local model image encoding failed"))
-                        print(f"[GenImg][ERROR] Local model image encoding failed: {enc_err}")
+                        self.logger.error(f"Local model image encoding failed: {enc_err}")
                         raise
-                    print("[GenImg][INFO] Generation succeeded (Local branch); returning with attachment")
+                    self.logger.info("Generation succeeded (Local branch); returning with attachment")
                     return {
                         "attachments": [
                             {
@@ -174,7 +175,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                         ]
                     }
                 else:
-                    print("[GenImg][WARN] Local branch did not produce an image; returning error")
+                    self.logger.warning("Local branch did not produce an image; returning error")
 
             error_message = self.lang_manager.translate(
                 guild_id, "commands", "generate_image", "responses", "all_methods_failed"
@@ -186,7 +187,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
             error_message = self.lang_manager.translate(
                 guild_id, "commands", "generate_image", "responses", "general_error", error=str(e)
             )
-            print(f"Image generation process error: {str(e)}")
+            self.logger.error(f"Image generation process error: {str(e)}")
             return {"error": error_message}
 
     @app_commands.command(name="generate_image", description="生成或編輯圖片")
@@ -208,7 +209,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                         input_images.append(img)
                     except Exception as e:
                         await func.report_error(e, f"generate_image_command attachment read: {e}")
-                        print(f"Failed to read attachment image: {e}")
+                        self.logger.error(f"Failed to read attachment image: {e}")
 
         result = await self._generate_image_logic(
             prompt=prompt,
@@ -232,7 +233,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                         files.append(discord.File(io.BytesIO(data), filename=fname))
                 except Exception as e:
                     await func.report_error(e, "Slash command file conversion failed")
-                    print(f"Slash reply conversion failed: {e}")
+                    self.logger.error(f"Slash reply conversion failed: {e}")
             content = result.get("content")
             if files:
                 await interaction.followup.send(content=content, files=files)
@@ -303,9 +304,9 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                                 "image_processing_error",
                                 error=str(e)
                             )
-                            print(error_msg)
+                            self.logger.error(error_msg)
                         else:
-                            print(f"Image processing error: {str(e)}")
+                            self.logger.error(f"Image processing error: {str(e)}")
             
             final_text = " ".join(text for text in response_text if text)
             return image_buffer, final_text or None
@@ -321,9 +322,9 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     "gemini_generation_error",
                     error=str(e)
                 )
-                print(error_msg)
+                self.logger.error(error_msg)
             else:
-                print(f"Gemini API generation error: {str(e)}")
+                self.logger.error(f"Gemini API generation error: {str(e)}")
             return None, None
 
     async def generate_with_local_model(self, channel, prompt: str, n_steps: int = 10, message_to_edit: discord.Message = None, guild_id: str = None):
@@ -397,9 +398,9 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     "local_model_error",
                     error=str(e)
                 )
-                print(error_msg)
+                self.logger.error(error_msg)
             else:
-                print(f"Local model generation error: {str(e)}")
+                self.logger.error(f"Local model generation error: {str(e)}")
                 return None
 
     async def cog_unload(self):

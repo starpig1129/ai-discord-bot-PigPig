@@ -1,5 +1,5 @@
 import asyncio
-import logging
+from addons.logging import get_logger
 from typing import List, Optional
 
 import discord
@@ -7,7 +7,7 @@ from llm.prompting.manager import get_prompt_manager
 from function import func
 
 # Logger
-_logger = logging.getLogger(__name__)
+_logger = get_logger(server_id="Bot", source="llm.prompting.system_prompt")
 
 def get_channel_system_prompt(
   channel_id: str,

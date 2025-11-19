@@ -21,7 +21,6 @@
 # SOFTWARE.
 import discord
 import asyncio
-import logging
 import threading
 from function import func
 from bot import PigPig
@@ -130,7 +129,8 @@ if __name__ == "__main__":
         try:
             asyncio.run(bot.close())
         except Exception as e:
-            print(f"最終清理階段發生錯誤: {e}")
+            log = get_logger(server_id="Bot", source=__name__)
+            log.error(f"最終清理階段發生錯誤: {e}")
             try:
                 asyncio.create_task(func.report_error(e, "main.py/finally"))
             except Exception:

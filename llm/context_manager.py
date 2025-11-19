@@ -6,7 +6,7 @@ This module implements the new ContextManager per docs/llm/context_manager.md:
 """
 
 import asyncio
-import logging
+
 import re
 from datetime import datetime
 from typing import Any, List, Tuple
@@ -18,8 +18,9 @@ from llm.memory.procedural import ProceduralMemoryProvider
 from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.schema import ProceduralMemory
 from langchain_core.messages import BaseMessage
+from addons.logging import get_logger
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = get_logger(server_id="Bot", source="llm.context_manager")
 
 
 class ContextManager:
@@ -48,7 +49,7 @@ class ContextManager:
             asyncio.create_task(
                 func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
             )
-            _LOGGER.exception("short_term_provider.get failed", exc_info=e)
+            _LOGGER.error("short_term_provider.get failed", exception=e)
             return "", []
 
         # 2) Extract user ids to fetch procedural memory
@@ -58,7 +59,7 @@ class ContextManager:
             asyncio.create_task(
                 func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
             )
-            _LOGGER.exception("extract_user_ids failed", exc_info=e)
+            _LOGGER.error("extract_user_ids failed", exception=e)
             user_ids = []
 
         # 3) Fetch procedural memory (resilient: on failure continue with empty mapping)
@@ -68,7 +69,7 @@ class ContextManager:
             asyncio.create_task(
                 func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
             )
-            _LOGGER.exception("procedural_provider.get failed", exc_info=e)
+            _LOGGER.error("procedural_provider.get failed", exception=e)
             procedural_memory = ProceduralMemory(user_info={})
 
         # 4) Format procedural memory into string (no STM serialization here)
@@ -92,7 +93,7 @@ class ContextManager:
             asyncio.create_task(
                 func.report_error(e, "ContextManager.get_context: _format_context_for_prompt failed")
             )
-            _LOGGER.exception("Formatting procedural context failed", exc_info=e)
+            _LOGGER.error("Formatting procedural context failed", exception=e)
             procedural_str = ""
 
         return procedural_str, short_term_msgs
@@ -132,7 +133,7 @@ class ContextManager:
             asyncio.create_task(
                 func.report_error(e, "ContextManager._extract_user_ids_from_messages/iter")
             )
-            _LOGGER.debug("Failed to iterate messages for id extraction", exc_info=e)
+            _LOGGER.debug("Failed to iterate messages for id extraction", exception=e)
 
         return list(ids)
 
@@ -159,7 +160,7 @@ class ContextManager:
             asyncio.create_task(
                 func.report_error(e, "ContextManager._format_context_for_prompt/procedural")
             )
-            _LOGGER.exception("Formatting procedural memory failed", exc_info=e)
+            _LOGGER.error("Formatting procedural memory failed", exception=e)
 
         try:
             parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}")
@@ -167,7 +168,7 @@ class ContextManager:
             asyncio.create_task(
                 func.report_error(e, "ContextManager._format_context_for_prompt/channel_ts")
             )
-            _LOGGER.exception("Formatting channel/timestamp failed", exc_info=e)
+            _LOGGER.error("Formatting channel/timestamp failed", exception=e)
 
         parts.append("--- End System Context ---")
         return "\n\n".join(parts)

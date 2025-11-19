@@ -26,7 +26,7 @@ This module provides LangChain-compatible tools for managing user personal
 memory (procedural memory) through the UserDataCog.
 """
 
-import logging
+from addons.logging import get_logger
 from typing import Optional, Any, TYPE_CHECKING, Union, cast
 
 import discord
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 
 # Module-level logger
-_logger = logging.getLogger(__name__)
+_logger = get_logger(server_id="Bot", source="llm.tools.user_data")
 
 
 class UserMemoryTools:

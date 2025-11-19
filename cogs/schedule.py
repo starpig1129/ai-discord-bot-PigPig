@@ -5,11 +5,12 @@ import yaml
 from datetime import datetime
 import pytz
 import os
-import logging
+import os
 from typing import Optional
 from .language_manager import LanguageManager
+from addons.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(server_id="Bot", source="schedule")
 
 class ScheduleManager(commands.Cog):
     def __init__(self, bot):

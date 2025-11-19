@@ -29,6 +29,7 @@ from addons.update.checker import VersionChecker
 from addons.update.downloader import UpdateDownloader
 from addons.settings import update_config
 from function import func
+from addons.logging import get_logger
 
 
 class UpdateCLI:
@@ -45,9 +46,10 @@ class UpdateCLI:
         self.version_checker = VersionChecker(self.github_config)
         self.permission_checker = UpdatePermissionChecker()
         
+        self.permission_checker = UpdatePermissionChecker()
+        
         # Setup logging
-        self.logger = logging.getLogger(__name__)
-        self._setup_logging()
+        self.logger = get_logger(server_id="system", source="update_cli")
     
     def _init_bot_owner_id(self):
         """Initialize bot owner ID from environment"""
@@ -58,13 +60,7 @@ class UpdateCLI:
         except Exception:
             self.bot_owner_id = 0
     
-    def _setup_logging(self):
-        """Setup logging configuration"""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-    
+
     def check_version(self, with_message: bool = False) -> str:
         """
         Check current version status
@@ -114,17 +110,19 @@ class UpdateCLI:
                 if latest_version == current_version:
                     self.logger.info(f"Your PigPig Bot is up-to-date! - {latest_version}")
                 else:
-                    # Use structured logging so the message is handled by the logging system
-                    self.logger.warning(
+                    msg = (
                         f"Your PigPig Bot is not up-to-date! The latest version is {latest_version} "
                         f"and you are currently running version {current_version}. "
                         f"Run `python update.py -l` to update your bot!"
                     )
+                    self.logger.warning(msg)
+                    print(f"\033[93m{msg}\033[0m")
             
             return latest_version
             
         except Exception as e:
             if with_message:
+                self.logger.error(f"Error checking version: {e}")
                 print(f"\033[91mError checking version: {e}\033[0m")
             return "v3.0.0"  # Fallback version
     
@@ -147,6 +145,7 @@ class UpdateCLI:
                 print("\033[93mWarning: BOT_OWNER_ID not configured. Update functionality may be restricted.\033[0m")
             else:
                 if not self.permission_checker.check_update_permission(self.bot_owner_id):
+                    self.logger.error("No permission to update. Bot owner ID required.")
                     print(f"\033[91mError: No permission to update. Bot owner ID required.\033[0m")
                     return False
             
@@ -211,6 +210,7 @@ class UpdateCLI:
                           f"Run `python main.py` to start your bot\033[0m")
                     return True
                 else:
+                    self.logger.error(f"Update failed: {result.get('error', 'Unknown error')}")
                     print(f"\033[91mUpdate failed: {result.get('error', 'Unknown error')}\033[0m")
                     return False
                     
@@ -218,6 +218,7 @@ class UpdateCLI:
                 loop.close()
                 
         except Exception as e:
+            self.logger.error(f"Error during installation: {e}")
             print(f"\033[91mError during installation: {e}\033[0m")
             # Report error using the new architecture
             asyncio.create_task(func.report_error(e, "update.py/install_version"))
@@ -290,6 +291,7 @@ class UpdateCLI:
             return 1
         except Exception as e:
             error_msg = f"Unexpected error: {e}"
+            self.logger.error(error_msg)
             print(f"\033[91m{error_msg}\033[0m")
             asyncio.create_task(func.report_error(e, "update.py/run"))
             return 1

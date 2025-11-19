@@ -8,7 +8,7 @@ channel-level system prompts, and basic message reply functionality.
 """
 
 import asyncio
-import logging
+from addons.logging import get_logger
 import time
 from typing import Any, List, Optional, Union, Tuple, AsyncIterator, Iterator
 
@@ -32,7 +32,7 @@ _MAX_RETRIES = 3  # Maximum number of retry attempts
 
 
 # Logger
-_logger = logging.getLogger(__name__)
+_logger = get_logger(server_id="Bot", source="llm.send_message")
 
 
 # Language converters (compiled once)
@@ -201,7 +201,7 @@ def _get_processing_message(
             message_type
         )
     except Exception:
-        _logger.exception(
+        _logger.error(
             'LanguageManager.translate failed, using default %s message',
             message_type
         )

@@ -30,12 +30,13 @@ import dateparser
 from typing import Optional
 from .language_manager import LanguageManager
 from function import func
-import logging
+from addons.logging import get_logger
 
 class ReminderCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.lang_manager: Optional[LanguageManager] = None
+        self.logger = get_logger(server_id="Bot", source="remind")
 
     async def cog_load(self):
         """當 Cog 載入時初始化語言管理器"""
@@ -72,7 +73,7 @@ class ReminderCog(commands.Cog):
             except Exception:
                 mention_safe = None
             if not mention_safe:
-                logging.warning(f"remind: target_user 無法取得 mention (target_user={target_user}, channel={getattr(channel,'id',None)}, interaction_user={getattr(interaction,'user',None)})")
+                self.logger.warning(f"remind: target_user 無法取得 mention (target_user={target_user}, channel={getattr(channel,'id',None)}, interaction_user={getattr(interaction,'user',None)})")
                 # 嘗試用 user id 回退；若都不可用則使用通用替代文字
                 if target_user and getattr(target_user, "id", None):
                     mention_safe = f"<@{getattr(target_user, 'id')}>"
@@ -193,7 +194,7 @@ class ReminderCog(commands.Cog):
                 return parsed_time
         except Exception as e:
             # 如果 dateparser 失敗，繼續嘗試正規表示式
-            logging.warning(f"Dateparser failed to parse '{time_str}': {e}")
+            self.logger.warning(f"Dateparser failed to parse '{time_str}': {e}")
             pass
 
         # 如果 dateparser 失敗或沒有回傳結果，嘗試使用正規表示式備用方案

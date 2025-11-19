@@ -15,6 +15,7 @@ from .data_loader import DataLoader
 from .model import Net
 sys.path.append(os.getcwd())
 from ..db.db import DB
+from addons.logging import get_logger
 
 SAVE_URI = os.getcwd() + "/models/"
 
@@ -28,6 +29,7 @@ class Train():
         self.epochs = epochs
         self.save_interval = save_interval
         self.log_interval = log_interval
+        self.logger = get_logger(server_id="Bot", source="eat.train")
 
     def genModel(self, discord_id:str):
         
@@ -66,7 +68,7 @@ class Train():
 
                 # Log training status
                 if batch_size % self.log_interval == 0:
-                    print('Train epoch: {}\tLoss: {:.6f}'.format(epoch+1, loss.data))
+                    self.logger.info('Train epoch: {}\tLoss: {:.6f}'.format(epoch+1, loss.data))
 
             if (epoch + 1) % self.save_interval == 0:
                 model.eval()
@@ -106,7 +108,7 @@ class Train():
 
             voc_pred = np.random.choice(vocabulary, p=pred)
 
-            print(vocabulary)
+            # print(vocabulary)
 
             voc_index = voc_to_int[voc_pred]
 

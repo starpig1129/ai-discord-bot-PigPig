@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 from typing import List, Tuple
-import logging
+from addons.logging import get_logger
+
+logger = get_logger(server_id="Bot", source="llm.model_manager")
 
 from langchain.agents.middleware import ModelFallbackMiddleware
 
@@ -25,7 +27,7 @@ class ModelManager:
             try:
                 asyncio.create_task(func.report_error(e, "llm/model_manager.py/_load_config"))
             except Exception:
-                print(f"llm/model_manager.py: failed to load llm_config: {e}")
+                logger.error(f"llm/model_manager.py: failed to load llm_config: {e}")
             self.priorities = {}
 
     def _resolve_priority_list(self, agent_type: str) -> List[str]:
@@ -57,7 +59,7 @@ class ModelManager:
             try:
                 asyncio.create_task(func.report_error(e, "llm/model_manager.py/_resolve_priority_list"))
             except Exception:
-                print(f"llm/model_manager.py/_resolve_priority_list error: {e}")
+                logger.error(f"llm/model_manager.py/_resolve_priority_list error: {e}")
             return []
 
     def get_model(self, agent_type: str) -> Tuple[str, ModelFallbackMiddleware]:
@@ -75,7 +77,7 @@ class ModelManager:
                 # 非同步上報錯誤，不要阻塞呼叫流程
                 asyncio.create_task(func.report_error(err, "llm/model_manager.py/get_model"))
             except Exception:
-                logging.exception("Failed to schedule func.report_error for missing model priorities")
+                logger.error("Failed to schedule func.report_error for missing model priorities")
             # 明確丟出例外，讓呼叫端能夠判斷並處理
             raise err
 
@@ -87,7 +89,7 @@ class ModelManager:
             try:
                 asyncio.create_task(func.report_error(e, "llm/model_manager.py/get_model"))
             except Exception:
-                logging.exception("Failed to schedule func.report_error for ModelFallbackMiddleware error")
+                logger.error("Failed to schedule func.report_error for ModelFallbackMiddleware error")
             # 保留原始例外以便上層取得詳細錯誤資訊
             raise
 

@@ -1,6 +1,6 @@
 import yaml
 import os
-import logging
+from addons.logging import get_logger
 from typing import Dict, Any, Optional
 from datetime import datetime
 import asyncio
@@ -17,7 +17,7 @@ class PromptLoader:
             config_path: YAML 配置檔案路徑
         """
         self.config_path = config_path
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="Bot", source="llm.prompting.loader")
         self._cached_config: Optional[Dict[str, Any]] = None
         self._last_loaded: Optional[datetime] = None
         

@@ -1,7 +1,7 @@
 import os
 import threading
 import time
-import logging
+from addons.logging import get_logger
 from typing import Dict, Callable, Set, Any
 from datetime import datetime
 import asyncio
@@ -23,7 +23,7 @@ class FileWatcher:
         self._running = False
         self._thread = None
         self._lock = threading.RLock()
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(server_id="Bot", source="llm.file_watcher")
     
     def watch_file(self, path: str, callback: Callable):
         """

@@ -175,7 +175,7 @@ class PigPig(commands.Bot):
         try:
             await self.change_presence(*args, **kwargs)
         except ConnectionResetError:
-            print("Connection reset error while changing presence, retrying in 60 seconds...")
+            log.warning("Connection reset error while changing presence, retrying in 60 seconds...")
             await asyncio.sleep(60)
 
     def get_logger_for_guild(self, guild_name):
@@ -207,7 +207,7 @@ class PigPig(commands.Bot):
                 try:
                     asyncio.create_task(func.report_error(e, f"setup_logger_for_guild: {guild_name}"))
                 except Exception:
-                    print(f"Failed to create logger for {guild_name}: {e}")
+                    log.error(f"Failed to create logger for {guild_name}: {e}")
                     # Final fallback: create logger without additional context
                     self.loggers[guild_name] = get_logger(server_id=guild_name, source="server")
         
@@ -358,7 +358,8 @@ class PigPig(commands.Bot):
             try:
                 asyncio.create_task(func.report_error(e, "bot.py/setup_hook/init_logging"))
             except Exception:
-                print("Failed to initialize system logger:", e)
+                # If system logger fails, use the module-level logger as fallback
+                log.error(f"Failed to initialize system logger: {e}")
 
         # Loading all the modules in `cogs` folder
         for module in os.listdir(ROOT_DIR + '/cogs'):
@@ -442,7 +443,7 @@ class PigPig(commands.Bot):
                 try:
                     asyncio.create_task(func.report_error(e, f"on_ready/setup_logger:{guild.name}"))
                 except Exception:
-                    print(f"Failed to setup logger for guild {guild.name}: {e}")
+                    log.error(f"Failed to setup logger for guild {guild.name}: {e}")
                 continue
 
             # Build channel state list
@@ -471,7 +472,7 @@ class PigPig(commands.Bot):
                 try:
                     asyncio.create_task(func.report_error(e, f"on_ready/write_guild_state:{guild.id}"))
                 except Exception:
-                    print(f"Failed to write guild state for {guild.id}: {e}")
+                    log.error(f"Failed to write guild state for {guild.id}: {e}")
 
         # After writing per-guild JSONs, also write a root mapping file (logs/guilds_map.json)
         try:
@@ -485,7 +486,7 @@ class PigPig(commands.Bot):
             try:
                 asyncio.create_task(func.report_error(e, "on_ready/write_guilds_map"))
             except Exception:
-                print(f"Failed to write guilds_map.json: {e}")
+                log.error(f"Failed to write guilds_map.json: {e}")
 
         # Update tokens client id
         tokens.client_id = self.user.id
