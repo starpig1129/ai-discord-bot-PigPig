@@ -63,7 +63,7 @@ class TOKENS:
         optional_api_keys = {
             "ANTHROPIC_API_KEY": self.anthropic_api_key,
             "OPENAI_API_KEY": self.openai_api_key,
-            "GEMINI_API_KEY": self.google_api_key,
+            "GOOGLE_API_KEY": self.google_api_key,
         }
 
         for api_name, api_value in optional_api_keys.items():
