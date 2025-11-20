@@ -87,10 +87,15 @@ class ShortTermMemoryProvider:
                                 })
 
                 # 創建消息（使用列表格式的 content）
+                # Add explicit speaker identification to help LLM distinguish between users
                 if msg.author.bot:
                     result.append(AIMessage(content=content_parts))
                 else:
-                    result.append(HumanMessage(content=content_parts))
+                    # Include 'name' parameter to make speaker identity explicit
+                    result.append(HumanMessage(
+                        content=content_parts,
+                        name=f"{msg.author.name}_{msg.author.id}"
+                    ))
 
             return result
         except Exception as e:

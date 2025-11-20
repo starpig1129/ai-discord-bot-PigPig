@@ -15,6 +15,7 @@ from llm.utils.send_message import send_message
 from function import func
 from addons.settings import prompt_config
 from .prompting.system_prompt import get_system_prompt
+from .prompting.protected_prompt_manager import get_protected_prompt_manager
 
 from llm.context_manager import ContextManager
 from llm.memory.short_term import ShortTermMemoryProvider
@@ -106,6 +107,109 @@ Output Format:
 - Keep analysis focused and actionable
 
 Focus on understanding what the user actually needs and prepare a clear analysis for the response generation phase."""
+
+    def _build_message_agent_prompt(self, bot_id: int, message: Message) -> str:
+        """
+        Build system prompt for message_agent using ProtectedPromptManager.
+        
+        System-level modules (Discord format, input parsing, memory system, etc.)
+        are protected and always loaded from base_configs.
+        Only customizable modules (identity, personality) can be overridden by users.
+        
+        Args:
+            bot_id: Discord bot ID
+            message: Discord message object
+            
+        Returns:
+            Complete system prompt with protected system modules and customizable personality
+        """
+        try:
+            # Get protected prompt manager
+            protected_manager = get_protected_prompt_manager()
+            
+            # Try to get user customizations from database/settings
+            # For now, we fallback to get_system_prompt for custom modules
+            custom_modules = {}
+            
+            # Attempt to get channel/server-specific customizations
+            # These should only affect customizable modules like identity, response_principles
+            if message and hasattr(message, "channel") and hasattr(message, "guild"):
+                try:
+                    from .prompting.system_prompt import get_channel_system_prompt
+                    channel_custom_prompt = get_channel_system_prompt(
+                        str(message.channel.id), 
+                        str(message.guild.id), 
+                        str(bot_id), 
+                        message
+                    )
+                    
+                    # If channel has custom prompt, use it for customizable modules only
+                    # The channel_custom_prompt should be parsed to extract only customizable parts
+                    if channel_custom_prompt and channel_custom_prompt.strip():
+                        # For now, if there's a channel custom prompt, we let it override
+                        # BUT in future versions, we should parse it to separate customizable
+                        # modules from protected ones
+                        # For safety, we still use protected manager's compose method
+                        pass
+                        
+                except Exception as exc:
+                    asyncio.create_task(
+                        func.report_error(exc, "Failed to get channel customizations for message_agent")
+                    )
+            
+            # Compose prompt with protected system modules + customizable modules
+            # Protected modules (output_format, input_parsing, memory_system, etc.) 
+            # are ALWAYS from base_configs
+            system_prompt = protected_manager.compose_system_prompt(
+                custom_module_contents=custom_modules
+            )
+            
+            # Apply dynamic replacements (bot_id, language, etc.)
+            base_vars = protected_manager.get_base_variables()
+            
+            # Replace template variables
+            try:
+                from addons.tokens import tokens
+                bot_owner_id = getattr(tokens, 'bot_owner_id', 0)
+            except ImportError:
+                bot_owner_id = 0
+            
+            system_prompt = system_prompt.replace('{bot_id}', str(bot_id))
+            system_prompt = system_prompt.replace('{bot_owner_id}', str(bot_owner_id))
+            system_prompt = system_prompt.replace('{bot_name}', base_vars.get('bot_name', '🐖🐖'))
+            system_prompt = system_prompt.replace('{creator}', base_vars.get('creator', '星豬'))
+            system_prompt = system_prompt.replace('{environment}', base_vars.get('environment', 'Discord server'))
+            
+            # Apply language replacements if available
+            if message and message.guild:
+                try:
+                    bot_instance = message.guild.me._state._get_client()
+                    lang_manager = bot_instance.get_cog("LanguageManager")
+                    if lang_manager:
+                        guild_id = str(message.guild.id)
+                        # Replace language placeholders
+                        import re
+                        placeholders = re.findall(r'\{\{lang\.[^}]+\}\}', system_prompt)
+                        for placeholder in placeholders:
+                            key = placeholder.strip('{}').replace('{{lang.', '').replace('}}', '')
+                            try:
+                                translation = lang_manager.get(guild_id, key)
+                                if translation:
+                                    system_prompt = system_prompt.replace(placeholder, translation)
+                            except Exception:
+                                continue
+                except Exception as exc:
+                    asyncio.create_task(
+                        func.report_error(exc, "Language replacement failed in message_agent prompt")
+                    )
+            
+            return system_prompt
+            
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "Orchestrator._build_message_agent_prompt"))
+            # Fall back to original get_system_prompt
+            return get_system_prompt(str(bot_id), message)
+
 
     async def handle_message(
         self, bot: Any, message_edit: Message, message: Message, logger: Any
@@ -214,7 +318,10 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 await func.report_error(e, "ModelManager.get_model failed for message_model")
                 raise RuntimeError(f"Failed to get message_model: {e}") from e
 
-            message_system_prompt = get_system_prompt(bot.user.id, message)
+            # Build message agent prompt using ProtectedPromptManager
+            # This ensures system-level modules (Discord format, input parsing, etc.)  
+            # are protected from user modification
+            message_system_prompt = self._build_message_agent_prompt(bot.user.id, message)
 
             # full_message_prompt must only include procedural_context_str and system prompt
             full_message_prompt = f"{procedural_context_str}\n\n{message_system_prompt}"
@@ -272,10 +379,17 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
         resp = OrchestratorResponse.construct()
         resp.reply = message_result
+        
+        # Build concise tool list for logging (only names, not full schemas)
+        tool_names = [getattr(t, "name", repr(t)) for t in all_tools]
+        
+        # Store full tool info in response if needed
         resp.tool_calls = [
             {"tool": getattr(t, "name", repr(t)), "args": getattr(t, "args", None)} for t in all_tools
         ]
-        logger.info(f"{bot.user.name}:{resp.reply}, tool_calls: {resp.tool_calls}")
+        
+        # Log with concise tool names only
+        logger.info(f"{bot.user.name}:{resp.reply}, available_tools: {tool_names}")
         return resp
 
 

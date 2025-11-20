@@ -87,10 +87,19 @@ analysis:
     Use this to personalize information gathering priorities.
     
     #### Short-Term Memory
-    Conversation history in the format:
+    Conversation history with explicit speaker identification:
     - **AIMessage**: Bot's previous responses
-    - **HumanMessage**: User messages as `<author_name> |(<author_id>)|(UNIX time): <message_content>`
-    Use this to understand the current discussion context.
+    - **HumanMessage**: User messages with `name` attribute in format `username_userid`
+      - Message content format: `[author_name | UserID:author_id | MessageID:msg_id] <som> message_content <eom> [metadata | timestamp: UNIX_time]`
+      - The `name` attribute allows you to distinguish between different users
+      - The LATEST message is from the CURRENT speaker
+      - Previous messages with DIFFERENT `name` attributes are from OTHER users
+    
+    **Understanding Multi-User Context**:
+    - When analyzing what tools are needed, consider WHO is asking
+    - If user asks about what ANOTHER user said/did, you may need tools like `get_user_activity`
+    - Parse UserIDs from the `name` attribute to identify different speakers
+    - The current message (latest) is the one you need to primarily serve
 
 # ============================================
 # EXECUTION MODULE
