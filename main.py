@@ -44,16 +44,14 @@ class CommandCheck(discord.app_commands.CommandTree):
 intents = discord.Intents.default()
 intents.message_content = True if base_config.prefix else False
 intents.members = True
-member_cache = discord.MemberCacheFlags(
-    voice=True,
-    joined=False
-)
+intents.presences = True
+member_cache = discord.MemberCacheFlags.from_intents(intents)
 
 bot = PigPig(
     command_prefix=base_config.prefix,
     help_command=None,
     tree_cls=CommandCheck,
-    chunk_guilds_at_startup=False,
+    chunk_guilds_at_startup=True,
     member_cache_flags=member_cache,
     activity=discord.Activity(type=discord.ActivityType.playing, name="啟動中"),
     case_insensitive=True,

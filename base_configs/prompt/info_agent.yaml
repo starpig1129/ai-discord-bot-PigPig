@@ -72,7 +72,8 @@ analysis:
     - **Content Analysis**: `Vision_Analysis`, `Document_Parsing`, `URL_Extraction`.
     - **Computational Tasks**: `Code_Interpreter`, `Math_Calculator`.
     - **Memory**: `Episodic_Memory_Search`, `Procedural_Memory_Save`.
-    - **Guild Custom Emojis**: `get_guild_emojis`, `add_reaction`.
+    - **Interactions**: `get_guild_emojis`, `get_guild_stickers`.
+    - **User Context**: `get_user_activity`, `get_channel_participants`.
 
     ### Batch Execution Strategy
     If you identify information needs:

@@ -153,7 +153,17 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 raise ValueError("Discord message.guild is None")
 
             runtime_context = OrchestratorRequest(bot=bot, message=message, logger=logger)
-            tool_list = get_tools(user, guid=guild, runtime=runtime_context)
+            
+            # Get tools for info agent (excludes action tools)
+            info_agent_tools = get_tools(user, guid=guild, runtime=runtime_context, agent_mode="info")
+            
+            # Get tools for message agent (only action tools)
+            message_agent_tools = get_tools(user, guid=guild, runtime=runtime_context, agent_mode="message")
+            
+            # Also get full tool list for logging/response construction if needed
+            # But OrchestratorResponse.tool_calls uses tool_list. 
+            # We should probably combine them or just get all for that purpose.
+            all_tools = info_agent_tools + message_agent_tools
 
             # --- Info agent setup ---
             try:
@@ -169,7 +179,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
             info_agent = create_agent(
                 model=info_model,
-                tools=tool_list,
+                tools=info_agent_tools,
                 system_prompt=full_info_prompt,
                 middleware=[fallback,DirectToolOutputMiddleware()],
             )
@@ -211,7 +221,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             #print("Message Agent Prompt:\n", full_message_prompt)
             message_agent = create_agent(
                 model=message_model,
-                tools=[],
+                tools=message_agent_tools,
                 system_prompt=full_message_prompt,
                 middleware=[fallback, ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
             )
@@ -240,7 +250,8 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         message_edit, 
                         message, 
                         streamer,
-                        raise_exception=should_raise
+                        raise_exception=should_raise,
+                        tools=message_agent_tools
                     )
                     # If we get here, success!
                     break
@@ -262,8 +273,9 @@ Focus on understanding what the user actually needs and prepare a clear analysis
         resp = OrchestratorResponse.construct()
         resp.reply = message_result
         resp.tool_calls = [
-            {"tool": getattr(t, "name", repr(t)), "args": getattr(t, "args", None)} for t in tool_list
+            {"tool": getattr(t, "name", repr(t)), "args": getattr(t, "args", None)} for t in all_tools
         ]
+        logger.info(f"{bot.user.name}:{resp.reply}, tool_calls: {resp.tool_calls}")
         return resp
 
 

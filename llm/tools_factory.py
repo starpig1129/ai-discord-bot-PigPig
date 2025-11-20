@@ -238,8 +238,15 @@ def _get_user_permissions(user: discord.Member, guid: discord.Guild) -> dict:
 from llm.schema import OrchestratorRequest
 
 
+# Tools specific to the message agent (action-oriented interaction tools)
+# Currently empty - message agent uses text-only responses
+MESSAGE_AGENT_TOOLS = set()
+
 def get_tools(
-    user: discord.Member, guid: discord.Guild, runtime: OrchestratorRequest
+    user: discord.Member, 
+    guid: discord.Guild, 
+    runtime: OrchestratorRequest,
+    agent_mode: str = "all"
 ) -> List[BaseTool]:
     """根據 Discord 使用者權限回傳可用的 LangChain 工具清單。
 
@@ -250,7 +257,13 @@ def get_tools(
     - 權限屬性可以設在 BaseTool 實例或原始 callable 上。
 
     Args:
-        user_id: Discord 使用者 ID
+        user: Discord 使用者
+        guid: Discord Guild
+        runtime: 執行時 context
+        agent_mode: 工具過濾模式 ("all", "info", "message")
+            - "all": 回傳所有可用工具
+            - "info": 回傳 Info Agent 專用工具 (排除 Message Agent 專用工具)
+            - "message": 僅回傳 Message Agent 專用工具
 
     Returns:
         List[BaseTool]: 可供 LangChain 使用的工具清單（靜態類型上會 cast 為 List[BaseTool]）。
@@ -298,27 +311,40 @@ def get_tools(
 
             required = getattr(t, "required_permission", None)
             if required is None:
-                result.append(t)
-                continue
-
-            if isinstance(required, str):
-                required_set = {
-                    p.strip().lower() for p in required.split(",") if p.strip()
-                }
+                # Permission check passed, now check agent_mode
+                pass
             else:
-                try:
-                    required_set = {str(p).lower() for p in required}
-                except Exception:
-                    required_set = set()
+                if isinstance(required, str):
+                    required_set = {
+                        p.strip().lower() for p in required.split(",") if p.strip()
+                    }
+                else:
+                    try:
+                        required_set = {str(p).lower() for p in required}
+                    except Exception:
+                        required_set = set()
 
-            allowed = False
-            if "admin" in required_set and perms.get("is_admin"):
-                allowed = True
-            if "moderator" in required_set and perms.get("is_moderator"):
-                allowed = True
+                allowed = False
+                if "admin" in required_set and perms.get("is_admin"):
+                    allowed = True
+                if "moderator" in required_set and perms.get("is_moderator"):
+                    allowed = True
+                
+                if not allowed:
+                    continue
 
-            if allowed:
-                result.append(t)
+            # Filter based on agent_mode
+            tool_name = getattr(t, "name", getattr(t, "__name__", repr(t)))
+            
+            if agent_mode == "info":
+                if tool_name in MESSAGE_AGENT_TOOLS:
+                    continue
+            elif agent_mode == "message":
+                if tool_name not in MESSAGE_AGENT_TOOLS:
+                    continue
+            
+            result.append(t)
+
         except Exception as e:
             _report_async(
                 e, f"llm.tools: filtering tool {getattr(t, 'name', repr(t))}"

@@ -213,7 +213,8 @@ async def _process_token_stream(
     channel: discord.abc.Messageable,
     message: discord.Message,
     lang_manager,
-    update_interval: float = _UPDATE_INTERVAL
+    update_interval: float = _UPDATE_INTERVAL,
+    tools: Optional[List[Any]] = None
 ) -> Tuple[str, discord.Message]:
     """Processes token stream and updates Discord messages based on time interval.
     
@@ -235,6 +236,61 @@ async def _process_token_stream(
     last_update_time = time.time()  # Track last update time
     pending_content = ''  # Content waiting to be sent to Discord
     is_capturing = False  # Flag to track if we're between <som> and <eom>
+    
+    # Tool execution tracking
+    tool_call_chunks = []
+    
+    async def _execute_tool_calls(chunks: List[Any]):
+        """Reconstructs and executes tool calls from chunks."""
+        if not chunks or not tools:
+            return
+            
+        # Simple reconstruction of tool calls from chunks
+        # This depends on the structure of AIMessageChunk
+        # We assume standard LangChain chunk structure
+        
+        # Group chunks by index to handle multiple tool calls
+        tool_calls_by_index = {}
+        
+        for chunk in chunks:
+            if hasattr(chunk, "index"):
+                idx = chunk.index
+                if idx not in tool_calls_by_index:
+                    tool_calls_by_index[idx] = {"name": "", "args": ""}
+                
+                if hasattr(chunk, "name") and chunk.name:
+                    tool_calls_by_index[idx]["name"] += chunk.name
+                if hasattr(chunk, "args") and chunk.args:
+                    tool_calls_by_index[idx]["args"] += chunk.args
+        
+        for idx, call_data in tool_calls_by_index.items():
+            name = call_data["name"]
+            args_str = call_data["args"]
+            
+            # Find matching tool
+            tool = next((t for t in tools if t.name == name), None)
+            if tool:
+                try:
+                    # Parse args if needed, but most tools accept string or dict
+                    # If args_str is JSON, we might need to parse it, but LangChain tools often handle it
+                    # For simplicity, we try to parse as JSON if it looks like it
+                    import json
+                    try:
+                        args = json.loads(args_str)
+                    except:
+                        args = args_str
+                        
+                    _logger.info(f"Executing tool {name} with args: {args}")
+                    # Execute tool - fire and forget
+                    if asyncio.iscoroutinefunction(tool.invoke) or asyncio.iscoroutinefunction(tool._run):
+                         await tool.invoke(args)
+                    else:
+                         # Run sync tool in thread if needed, but invoke handles it usually
+                         await tool.invoke(args)
+                except Exception as e:
+                    _logger.error(f"Failed to execute tool {name}: {e}")
+            else:
+                _logger.warning(f"Tool {name} not found in provided tools list")
     
     async def should_update() -> bool:
         """Check if enough time has passed since last update."""
@@ -289,6 +345,9 @@ async def _process_token_stream(
         pending_content = ''
         last_update_time = time.time()
     
+    # Buffer for handling split tags
+    tag_buffer = ''
+    
     def extract_display_content(token_str: str) -> str:
         """Extract content that should be displayed on Discord.
         
@@ -298,27 +357,41 @@ async def _process_token_stream(
         Returns:
             Content to display (empty if outside markers or contains only markers).
         """
-        nonlocal is_capturing
+        nonlocal is_capturing, tag_buffer
         
-        display_str = token_str
+        # Prepend any buffered content
+        current_str = tag_buffer + token_str
+        tag_buffer = ''
         
-        # Check for start marker
-        if '<som>' in display_str:
-            is_capturing = True
-            # Remove everything before and including <som>
-            display_str = display_str.split('<som>', 1)[-1]
-        
-        # Check for end marker
-        if '<eom>' in display_str:
-            # Only capture content before <eom>
-            display_str = display_str.split('<eom>', 1)[0]
-            result = display_str if is_capturing else ''
-            is_capturing = False
-            return result
-        
-        # Return content only if we're capturing
-        return display_str if is_capturing else ''
-    
+        display_str = ''
+        i = 0
+        while i < len(current_str):
+            # Check for potential start of a tag
+            if current_str[i] == '<':
+                # Check if it's a complete tag
+                if current_str[i:].startswith('<som>'):
+                    is_capturing = True
+                    i += 5
+                    continue
+                elif current_str[i:].startswith('<eom>'):
+                    is_capturing = False
+                    i += 5
+                    continue
+                
+                # Check if it could be a partial tag
+                remaining = current_str[i:]
+                if '<som>'.startswith(remaining) or '<eom>'.startswith(remaining):
+                    # It's a partial tag, buffer it and stop processing this chunk
+                    tag_buffer = remaining
+                    break
+            
+            # If we are capturing, append the character
+            if is_capturing:
+                display_str += current_str[i]
+            i += 1
+            
+        return display_str
+
     try:
         async for token, metadata in streamer:
             # Extract text token
@@ -339,9 +412,20 @@ async def _process_token_stream(
                     if await should_update():
                         await update_message()
                 
-                # Stop processing if we've passed <eom>
-                if not is_capturing and '<eom>' in token_str:
-                    break
+                # Check if we have finished capturing (eom encountered)
+                # We can check is_capturing flag, but we need to be careful about
+                # the state transition. If we were capturing and now we are not,
+                # and the buffer is empty (meaning we fully processed <eom>), then we are done.
+                if not is_capturing and not tag_buffer and '<eom>' in message_result:
+                     pass # We don't break immediately to allow tool calls to be processed if they come after
+            
+            # Capture tool call chunks
+            if hasattr(token, "tool_call_chunks") and token.tool_call_chunks:
+                tool_call_chunks.extend(token.tool_call_chunks)
+        
+        # Execute any captured tool calls
+        if tool_call_chunks:
+            await _execute_tool_calls(tool_call_chunks)
         
         # Send any remaining content
         if pending_content:
@@ -355,8 +439,21 @@ async def _process_token_stream(
             await update_message()
             
         # Check if we have any content after all processing
-        if not message_result or not message_result.strip():
-            raise ValueError("Generated response is empty")
+        # Allow either text content OR tool calls (or both)
+        has_text_content = message_result and message_result.strip()
+        has_tool_calls = len(tool_call_chunks) > 0
+        
+        if not has_text_content and not has_tool_calls:
+            raise ValueError("Generated response is empty and no tools were called")
+        
+        # If we only have tool calls but no text content, delete the "processing" message
+        if has_tool_calls and not has_text_content:
+            try:
+                if current_message:
+                    await current_message.delete()
+                    _logger.info("Deleted processing message after tool-only response")
+            except Exception as e:
+                _logger.warning(f"Failed to delete processing message: {e}")
         
         return message_result, current_message
     
@@ -378,7 +475,8 @@ async def send_message(
     message: discord.Message,
     streamer: AsyncIterator,
     update_interval: float = _UPDATE_INTERVAL,
-    raise_exception: bool = False
+    raise_exception: bool = False,
+    tools: Optional[List[Any]] = None
 ) -> str:
     """Consumes a token stream and updates Discord messages with time-based updates.
     
@@ -431,7 +529,8 @@ async def send_message(
             channel,
             message,
             lang_manager,
-            update_interval
+            update_interval,
+            tools
         )
 
         return message_result
