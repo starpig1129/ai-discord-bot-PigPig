@@ -273,11 +273,29 @@ async def _process_token_stream(
                 try:
                     # Update status to "Executing tool..."
                     if current_message:
-                        tool_msg = lang_manager.translate(
-                            str(message.guild.id) if message.guild else "0",
-                            "system", "chat_bot", "responses", "tool_executing",
-                            tool_name=name
-                        ) if lang_manager else f"🛠️ 正在執行工具: {name}..."
+                        tool_msg = ""
+                        if lang_manager:
+                            # Try to get specific message for this tool
+                            tool_key = name
+                            # Handle some common variations or mapping if needed, but for now direct mapping
+                            
+                            msg = lang_manager.translate(
+                                str(message.guild.id) if message.guild else "0",
+                                "system", "chat_bot", "responses", "tools", tool_key
+                            )
+                            
+                            # Check if translation was found (LanguageManager returns error string if not)
+                            if "Translation not found" in msg or "TRANSLATION_ERROR" in msg:
+                                # Fallback to default tool message
+                                tool_msg = lang_manager.translate(
+                                    str(message.guild.id) if message.guild else "0",
+                                    "system", "chat_bot", "responses", "tools", "default",
+                                    tool_name=name
+                                )
+                            else:
+                                tool_msg = msg
+                        else:
+                            tool_msg = f"🛠️ 正在執行工具: {name}..."
                         
                         await safe_edit_message(current_message, tool_msg)
 
@@ -291,12 +309,24 @@ async def _process_token_stream(
                         args = args_str
                         
                     _logger.info(f"Executing tool {name} with args: {args}")
-                    # Execute tool - fire and forget
-                    if asyncio.iscoroutinefunction(tool.invoke) or asyncio.iscoroutinefunction(tool._run):
-                         await tool.invoke(args)
-                    else:
-                         # Run sync tool in thread if needed, but invoke handles it usually
-                         await tool.invoke(args)
+                    
+                    # Execute tool with timeout
+                    try:
+                        # Use ainvoke if available (standard in modern LangChain)
+                        if hasattr(tool, "ainvoke"):
+                            await asyncio.wait_for(tool.ainvoke(args), timeout=10.0)
+                        elif asyncio.iscoroutinefunction(tool.invoke) or asyncio.iscoroutinefunction(tool._run):
+                             await asyncio.wait_for(tool.invoke(args), timeout=10.0)
+                        else:
+                             # Run sync tool in thread to avoid blocking loop and allow timeout
+                             await asyncio.wait_for(asyncio.to_thread(tool.invoke, args), timeout=10.0)
+                    except asyncio.TimeoutError:
+                        _logger.warning(f"Tool {name} timed out after 10 seconds")
+                        if current_message:
+                             # Optional: Update message to show timeout
+                             pass
+                    except Exception as e:
+                        raise e # Re-raise to be caught by outer except
                 except Exception as e:
                     _logger.error(f"Failed to execute tool {name}: {e}")
             else:

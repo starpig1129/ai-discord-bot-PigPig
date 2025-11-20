@@ -1,0 +1,25 @@
+{
+    "responses": {
+        "analyzing": "🔍 Analyzing info...",
+        "thinking": "🧠 Thinking about reply...",
+        "processing": "Processing...",
+        "continuation": "Continuing output...",
+        "tools": {
+            "internet_search": "🌍 Searching the web...",
+            "search_episodic_memory": "🧠 Recalling past conversations...",
+            "read_user_memory": "📖 Reading user memory...",
+            "save_user_memory": "💾 Saving this to memory...",
+            "generate_image": "🎨 Generating image...",
+            "set_reminder": "⏰ Setting a reminder...",
+            "calculate_math": "🧮 Calculating...",
+            "add_reaction": "😊 Adding a reaction...",
+            "send_sticker": "🎭 Sending a sticker...",
+            "list_tools": "🔧 Checking available tools...",
+            "get_user_activity": "👀 Checking user activity...",
+            "get_channel_participants": "👥 Checking channel members...",
+            "get_guild_emojis": "😀 Reading server emojis...",
+            "get_guild_stickers": "🖼️ Reading server stickers...",
+            "default": "🛠️ Using {tool_name}..."
+        }
+    }
+}

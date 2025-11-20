@@ -34,14 +34,21 @@ class ToolFeedbackCallbackHandler(AsyncCallbackHandler):
         """Run when tool starts running."""
         tool_name = serialized.get("name", "Unknown Tool")
         
-        # Translate the status message
-        status_msg = self.language_manager.translate(
+        # Try to get specific message for this tool
+        msg = self.language_manager.translate(
             self.guild_id,
-            "system",
-            "chat_bot",
-            "responses",
-            "tool_executing",
-            tool_name=tool_name
+            "system", "chat_bot", "responses", "tools", tool_name
         )
+        
+        # Check if translation was found
+        if "Translation not found" in msg or "TRANSLATION_ERROR" in msg:
+            # Fallback to default tool message
+            status_msg = self.language_manager.translate(
+                self.guild_id,
+                "system", "chat_bot", "responses", "tools", "default",
+                tool_name=tool_name
+            )
+        else:
+            status_msg = msg
         
         await safe_edit_message(self.message_edit, status_msg)
