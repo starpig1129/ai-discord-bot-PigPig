@@ -794,6 +794,14 @@ async def setup(bot: commands.Bot) -> None:
     Args:
         bot: The Discord bot instance.
     """
+    # Check if memory system is enabled before loading
+    from addons.settings import memory_config
+    
+    if not getattr(memory_config, "enabled", True):
+        log.info("Memory system is disabled in memory.yaml, skipping UserDataCog.")
+        return
+    
     user_manager = getattr(bot, 'user_manager', None)
     cog = UserDataCog(bot, user_manager=user_manager)
     await bot.add_cog(cog)
+

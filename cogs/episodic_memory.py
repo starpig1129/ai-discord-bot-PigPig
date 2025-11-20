@@ -299,6 +299,13 @@ class EpisodicMemoryService(commands.Cog):
 
 async def setup(bot: commands.Bot):
     """The setup function for the cog."""
+    # Check if memory system is enabled before loading
+    from addons.settings import memory_config
+    
+    if not getattr(memory_config, "enabled", True):
+        log.info("Memory system is disabled in memory.yaml, skipping EpisodicMemoryService cog.")
+        return
+    
     # Deterministically require bot.episodic_storage; do not fall back to db_manager.
     storage = getattr(bot, "episodic_storage", None)
     if storage is None:

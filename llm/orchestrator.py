@@ -51,7 +51,10 @@ class Orchestrator:
         cog = bot.get_cog("UserDataCog")
         user_manager = getattr(cog, "user_manager", None) if cog is not None else None
 
-        if user_manager is None:
+        from addons.settings import memory_config
+        memory_enabled = getattr(memory_config, "enabled", True)
+
+        if user_manager is None and memory_enabled:
             asyncio.create_task(
                 func.report_error(
                     Exception("Missing user_manager on bot UserDataCog for Orchestrator"),

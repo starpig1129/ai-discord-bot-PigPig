@@ -25,7 +25,7 @@ class ProceduralMemoryProvider:
         Returns:
             ProceduralMemory containing a dict mapping user_id to UserInfo.
         """
-        if not user_ids:
+        if not user_ids or not self.user_manager:
             return ProceduralMemory(user_info={})
 
         try:
