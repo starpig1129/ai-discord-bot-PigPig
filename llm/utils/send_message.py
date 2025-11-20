@@ -233,7 +233,7 @@ async def _process_token_stream(
     message_result = ''  # Full accumulated result (including ALL tokens and markers)
     display_content = ''  # Filtered content for Discord (only between markers)
     current_block = ''  # Current message block content for Discord
-    last_update_time = time.time()  # Track last update time
+    last_update_time = 0  # Initialize to 0 to allow immediate first update
     pending_content = ''  # Content waiting to be sent to Discord
     is_capturing = False  # Flag to track if we're between <som> and <eom>
     
@@ -271,6 +271,16 @@ async def _process_token_stream(
             tool = next((t for t in tools if t.name == name), None)
             if tool:
                 try:
+                    # Update status to "Executing tool..."
+                    if current_message:
+                        tool_msg = lang_manager.translate(
+                            str(message.guild.id) if message.guild else "0",
+                            "system", "chat_bot", "responses", "tool_executing",
+                            tool_name=name
+                        ) if lang_manager else f"🛠️ 正在執行工具: {name}..."
+                        
+                        await safe_edit_message(current_message, tool_msg)
+
                     # Parse args if needed, but most tools accept string or dict
                     # If args_str is JSON, we might need to parse it, but LangChain tools often handle it
                     # For simplicity, we try to parse as JSON if it looks like it

@@ -1,0 +1,9 @@
+{
+    "responses": {
+        "analyzing": "🔍 分析資訊中...",
+        "thinking": "🧠 思考回覆中...",
+        "processing": "處理中...",
+        "continuation": "繼續輸出中...",
+        "tool_executing": "🛠️ 正在執行工具: {tool_name}..."
+    }
+}

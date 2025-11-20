@@ -11,7 +11,7 @@ from langchain.agents.middleware import ModelCallLimitMiddleware, AgentMiddlewar
 from llm.model_manager import ModelManager
 from llm.tools_factory import get_tools
 from llm.schema import OrchestratorResponse, OrchestratorRequest
-from llm.utils.send_message import send_message
+from llm.utils.send_message import send_message, safe_edit_message
 from function import func
 from addons.settings import prompt_config
 from .prompting.system_prompt import get_system_prompt
@@ -20,6 +20,7 @@ from .prompting.protected_prompt_manager import get_protected_prompt_manager
 from llm.context_manager import ContextManager
 from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.procedural import ProceduralMemoryProvider
+from llm.callbacks import ToolFeedbackCallbackHandler
 
 
 class DirectToolOutputMiddleware(AgentMiddleware):
@@ -227,170 +228,193 @@ Focus on understanding what the user actually needs and prepare a clear analysis
         # Default fallbacks
         procedural_context_str: str = ""
         short_term_msgs: List[BaseMessage] = []
-        # 1) Acquire contextual data from ContextManager with resilient error handling
-        try:
-            ctx = await self.context_manager.get_context(message)
-            # Expect a tuple (procedural_str, short_term_msgs)
-            if isinstance(ctx, tuple) and len(ctx) == 2:
-                procedural_context_str, short_term_msgs = ctx  # type: ignore
-            else:
-                # unexpected return type; report and continue with fallbacks
-                asyncio.create_task(
-                    func.report_error(
-                        Exception(f"ContextManager.get_context returned unexpected type: {type(ctx)}"),
-                        "Orchestrator.handle_message",
+        
+        # Get LanguageManager
+        lang_manager = bot.get_cog("LanguageManager")
+        guild_id = str(message.guild.id) if message.guild else "0"
+
+        # Provide feedback to the user that the bot is processing
+        async with message.channel.typing():
+            # 1) Acquire contextual data from ContextManager with resilient error handling
+            try:
+                ctx = await self.context_manager.get_context(message)
+                # Expect a tuple (procedural_str, short_term_msgs)
+                if isinstance(ctx, tuple) and len(ctx) == 2:
+                    procedural_context_str, short_term_msgs = ctx  # type: ignore
+                else:
+                    # unexpected return type; report and continue with fallbacks
+                    asyncio.create_task(
+                        func.report_error(
+                            Exception(f"ContextManager.get_context returned unexpected type: {type(ctx)}"),
+                            "Orchestrator.handle_message",
+                        )
                     )
-                )
-        except Exception as e:
-            # Per design: report and continue with safe defaults
-            asyncio.create_task(func.report_error(e, "ContextManager.get_context failed in Orchestrator"))
-            procedural_context_str = ""
-            short_term_msgs = []
-
-        try:
-            user = getattr(message, "author", None)
-            if user is None:
-                raise ValueError("Discord message.author has no id")
-
-            guild = getattr(message, "guild", None)
-            if guild is None:
-                raise ValueError("Discord message.guild is None")
-
-            runtime_context = OrchestratorRequest(bot=bot, message=message, logger=logger)
-            
-            # Get tools for info agent (excludes action tools)
-            info_agent_tools = get_tools(user, guid=guild, runtime=runtime_context, agent_mode="info")
-            
-            # Get tools for message agent (only action tools)
-            message_agent_tools = get_tools(user, guid=guild, runtime=runtime_context, agent_mode="message")
-            
-            # Also get full tool list for logging/response construction if needed
-            # But OrchestratorResponse.tool_calls uses tool_list. 
-            # We should probably combine them or just get all for that purpose.
-            all_tools = info_agent_tools + message_agent_tools
-
-            # --- Info agent setup ---
-            try:
-                info_model, fallback = self.model_manager.get_model("info_model")
             except Exception as e:
-                await func.report_error(e, "ModelManager.get_model failed for info_model")
-                raise RuntimeError(f"Failed to get info_model: {e}") from e
-
-            info_system_prompt = self._build_info_agent_prompt(bot_id=bot.user.id, message=message)
-            # IMPORTANT: full_info_prompt should only include procedural_context_str (string) and system prompt.
-            full_info_prompt = f"{procedural_context_str}\n\n{info_system_prompt}"
-            #print("Info Agent Prompt:\n", full_info_prompt)
-
-            info_agent = create_agent(
-                model=info_model,
-                tools=info_agent_tools,
-                system_prompt=full_info_prompt,
-                middleware=[fallback,DirectToolOutputMiddleware()],
-            )
-
-            # Inject short-term memory messages directly before current user input
-            messages_for_info_agent = list(short_term_msgs)
-            #print("Info Agent Messages:\n", messages_for_info_agent)
-            
-            # Execute info_agent to process user message and tools
-            info_result = await info_agent.ainvoke({"messages": messages_for_info_agent})
-            
-            # Extract the analysis output from info_agent result
-            # Info agent should return analysis in a format suitable for message generation
-            info_message: List[BaseMessage] = []
-            if isinstance(info_result, dict) and "messages" in info_result:
-                info_message = info_result["messages"]
-            else:
-                # Fallback: create a human message from the result
-                result_str = str(info_result) if info_result else ""
-                from langchain_core.messages import HumanMessage
-                info_message = [HumanMessage(content=result_str)]
-        except Exception as e:
-            await asyncio.create_task(func.report_error(e, "info_agent failed"))
-            raise
-
-        try:
-            # --- Message agent setup ---
+                # Per design: report and continue with safe defaults
+                asyncio.create_task(func.report_error(e, "ContextManager.get_context failed in Orchestrator"))
+                procedural_context_str = ""
+                short_term_msgs = []
 
             try:
-                message_model, fallback = self.model_manager.get_model("message_model")
-            except Exception as e:
-                await func.report_error(e, "ModelManager.get_model failed for message_model")
-                raise RuntimeError(f"Failed to get message_model: {e}") from e
+                user = getattr(message, "author", None)
+                if user is None:
+                    raise ValueError("Discord message.author has no id")
 
-            # Build message agent prompt using ProtectedPromptManager
-            # This ensures system-level modules (Discord format, input parsing, etc.)  
-            # are protected from user modification
-            message_system_prompt = self._build_message_agent_prompt(bot.user.id, message)
+                guild = getattr(message, "guild", None)
+                if guild is None:
+                    raise ValueError("Discord message.guild is None")
 
-            # full_message_prompt must only include procedural_context_str and system prompt
-            full_message_prompt = f"{procedural_context_str}\n\n{message_system_prompt}"
-            #print("Message Agent Prompt:\n", full_message_prompt)
-            message_agent = create_agent(
-                model=message_model,
-                tools=message_agent_tools,
-                system_prompt=full_message_prompt,
-                middleware=[fallback, ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
-            )
+                runtime_context = OrchestratorRequest(bot=bot, message=message, logger=logger)
+                
+                # Get tools for info agent (excludes action tools)
+                info_agent_tools = get_tools(user, guid=guild, runtime=runtime_context, agent_mode="info")
+                
+                # Get tools for message agent (only action tools)
+                message_agent_tools = get_tools(user, guid=guild, runtime=runtime_context, agent_mode="message")
+                
+                # Also get full tool list for logging/response construction if needed
+                # But OrchestratorResponse.tool_calls uses tool_list. 
+                # We should probably combine them or just get all for that purpose.
+                all_tools = info_agent_tools + message_agent_tools
 
-            # Use the analysis from info_agent for message generation
-            # Compose messages for message_agent with analysis output and context
-            messages_for_message_agent = list(info_message)
-
-            #print("Message Agent Messages:\n", messages_for_message_agent)
-            
-            # Retry loop for message generation to handle empty responses or transient errors
-            max_retries = 3
-            for attempt in range(max_retries):
+                # --- Info agent setup ---
                 try:
-                    streamer = message_agent.astream(
-                        {"messages": messages_for_message_agent},
-                        stream_mode="messages",
-                    )
-                    
-                    # On last attempt, let send_message handle the error (send error msg to user)
-                    # For earlier attempts, raise exception to trigger retry
-                    should_raise = (attempt < max_retries - 1)
-                    
-                    message_result = await send_message(
-                        bot, 
-                        message_edit, 
-                        message, 
-                        streamer,
-                        raise_exception=should_raise,
-                        tools=message_agent_tools
-                    )
-                    # If we get here, success!
-                    break
-                    
+                    info_model, fallback = self.model_manager.get_model("info_model")
                 except Exception as e:
-                    logger.warning(f"Message generation attempt {attempt + 1}/{max_retries} failed: {e}")
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(1)  # Wait a bit before retry
-                    else:
-                        # This block should theoretically not be reached if raise_exception=False 
-                        # on the last attempt, as send_message would return the error string.
-                        # But if it does raise (e.g. critical error), re-raise it.
-                        raise
+                    await func.report_error(e, "ModelManager.get_model failed for info_model")
+                    raise RuntimeError(f"Failed to get info_model: {e}") from e
 
-        except Exception as e:
-            await asyncio.create_task(func.report_error(e, "message_agent failed"))
-            raise
+                info_system_prompt = self._build_info_agent_prompt(bot_id=bot.user.id, message=message)
+                # IMPORTANT: full_info_prompt should only include procedural_context_str (string) and system prompt.
+                full_info_prompt = f"{procedural_context_str}\n\n{info_system_prompt}"
+                #print("Info Agent Prompt:\n", full_info_prompt)
 
-        resp = OrchestratorResponse.construct()
-        resp.reply = message_result
-        
-        # Build concise tool list for logging (only names, not full schemas)
-        tool_names = [getattr(t, "name", repr(t)) for t in all_tools]
-        
-        # Store full tool info in response if needed
-        resp.tool_calls = [
-            {"tool": getattr(t, "name", repr(t)), "args": getattr(t, "args", None)} for t in all_tools
-        ]
-        
-        # Log with concise tool names only
-        logger.info(f"{bot.user.name}:{resp.reply}, available_tools: {tool_names}")
-        return resp
+                info_agent = create_agent(
+                    model=info_model,
+                    tools=info_agent_tools,
+                    system_prompt=full_info_prompt,
+                    middleware=[fallback,DirectToolOutputMiddleware()],
+                )
+
+                # Inject short-term memory messages directly before current user input
+                messages_for_info_agent = list(short_term_msgs)
+                #print("Info Agent Messages:\n", messages_for_info_agent)
+                
+                # Update status to "Analyzing..."
+                analyzing_msg = lang_manager.translate(guild_id, "system", "chat_bot", "responses", "analyzing") if lang_manager else "🔍 分析資訊中..."
+                await safe_edit_message(message_edit, analyzing_msg)
+                
+                # Prepare callbacks
+                callbacks = []
+                if lang_manager:
+                    callbacks.append(ToolFeedbackCallbackHandler(message_edit, lang_manager, guild_id))
+
+                # Execute info_agent to process user message and tools
+                info_result = await info_agent.ainvoke(
+                    {"messages": messages_for_info_agent},
+                    config={"callbacks": callbacks}
+                )
+                
+                # Extract the analysis output from info_agent result
+                # Info agent should return analysis in a format suitable for message generation
+                info_message: List[BaseMessage] = []
+                if isinstance(info_result, dict) and "messages" in info_result:
+                    info_message = info_result["messages"]
+                else:
+                    # Fallback: create a human message from the result
+                    result_str = str(info_result) if info_result else ""
+                    from langchain_core.messages import HumanMessage
+                    info_message = [HumanMessage(content=result_str)]
+            except Exception as e:
+                await asyncio.create_task(func.report_error(e, "info_agent failed"))
+                raise
+
+            try:
+                # --- Message agent setup ---
+
+                try:
+                    message_model, fallback = self.model_manager.get_model("message_model")
+                except Exception as e:
+                    await func.report_error(e, "ModelManager.get_model failed for message_model")
+                    raise RuntimeError(f"Failed to get message_model: {e}") from e
+
+                # Build message agent prompt using ProtectedPromptManager
+                # This ensures system-level modules (Discord format, input parsing, etc.)  
+                # are protected from user modification
+                message_system_prompt = self._build_message_agent_prompt(bot.user.id, message)
+
+                # full_message_prompt must only include procedural_context_str and system prompt
+                full_message_prompt = f"{procedural_context_str}\n\n{message_system_prompt}"
+                #print("Message Agent Prompt:\n", full_message_prompt)
+                message_agent = create_agent(
+                    model=message_model,
+                    tools=message_agent_tools,
+                    system_prompt=full_message_prompt,
+                    middleware=[fallback, ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
+                )
+
+                # Use the analysis from info_agent for message generation
+                # Compose messages for message_agent with analysis output and context
+                messages_for_message_agent = list(info_message)
+
+                #print("Message Agent Messages:\n", messages_for_message_agent)
+                
+                # Update status to "Thinking..."
+                thinking_msg = lang_manager.translate(guild_id, "system", "chat_bot", "responses", "thinking") if lang_manager else "🧠 思考回覆中..."
+                await safe_edit_message(message_edit, thinking_msg)
+                
+                # Retry loop for message generation to handle empty responses or transient errors
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        streamer = message_agent.astream(
+                            {"messages": messages_for_message_agent},
+                            stream_mode="messages",
+                        )
+                        
+                        # On last attempt, let send_message handle the error (send error msg to user)
+                        # For earlier attempts, raise exception to trigger retry
+                        should_raise = (attempt < max_retries - 1)
+                        
+                        message_result = await send_message(
+                            bot, 
+                            message_edit, 
+                            message, 
+                            streamer,
+                            raise_exception=should_raise,
+                            tools=message_agent_tools
+                        )
+                        # If we get here, success!
+                        break
+                        
+                    except Exception as e:
+                        logger.warning(f"Message generation attempt {attempt + 1}/{max_retries} failed: {e}")
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(1)  # Wait a bit before retry
+                        else:
+                            # This block should theoretically not be reached if raise_exception=False 
+                            # on the last attempt, as send_message would return the error string.
+                            # But if it does raise (e.g. critical error), re-raise it.
+                            raise
+
+            except Exception as e:
+                await asyncio.create_task(func.report_error(e, "message_agent failed"))
+                raise
+
+            resp = OrchestratorResponse.construct()
+            resp.reply = message_result
+            
+            # Build concise tool list for logging (only names, not full schemas)
+            tool_names = [getattr(t, "name", repr(t)) for t in all_tools]
+            
+            # Store full tool info in response if needed
+            resp.tool_calls = [
+                {"tool": getattr(t, "name", repr(t)), "args": getattr(t, "args", None)} for t in all_tools
+            ]
+            
+            # Log with concise tool names only
+            logger.info(f"{bot.user.name}:{resp.reply}, available_tools: {tool_names}")
+            return resp
 
 
 __all__ = ["Orchestrator"]
