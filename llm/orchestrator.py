@@ -382,7 +382,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             message, 
                             streamer,
                             raise_exception=should_raise,
-                            tools=message_agent_tools
+                            tools=all_tools
                         )
                         # If we get here, success!
                         break

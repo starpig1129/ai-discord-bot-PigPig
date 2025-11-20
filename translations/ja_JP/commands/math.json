@@ -1,4 +1,7 @@
 {
+  "responses": {
+    "result": "計算結果: {expression} = {result}"
+  },
   "calculate": {
     "name": "calculate",
     "description": "数学式を計算",

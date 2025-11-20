@@ -1,4 +1,7 @@
 {
+  "responses": {
+    "result": "Calculation result: {expression} = {result}"
+  },
   "calculate": {
     "name": "calculate",
     "description": "Calculate mathematical expression",

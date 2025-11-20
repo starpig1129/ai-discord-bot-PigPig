@@ -343,6 +343,16 @@ def get_tools(
                 if tool_name not in MESSAGE_AGENT_TOOLS:
                     continue
             
+            # Assign agent_mode to the tool for identification
+            # Note: This modifies the tool instance in place. Since tools are disjoint
+            # between info/message modes (based on MESSAGE_AGENT_TOOLS logic above),
+            # this is generally safe. For "all" mode, it will be "all".
+            try:
+                t.agent_mode = agent_mode
+            except Exception:
+                # Some tool objects might not allow attribute assignment
+                pass
+
             result.append(t)
 
         except Exception as e:
