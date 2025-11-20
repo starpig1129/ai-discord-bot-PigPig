@@ -165,4 +165,8 @@ class GifTools(commands.Cog):
             return ""
 
 async def setup(bot):
+    from addons.tokens import tokens
+    if not tokens.tenor_api_key:
+        log.warning("TENOR_API_KEY not found, skipping GifTools cog.")
+        return
     await bot.add_cog(GifTools(bot))
