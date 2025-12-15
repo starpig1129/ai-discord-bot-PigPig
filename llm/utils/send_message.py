@@ -235,7 +235,7 @@ async def _process_token_stream(
     current_block = ''  # Current message block content for Discord
     last_update_time = 0  # Initialize to 0 to allow immediate first update
     pending_content = ''  # Content waiting to be sent to Discord
-    is_capturing = False  # Flag to track if we're between <som> and <eom>
+    is_capturing = False  # Only capture content between <som> and <eom> markers
     
     # Tool execution tracking
     tool_call_chunks = []
@@ -387,6 +387,7 @@ async def _process_token_stream(
     
     # Buffer for handling split tags
     tag_buffer = ''
+    markers_detected = False  # Track if any <som> or <eom> markers were found
     
     def extract_display_content(token_str: str) -> str:
         """Extract content that should be displayed on Discord.
@@ -395,9 +396,11 @@ async def _process_token_stream(
             token_str: Current token string.
             
         Returns:
-            Content to display (empty if outside markers or contains only markers).
+            Content to display. If markers are present, only content between
+            <som> and <eom> is returned. If no markers detected, all content
+            is passed through.
         """
-        nonlocal is_capturing, tag_buffer
+        nonlocal is_capturing, tag_buffer, markers_detected
         
         # Prepend any buffered content
         current_str = tag_buffer + token_str
@@ -410,10 +413,12 @@ async def _process_token_stream(
             if current_str[i] == '<':
                 # Check if it's a complete tag
                 if current_str[i:].startswith('<som>'):
+                    markers_detected = True
                     is_capturing = True
                     i += 5
                     continue
                 elif current_str[i:].startswith('<eom>'):
+                    markers_detected = True
                     is_capturing = False
                     i += 5
                     continue
@@ -425,7 +430,8 @@ async def _process_token_stream(
                     tag_buffer = remaining
                     break
             
-            # If we are capturing, append the character
+            # If we are capturing (or no markers detected yet), append the character
+            # When no markers are used by the model, we capture everything
             if is_capturing:
                 display_str += current_str[i]
             i += 1
@@ -472,10 +478,21 @@ async def _process_token_stream(
             await update_message()
             
         # Fallback: If no content was displayed but we have raw result,
-        # it means the model likely forgot the <som> tags.
+        # it means the model output was entirely outside <som>/<eom> markers.
         if not display_content and message_result and message_result.strip():
-            _logger.warning("Model output content without <som> tags. Applying fallback.")
-            pending_content = message_result
+            if markers_detected:
+                _logger.warning("Model used markers but all content was outside them. Applying fallback.")
+            else:
+                _logger.warning("Model output without <som>/<eom> markers. Applying fallback with cleanup.")
+            
+            # Try to strip identity prefixes like "[Name | UserID:xxx | MessageID:xxx]  content"
+            import re
+            cleaned_result = message_result
+            # Pattern: [anything | UserID:digits | MessageID:digits] followed by optional whitespace
+            prefix_pattern = r'^\[.*?\|\s*UserID:\d+\s*\|\s*MessageID:\d+\]\s*'
+            cleaned_result = re.sub(prefix_pattern, '', cleaned_result, flags=re.DOTALL)
+            
+            pending_content = cleaned_result.strip() if cleaned_result.strip() else message_result
             await update_message()
             
         # Check if we have any content after all processing

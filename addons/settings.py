@@ -155,6 +155,8 @@ class LLMConfig:
         self.data: dict = _load_yaml_file(path)
         self.model_priorities: list = self.data.get("model_priorities", [])
         self.google_search_agent: str = self.data.get("google_search_agent", "gemini-2.0-flash")
+        # Ollama server URL (defaults to localhost:11434)
+        self.ollama_url: Optional[str] = self.data.get("ollama_url", "http://localhost:11434")
 
 
 class UpdateConfig:
