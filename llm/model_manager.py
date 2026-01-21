@@ -62,6 +62,31 @@ class ModelManager:
                 logger.error(f"llm/model_manager.py/_resolve_priority_list error: {e}")
             return []
 
+    def get_model_priority_list(self, agent_type: str) -> List[str]:
+        """Returns the full list of models for a given agent_type.
+
+        This method is useful for streaming fallback scenarios where
+        ModelFallbackMiddleware doesn't work (streaming mode).
+
+        Args:
+            agent_type: The agent type to get models for (e.g., 'info_model').
+
+        Returns:
+            List of model strings in priority order (e.g., ['google_genai:gemini-2.5-flash', 'ollama:gpt-oss:20b']).
+
+        Raises:
+            ValueError: If no model priorities are configured for the agent_type.
+        """
+        priorities = self._resolve_priority_list(agent_type)
+        if not priorities:
+            err = ValueError(f"No model priorities configured for agent_type '{agent_type}'")
+            try:
+                asyncio.create_task(func.report_error(err, "llm/model_manager.py/get_model_priority_list"))
+            except Exception:
+                logger.error("Failed to schedule func.report_error for missing model priorities")
+            raise err
+        return priorities
+
     def get_model(self, agent_type: str) -> Tuple[str, ModelFallbackMiddleware]:
         """公開方法，回傳 (primary_model, ModelFallbackMiddleware)。
 

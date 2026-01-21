@@ -3,6 +3,10 @@ import asyncio
 from typing import Any, List
 import re
 
+from addons.logging import get_logger
+
+logger = get_logger(server_id="Bot", source="llm.orchestrator")
+
 from discord import Message
 from langchain_core.messages import BaseMessage
 from langchain.agents import create_agent
@@ -280,28 +284,22 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 # We should probably combine them or just get all for that purpose.
                 all_tools = info_agent_tools + message_agent_tools
 
-                # --- Info agent setup ---
+                # --- Info agent setup with fallback ---
+                # Note: Using manual fallback for consistency with message_agent
+                # and to handle quota/rate limit errors more gracefully.
+                
                 try:
-                    info_model, fallback = self.model_manager.get_model("info_model")
+                    info_model_list = self.model_manager.get_model_priority_list("info_model")
                 except Exception as e:
-                    await func.report_error(e, "ModelManager.get_model failed for info_model")
-                    raise RuntimeError(f"Failed to get info_model: {e}") from e
+                    await func.report_error(e, "ModelManager.get_model_priority_list failed for info_model")
+                    raise RuntimeError(f"Failed to get info_model priority list: {e}") from e
 
                 info_system_prompt = self._build_info_agent_prompt(bot_id=bot.user.id, message=message)
                 # IMPORTANT: full_info_prompt should only include procedural_context_str (string) and system prompt.
                 full_info_prompt = f"{procedural_context_str}\n\n{info_system_prompt}"
-                #print("Info Agent Prompt:\n", full_info_prompt)
-
-                info_agent = create_agent(
-                    model=info_model,
-                    tools=info_agent_tools,
-                    system_prompt=full_info_prompt,
-                    middleware=[fallback,DirectToolOutputMiddleware()],
-                )
 
                 # Inject short-term memory messages directly before current user input
                 messages_for_info_agent = list(short_term_msgs)
-                #print("Info Agent Messages:\n", messages_for_info_agent)
                 
                 # Update status to "Analyzing..."
                 analyzing_msg = lang_manager.translate(guild_id, "system", "chat_bot", "responses", "analyzing") if lang_manager else "🔍 分析資訊中..."
@@ -312,11 +310,39 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 if lang_manager:
                     callbacks.append(ToolFeedbackCallbackHandler(message_edit, lang_manager, guild_id))
 
-                # Execute info_agent to process user message and tools
-                info_result = await info_agent.ainvoke(
-                    {"messages": messages_for_info_agent},
-                    config={"callbacks": callbacks}
-                )
+                # Info agent fallback loop - try each model once, no retries
+                info_result = None
+                last_info_exception = None
+                
+                for model_index, current_info_model in enumerate(info_model_list):
+                    try:
+                        logger.info(f"Info agent: trying model {current_info_model} ({model_index + 1}/{len(info_model_list)})")
+                        
+                        info_agent = create_agent(
+                            model=current_info_model,
+                            tools=info_agent_tools,
+                            system_prompt=full_info_prompt,
+                            middleware=[DirectToolOutputMiddleware()],
+                        )
+
+                        # Execute info_agent to process user message and tools
+                        info_result = await info_agent.ainvoke(
+                            {"messages": messages_for_info_agent},
+                            config={"callbacks": callbacks}
+                        )
+                        
+                        # Success!
+                        if model_index > 0:
+                            logger.info(f"Info agent fallback successful: used model {current_info_model}")
+                        break
+                        
+                    except Exception as e:
+                        last_info_exception = e
+                        logger.warning(f"Info agent model {current_info_model} failed: {e}")
+                        # Continue to next model immediately
+                
+                if info_result is None and last_info_exception is not None:
+                    raise last_info_exception
                 
                 # Extract the analysis output from info_agent result
                 # Info agent should return analysis in a format suitable for message generation
@@ -333,13 +359,15 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 raise
 
             try:
-                # --- Message agent setup ---
+                # --- Message agent setup with streaming fallback ---
+                # Note: ModelFallbackMiddleware doesn't support streaming mode,
+                # so we implement fallback at the orchestrator level.
 
                 try:
-                    message_model, fallback = self.model_manager.get_model("message_model")
+                    model_priority_list = self.model_manager.get_model_priority_list("message_model")
                 except Exception as e:
-                    await func.report_error(e, "ModelManager.get_model failed for message_model")
-                    raise RuntimeError(f"Failed to get message_model: {e}") from e
+                    await func.report_error(e, "ModelManager.get_model_priority_list failed for message_model")
+                    raise RuntimeError(f"Failed to get message_model priority list: {e}") from e
 
                 # Build message agent prompt using ProtectedPromptManager
                 # This ensures system-level modules (Discord format, input parsing, etc.)  
@@ -348,57 +376,65 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
                 # full_message_prompt must only include procedural_context_str and system prompt
                 full_message_prompt = f"{procedural_context_str}\n\n{message_system_prompt}"
-                #print("Message Agent Prompt:\n", full_message_prompt)
-                message_agent = create_agent(
-                    model=message_model,
-                    tools=message_agent_tools,
-                    system_prompt=full_message_prompt,
-                    middleware=[fallback, ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
-                )
 
                 # Use the analysis from info_agent for message generation
                 # Compose messages for message_agent with analysis output and context
                 messages_for_message_agent = list(info_message)
-
-                #print("Message Agent Messages:\n", messages_for_message_agent)
                 
                 # Update status to "Thinking..."
                 thinking_msg = lang_manager.translate(guild_id, "system", "chat_bot", "responses", "thinking") if lang_manager else "🧠 思考回覆中..."
                 await safe_edit_message(message_edit, thinking_msg)
                 
-                # Retry loop for message generation to handle empty responses or transient errors
-                max_retries = 3
-                for attempt in range(max_retries):
+                # Streaming fallback loop - try each model once, no retries
+                last_exception = None
+                message_result = None
+                
+                for model_index, current_model in enumerate(model_priority_list):
                     try:
+                        logger.info(f"Message agent: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
+                        
+                        # Create agent with current model (no fallback middleware needed)
+                        message_agent = create_agent(
+                            model=current_model,
+                            tools=message_agent_tools,
+                            system_prompt=full_message_prompt,
+                            middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
+                        )
+                        
                         streamer = message_agent.astream(
                             {"messages": messages_for_message_agent},
                             stream_mode="messages",
                         )
                         
-                        # On last attempt, let send_message handle the error (send error msg to user)
-                        # For earlier attempts, raise exception to trigger retry
-                        should_raise = (attempt < max_retries - 1)
+                        # Only raise if there are more models to try
+                        is_last_model = (model_index == len(model_priority_list) - 1)
                         
                         message_result = await send_message(
                             bot, 
                             message_edit, 
                             message, 
                             streamer,
-                            raise_exception=should_raise,
+                            raise_exception=not is_last_model,
                             tools=all_tools
                         )
-                        # If we get here, success!
+                        
+                        # Success!
+                        if model_index > 0:
+                            logger.info(f"Fallback successful: used model {current_model}")
                         break
                         
                     except Exception as e:
-                        logger.warning(f"Message generation attempt {attempt + 1}/{max_retries} failed: {e}")
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(1)  # Wait a bit before retry
-                        else:
-                            # This block should theoretically not be reached if raise_exception=False 
-                            # on the last attempt, as send_message would return the error string.
-                            # But if it does raise (e.g. critical error), re-raise it.
-                            raise
+                        last_exception = e
+                        logger.warning(f"Model {current_model} failed: {e}")
+                        # Continue to next model immediately
+                    
+                    # If we got a result, break out of the model loop
+                    if message_result is not None:
+                        break
+                
+                # If all models failed, raise the last exception
+                if message_result is None and last_exception is not None:
+                    raise last_exception
 
             except Exception as e:
                 await asyncio.create_task(func.report_error(e, "message_agent failed"))

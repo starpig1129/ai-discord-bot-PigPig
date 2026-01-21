@@ -86,13 +86,13 @@ class EatWhatView(discord.ui.View):
             await func.report_error(e, "cogs/eat/views.py/regenerate")
     @discord.ui.button(label="查看評論", emoji="📰")
     async def review(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """美食評論功能按鈕 - 已升級至 Google Gemini API 官方標準
+        """美食評論功能按鈕 - 支援 Streaming Fallback
         
-        主要改進：
+        主要功能：
         1. 使用官方 role + parts 格式建構對話歷史
         2. 採用 function 角色格式化店家資訊（符合工具調用標準）
         3. 改用 async for 處理串流回應
-        4. 加強錯誤處理和中文註解
+        4. 支援模型 fallback（當主模型配額用盡時自動切換）
         """
         try:
             system_prompt = '''You are a professional and witty food critic who excels at writing vivid and interesting reviews based on restaurant information.
@@ -111,7 +111,6 @@ class EatWhatView(discord.ui.View):
             }
             
             # === 使用官方 function 角色格式建構對話歷史 ===
-            # 符合新的工具調用和智慧上下文建構標準
             dialogue_history = [
                 {
                     "role": "function",
@@ -128,38 +127,72 @@ class EatWhatView(discord.ui.View):
             await interaction.response.send_message("🍽️ AI 美食評論家正在分析中...", ephemeral=True)
             message_to_edit = await interaction.followup.send("📝 準備撰寫專業評論...", ephemeral=True)
             
-            review_model, fallback = ModelManager().get_model("review_model")
-            if review_model is None:
-                raise RuntimeError("review_model not available")
-            review_agent = create_agent(
-                model=review_model,
-                tools=[],
-                system_prompt=system_prompt,
-                middleware=[fallback],
-            )
+            # Get model priority list for streaming fallback
+            model_manager = ModelManager()
+            try:
+                model_priority_list = model_manager.get_model_priority_list("review_model")
+            except ValueError as e:
+                await func.report_error(e, "cogs/eat/views.py/review - no review_model configured")
+                await safe_edit_message(message_to_edit, "❌ 評論模型未正確設定")
+                return
+            
             messages = dialogue_history + [
                 HumanMessage(content="Based on the provided restaurant information, write a professional and witty food review.")
             ]
-            streamer = review_agent.stream(
-                {"messages": messages}, 
-                stream_mode="messages"
-            )
-            buffer_size = 40  # 每次更新的字元數
-            responses = ""
+            
+            # Streaming fallback loop - try each model once, no retries
             responsesall = ""
-
-            async for token, metadata in streamer:
-                if hasattr(token, 'content'):
-                    responses += token.content
+            last_exception = None
+            success = False
+            
+            for model_index, current_model in enumerate(model_priority_list):
+                try:
+                    review_agent = create_agent(
+                        model=current_model,
+                        tools=[],
+                        system_prompt=system_prompt,
+                        middleware=[],
+                    )
                     
-                    if len(responses) >= buffer_size:
-                        responsesall += responses
+                    streamer = review_agent.astream(
+                        {"messages": messages}, 
+                        stream_mode="messages"
+                    )
+                    
+                    buffer_size = 40
+                    responses = ""
+                    responsesall = ""
+                    
+                    async for token, metadata in streamer:
+                        if hasattr(token, 'content') and token.content:
+                            responses += token.content
+                            
+                            if len(responses) >= buffer_size:
+                                responsesall += responses
+                                await safe_edit_message(message_to_edit, responsesall)
+                                responses = ""
+                    
+                    # Process remaining content
+                    responsesall += responses
+                    responsesall = responsesall.strip()
+                    
+                    if responsesall:
                         await safe_edit_message(message_to_edit, responsesall)
-                        responses = ""
-
-            # 處理剩餘的回應內容並清理特殊標記
-            responsesall += responses
-            responsesall = responsesall.strip()
-            await safe_edit_message(message_to_edit, responsesall)
+                        success = True
+                        break
+                    else:
+                        raise ValueError("Empty response from model")
+                        
+                except Exception as e:
+                    last_exception = e
+                    # Continue to next model immediately
+                
+                if success:
+                    break
+            
+            if not success and last_exception:
+                await safe_edit_message(message_to_edit, f"❌ 評論生成失敗: {str(last_exception)[:100]}")
+                await func.report_error(last_exception, "cogs/eat/views.py/review - all models failed")
+                
         except Exception as e:
             await func.report_error(e, "cogs/eat/views.py/review")
