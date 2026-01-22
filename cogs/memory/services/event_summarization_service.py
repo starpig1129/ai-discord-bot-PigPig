@@ -18,6 +18,7 @@ from function import func
 from addons.settings import MemoryConfig, prompt_config
 from addons.logging import get_logger
 from llm.model_manager import ModelManager
+from llm.model_circuit_breaker import get_model_circuit_breaker
 
 log = get_logger(__name__)
 
@@ -319,6 +320,8 @@ class EventSummarizationService:
         """
         Get event summary from LLM using the episodic memory extractor prompt with structured output.
         
+        Uses circuit breaker to avoid calling models that are known to be failing.
+        
         Args:
             message_data: Prepared message data for LLM processing
             previous_summary: Context from previous events
@@ -327,63 +330,85 @@ class EventSummarizationService:
             MemoryFragmentList object or None if failed
         """
         try:
-            # Get the model and fallback middleware
+            # Get model priority list for fallback
             try:
-                primary_model, fallback_mw = self.model_manager.get_model("episodic_memory_model")
-                log.debug(f"Using model: {primary_model}")
+                model_priority_list = self.model_manager.get_model_priority_list("episodic_memory_model")
+                log.debug(f"Episodic memory model priority list: {model_priority_list}")
             except ValueError as e:
-                log.error(f"Failed to get model for episodic_memory_model: {e}")
+                log.error(f"Failed to get model list for episodic_memory_model: {e}")
                 return None
             
             # Prepare the system and user prompts
             system_prompt = self._get_system_prompt()
             user_prompt = self._get_user_prompt_with_messages(message_data, previous_summary)
             
-            # Create the agent with structured output
-            log.debug("Creating agent with structured output for episodic memory extraction")
-            
-            agent = create_agent(
-                primary_model,
-                tools=[],
-                system_prompt=system_prompt,
-                response_format=MemoryFragmentList,  # Use structured output
-                middleware=[fallback_mw] if fallback_mw else []
-            )
-            
             # Prepare the message list
             message_list = [HumanMessage(content=user_prompt)]
             
-            # Make the API call to the LLM
-            log.debug("Calling LLM for episodic memory extraction with structured output")
-            response = await agent.ainvoke(cast(Any, {"messages": message_list}))
+            # Use circuit breaker to skip known-failing models
+            circuit_breaker = get_model_circuit_breaker()
+            last_exception = None
             
-            # Extract structured response using the unified method
-            memory_fragment = self._extract_structured_response(
-                response,
-                MemoryFragmentList,
-                "Episodic Memory Extractor"
-            )
-            
-            if memory_fragment:
-                # Log a concise preview: number of fragments and first fragment content preview if available.
+            for model_index, current_model in enumerate(model_priority_list):
+                # Skip models that are in cooldown (recently failed)
+                if not circuit_breaker.is_available(current_model):
+                    log.info(f"Episodic memory: skipping model {current_model} (circuit breaker open)")
+                    continue
+                
                 try:
-                    first_preview = (
-                        memory_fragment.fragments[0].query_value[:50]
-                        if getattr(memory_fragment, "fragments", None)
-                        and len(memory_fragment.fragments) > 0
-                        else ""
+                    log.debug(f"Episodic memory: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
+                    
+                    # Create the agent with structured output
+                    agent = create_agent(
+                        current_model,
+                        tools=[],
+                        system_prompt=system_prompt,
+                        response_format=MemoryFragmentList,  # Use structured output
+                        middleware=[]
                     )
-                    log.debug(
-                        f"Successfully extracted {len(memory_fragment.fragments)} memory fragment(s); preview: {first_preview}..."
+                    
+                    # Make the API call to the LLM
+                    response = await agent.ainvoke(cast(Any, {"messages": message_list}))
+                    
+                    # Extract structured response using the unified method
+                    memory_fragment = self._extract_structured_response(
+                        response,
+                        MemoryFragmentList,
+                        "Episodic Memory Extractor"
                     )
-                except Exception:
-                    log.debug(
-                        "Successfully extracted memory fragment(s); unable to generate preview"
-                    )
-            else:
-                log.warning("Failed to extract memory fragment from LLM response")
+                    
+                    if memory_fragment:
+                        # Log a concise preview
+                        try:
+                            first_preview = (
+                                memory_fragment.fragments[0].query_value[:50]
+                                if getattr(memory_fragment, "fragments", None)
+                                and len(memory_fragment.fragments) > 0
+                                else ""
+                            )
+                            log.debug(
+                                f"Successfully extracted {len(memory_fragment.fragments)} memory fragment(s); preview: {first_preview}..."
+                            )
+                        except Exception:
+                            log.debug(
+                                "Successfully extracted memory fragment(s); unable to generate preview"
+                            )
+                        return memory_fragment
+                    else:
+                        raise ValueError("Failed to extract memory fragment from LLM response")
+                        
+                except Exception as e:
+                    last_exception = e
+                    # Record failure in circuit breaker
+                    circuit_breaker.record_failure(current_model, e)
+                    log.warning(f"Episodic memory model {current_model} failed: {e}")
+                    # Continue to next model
             
-            return memory_fragment
+            # All models failed
+            log.warning("Failed to extract memory fragment from LLM response after all models attempted")
+            if last_exception:
+                await func.report_error(last_exception, "EventSummarizationService/_get_llm_summary - all models failed")
+            return None
             
         except Exception as e:
             log.error(f"Error getting LLM summary: {e}", exc_info=True)

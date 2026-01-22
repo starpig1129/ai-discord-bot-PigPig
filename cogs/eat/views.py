@@ -12,6 +12,7 @@ from cogs.eat.train.train import Train
 from cogs.eat.embeds import eatEmbed
 from function import func
 from llm.model_manager import ModelManager
+from llm.model_circuit_breaker import get_model_circuit_breaker
 from llm.utils.send_message import safe_edit_message
 
 map = GoogleMapCrawler()
@@ -141,11 +142,17 @@ class EatWhatView(discord.ui.View):
             ]
             
             # Streaming fallback loop - try each model once, no retries
+            # Use circuit breaker to skip known-failing models
+            circuit_breaker = get_model_circuit_breaker()
             responsesall = ""
             last_exception = None
             success = False
             
             for model_index, current_model in enumerate(model_priority_list):
+                # Skip models that are in cooldown (recently failed)
+                if not circuit_breaker.is_available(current_model):
+                    continue
+                
                 try:
                     review_agent = create_agent(
                         model=current_model,
@@ -185,6 +192,8 @@ class EatWhatView(discord.ui.View):
                         
                 except Exception as e:
                     last_exception = e
+                    # Record failure in circuit breaker
+                    circuit_breaker.record_failure(current_model, e)
                     # Continue to next model immediately
                 
                 if success:

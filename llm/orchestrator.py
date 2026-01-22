@@ -25,6 +25,7 @@ from llm.context_manager import ContextManager
 from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.procedural import ProceduralMemoryProvider
 from llm.callbacks import ToolFeedbackCallbackHandler
+from llm.model_circuit_breaker import get_model_circuit_breaker
 
 
 class DirectToolOutputMiddleware(AgentMiddleware):
@@ -311,10 +312,19 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     callbacks.append(ToolFeedbackCallbackHandler(message_edit, lang_manager, guild_id))
 
                 # Info agent fallback loop - try each model once, no retries
+                # Use circuit breaker to skip models that recently failed
+                circuit_breaker = get_model_circuit_breaker()
                 info_result = None
                 last_info_exception = None
+                models_tried = 0
                 
                 for model_index, current_info_model in enumerate(info_model_list):
+                    # Skip models that are in cooldown (recently failed)
+                    if not circuit_breaker.is_available(current_info_model):
+                        logger.info(f"Info agent: skipping model {current_info_model} (circuit breaker open)")
+                        continue
+                    
+                    models_tried += 1
                     try:
                         logger.info(f"Info agent: trying model {current_info_model} ({model_index + 1}/{len(info_model_list)})")
                         
@@ -332,12 +342,14 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         )
                         
                         # Success!
-                        if model_index > 0:
+                        if models_tried > 1:
                             logger.info(f"Info agent fallback successful: used model {current_info_model}")
                         break
                         
                     except Exception as e:
                         last_info_exception = e
+                        # Record failure in circuit breaker
+                        circuit_breaker.record_failure(current_info_model, e)
                         logger.warning(f"Info agent model {current_info_model} failed: {e}")
                         # Continue to next model immediately
                 
@@ -386,10 +398,18 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 await safe_edit_message(message_edit, thinking_msg)
                 
                 # Streaming fallback loop - try each model once, no retries
+                # Use circuit breaker to skip models that recently failed
                 last_exception = None
                 message_result = None
+                models_tried = 0
                 
                 for model_index, current_model in enumerate(model_priority_list):
+                    # Skip models that are in cooldown (recently failed)
+                    if not circuit_breaker.is_available(current_model):
+                        logger.info(f"Message agent: skipping model {current_model} (circuit breaker open)")
+                        continue
+                    
+                    models_tried += 1
                     try:
                         logger.info(f"Message agent: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
                         
@@ -406,25 +426,28 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             stream_mode="messages",
                         )
                         
-                        # Only raise if there are more models to try
-                        is_last_model = (model_index == len(model_priority_list) - 1)
+                        # Check if there are more available models to try
+                        remaining_models = [m for m in model_priority_list[model_index + 1:] if circuit_breaker.is_available(m)]
+                        is_last_available = len(remaining_models) == 0
                         
                         message_result = await send_message(
                             bot, 
                             message_edit, 
                             message, 
                             streamer,
-                            raise_exception=not is_last_model,
+                            raise_exception=not is_last_available,
                             tools=all_tools
                         )
                         
                         # Success!
-                        if model_index > 0:
+                        if models_tried > 1:
                             logger.info(f"Fallback successful: used model {current_model}")
                         break
                         
                     except Exception as e:
                         last_exception = e
+                        # Record failure in circuit breaker
+                        circuit_breaker.record_failure(current_model, e)
                         logger.warning(f"Model {current_model} failed: {e}")
                         # Continue to next model immediately
                     
