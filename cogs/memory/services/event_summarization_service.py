@@ -401,7 +401,12 @@ class EventSummarizationService:
                     last_exception = e
                     # Record failure in circuit breaker
                     circuit_breaker.record_failure(current_model, e)
-                    log.warning(f"Episodic memory model {current_model} failed: {e}")
+                    
+                    error_msg = str(e)
+                    if "No data received from Ollama stream" in error_msg:
+                        log.warning(f"Episodic memory model {current_model} failed: Ollama stream empty (possible overload or bad prompt)")
+                    else:
+                        log.warning(f"Episodic memory model {current_model} failed: {e}")
                     # Continue to next model
             
             # All models failed

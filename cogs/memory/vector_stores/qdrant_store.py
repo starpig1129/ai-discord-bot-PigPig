@@ -132,6 +132,11 @@ class QdrantStore(VectorStoreInterface):
             # Convert MemoryFragments to LangChain Documents
             documents = []
             for mem in memories:
+                # Skip empty memories to prevent vector store errors
+                if not mem.query_key or not mem.query_key.strip():
+                    logger.warning("Skipping empty memory fragment: ID=%s", getattr(mem, "id", "unknown"))
+                    continue
+
                 metadata = getattr(mem, "metadata", {}) or {}
                 if isinstance(metadata, dict):
                     # Ensure IDs are strings for filtering
@@ -149,6 +154,10 @@ class QdrantStore(VectorStoreInterface):
                     }
                 )
                 documents.append(doc)
+
+            if not documents:
+                logger.warning("No valid documents to add after filtering empty memories")
+                return
 
             # Use LangChain's batch add
             await asyncio.get_event_loop().run_in_executor(
