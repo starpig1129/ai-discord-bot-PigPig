@@ -18,7 +18,12 @@ from function import func
 from addons.settings import MemoryConfig, prompt_config
 from addons.logging import get_logger
 from llm.model_manager import ModelManager
+from llm.model_manager import ModelManager
 from llm.model_circuit_breaker import get_model_circuit_breaker
+from langchain_ollama import ChatOllama
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 
 log = get_logger(__name__)
 
@@ -167,9 +172,24 @@ class EventSummarizationService:
             # Step 3: Convert based on payload type
             if isinstance(payload, str):
                 # JSON string
-                result = expected_model.model_validate_json(payload)
-                log.debug(f"{context}: Parsed from JSON string")
-                return result
+                try:
+                    result = expected_model.model_validate_json(payload)
+                    log.debug(f"{context}: Parsed from JSON string")
+                    return result
+                except Exception:
+                    # Attempt to sanitize by extracting JSON from first { to last }
+                    import re
+                    match = re.search(r'(\{.*\})', payload, re.DOTALL)
+                    if match:
+                        cleaned = match.group(1)
+                        try:
+                            result = expected_model.model_validate_json(cleaned)
+                            log.debug(f"{context}: Parsed from sanitized JSON string")
+                            return result
+                        except Exception:
+                            pass
+                    # If sanitization fails or validation still fails, re-raise original or let it fall through
+                    raise
             elif isinstance(payload, dict):
                 # Dictionary
                 result = expected_model.model_validate(payload)
@@ -368,7 +388,24 @@ class EventSummarizationService:
                     )
                     
                     # Make the API call to the LLM
-                    response = await agent.ainvoke(cast(Any, {"messages": message_list}))
+                    try:
+                        response = await agent.ainvoke(cast(Any, {"messages": message_list}))
+                    except Exception as invoke_error:
+                        # Fallback for when tool parsing fails (e.g., LLM returns Python code)
+                        log.warning(f"Structured invoke failed for {current_model}: {invoke_error}. Attempting raw fallback.")
+                        
+                        try:
+                            # Instantiate model object from string
+                            model_instance = self._create_llm_instance(current_model)
+                            
+                            # Manually invoke the model to get raw output
+                            # Ensure we pass the properly formatted messages
+                            raw_response = await model_instance.ainvoke(message_list)
+                            response = {"output": raw_response.content}
+                            log.debug(f"Raw mode fallback successful for {current_model}")
+                        except Exception as fallback_error:
+                            log.error(f"Raw fallback also failed for {current_model}: {fallback_error}")
+                            raise invoke_error  # Raise original error if fallback fails
                     
                     # Extract structured response using the unified method
                     memory_fragment = self._extract_structured_response(
@@ -419,6 +456,46 @@ class EventSummarizationService:
             log.error(f"Error getting LLM summary: {e}", exc_info=True)
             await func.report_error(e, "EventSummarizationService/_get_llm_summary")
             return None
+
+    def _create_llm_instance(self, model_name: str) -> Any:
+        """
+        Create a LangChain model instance from a model name string.
+        
+        Args:
+            model_name: Model identifier (e.g. 'ollama:gpt-oss:20b')
+            
+        Returns:
+            LangChain chat model instance
+        """
+        try:
+            if model_name.startswith("ollama:"):
+                model_id = model_name.split(":", 1)[1]
+                # Default to localhost if not specified in config
+                base_url = getattr(self.settings, "ollama_base_url", "http://localhost:11434")
+                return ChatOllama(model=model_id, base_url=base_url, temperature=0.1)
+            
+            elif model_name.startswith("google_genai:"):
+                model_id = model_name.split(":", 1)[1]
+                api_key = getattr(self.settings, "google_api_key", None)
+                if not api_key:
+                    from addons.tokens import tokens
+                    api_key = getattr(tokens, "google_api_key", None)
+                return ChatGoogleGenerativeAI(model=model_id, google_api_key=api_key, temperature=0.1)
+                
+            elif model_name.startswith("openai:"):
+                model_id = model_name.split(":", 1)[1]
+                return ChatOpenAI(model=model_id, temperature=0.1)
+
+            elif model_name.startswith("anthropic:"):
+                model_id = model_name.split(":", 1)[1]
+                return ChatAnthropic(model=model_id, temperature=0.1)
+            
+            else:
+                raise ValueError(f"Unknown model provider in: {model_name}")
+                
+        except Exception as e:
+            log.error(f"Failed to create LLM instance for {model_name}: {e}")
+            raise
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt from the episodic memory extractor template."""

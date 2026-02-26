@@ -124,7 +124,7 @@ def get_error_deduplicator() -> ErrorDeduplicator:
     if _error_deduplicator is None:
         with _dedup_lock:
             if _error_deduplicator is None:
-                _error_deduplicator = ErrorDeduplicator(cooldown_seconds=300.0)  # 5 min
+                _error_deduplicator = ErrorDeduplicator(cooldown_seconds=86400.0)  # 1 day
     return _error_deduplicator
 
 
@@ -205,11 +205,11 @@ class Function:
 
         error_field_value = f"```{type(error).__name__}: {error}```"
         if len(error_field_value) > 1024:
-            error_field_value = error_field_value[:1021] + "...```"
+            error_field_value = error_field_value[:1010] + "...```"
         embed.add_field(name="錯誤", value=error_field_value, inline=False)
 
         if len(traceback_str) > 1024:
-            traceback_str = traceback_str[:1021] + "..."
+            traceback_str = traceback_str[:1010] + "..."
         traceback_field_value = f"```python\n{traceback_str}\n```"
         if len(traceback_field_value) > 1024:
             # 重新計算截斷長度
