@@ -1,10 +1,22 @@
 {
-  "queue_empty": "キューは空です",
-  "commands": {
-    "music": {
-      "player": {
-        "queue_empty": "キューは空です"
-      }
-    }
-  }
+    "queue_empty": "キューは空です",
+    "duration": "長さ",
+    "views": "視聴回数",
+    "progress": "進行状況",
+    "queue": "次に再生",
+    "added_by": "追加者",
+    "commands": {
+        "music": {
+            "player": {
+                "queue_empty": "キューは空です",
+                "duration": "長さ",
+                "views": "視聴回数",
+                "progress": "進行状況",
+                "queue": "次に再生",
+                "added_by": "追加者"
+            }
+        }
+    },
+    "now_playing": "🎵 再生中",
+    "uploader": "👤 アップローダー"
 }

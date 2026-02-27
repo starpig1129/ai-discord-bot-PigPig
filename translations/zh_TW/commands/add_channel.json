@@ -1,0 +1,6 @@
+{
+    "responses": {
+        "already_exists": "此頻道已在列表中。",
+        "success": "成功新增頻道。"
+    }
+}

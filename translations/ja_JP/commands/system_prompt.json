@@ -161,7 +161,8 @@
         "text_channel_only": "この機能はテキストチャンネル内でのみ使用できます",
         "operation_cancelled": "操作がキャンセルされました",
         "no_channels_available": "コピー可能な利用可能なチャンネルがありません",
-        "internal_error": "内部エラー、後で再試行してください"
+        "internal_error": "内部エラー、後で再試行してください",
+        "prompt_too_long": "システムプロンプトが長すぎます。"
     },
     "modules": {
         "descriptions": {
@@ -241,5 +242,9 @@
             "success_message_guild": "サーバー {guild_id} のシステムプロンプトキャッシュを正常にクリアしました",
             "error_message": "キャッシュクリア中にエラーが発生しました"
         }
+    },
+    "validation": {
+        "module_empty": "モジュール名は空にできません。",
+        "prompt_empty": "プロンプト内容は空にできません。"
     }
 }

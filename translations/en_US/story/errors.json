@@ -1,0 +1,7 @@
+{
+    "characters_load_failed": "Failed to load character data.",
+    "first_scene_failed": "Failed to generate first scene.",
+    "gm_plan_failed": "GM story planning failed.",
+    "world_load_failed": "Failed to load world settings.",
+    "world_not_found": "Selected world not found."
+}

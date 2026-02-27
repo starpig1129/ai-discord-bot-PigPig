@@ -1,0 +1,7 @@
+{
+    "duration_label": "Duration: {duration}",
+    "placeholder": "Select a song to play",
+    "processing": "⏳ | Processing",
+    "processing_desc": "Processing your selection, please wait...",
+    "added": "✅ | Added to playlist: {title}"
+}

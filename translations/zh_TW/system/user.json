@@ -1,6 +1,6 @@
 {
-  "id_format": "使用者 ID：{user_id}",
-  "user": {
-    "id_format": "使用者 ID：{user_id}"
-  }
+    "id_format": "使用者 ID：{user_id}",
+    "user": {
+        "id_format": "使用者 ID：{user_id}"
+    }
 }

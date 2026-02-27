@@ -1,48 +1,48 @@
 {
-  "set_server_mode": {
-    "choices": {
-      "unrestricted": "無限制",
-      "whitelist": "白名單",
-      "blacklist": "黑名單"
+    "set_server_mode": {
+        "choices": {
+            "unrestricted": "無限制",
+            "whitelist": "白名單",
+            "blacklist": "黑名單"
+        },
+        "responses": {
+            "success": "已將伺服器回應模式設定為：{mode}"
+        }
     },
-    "responses": {
-      "success": "已將伺服器回應模式設定為：{mode}"
-    }
-  },
-  "set_channel_mode": {
-    "choices": {
-      "default": "預設（遵從伺服器）",
-      "story": "故事模式"
+    "set_channel_mode": {
+        "choices": {
+            "default": "預設（遵從伺服器）",
+            "story": "故事模式"
+        },
+        "responses": {
+            "success": "已將頻道 {channel} 的模式設定為：{mode}",
+            "reset": "已將頻道 {channel} 的模式重設為預設（遵從伺服器）。",
+            "already_default": "頻道 {channel} 已經在使用預設模式。"
+        }
     },
-    "responses": {
-      "success": "已將頻道 {channel} 的模式設定為：{mode}",
-      "reset": "已將頻道 {channel} 的模式重設為預設（遵從伺服器）。",
-      "already_default": "頻道 {channel} 已經在使用預設模式。"
-    }
-  },
-  "add_channel": {
-    "choices": {
-      "whitelist": "白名單",
-      "blacklist": "黑名單"
+    "add_channel": {
+        "choices": {
+            "whitelist": "白名單",
+            "blacklist": "黑名單"
+        },
+        "responses": {
+            "success": "頻道 {channel} 已新增到 {list_type}",
+            "already_exists": "頻道 {channel} 已存在於 {list_type} 中"
+        }
     },
-    "responses": {
-      "success": "頻道 {channel} 已新增到 {list_type}",
-      "already_exists": "頻道 {channel} 已存在於 {list_type} 中"
-    }
-  },
-  "remove_channel": {
-    "choices": {
-      "whitelist": "白名單",
-      "blacklist": "黑名單"
+    "remove_channel": {
+        "choices": {
+            "whitelist": "白名單",
+            "blacklist": "黑名單"
+        },
+        "responses": {
+            "success": "頻道 {channel} 已從 {list_type} 移除",
+            "not_found": "在 {list_type} 中找不到頻道 {channel}"
+        }
     },
-    "responses": {
-      "success": "頻道 {channel} 已從 {list_type} 移除",
-      "not_found": "在 {list_type} 中找不到頻道 {channel}"
+    "auto_response": {
+        "responses": {
+            "success": "頻道 {channel} 自動回覆設定為：{enabled}"
+        }
     }
-  },
-  "auto_response": {
-    "responses": {
-      "success": "頻道 {channel} 自動回覆設定為：{enabled}"
-    }
-  }
 }

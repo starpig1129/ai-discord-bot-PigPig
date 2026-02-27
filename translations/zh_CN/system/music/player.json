@@ -1,10 +1,22 @@
 {
-  "queue_empty": "播放队列为空",
-  "commands": {
-    "music": {
-      "player": {
-        "queue_empty": "播放队列为空"
-      }
-    }
-  }
+    "queue_empty": "播放队列为空",
+    "duration": "时长",
+    "views": "观看次数",
+    "progress": "进度",
+    "queue": "即将播放",
+    "added_by": "点播者",
+    "commands": {
+        "music": {
+            "player": {
+                "queue_empty": "播放队列为空",
+                "duration": "时长",
+                "views": "观看次数",
+                "progress": "进度",
+                "queue": "即将播放",
+                "added_by": "点播者"
+            }
+        }
+    },
+    "now_playing": "🎵 正在播放",
+    "uploader": "👤 上传频道"
 }

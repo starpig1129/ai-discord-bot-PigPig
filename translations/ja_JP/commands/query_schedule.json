@@ -1,0 +1,11 @@
+{
+    "responses": {
+        "channel_not_found": "スケジュールチャンネルが見つかりません。",
+        "error": "スケジュールの照会中にエラーが発生しました。",
+        "invalid_query_type": "無効なスケジュール照会タイプです。",
+        "invalid_time_format": "無効な時間形式が提供されました。",
+        "no_schedule": "この時間のスケジュールは見つかりませんでした。",
+        "permission_denied": "スケジュール照会の権限が拒否されました。",
+        "user_not_found": "ターゲットユーザーが見つかりません。"
+    }
+}

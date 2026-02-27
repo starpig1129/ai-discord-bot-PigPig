@@ -161,7 +161,8 @@
         "text_channel_only": "此功能只能在文字頻道內使用",
         "operation_cancelled": "操作已取消",
         "no_channels_available": "沒有可用的頻道進行複製",
-        "internal_error": "內部錯誤，請稍後重試"
+        "internal_error": "內部錯誤，請稍後重試",
+        "prompt_too_long": "系統提示詞太長了。"
     },
     "modules": {
         "descriptions": {
@@ -181,7 +182,18 @@
             "language": "語言偏好和表現",
             "professionalism": "專業議題的表現標準",
             "interaction": "互動模式和對話風格",
-            "format_descriptions": "這行保留以示例"
+            "formatting": "Discord格式化規則",
+            "professional_personality": "專業且有個性的設定"
+        },
+        "modules_select_descriptions": {
+            "base": "基本身份和核心指令",
+            "personality": "個性特徵和表現風格",
+            "answering_principles": "問答的基本原則",
+            "language": "語言偏好和表現",
+            "professionalism": "專業議題的表現標準",
+            "interaction": "互動模式和對話風格",
+            "formatting": "Discord格式化規則",
+            "professional_personality": "專業且有個性的設定"
         },
         "help": {
             "title": "📦 模組說明",
@@ -230,5 +242,9 @@
             "success_message_guild": "已成功清除伺服器 {guild_id} 的系統提示詞快取",
             "error_message": "清除快取時出錯"
         }
+    },
+    "validation": {
+        "module_empty": "模組名稱不能為空。",
+        "prompt_empty": "提示詞內容不能為空。"
     }
 }

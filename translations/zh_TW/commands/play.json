@@ -1,0 +1,23 @@
+{
+    "errors": {
+        "attempting_next": "正在嘗試播放下一首歌曲...",
+        "no_results": "找不到搜尋結果。",
+        "no_voice_channel": "你必須先加入語音頻道。",
+        "nothing_playing": "目前沒有正在播放的內容。",
+        "playback_error": "播放時發生錯誤。",
+        "playback_failed_desc": "無法串流請求的音軌。",
+        "playback_failed_title": "播放失敗",
+        "playlist_download_failed": "下載播放清單資訊失敗。",
+        "queue_full_desc": "播放隊列已滿。",
+        "queue_full_title": "隊列已滿",
+        "video_info_failed": "獲取影片資訊失敗。"
+    },
+    "responses": {
+        "playlist_added": "播放清單已加入隊列。",
+        "queue_finished": "隊列播放完畢。正在斷開連接...",
+        "refreshed_ui": "音樂控制介面已更新。",
+        "search_results_title": "搜尋結果",
+        "select_song": "請選擇要播放的歌曲。",
+        "song_added": "歌曲已加入隊列。"
+    }
+}

@@ -161,7 +161,8 @@
         "text_channel_only": "This function can only be used in text channels",
         "operation_cancelled": "Operation cancelled",
         "no_channels_available": "No available channels for copying",
-        "internal_error": "Internal error, please try again later"
+        "internal_error": "Internal error, please try again later",
+        "prompt_too_long": "System prompt is too long."
     },
     "modules": {
         "descriptions": {
@@ -241,5 +242,9 @@
             "success_message_guild": "Successfully cleared system prompt cache for server {guild_id}",
             "error_message": "Error occurred while clearing cache"
         }
+    },
+    "validation": {
+        "module_empty": "Module name cannot be empty.",
+        "prompt_empty": "Prompt content cannot be empty."
     }
 }

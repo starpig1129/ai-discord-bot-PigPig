@@ -161,7 +161,8 @@
         "text_channel_only": "此功能只能在文本频道内使用",
         "operation_cancelled": "操作已取消",
         "no_channels_available": "没有可用的频道进行复制",
-        "internal_error": "内部错误，请稍后重试"
+        "internal_error": "内部错误，请稍后重试",
+        "prompt_too_long": "系统提示词太长了。"
     },
     "modules": {
         "descriptions": {
@@ -241,5 +242,9 @@
             "success_message_guild": "已成功清除服务器 {guild_id} 的系统提示词缓存",
             "error_message": "清除缓存时出错"
         }
+    },
+    "validation": {
+        "module_empty": "模块名称不能为空。",
+        "prompt_empty": "提示词内容不能为空。"
     }
 }

@@ -1,0 +1,7 @@
+{
+    "characters_load_failed": "載入角色資料失敗。",
+    "first_scene_failed": "生成第一幕失敗。",
+    "gm_plan_failed": "GM 故事規劃失敗。",
+    "world_load_failed": "載入世界設定失敗。",
+    "world_not_found": "找不到選擇的世界。"
+}

@@ -1,0 +1,6 @@
+{
+    "responses": {
+        "already_exists": "此频道已在列表中。",
+        "success": "成功添加频道。"
+    }
+}

@@ -1,5 +1,5 @@
 {
-  "responses": {
-    "current": "現在の言語：{language}"
-  }
+    "responses": {
+        "current": "現在の言語：{language}"
+    }
 }

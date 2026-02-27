@@ -3,34 +3,34 @@
     "description": "Show bot detailed information",
     "title": "🤖 Bot Information Overview",
     "fields": {
-      "basic_stats": {
-        "name": "📊 Basic Statistics",
-        "servers": "Server Count",
-        "users": "User Count",
-        "text_channels": "Text Channels",
-        "voice_channels": "Voice Channels",
-        "loaded_cogs": "Loaded Cogs"
-      },
-      "performance": {
-        "name": "⚡ Performance Monitoring",
-        "latency": "Network Latency",
-        "memory_usage": "Memory Usage",
-        "uptime": "Uptime"
-      },
-      "cogs": {
-        "name": "🔧 Feature Modules",
-        "commands": "commands",
-        "no_cogs": "No loaded modules"
-      }
+        "basic_stats": {
+            "name": "📊 Basic Statistics",
+            "servers": "Server Count",
+            "users": "User Count",
+            "text_channels": "Text Channels",
+            "voice_channels": "Voice Channels",
+            "loaded_cogs": "Loaded Cogs"
+        },
+        "performance": {
+            "name": "⚡ Performance Monitoring",
+            "latency": "Network Latency",
+            "memory_usage": "Memory Usage",
+            "uptime": "Uptime"
+        },
+        "cogs": {
+            "name": "🔧 Feature Modules",
+            "commands": "commands",
+            "no_cogs": "No loaded modules"
+        }
     },
     "status": {
-      "online": "🟢 Online",
-      "idle": "🟡 Idle",
-      "dnd": "🔴 Do Not Disturb",
-      "offline": "⚫ Offline",
-      "unknown": "❓ Unknown"
+        "online": "🟢 Online",
+        "idle": "🟡 Idle",
+        "dnd": "🔴 Do Not Disturb",
+        "offline": "⚫ Offline",
+        "unknown": "❓ Unknown"
     },
-    "footer":{
-      "status_prefix":"Status: "
+    "footer": {
+        "status_prefix": "Status: "
     }
-  }
+}

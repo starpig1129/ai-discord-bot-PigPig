@@ -1,0 +1,23 @@
+{
+    "errors": {
+        "attempting_next": "正在尝试播放下一首歌曲...",
+        "no_results": "找不到搜索结果。",
+        "no_voice_channel": "你必须先加入语音频道。",
+        "nothing_playing": "目前没有正在播放的内容。",
+        "playback_error": "播放时发生错误。",
+        "playback_failed_desc": "无法串流请求的音轨。",
+        "playback_failed_title": "播放失败",
+        "playlist_download_failed": "下载播放列表信息失败。",
+        "queue_full_desc": "播放队列已满。",
+        "queue_full_title": "队列已满",
+        "video_info_failed": "获取视频信息失败。"
+    },
+    "responses": {
+        "playlist_added": "播放列表已加入队列。",
+        "queue_finished": "队列播放完毕。正在断开连接...",
+        "refreshed_ui": "音乐控制界面已更新。",
+        "search_results_title": "搜索结果",
+        "select_song": "请选择要播放的歌曲。",
+        "song_added": "歌曲已加入队列。"
+    }
+}

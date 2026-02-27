@@ -1,0 +1,23 @@
+{
+    "errors": {
+        "attempting_next": "次の曲を再生しようとしています...",
+        "no_results": "検索結果が見つかりませんでした。",
+        "no_voice_channel": "まずボイスチャンネルに参加する必要があります。",
+        "nothing_playing": "現在何も再生されていません。",
+        "playback_error": "再生中にエラーが発生しました。",
+        "playback_failed_desc": "リクエストされたトラックをストリーミングできませんでした。",
+        "playback_failed_title": "再生失敗",
+        "playlist_download_failed": "プレイリスト情報のダウンロードに失敗しました。",
+        "queue_full_desc": "キューがいっぱいです。",
+        "queue_full_title": "キュー満杯",
+        "video_info_failed": "ビデオ情報の取得に失敗しました。"
+    },
+    "responses": {
+        "playlist_added": "プレイリストがキューに追加されました。",
+        "queue_finished": "キューが終了しました。切断中...",
+        "refreshed_ui": "ミュージックUIが更新されました。",
+        "search_results_title": "検索結果",
+        "select_song": "再生する曲を選択してください。",
+        "song_added": "曲がキューに追加されました。"
+    }
+}

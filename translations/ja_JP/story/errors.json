@@ -1,0 +1,7 @@
+{
+    "characters_load_failed": "キャラクターデータの読み込みに失敗しました。",
+    "first_scene_failed": "最初のシーンの生成に失敗しました。",
+    "gm_plan_failed": "GMのストーリープランニングに失敗しました。",
+    "world_load_failed": "ワールド設定の読み込みに失敗しました。",
+    "world_not_found": "選択されたワールドが見つかりません。"
+}

@@ -1,10 +1,22 @@
 {
-  "queue_empty": "播放佇列為空",
-  "commands": {
-    "music": {
-      "player": {
-        "queue_empty": "播放佇列為空"
-      }
-    }
-  }
+    "queue_empty": "播放佇列為空",
+    "duration": "時長",
+    "views": "觀看次數",
+    "progress": "進度",
+    "queue": "即將播放",
+    "added_by": "點播者",
+    "commands": {
+        "music": {
+            "player": {
+                "queue_empty": "播放佇列為空",
+                "duration": "時長",
+                "views": "觀看次數",
+                "progress": "進度",
+                "queue": "即將播放",
+                "added_by": "點播者"
+            }
+        }
+    },
+    "now_playing": "🎵 正在播放",
+    "uploader": "👤 上傳頻道"
 }

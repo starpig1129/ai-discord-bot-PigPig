@@ -1,0 +1,6 @@
+{
+    "responses": {
+        "error": "Failed to update schedule.",
+        "success": "Schedule updated successfully."
+    }
+}

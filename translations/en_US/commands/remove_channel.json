@@ -1,0 +1,6 @@
+{
+    "responses": {
+        "not_found": "Channel not in the list.",
+        "success": "Channel removed successfully."
+    }
+}

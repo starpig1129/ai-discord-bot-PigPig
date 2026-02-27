@@ -1,10 +1,10 @@
 {
-  "yaml_parse_error": "YAML 格式解析錯誤",
-  "commands": {
-    "schedule": {
-      "errors": {
-        "yaml_parse_error": "YAML 格式解析錯誤"
-      }
+    "yaml_parse_error": "YAML 格式解析錯誤",
+    "commands": {
+        "schedule": {
+            "errors": {
+                "yaml_parse_error": "YAML 格式解析錯誤"
+            }
+        }
     }
-  }
 }

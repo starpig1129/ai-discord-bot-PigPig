@@ -1,0 +1,7 @@
+{
+    "duration_label": "時長: {duration}",
+    "placeholder": "選擇要播放的歌曲",
+    "processing": "⏳ | 處理中",
+    "processing_desc": "正在處理您的選擇，請稍候...",
+    "added": "✅ | 已添加到播放清單： {title}"
+}

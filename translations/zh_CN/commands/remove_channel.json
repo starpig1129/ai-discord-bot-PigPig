@@ -1,0 +1,6 @@
+{
+    "responses": {
+        "not_found": "频道不在列表中。",
+        "success": "频道已成功移除。"
+    }
+}

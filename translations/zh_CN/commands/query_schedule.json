@@ -1,0 +1,11 @@
+{
+    "responses": {
+        "channel_not_found": "找不到日程频道。",
+        "error": "查询日程时发生错误。",
+        "invalid_query_type": "无效的日程查询类型。",
+        "invalid_time_format": "提供的时间格式无效。",
+        "no_schedule": "此时间段没有安排日程。",
+        "permission_denied": "权限不足，无法查询日程。",
+        "user_not_found": "找不到目标用户。"
+    }
+}

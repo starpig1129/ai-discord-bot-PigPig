@@ -1,4 +1,6 @@
 {
-      "name": "help",
-      "description": "显示此帮助讯息"
-    }
+    "name": "help",
+    "description": "显示此帮助讯息",
+    "help_description": "可用指令与说明的详细列表。",
+    "help_title": "机器人帮助中心"
+}

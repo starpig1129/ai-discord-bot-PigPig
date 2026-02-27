@@ -1,0 +1,23 @@
+{
+    "errors": {
+        "attempting_next": "Attempting to play next song...",
+        "no_results": "No search results found.",
+        "no_voice_channel": "You must join a voice channel first.",
+        "nothing_playing": "Nothing is currently playing.",
+        "playback_error": "An error occurred during playback.",
+        "playback_failed_desc": "Could not stream the requested track.",
+        "playback_failed_title": "Playback Failed",
+        "playlist_download_failed": "Failed to download playlist info.",
+        "queue_full_desc": "The music queue is full.",
+        "queue_full_title": "Queue Full",
+        "video_info_failed": "Failed to retrieve video information."
+    },
+    "responses": {
+        "playlist_added": "Playlist added to queue.",
+        "queue_finished": "Queue finished. Disconnecting...",
+        "refreshed_ui": "Music UI refreshed.",
+        "search_results_title": "Search Results",
+        "select_song": "Please select a song to play.",
+        "song_added": "Song added to queue."
+    }
+}

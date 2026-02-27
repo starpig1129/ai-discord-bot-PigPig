@@ -1,86 +1,86 @@
 {
-  "upload_schedule": {
-    "name": "upload_schedule",
-    "description": "Upload schedule YAML file",
-    "responses": {
-      "success": "Schedule uploaded successfully",
-      "error": "Error uploading schedule"
-    }
-  },
-  "query_schedule": {
-    "name": "query_schedule",
-    "description": "Query schedule",
-    "choices": {
-      "query_type": {
-        "full": "Full schedule",
-        "specific_time": "Specific time",
-        "next": "Next event"
-      },
-      "day": {
-        "Monday": "Monday",
-        "Tuesday": "Tuesday",
-        "Wednesday": "Wednesday",
-        "Thursday": "Thursday",
-        "Friday": "Friday",
-        "Saturday": "Saturday",
-        "Sunday": "Sunday"
-      },
-      "weekdays": {
-        "Monday": "Monday",
-        "Tuesday": "Tuesday",
-        "Wednesday": "Wednesday",
-        "Thursday": "Thursday",
-        "Friday": "Friday",
-        "Saturday": "Saturday",
-        "Sunday": "Sunday",
-        "day": "Day"
-      }
-    },
-    "responses": {
-      "success": "Query completed",
-      "error": "Error querying schedule",
-      "no_schedule": "No schedule found",
-      "user_not_found": "User not found",
-      "channel_not_found": "Channel not found",
-      "permission_denied": "Permission denied to view this schedule",
-      "invalid_time_format": "Invalid time format",
-      "invalid_query_type": "Invalid query type"
-    }
-  },
-  "update_schedule": {
-    "name": "update_schedule",
-    "description": "Update or create schedule",
-    "responses": {
-      "success": "Schedule updated successfully",
-      "error": "Error updating schedule"
-    }
-  },
-  "show_template": {
-    "name": "show_template",
-    "description": "Show schedule template"
-  },
-  "responses": {
     "upload_schedule": {
-      "success": "Schedule uploaded successfully",
-      "error": "Schedule upload failed: {error}"
+        "name": "upload_schedule",
+        "description": "Upload schedule YAML file",
+        "responses": {
+            "success": "Schedule uploaded successfully",
+            "error": "Error uploading schedule"
+        }
     },
     "query_schedule": {
-      "error": "Error querying schedule: {error}",
-      "no_schedule": "No schedule data found",
-      "user_not_found": "User not found",
-      "channel_not_found": "Channel not found",
-      "permission_denied": "Permission denied to query this channel's schedule",
-      "invalid_time_format": "Invalid time format",
-      "invalid_query_type": "Invalid query type"
+        "name": "query_schedule",
+        "description": "Query schedule",
+        "choices": {
+            "query_type": {
+                "full": "Full schedule",
+                "specific_time": "Specific time",
+                "next": "Next event"
+            },
+            "day": {
+                "Monday": "Monday",
+                "Tuesday": "Tuesday",
+                "Wednesday": "Wednesday",
+                "Thursday": "Thursday",
+                "Friday": "Friday",
+                "Saturday": "Saturday",
+                "Sunday": "Sunday"
+            },
+            "weekdays": {
+                "Monday": "Monday",
+                "Tuesday": "Tuesday",
+                "Wednesday": "Wednesday",
+                "Thursday": "Thursday",
+                "Friday": "Friday",
+                "Saturday": "Saturday",
+                "Sunday": "Sunday",
+                "day": "Day"
+            }
+        },
+        "responses": {
+            "success": "Query completed",
+            "error": "Error querying schedule",
+            "no_schedule": "No schedule found",
+            "user_not_found": "User not found",
+            "channel_not_found": "Channel not found",
+            "permission_denied": "Permission denied to view this schedule",
+            "invalid_time_format": "Invalid time format",
+            "invalid_query_type": "Invalid query type"
+        }
     },
     "update_schedule": {
-      "success": "Schedule updated successfully",
-      "error": "Schedule update failed: {error}"
+        "name": "update_schedule",
+        "description": "Update or create schedule",
+        "responses": {
+            "success": "Schedule updated successfully",
+            "error": "Error updating schedule"
+        }
+    },
+    "show_template": {
+        "name": "show_template",
+        "description": "Show schedule template"
+    },
+    "responses": {
+        "upload_schedule": {
+            "success": "Schedule uploaded successfully",
+            "error": "Schedule upload failed: {error}"
+        },
+        "query_schedule": {
+            "error": "Error querying schedule: {error}",
+            "no_schedule": "No schedule data found",
+            "user_not_found": "User not found",
+            "channel_not_found": "Channel not found",
+            "permission_denied": "Permission denied to query this channel's schedule",
+            "invalid_time_format": "Invalid time format",
+            "invalid_query_type": "Invalid query type"
+        },
+        "update_schedule": {
+            "success": "Schedule updated successfully",
+            "error": "Schedule update failed: {error}"
+        }
+    },
+    "choices": {
+        "weekdays": {
+            "day": "Day"
+        }
     }
-  },
-  "choices": {
-    "weekdays": {
-      "day": "Day"
-    }
-  }
 }

@@ -1,0 +1,11 @@
+{
+    "responses": {
+        "channel_not_found": "Schedule channel not found.",
+        "error": "Error querying schedule.",
+        "invalid_query_type": "Invalid schedule query type.",
+        "invalid_time_format": "Invalid time format provided.",
+        "no_schedule": "No schedule found for this time.",
+        "permission_denied": "Permission denied for schedule query.",
+        "user_not_found": "Target user not found."
+    }
+}

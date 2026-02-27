@@ -1,5 +1,5 @@
 {
-  "enabled": "Enabled",
-  "disabled": "Disabled",
-  "toggled": "{user} toggled autoplay: {status}"
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "toggled": "{user} toggled autoplay: {status}"
 }

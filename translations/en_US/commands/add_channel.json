@@ -1,0 +1,6 @@
+{
+    "responses": {
+        "already_exists": "This channel is already in the list.",
+        "success": "Successfully added the channel."
+    }
+}

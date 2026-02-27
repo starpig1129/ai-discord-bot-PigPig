@@ -3,34 +3,34 @@
     "description": "显示机器人详细信息",
     "title": "🤖 机器人信息总览",
     "fields": {
-      "basic_stats": {
-        "name": "📊 基本统计",
-        "servers": "服务器数量",
-        "users": "用户数量",
-        "text_channels": "文字频道",
-        "voice_channels": "语音频道",
-        "loaded_cogs": "已加载 Cogs"
-      },
-      "performance": {
-        "name": "⚡ 性能监控",
-        "latency": "网络延迟",
-        "memory_usage": "内存使用",
-        "uptime": "运行时间"
-      },
-      "cogs": {
-        "name": "🔧 功能模块",
-        "commands": "个命令",
-        "no_cogs": "无加载的模块"
-      }
+        "basic_stats": {
+            "name": "📊 基本统计",
+            "servers": "服务器数量",
+            "users": "用户数量",
+            "text_channels": "文字频道",
+            "voice_channels": "语音频道",
+            "loaded_cogs": "已加载 Cogs"
+        },
+        "performance": {
+            "name": "⚡ 性能监控",
+            "latency": "网络延迟",
+            "memory_usage": "内存使用",
+            "uptime": "运行时间"
+        },
+        "cogs": {
+            "name": "🔧 功能模块",
+            "commands": "个命令",
+            "no_cogs": "无加载的模块"
+        }
     },
     "status": {
-      "online": "🟢 在线",
-      "idle": "🟡 闲置",
-      "dnd": "🔴 请勿打扰",
-      "offline": "⚫ 离线",
-      "unknown": "❓ 未知"
+        "online": "🟢 在线",
+        "idle": "🟡 闲置",
+        "dnd": "🔴 请勿打扰",
+        "offline": "⚫ 离线",
+        "unknown": "❓ 未知"
     },
-    "footer":{
-      "status_prefix":"状态："
+    "footer": {
+        "status_prefix": "状态："
     }
-  }
+}

@@ -1,0 +1,6 @@
+{
+    "responses": {
+        "error": "Error uploading schedule file.",
+        "success": "Schedule file uploaded successfully."
+    }
+}

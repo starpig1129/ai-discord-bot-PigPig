@@ -1,48 +1,48 @@
 {
-  "set_server_mode": {
-    "choices": {
-      "unrestricted": "无限制",
-      "whitelist": "白名单",
-      "blacklist": "黑名单"
+    "set_server_mode": {
+        "choices": {
+            "unrestricted": "无限制",
+            "whitelist": "白名单",
+            "blacklist": "黑名单"
+        },
+        "responses": {
+            "success": "已将服务器响应模式设定为：{mode}"
+        }
     },
-    "responses": {
-      "success": "已将服务器响应模式设定为：{mode}"
-    }
-  },
-  "set_channel_mode": {
-    "choices": {
-      "default": "默认（遵从服务器）",
-      "story": "故事模式"
+    "set_channel_mode": {
+        "choices": {
+            "default": "默认（遵从服务器）",
+            "story": "故事模式"
+        },
+        "responses": {
+            "success": "已将频道 {channel} 的模式设定为：{mode}",
+            "reset": "已将频道 {channel} 的模式重设为默认（遵从服务器）。",
+            "already_default": "频道 {channel} 已经在使用默认模式。"
+        }
     },
-    "responses": {
-      "success": "已将频道 {channel} 的模式设定为：{mode}",
-      "reset": "已将频道 {channel} 的模式重设为默认（遵从服务器）。",
-      "already_default": "频道 {channel} 已经在使用默认模式。"
-    }
-  },
-  "add_channel": {
-    "choices": {
-      "whitelist": "白名单",
-      "blacklist": "黑名单"
+    "add_channel": {
+        "choices": {
+            "whitelist": "白名单",
+            "blacklist": "黑名单"
+        },
+        "responses": {
+            "success": "频道 {channel} 已添加到 {list_type}",
+            "already_exists": "频道 {channel} 已存在于 {list_type} 中"
+        }
     },
-    "responses": {
-      "success": "频道 {channel} 已添加到 {list_type}",
-      "already_exists": "频道 {channel} 已存在于 {list_type} 中"
-    }
-  },
-  "remove_channel": {
-    "choices": {
-      "whitelist": "白名单",
-      "blacklist": "黑名单"
+    "remove_channel": {
+        "choices": {
+            "whitelist": "白名单",
+            "blacklist": "黑名单"
+        },
+        "responses": {
+            "success": "频道 {channel} 已从 {list_type} 移除",
+            "not_found": "在 {list_type} 中找不到频道 {channel}"
+        }
     },
-    "responses": {
-      "success": "频道 {channel} 已从 {list_type} 移除",
-      "not_found": "在 {list_type} 中找不到频道 {channel}"
+    "auto_response": {
+        "responses": {
+            "success": "频道 {channel} 自动回复设定为：{enabled}"
+        }
     }
-  },
-  "auto_response": {
-    "responses": {
-      "success": "频道 {channel} 自动回复设定为：{enabled}"
-    }
-  }
 }

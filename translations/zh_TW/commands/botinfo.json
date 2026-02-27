@@ -1,36 +1,36 @@
 {
-  "name": "botinfo",
-  "description": "顯示機器人詳細資訊",
-  "title": "🤖 機器人資訊總覽",
-  "fields": {
-    "basic_stats": {
-      "name": "📊 基本統計",
-      "servers": "伺服器數量",
-      "users": "用戶數量",
-      "text_channels": "文字頻道",
-      "voice_channels": "語音頻道",
-      "loaded_cogs": "已載入 Cogs"
+    "name": "botinfo",
+    "description": "顯示機器人詳細資訊",
+    "title": "🤖 機器人資訊總覽",
+    "fields": {
+        "basic_stats": {
+            "name": "📊 基本統計",
+            "servers": "伺服器數量",
+            "users": "用戶數量",
+            "text_channels": "文字頻道",
+            "voice_channels": "語音頻道",
+            "loaded_cogs": "已載入 Cogs"
+        },
+        "performance": {
+            "name": "⚡ 效能監控",
+            "latency": "網路延遲",
+            "memory_usage": "記憶體使用",
+            "uptime": "運行時間"
+        },
+        "cogs": {
+            "name": "🔧 功能模組",
+            "commands": "個命令",
+            "no_cogs": "無載入的模組"
+        }
     },
-    "performance": {
-      "name": "⚡ 效能監控",
-      "latency": "網路延遲",
-      "memory_usage": "記憶體使用",
-      "uptime": "運行時間"
+    "status": {
+        "online": "🟢 線上",
+        "idle": "🟡 閒置",
+        "dnd": "🔴 請勿打擾",
+        "offline": "⚫ 離線",
+        "unknown": "❓ 未知"
     },
-    "cogs": {
-      "name": "🔧 功能模組",
-      "commands": "個命令",
-      "no_cogs": "無載入的模組"
+    "footer": {
+        "status_prefix": "狀態："
     }
-  },
-  "status": {
-    "online": "🟢 線上",
-    "idle": "🟡 閒置",
-    "dnd": "🔴 請勿打擾",
-    "offline": "⚫ 離線",
-    "unknown": "❓ 未知"
-  },
-  "footer":{
-    "status_prefix":"狀態："
-  }
 }

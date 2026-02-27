@@ -1,0 +1,6 @@
+{
+    "responses": {
+        "not_found": "頻道不在列表中。",
+        "success": "頻道已成功移除。"
+    }
+}

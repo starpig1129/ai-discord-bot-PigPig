@@ -1,4 +1,6 @@
 {
-      "name": "help",
-      "description": "このヘルプメッセージを表示"
-    }
+    "name": "help",
+    "description": "このヘルプメッセージを表示",
+    "help_description": "利用可能なコマンドと説明の詳細リスト。",
+    "help_title": "ボットヘルプセンター"
+}

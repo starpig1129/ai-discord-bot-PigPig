@@ -1,0 +1,7 @@
+{
+    "duration_label": "再生時間: {duration}",
+    "placeholder": "再生する曲を選択してください",
+    "processing": "⏳ | 処理中",
+    "processing_desc": "選択を処理しています、少々お待ちください...",
+    "added": "✅ | 再生リストに追加しました： {title}"
+}

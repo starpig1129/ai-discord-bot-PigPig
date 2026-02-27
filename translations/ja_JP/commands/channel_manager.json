@@ -1,48 +1,48 @@
 {
-  "set_server_mode": {
-    "choices": {
-      "unrestricted": "無制限",
-      "whitelist": "ホワイトリスト",
-      "blacklist": "ブラックリスト"
+    "set_server_mode": {
+        "choices": {
+            "unrestricted": "無制限",
+            "whitelist": "ホワイトリスト",
+            "blacklist": "ブラックリスト"
+        },
+        "responses": {
+            "success": "サーバーの応答モードを{mode}に設定しました"
+        }
     },
-    "responses": {
-      "success": "サーバーの応答モードを{mode}に設定しました"
-    }
-  },
-  "set_channel_mode": {
-    "choices": {
-      "default": "デフォルト（サーバーに従う）",
-      "story": "ストーリーモード"
+    "set_channel_mode": {
+        "choices": {
+            "default": "デフォルト（サーバーに従う）",
+            "story": "ストーリーモード"
+        },
+        "responses": {
+            "success": "チャンネル{channel}のモードを{mode}に設定しました",
+            "reset": "チャンネル{channel}のモードをデフォルト（サーバーに従う）にリセットしました。",
+            "already_default": "チャンネル{channel}はすでにデフォルトモードを使用しています。"
+        }
     },
-    "responses": {
-      "success": "チャンネル{channel}のモードを{mode}に設定しました",
-      "reset": "チャンネル{channel}のモードをデフォルト（サーバーに従う）にリセットしました。",
-      "already_default": "チャンネル{channel}はすでにデフォルトモードを使用しています。"
-    }
-  },
-  "add_channel": {
-    "choices": {
-      "whitelist": "ホワイトリスト",
-      "blacklist": "ブラックリスト"
+    "add_channel": {
+        "choices": {
+            "whitelist": "ホワイトリスト",
+            "blacklist": "ブラックリスト"
+        },
+        "responses": {
+            "success": "チャンネル{channel}を{list_type}に追加しました",
+            "already_exists": "チャンネル{channel}はすでに{list_type}に存在します"
+        }
     },
-    "responses": {
-      "success": "チャンネル{channel}を{list_type}に追加しました",
-      "already_exists": "チャンネル{channel}はすでに{list_type}に存在します"
-    }
-  },
-  "remove_channel": {
-    "choices": {
-      "whitelist": "ホワイトリスト",
-      "blacklist": "ブラックリスト"
+    "remove_channel": {
+        "choices": {
+            "whitelist": "ホワイトリスト",
+            "blacklist": "ブラックリスト"
+        },
+        "responses": {
+            "success": "チャンネル{channel}を{list_type}から削除しました",
+            "not_found": "チャンネル{channel}が{list_type}に見つかりません"
+        }
     },
-    "responses": {
-      "success": "チャンネル{channel}を{list_type}から削除しました",
-      "not_found": "チャンネル{channel}が{list_type}に見つかりません"
+    "auto_response": {
+        "responses": {
+            "success": "チャンネル{channel}の自動応答を{enabled}に設定しました"
+        }
     }
-  },
-  "auto_response": {
-    "responses": {
-      "success": "チャンネル{channel}の自動応答を{enabled}に設定しました"
-    }
-  }
 }

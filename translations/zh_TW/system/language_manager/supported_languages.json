@@ -1,14 +1,6 @@
 {
-  "zh_TW": "繁體中文",
-  "zh_CN": "簡體中文",
-  "en_US": "英文",
-  "ja_JP": "日文",
-  "language_manager": {
-    "supported_languages": {
-      "zh_TW": "繁體中文",
-      "zh_CN": "簡體中文",
-      "en_US": "英文",
-      "ja_JP": "日文"
-    }
-  }
+    "zh_TW": "繁體中文",
+    "zh_CN": "簡體中文",
+    "en_US": "英文",
+    "ja_JP": "日文"
 }
