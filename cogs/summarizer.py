@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from langchain.agents import create_agent
+from llm.gemini_cli_model import resolve_model
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
@@ -123,7 +124,7 @@ class SummarizerCog(commands.Cog):
             # 建立 agent（維持 create_agent，但傳入 SystemMessage 作為系統角色）
             model, fallback = ModelManager().get_model("summarize_model")
             summarize_agent = create_agent(
-                model=model,
+                model=resolve_model(model),
                 tools=[],
                 system_prompt=system_prompt,
                 middleware=[

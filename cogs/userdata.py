@@ -38,6 +38,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from langchain.agents import create_agent
+from llm.gemini_cli_model import resolve_model
 from langchain.agents.middleware import ModelCallLimitMiddleware
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
@@ -390,7 +391,7 @@ class UserDataCog(commands.Cog):
             raise RuntimeError(f"Failed to get user_data_model: {e}") from e
 
         agent = create_agent(
-            model=model,
+            model=resolve_model(model),
             tools=[],
             system_prompt=system_prompt,
             response_format=UserDataResponse,

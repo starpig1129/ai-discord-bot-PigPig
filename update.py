@@ -94,7 +94,7 @@ class UpdateCLI:
                     temp_manager = UpdateManager(bot)
                     current_version = temp_manager.version_checker.get_current_version()
                 else:
-                    current_version = "v3.0.0"  # Fallback
+                    current_version = "v3.1.0"  # Fallback
             
             # Get latest version asynchronously
             loop = asyncio.new_event_loop()
@@ -123,7 +123,7 @@ class UpdateCLI:
             if with_message:
                 self.logger.error(f"Error checking version: {e}")
                 print(f"\033[91mError checking version: {e}\033[0m")
-            return "v3.0.0"  # Fallback version
+            return "v3.1.0"  # Fallback version
     
     def install_version(self, version: Optional[str] = None, is_latest: bool = False, 
                        is_beta: bool = False) -> bool:

@@ -6,17 +6,17 @@ ipc_server:
   port: 8000
   enable: false
 
-version: "v3.0.0"
+version: "v3.1.0"
 logging:
   # Console output settings
   console:
     enabled: true
     color: true
-    level: "INFO"  # DEBUG | INFO | WARNING | ERROR | CRITICAL
-  
+    level: "INFO" # DEBUG | INFO | WARNING | ERROR | CRITICAL
+
   # Enable emoji indicators (🔍 ✅ ⚠️ ❌ 🚨)
   use_emoji: false
-  
+
   # Color mapping for different log components
   color_map:
     # Log level colors
@@ -26,44 +26,44 @@ logging:
       WARNING: "yellow"
       ERROR: "red"
       CRITICAL: "bright_red"
-    
+
     # Source type colors
     source:
       system: "magenta"
       server: "bright_blue"
       external: "blue"
-    
+
     # Field colors (for detailed console output)
     fields:
-      timestamp: "bright_black"  # Dim gray for timestamps
-      channel: "bright_black"     # Dim gray for channel names
-      user: "bright_black"        # Dim gray for user IDs
-      action: "bright_cyan"       # Bright cyan for actions
-      message: "white"            # White for messages
-  
+      timestamp: "bright_black" # Dim gray for timestamps
+      channel: "bright_black" # Dim gray for channel names
+      user: "bright_black" # Dim gray for user IDs
+      action: "bright_cyan" # Bright cyan for actions
+      message: "white" # White for messages
+
   # Async writer settings
   async:
     batch_size: 500
-    flush_interval: 2.0  # seconds
-  
+    flush_interval: 2.0 # seconds
+
   # Log rotation settings
   rotation:
-    policy: "daily"  # daily | size | time
+    policy: "daily" # daily | size | time
     compress: true
     retention_days: 300
-  
+
   # Per-level retention (overrides rotation.retention_days)
   per_level_retention:
-    INFO: 300     # 300 days
-    WARNING: 300  # 300 days
-    ERROR: 900    # 900 days (2.5 years)
-  
+    INFO: 300 # 300 days
+    WARNING: 300 # 300 days
+    ERROR: 900 # 900 days (2.5 years)
+
   # Fsync after each flush (slower but safer)
   fsync_on_flush: false
-  
+
   # Base path for log files
   log_base_path: "logs"
-  
+
   # Third-party library log levels (reduce noise)
   third_party_levels:
     sqlalchemy: "WARNING"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import asyncio
-from typing import Any, List
+from typing import Any, List, Union
 import re
 
 from addons.logging import get_logger
@@ -8,6 +8,7 @@ from addons.logging import get_logger
 logger = get_logger(server_id="Bot", source="llm.orchestrator")
 
 from discord import Message
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware, AgentMiddleware, hook_config
@@ -26,6 +27,8 @@ from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.procedural import ProceduralMemoryProvider
 from llm.callbacks import ToolFeedbackCallbackHandler
 from llm.model_circuit_breaker import get_model_circuit_breaker
+from llm.gemini_cli_model import resolve_model as _resolve_model
+
 
 
 class DirectToolOutputMiddleware(AgentMiddleware):
@@ -329,7 +332,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         logger.info(f"Info agent: trying model {current_info_model} ({model_index + 1}/{len(info_model_list)})")
                         
                         info_agent = create_agent(
-                            model=current_info_model,
+                            model=_resolve_model(current_info_model),
                             tools=info_agent_tools,
                             system_prompt=full_info_prompt,
                             middleware=[DirectToolOutputMiddleware()],
@@ -415,7 +418,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         
                         # Create agent with current model (no fallback middleware needed)
                         message_agent = create_agent(
-                            model=current_model,
+                            model=_resolve_model(current_model),
                             tools=message_agent_tools,
                             system_prompt=full_message_prompt,
                             middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],

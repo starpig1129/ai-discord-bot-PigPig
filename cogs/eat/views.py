@@ -3,6 +3,7 @@ import discord
 import json
 
 from langchain.agents import create_agent
+from llm.gemini_cli_model import resolve_model
 from langchain_core.messages import HumanMessage
 
 from cogs.eat.db.db import DB
@@ -155,7 +156,7 @@ class EatWhatView(discord.ui.View):
                 
                 try:
                     review_agent = create_agent(
-                        model=current_model,
+                        model=resolve_model(current_model),
                         tools=[],
                         system_prompt=system_prompt,
                         middleware=[],

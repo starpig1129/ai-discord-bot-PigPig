@@ -12,6 +12,7 @@ from datetime import timezone
 import discord
 from pydantic import BaseModel, Field
 from langchain.agents import create_agent
+from llm.gemini_cli_model import resolve_model, ChatGeminiCLI
 from langchain_core.messages import HumanMessage
 
 from function import func
@@ -380,7 +381,7 @@ class EventSummarizationService:
                     
                     # Create the agent with structured output
                     agent = create_agent(
-                        current_model,
+                        resolve_model(current_model),
                         tools=[],
                         system_prompt=system_prompt,
                         response_format=MemoryFragmentList,  # Use structured output
@@ -490,6 +491,10 @@ class EventSummarizationService:
                 model_id = model_name.split(":", 1)[1]
                 return ChatAnthropic(model=model_id, temperature=0.1)
             
+            elif model_name.startswith("gemini_cli:"):
+                model_id = model_name.split(":", 1)[1]
+                return ChatGeminiCLI(model=model_id)
+
             else:
                 raise ValueError(f"Unknown model provider in: {model_name}")
                 

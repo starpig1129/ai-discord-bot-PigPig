@@ -63,11 +63,11 @@ class VersionChecker:
                 pass
                 
             # 使用預設版本
-            return "v3.0.0"
+            return "v3.1.0"
             
         except Exception as e:
             self.logger.warning(f"獲取版本資訊時發生錯誤: {e}，使用預設版本")
-            return "v3.0.0"
+            return "v3.1.0"
     
     async def check_for_updates(self) -> Dict[str, any]:
         """

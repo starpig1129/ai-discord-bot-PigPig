@@ -11,6 +11,7 @@ from function import func
 
 from llm.model_manager import ModelManager
 from langchain.agents import create_agent
+from llm.gemini_cli_model import resolve_model
 from langchain_core.messages import HumanMessage
 
 from .database import StoryDB, CharacterDB
@@ -441,7 +442,7 @@ class StoryManager:
                 # Call GM agent
                 story_gm_model, fallback = ModelManager().get_model("story_gm_model")
                 agent = create_agent(
-                    story_gm_model, 
+                    resolve_model(story_gm_model), 
                     tools=[], 
                     system_prompt=gm_prompt, 
                     response_format=GMActionPlan,
@@ -552,7 +553,7 @@ class StoryManager:
                             # Call character agent
                             story_character_model, fallback =                                 ModelManager().get_model("story_character_model")
                             agent = create_agent(
-                                story_character_model, 
+                                resolve_model(story_character_model), 
                                 tools=[],
                                 system_prompt=char_system_prompt, 
                                 response_format=CharacterAction, 
@@ -811,7 +812,7 @@ class StoryManager:
             # Call summary model with structured output
             story_summary_model, fallback = ModelManager().get_model("story_summary_model")
             agent = create_agent(
-                story_summary_model, 
+                resolve_model(story_summary_model), 
                 tools=[], 
                 system_prompt=summary_system_prompt,
                 response_format=StorySummary,  # 使用結構化輸出
@@ -895,7 +896,7 @@ class StoryManager:
             # Call outline model with structured output
             story_outline_model, fallback = ModelManager().get_model("story_outline_model")
             agent = create_agent(
-                story_outline_model, 
+                resolve_model(story_outline_model), 
                 tools=[], 
                 system_prompt=outline_system_prompt,
                 response_format=StoryOutline,  # 使用結構化輸出
@@ -1071,7 +1072,7 @@ class StoryManager:
                 # Call GM Model for initial scene
                 story_gm_model, fallback = ModelManager().get_model("story_gm_model")
                 agent = create_agent(
-                    story_gm_model, 
+                    resolve_model(story_gm_model), 
                     tools=[], 
                     system_prompt=gm_prompt, 
                     response_format=GMActionPlan, 
