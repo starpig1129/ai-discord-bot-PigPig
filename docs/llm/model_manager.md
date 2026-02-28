@@ -143,6 +143,10 @@ model_priorities:
 - **Models**: `gemini-pro`, `gemini-pro-vision`
 - **API Key**: Set via `GOOGLE_API_KEY` or `GEMINI_API_KEY`
 
+#### Gemini CLI (Fallback)
+- **Models**: `auto` (resolves to fallback model, e.g., `gemini-1.5-pro`), or explicit names.
+- **Configuration**: Uses the local `gemini` CLI executable via subprocess. Requires `@google/gemini-cli` installed and authenticated globally (`gemini login`). Fully utilizes Google One AI Pro account quotas (no API key required).
+
 #### OpenAI  
 - **Models**: `gpt-4`, `gpt-3.5-turbo`, `gpt-4-turbo`
 - **API Key**: Set via `OPENAI_API_KEY`
