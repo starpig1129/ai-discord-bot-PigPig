@@ -481,7 +481,8 @@ class EventSummarizationService:
                 if not api_key:
                     from addons.tokens import tokens
                     api_key = getattr(tokens, "google_api_key", None)
-                return ChatGoogleGenerativeAI(model=model_id, google_api_key=api_key, temperature=0.1)
+                # max_retries=1 prevents SDK hanging for 16-22s on 429 Quota Exceeded errors
+                return ChatGoogleGenerativeAI(model=model_id, google_api_key=api_key, temperature=0.1, max_retries=1)
                 
             elif model_name.startswith("openai:"):
                 model_id = model_name.split(":", 1)[1]

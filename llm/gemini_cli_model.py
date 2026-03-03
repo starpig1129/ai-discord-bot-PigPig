@@ -11,8 +11,9 @@ strings at any ``create_agent`` call site.
 from __future__ import annotations
 
 import asyncio
-import json
+import glob
 import logging
+import os
 import shlex
 import subprocess
 from typing import Any, AsyncIterator, Iterator, List, Optional, Union
@@ -44,8 +45,8 @@ class ChatGeminiCLI(BaseChatModel):
     """
 
     model: str = Field(
-        default="gemini-1.5-pro",
-        description="Model name format for Gemini CLI. 'auto' defaults to 1.5-pro.",
+        default="gemini-3.0-flash",
+        description="Model name format for Gemini CLI. 'auto' defaults to 3.0 flash.",
     )
     temperature: float = Field(
         default=0.7,
@@ -57,11 +58,33 @@ class ChatGeminiCLI(BaseChatModel):
         return "gemini-cli"
 
     def _resolve_model_name(self) -> str:
-        return "gemini-1.5-pro" if self.model == "auto" else self.model
+        """Resolve model name. 'auto' is kept as-is for CLI's internal selection."""
+        return self.model
+
+    @staticmethod
+    def _get_node20_env() -> str:
+        """Finds Node >= v20 path in nvm and returns a PATH prepend string.
+
+        Falls back to empty string if not using NVM or if v20/v22 isn't found.
+        """
+        nvm_base = os.path.expanduser("~/.nvm/versions/node")
+        if os.path.isdir(nvm_base):
+            for prefix in ["v22.*", "v20.*"]:
+                matches = glob.glob(os.path.join(nvm_base, prefix))
+                if matches:
+                    matches.sort(reverse=True)
+                    node_path = os.path.join(matches[0], "bin")
+                    return f"PATH={node_path}:$PATH "
+        return ""
 
     @staticmethod
     def _format_messages(messages: List[BaseMessage]) -> str:
-        """Combine all messages into a string for the CLI payload."""
+        """Combine all messages into a single string for the CLI payload.
+
+        Passes through ALL messages (system, human, AI) transparently,
+        mirroring exactly what the API-based models receive from the
+        orchestrator.
+        """
         text_parts = []
         for msg in messages:
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
@@ -73,11 +96,6 @@ class ChatGeminiCLI(BaseChatModel):
                 text_parts.append(f"[Model]\n{content}\n")
         return "\n".join(text_parts).strip()
 
-    def _build_command(self, prompt: str) -> list[str]:
-        # Using basic login credentials via CLI
-        # Assuming the environment has `gemini` globally installed and accessible in PATH.
-        return ["gemini", "prompt", prompt]
-
     def _generate(
         self,
         messages: List[BaseMessage],
@@ -87,13 +105,11 @@ class ChatGeminiCLI(BaseChatModel):
     ) -> ChatResult:
         """Execute gemini CLI synchronously."""
         prompt = self._format_messages(messages)
-        cmd = self._build_command(prompt)
 
         try:
-            # shell=True is sometimes needed to resolve npm global binaries in nvm 
-            # safely wrap the prompt to prevent injection
             safe_prompt = shlex.quote(prompt)
-            shell_cmd = f"gemini prompt {safe_prompt}"
+            env_prefix = self._get_node20_env()
+            shell_cmd = f"{env_prefix}gemini prompt {safe_prompt}"
             
             result = subprocess.run(
                 shell_cmd,
@@ -102,6 +118,7 @@ class ChatGeminiCLI(BaseChatModel):
                 capture_output=True,
                 text=True,
                 timeout=120,
+                cwd='/tmp',  # Prevent CLI from reading project GEMINI.md
             )
             output = result.stdout.strip()
             # The CLI usually uses markdown styling headers or empty whitespace we strip out
@@ -125,12 +142,14 @@ class ChatGeminiCLI(BaseChatModel):
         """Execute gemini CLI asynchronously via asyncio subprocess."""
         prompt = self._format_messages(messages)
         safe_prompt = shlex.quote(prompt)
-        shell_cmd = f"gemini prompt {safe_prompt}"
+        env_prefix = self._get_node20_env()
+        shell_cmd = f"{env_prefix}gemini prompt {safe_prompt}"
 
         proc = await asyncio.create_subprocess_shell(
             shell_cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd='/tmp',  # Prevent CLI from reading project GEMINI.md
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
@@ -174,14 +193,26 @@ class ChatGeminiCLI(BaseChatModel):
         yield ChatGenerationChunk(message=AIMessageChunk(content=str(content)))
 
 
+from langchain.chat_models import init_chat_model
+
 def resolve_model(model_str: str) -> Union[str, _BaseChatModel]:
     """Resolve a provider-qualified model string.
 
     If *model_str* starts with ``gemini_cli:``, return a ready-to-use
-    ``ChatGeminiCLI`` instance.  Otherwise return the string unchanged so
-    that ``init_chat_model`` can handle it.
+    ``ChatGeminiCLI`` instance.
+    If it starts with ``google_genai:``, we instantiate it immediately
+    with `max_retries=1` to prevent LangChain from hanging for ~22s
+    when hitting 429 Quota Exceeded errors.
+    Otherwise return the string unchanged so that ``init_chat_model``
+    can handle it.
     """
     if model_str.startswith("gemini_cli:"):
         model_name = model_str.split(":", 1)[1]
         return ChatGeminiCLI(model=model_name)
+    elif model_str.startswith("google_genai:"):
+        try:
+            return init_chat_model(model_str, max_retries=1)
+        except Exception as e:
+            logger.warning(f"Failed to pre-initialize {model_str} with max_retries: {e}")
+            return model_str
     return model_str

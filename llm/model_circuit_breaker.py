@@ -123,6 +123,10 @@ class ModelCircuitBreaker:
         Returns:
             True if the model can be tried, False if it's in cooldown.
         """
+        # gemini_cli uses a separate authenticated quota (Google One), do not throttle it
+        if model_name.startswith("gemini_cli:"):
+            return True
+
         with self._lock:
             if model_name not in self._failures:
                 return True
@@ -159,6 +163,10 @@ class ModelCircuitBreaker:
             error: The exception that occurred.
             category: Optional explicit category (auto-detected if not provided).
         """
+        # gemini_cli uses a separate authenticated quota (Google One), never throttle
+        if model_name.startswith("gemini_cli:"):
+            return
+
         with self._lock:
             if category is None:
                 category = self.categorize_error(error)
