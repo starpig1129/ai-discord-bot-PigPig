@@ -353,7 +353,9 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         last_info_exception = e
                         # Record failure in circuit breaker
                         circuit_breaker.record_failure(current_info_model, e)
-                        logger.warning(f"Info agent model {current_info_model} failed: {e}")
+                        import traceback
+                        error_trace = traceback.format_exc()
+                        logger.warning(f"Info agent model {current_info_model} failed: {repr(e)}\n{error_trace}")
                         # Continue to next model immediately
                 
                 if info_result is None and last_info_exception is not None:

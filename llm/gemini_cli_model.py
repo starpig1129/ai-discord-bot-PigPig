@@ -1,8 +1,8 @@
-"""LangChain ChatModel wrapper using the Google Gemini CLI via subprocess.
+"""LangChain ChatModel wrapper using the Google Gemini SDK.
 
-Provides a ``ChatGeminiCLI`` class that invokes the global ``gemini``
-Node.js command. This is used as a fallback to take advantage of Google One
-AI Pro quotas when API Keys are not available or preferred.
+Provides a ``ChatGeminiCLI`` class that utilizes the new `google-genai`
+Python SDK. This replaces the old subprocess-based CLI approach to improve
+performance, avoid OS limits with large prompts, and fix timeout issues.
 
 Also exports ``resolve_model()`` for intercepting ``gemini_cli:*`` model
 strings at any ``create_agent`` call site.
@@ -10,19 +10,14 @@ strings at any ``create_agent`` call site.
 
 from __future__ import annotations
 
-import asyncio
-import glob
 import logging
 import os
-import shlex
-import subprocess
-from typing import Any, AsyncIterator, Iterator, List, Optional, Union
+from typing import Any, AsyncIterator, Iterator, List, Optional, Union, Dict
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForLLMRun,
     CallbackManagerForLLMRun,
 )
-from langchain_core.language_models import BaseChatModel as _BaseChatModel
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -33,57 +28,78 @@ from langchain_core.messages import (
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import Field
+from pydantic import PrivateAttr
+
+# Attempt to import google-genai
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
 
 logger = logging.getLogger(__name__)
 
 
 class ChatGeminiCLI(BaseChatModel):
-    """LangChain chat model wrapper around the Google Gemini CLI.
+    """LangChain chat model wrapper around the Google Gemini SDK.
     
-    This heavily relies on subprocess calls to `gemini prompt <text>`,
-    meaning performance is bound by Node.js startup time and CLI execution speed.
+    This replaces the Node.js CLI subprocess with direct API calls via
+    `google-genai`, retaining the same Langchain wrapper interface.
     """
 
     model: str = Field(
         default="gemini-3.0-flash",
-        description="Model name format for Gemini CLI. 'auto' defaults to 3.0 flash.",
+        description="Model name format for Gemini. 'auto' defaults to 3.0 flash.",
     )
     temperature: float = Field(
         default=0.7,
-        description="Not currently supported by raw gemini CLI.",
+        description="Temperature for generation.",
     )
+    
+    # Private client initialized once
+    _client: Any = PrivateAttr()
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if genai is None:
+            raise ImportError(
+                "Could not import google.genai python package. "
+                "Please install it with `pip install google-genai`."
+            )
+        
+        # Read API key explicitly from the same variables the CLI used
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if api_key:
+            self._client = genai.Client(api_key=api_key)
+        else:
+            logger.warning("No GEMINI_API_KEY or GOOGLE_API_KEY found in environment! Deferring to SDK ADC/default auth.")
+            self._client = genai.Client()
 
     @property
     def _llm_type(self) -> str:
-        return "gemini-cli"
+        return "gemini-cli-sdk" # Keeps legacy name spirit but signifies SDK
 
     def _resolve_model_name(self) -> str:
-        """Resolve model name. 'auto' is kept as-is for CLI's internal selection."""
+        """Resolve model name. 'auto' translates to gemini-3.0-flash."""
+        if self.model == "auto":
+            return "gemini-3.0-flash"
         return self.model
 
-    @staticmethod
-    def _get_node20_env() -> str:
-        """Finds Node >= v20 path in nvm and returns a PATH prepend string.
-
-        Falls back to empty string if not using NVM or if v20/v22 isn't found.
+    def bind_tools(self, tools: Any, **kwargs: Any) -> BaseChatModel:
+        """Stub for tool binding since this bare-bones SDK wrapper does not
+        support tool parsing / function calling execution yet.
+        
+        Returning `self` allows LangChain to wrap it inside tool-enabled graphs
+        (like info_agent) without raising NotImplementedError. The agent simply
+        receives plain text instead of tool calls, safely exiting the loop.
         """
-        nvm_base = os.path.expanduser("~/.nvm/versions/node")
-        if os.path.isdir(nvm_base):
-            for prefix in ["v22.*", "v20.*"]:
-                matches = glob.glob(os.path.join(nvm_base, prefix))
-                if matches:
-                    matches.sort(reverse=True)
-                    node_path = os.path.join(matches[0], "bin")
-                    return f"PATH={node_path}:$PATH "
-        return ""
+        return self
 
     @staticmethod
     def _format_messages(messages: List[BaseMessage]) -> str:
-        """Combine all messages into a single string for the CLI payload.
+        """Combine all messages into a single string for the payload.
 
-        Passes through ALL messages (system, human, AI) transparently,
-        mirroring exactly what the API-based models receive from the
-        orchestrator.
+        Passes through ALL messages (system, human, AI) transparently.
         """
         text_parts = []
         for msg in messages:
@@ -103,30 +119,28 @@ class ChatGeminiCLI(BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        """Execute gemini CLI synchronously."""
+        """Execute Gemini SDK synchronously."""
         prompt = self._format_messages(messages)
-
+        model_name = self._resolve_model_name()
+        
+        config_args = {"temperature": self.temperature}
+        if stop:
+            config_args["stop_sequences"] = stop
+        
         try:
-            safe_prompt = shlex.quote(prompt)
-            env_prefix = self._get_node20_env()
-            shell_cmd = f"{env_prefix}gemini prompt {safe_prompt}"
-            
-            result = subprocess.run(
-                shell_cmd,
-                shell=True,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=120,
-                cwd='/tmp',  # Prevent CLI from reading project GEMINI.md
+            response = self._client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(**config_args)
             )
-            output = result.stdout.strip()
-            # The CLI usually uses markdown styling headers or empty whitespace we strip out
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Gemini CLI Error: {e.stderr}")
-            raise RuntimeError(f"Gemini CLI failed: {e.stderr}") from e
-        except subprocess.TimeoutExpired as e:
-            raise TimeoutError("Gemini CLI timed out generating response") from e
+            output = response.text or ""
+        except Exception as e:
+            logger.error(f"Gemini SDK Error: {e}")
+            raise RuntimeError(f"Gemini SDK failed: {e}") from e
+
+        if not output:
+             logger.warning("Gemini SDK returned empty output")
+             raise RuntimeError("Gemini SDK returned empty response")
 
         return ChatResult(
             generations=[ChatGeneration(message=AIMessage(content=output))]
@@ -139,36 +153,32 @@ class ChatGeminiCLI(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        """Execute gemini CLI asynchronously via asyncio subprocess."""
+        """Execute Gemini SDK asynchronously."""
         prompt = self._format_messages(messages)
-        safe_prompt = shlex.quote(prompt)
-        env_prefix = self._get_node20_env()
-        shell_cmd = f"{env_prefix}gemini prompt {safe_prompt}"
-
-        proc = await asyncio.create_subprocess_shell(
-            shell_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd='/tmp',  # Prevent CLI from reading project GEMINI.md
-        )
+        model_name = self._resolve_model_name()
+        
+        config_args = {"temperature": self.temperature}
+        if stop:
+            config_args["stop_sequences"] = stop
+            
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-        except asyncio.TimeoutError:
-            proc.kill()
-            raise TimeoutError("Gemini CLI async call timed out")
+            response = await self._client.aio.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(**config_args)
+            )
+            text = response.text or ""
+        except Exception as e:
+            logger.error(f"Gemini SDK async error: {e}")
+            raise RuntimeError(f"Gemini SDK async failed: {e}") from e
 
-        if proc.returncode != 0:
-            err_msg = stderr.decode() if stderr else "Unknown Error"
-            logger.error(f"Gemini CLI Error: {err_msg}")
-            raise RuntimeError(f"Gemini CLI failed: {err_msg}")
+        if not text:
+            logger.warning("Gemini SDK returned empty asynchronous output.")
+            raise RuntimeError("Gemini SDK returned empty response")
 
-        text = stdout.decode().strip() if stdout else ""
         return ChatResult(
             generations=[ChatGeneration(message=AIMessage(content=text))]
         )
-
-    # Note: Real token-by-token streaming is extremely hard to parse from TTY 
-    # output of the raw `gemini` CLI. We simulate it by yielding the final output block.
 
     def _stream(
         self,
@@ -177,9 +187,29 @@ class ChatGeminiCLI(BaseChatModel):
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        result = self._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
-        content = result.generations[0].message.content
-        yield ChatGenerationChunk(message=AIMessageChunk(content=str(content)))
+        """Stream generation synchronously."""
+        prompt = self._format_messages(messages)
+        model_name = self._resolve_model_name()
+        
+        config_args = {"temperature": self.temperature}
+        if stop:
+            config_args["stop_sequences"] = stop
+            
+        try:
+            response_stream = self._client.models.generate_content_stream(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(**config_args)
+            )
+            for chunk in response_stream:
+                text = chunk.text or ""
+                if text:
+                    yield ChatGenerationChunk(message=AIMessageChunk(content=text))
+                    if run_manager:
+                        run_manager.on_llm_new_token(text)
+        except Exception as e:
+            logger.error(f"Gemini SDK streaming Error: {e}")
+            raise RuntimeError(f"Gemini SDK streaming failed: {e}") from e
 
     async def _astream(
         self,
@@ -188,31 +218,35 @@ class ChatGeminiCLI(BaseChatModel):
         run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
-        result = await self._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs)
-        content = result.generations[0].message.content
-        yield ChatGenerationChunk(message=AIMessageChunk(content=str(content)))
-
-
-from langchain.chat_models import init_chat_model
-
-def resolve_model(model_str: str) -> Union[str, _BaseChatModel]:
-    """Resolve a provider-qualified model string.
-
-    If *model_str* starts with ``gemini_cli:``, return a ready-to-use
-    ``ChatGeminiCLI`` instance.
-    If it starts with ``google_genai:``, we instantiate it immediately
-    with `max_retries=1` to prevent LangChain from hanging for ~22s
-    when hitting 429 Quota Exceeded errors.
-    Otherwise return the string unchanged so that ``init_chat_model``
-    can handle it.
-    """
-    if model_str.startswith("gemini_cli:"):
-        model_name = model_str.split(":", 1)[1]
-        return ChatGeminiCLI(model=model_name)
-    elif model_str.startswith("google_genai:"):
+        """Stream generation asynchronously."""
+        prompt = self._format_messages(messages)
+        model_name = self._resolve_model_name()
+        
+        config_args = {"temperature": self.temperature}
+        if stop:
+            config_args["stop_sequences"] = stop
+            
         try:
-            return init_chat_model(model_str, max_retries=1)
+            response_stream = await self._client.aio.models.generate_content_stream(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(**config_args)
+            )
+            async for chunk in response_stream:
+                text = chunk.text or ""
+                if text:
+                    yield ChatGenerationChunk(message=AIMessageChunk(content=text))
+                    if run_manager:
+                        await run_manager.on_llm_new_token(text)
         except Exception as e:
-            logger.warning(f"Failed to pre-initialize {model_str} with max_retries: {e}")
-            return model_str
-    return model_str
+            logger.error(f"Gemini SDK async streaming Error: {e}")
+            raise RuntimeError(f"Gemini SDK async streaming failed: {e}") from e
+
+
+def resolve_model(model_name: str, cache: bool = True) -> Any:
+    """Returns a ChatGeminiCLI instance configured for the specific model.
+    """
+    if ":" in model_name:
+        base, model_id = model_name.split(":", 1)
+        return ChatGeminiCLI(model=model_id, temperature=0.7)
+    return ChatGeminiCLI(model=model_name, temperature=0.7)
