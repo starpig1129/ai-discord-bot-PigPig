@@ -3,6 +3,7 @@
         "attempting_next": "Attempting to play next song...",
         "no_results": "No search results found.",
         "no_voice_channel": "You must join a voice channel first.",
+        "voice_connect_failed": "Failed to connect to the voice channel. Please try again later.",
         "nothing_playing": "Nothing is currently playing.",
         "playback_error": "An error occurred during playback.",
         "playback_failed_desc": "Could not stream the requested track.",

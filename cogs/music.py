@@ -107,7 +107,14 @@ class YTMusic(commands.Cog):
         # 連接至語音頻道
         channel = interaction.user.voice.channel
         if interaction.guild.voice_client is None:
-            await channel.connect()
+            try:
+                await channel.connect()
+            except Exception as e:
+                await func.report_error(e, "music.py/play/channel.connect")
+                title = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "voice_connect_failed")
+                embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
 
         # 如果沒有提供查詢，刷新UI
         if not query:
@@ -863,6 +870,9 @@ class YTMusic(commands.Cog):
             if before.channel is not None and after.channel is None:
                 # Bot was disconnected
                 guild_id = member.guild.id
+                # If discord.py still has a voice_client, it's internally retrying — don't clean up yet
+                if member.guild.voice_client is not None:
+                    return
                 logger.info(f"[音樂] 偵測到機器人被動斷線於伺服器 {member.guild.name}。")
                 await self._cancel_disconnect_timer(guild_id)
                 await self._cleanup_voice_session(guild_id)

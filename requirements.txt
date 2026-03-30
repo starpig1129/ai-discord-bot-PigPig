@@ -3,7 +3,8 @@ aiohttp==3.13.2
 beautifulsoup4==4.14.2
 dateparser==1.2.2
 decord==0.6.0
-discord.py==2.6.4
+discord.py==2.7.1
+davey==0.1.5
 numpy==2.2.6
 OpenCC==1.1.9
 opencv-python==4.12.0.88

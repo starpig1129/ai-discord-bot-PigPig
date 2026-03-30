@@ -3,6 +3,7 @@
         "attempting_next": "正在尝试播放下一首歌曲...",
         "no_results": "找不到搜索结果。",
         "no_voice_channel": "你必须先加入语音频道。",
+        "voice_connect_failed": "无法连接至语音频道，请稍后再试。",
         "nothing_playing": "目前没有正在播放的内容。",
         "playback_error": "播放时发生错误。",
         "playback_failed_desc": "无法串流请求的音轨。",

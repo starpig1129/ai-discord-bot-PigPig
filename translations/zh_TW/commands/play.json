@@ -3,6 +3,7 @@
         "attempting_next": "正在嘗試播放下一首歌曲...",
         "no_results": "找不到搜尋結果。",
         "no_voice_channel": "你必須先加入語音頻道。",
+        "voice_connect_failed": "無法連接至語音頻道，請稍後再試。",
         "nothing_playing": "目前沒有正在播放的內容。",
         "playback_error": "播放時發生錯誤。",
         "playback_failed_desc": "無法串流請求的音軌。",

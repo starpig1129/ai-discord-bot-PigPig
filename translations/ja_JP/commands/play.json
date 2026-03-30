@@ -3,6 +3,7 @@
         "attempting_next": "次の曲を再生しようとしています...",
         "no_results": "検索結果が見つかりませんでした。",
         "no_voice_channel": "まずボイスチャンネルに参加する必要があります。",
+        "voice_connect_failed": "ボイスチャンネルに接続できませんでした。しばらくしてから再度お試しください。",
         "nothing_playing": "現在何も再生されていません。",
         "playback_error": "再生中にエラーが発生しました。",
         "playback_failed_desc": "リクエストされたトラックをストリーミングできませんでした。",
