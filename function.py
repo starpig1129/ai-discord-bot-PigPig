@@ -124,7 +124,7 @@ def get_error_deduplicator() -> ErrorDeduplicator:
     if _error_deduplicator is None:
         with _dedup_lock:
             if _error_deduplicator is None:
-                _error_deduplicator = ErrorDeduplicator(cooldown_seconds=86400.0)  # 1 day
+                _error_deduplicator = ErrorDeduplicator(cooldown_seconds=43200.0)  # 12 hours
     return _error_deduplicator
 
 

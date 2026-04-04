@@ -157,6 +157,7 @@ class LLMConfig:
         self.google_search_agent: str = self.data.get("google_search_agent", "gemini-2.0-flash")
         # Ollama server URL (defaults to localhost:11434)
         self.ollama_url: Optional[str] = self.data.get("ollama_url", "http://localhost:11434")
+        self.llm_call_timeout: float = float(self.data.get("llm_call_timeout", 60))
 
 
 class UpdateConfig:

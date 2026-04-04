@@ -8,7 +8,8 @@ from addons.logging import get_logger
 logger = get_logger(server_id="Bot", source="llm.orchestrator")
 
 from discord import Message
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain.chat_models import init_chat_model
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware, AgentMiddleware, hook_config
 
@@ -17,7 +18,9 @@ from llm.tools_factory import get_tools
 from llm.schema import OrchestratorResponse, OrchestratorRequest
 from llm.utils.send_message import send_message, safe_edit_message
 from function import func
-from addons.settings import prompt_config
+from addons.settings import llm_config, prompt_config
+
+_LLM_CALL_TIMEOUT_SECONDS: float = llm_config.llm_call_timeout
 from .prompting.system_prompt import get_system_prompt
 from .prompting.protected_prompt_manager import get_protected_prompt_manager
 
@@ -328,17 +331,23 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     try:
                         logger.info(f"Info agent: trying model {current_info_model} ({model_index + 1}/{len(info_model_list)})")
                         
+                        # Instantiate model with zero retries to ensure immediate fallback on quota exhaustion
+                        info_model_instance = init_chat_model(current_info_model, max_retries=0)
+                        
                         info_agent = create_agent(
-                            model=current_info_model,
+                            model=info_model_instance,
                             tools=info_agent_tools,
                             system_prompt=full_info_prompt,
                             middleware=[DirectToolOutputMiddleware()],
                         )
 
                         # Execute info_agent to process user message and tools
-                        info_result = await info_agent.ainvoke(
-                            {"messages": messages_for_info_agent},
-                            config={"callbacks": callbacks}
+                        info_result = await asyncio.wait_for(
+                            info_agent.ainvoke(
+                                {"messages": messages_for_info_agent},
+                                config={"callbacks": callbacks}
+                            ),
+                            timeout=_LLM_CALL_TIMEOUT_SECONDS,
                         )
                         
                         # Success!
@@ -364,7 +373,6 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 else:
                     # Fallback: create a human message from the result
                     result_str = str(info_result) if info_result else ""
-                    from langchain_core.messages import HumanMessage
                     info_message = [HumanMessage(content=result_str)]
             except Exception as e:
                 await asyncio.create_task(func.report_error(e, "info_agent failed"))
@@ -391,7 +399,20 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
                 # Use the analysis from info_agent for message generation
                 # Compose messages for message_agent with analysis output and context
-                messages_for_message_agent = list(info_message)
+                # Filter out ToolMessage and AIMessage with tool_calls — local models (e.g. Ollama)
+                # don't support these formats in conversation history and will fail immediately.
+                clean_info_messages: List[BaseMessage] = []
+                for _msg in info_message:
+                    if isinstance(_msg, ToolMessage):
+                        continue  # skip tool execution results
+                    elif isinstance(_msg, AIMessage) and _msg.tool_calls:
+                        # keep text content only, drop tool_calls
+                        _text = _msg.content if isinstance(_msg.content, str) else ""
+                        if _text.strip():
+                            clean_info_messages.append(AIMessage(content=_text))
+                    else:
+                        clean_info_messages.append(_msg)
+                messages_for_message_agent = clean_info_messages
                 
                 # Update status to "Thinking..."
                 thinking_msg = lang_manager.translate(guild_id, "system", "chat_bot", "responses", "thinking") if lang_manager else "🧠 思考回覆中..."
@@ -413,9 +434,11 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     try:
                         logger.info(f"Message agent: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
                         
-                        # Create agent with current model (no fallback middleware needed)
+                        # Create agent with current model configured for zero retries
+                        message_model_instance = init_chat_model(current_model, max_retries=0)
+                        
                         message_agent = create_agent(
-                            model=current_model,
+                            model=message_model_instance,
                             tools=message_agent_tools,
                             system_prompt=full_message_prompt,
                             middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
@@ -430,13 +453,16 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         remaining_models = [m for m in model_priority_list[model_index + 1:] if circuit_breaker.is_available(m)]
                         is_last_available = len(remaining_models) == 0
                         
-                        message_result = await send_message(
-                            bot, 
-                            message_edit, 
-                            message, 
-                            streamer,
-                            raise_exception=not is_last_available,
-                            tools=all_tools
+                        message_result = await asyncio.wait_for(
+                            send_message(
+                                bot,
+                                message_edit,
+                                message,
+                                streamer,
+                                raise_exception=not is_last_available,
+                                tools=all_tools
+                            ),
+                            timeout=_LLM_CALL_TIMEOUT_SECONDS,
                         )
                         
                         # Success!

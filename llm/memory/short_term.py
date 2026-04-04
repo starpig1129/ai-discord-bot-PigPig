@@ -33,7 +33,10 @@ class ShortTermMemoryProvider:
         The returned order is oldest -> newest.
         """
         try:
-            history = [msg async for msg in message.channel.history(limit=self.limit)][1:]  # Exclude the  bot's message
+            history = [
+                msg async for msg in message.channel.history(limit=self.limit)
+                if msg.author.id != self.bot.user.id
+            ]
             history.reverse()
 
             result: List[BaseMessage] = []
@@ -62,28 +65,25 @@ class ShortTermMemoryProvider:
                     for attachment in msg.attachments:
                         if attachment.content_type:
                             if attachment.content_type.startswith('image/'):
+                                # Standard LangChain format for both Gemini and Ollama
                                 content_parts.append({
-                                    "type": "image",
-                                    "url": attachment.url,
-                                    "mime_type": attachment.content_type
+                                    "type": "image_url",
+                                    "image_url": {"url": attachment.url}
                                 })
                             elif attachment.content_type.startswith('video/'):
                                 content_parts.append({
-                                    "type": "video",
-                                    "url": attachment.url,
-                                    "mime_type": attachment.content_type
+                                    "type": "text",
+                                    "text": f"[影片附件: {attachment.filename}]"
                                 })
                             elif attachment.content_type == 'application/pdf':
                                 content_parts.append({
-                                    "type": "file",
-                                    "url": attachment.url,
-                                    "mime_type": "application/pdf"
+                                    "type": "text",
+                                    "text": f"[PDF 附件: {attachment.filename}]"
                                 })
                             elif attachment.content_type.startswith('audio/'):
                                 content_parts.append({
-                                    "type": "audio",
-                                    "url": attachment.url,
-                                    "mime_type": attachment.content_type
+                                    "type": "text",
+                                    "text": f"[音訊附件: {attachment.filename}]"
                                 })
 
                 # 創建消息（使用列表格式的 content）

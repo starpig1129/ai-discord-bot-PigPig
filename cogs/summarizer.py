@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
@@ -120,10 +121,12 @@ class SummarizerCog(commands.Cog):
             user_instruction = "請根據我提供的對話歷史紀錄，開始進行摘要。"
             log.info(f"正在調用語言模型生成摘要... (分析 {human_msg_count} 則人類訊息，總輸入 {current_char_count} 字元)")
 
-            # 建立 agent（維持 create_agent，但傳入 SystemMessage 作為系統角色）
-            model, fallback = ModelManager().get_model("summarize_model")
+            # 建立 agent（設定 max_retries=1 避免配額耗盡時卡住）
+            model_name, fallback = ModelManager().get_model("summarize_model")
+            model_instance = init_chat_model(model_name, max_retries=1)
+            
             summarize_agent = create_agent(
-                model=model,
+                model=model_instance,
                 tools=[],
                 system_prompt=system_prompt,
                 middleware=[

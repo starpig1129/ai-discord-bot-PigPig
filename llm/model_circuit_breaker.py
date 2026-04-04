@@ -43,7 +43,7 @@ class ErrorCategory(Enum):
 
 # Cooldown durations in seconds for each error category
 COOLDOWN_SECONDS: Dict[ErrorCategory, float] = {
-    ErrorCategory.QUOTA_EXHAUSTED: 120.0,   # 2 minutes for quota
+    ErrorCategory.QUOTA_EXHAUSTED: 43200.0, # 12 hours for quota recovery
     ErrorCategory.MODEL_NOT_FOUND: 3600.0,  # 1 hour for non-existent models
     ErrorCategory.RATE_LIMITED: 30.0,       # 30 seconds for rate limits
     ErrorCategory.AUTHENTICATION: 7200.0,   # 2 hours for auth issues

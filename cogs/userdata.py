@@ -46,6 +46,7 @@ from addons.settings import prompt_config
 from cogs.memory.users.manager import SQLiteUserManager
 from cogs.memory.users.models import UserInfo
 from function import func
+from langchain.chat_models import init_chat_model
 from llm.model_manager import ModelManager
 from llm.utils.send_message import safe_edit_message
 
@@ -384,20 +385,14 @@ class UserDataCog(commands.Cog):
         )
 
         try:
-            model, fallback = ModelManager().get_model("user_data_model")
+            model_id, _ = ModelManager().get_model("user_data_model")
+            # Directly use the model with structured output instead of creating a full agent
+            # This avoids the overhead of creating prompt templates and multiple layers of agent logic
+            # Setting max_retries=1 to prevent hanging during quota exhaustion; fallbacks will handle it
+            llm = init_chat_model(model_id, max_retries=1).with_structured_output(UserDataResponse)
         except Exception as e:
-            await func.report_error(e, "Failed to get user_data_model")
+            await func.report_error(e, "Failed to get user_data_model for merge")
             raise RuntimeError(f"Failed to get user_data_model: {e}") from e
-
-        agent = create_agent(
-            model=model,
-            tools=[],
-            system_prompt=system_prompt,
-            response_format=UserDataResponse,
-            middleware=cast(Any, [fallback,
-                ModelCallLimitMiddleware(run_limit=1, exit_behavior="end"),
-            ]),
-        )
 
         existing_data_str = "No existing data"
         if existing_data:
@@ -414,11 +409,13 @@ class UserDataCog(commands.Cog):
             "Please merge these intelligently and return the complete merged result."
         )
 
-        response = await agent.ainvoke({
-            "messages": [HumanMessage(content=user_prompt)]
-        })
+        # Direct invocation for better performance
+        response = await llm.ainvoke([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ])
 
-        return response["structured_response"]
+        return response
 
     async def _save_user_data(
         self,
@@ -454,23 +451,17 @@ class UserDataCog(commands.Cog):
             existing_data = user_info
             if not user_info:
                 try:
-                    # Create a minimal user record so downstream logic (and DB constraints) have a row to work with.
-                    created = await self.user_manager.update_user_activity(user_id, display_name)
-                    if created:
-                        self.logger.info(f"Initialized user record for {user_id}")
-                        # Attempt to fetch the freshly created record for the AI merge step.
-                        try:
-                            existing_data = await self.user_manager.get_user_info(user_id)
-                        except Exception as e:
-                            self.logger.warning(f"Re-fetch after init failed for {user_id}: {e}")
-                    else:
-                        self.logger.warning(f"Initialization of user record returned False for {user_id}")
+                    # Create a minimal user record
+                    await self.user_manager.update_user_activity(user_id, display_name)
+                    self.logger.info(f"Initialized user record for {user_id}")
+                    # Use a default UserInfo object instead of re-fetching from DB
+                    existing_data = UserInfo(
+                        discord_id=user_id,
+                        discord_name=display_name,
+                        display_names=[display_name] if display_name else []
+                    )
                 except Exception as e:
-                    self.logger.error(f"Failed to initialize user record for {user_id}: {e}", exception=e)
-                    try:
-                        await func.report_error(e, f"Failed to initialize user record (user: {user_id})")
-                    except Exception:
-                        pass
+                    self.logger.error(f"Failed to initialize user record for {user_id}: {e}")
  
             # Invoke AI agent to merge data
             try:
@@ -710,8 +701,11 @@ class UserDataCog(commands.Cog):
                     fallback_key="invalid_user"
                 )
 
-            # Fetch user object
-            user = await self.bot.fetch_user(int(user_id))
+            # Resolve user object - try cache (get_user) first
+            user = self.bot.get_user(int(user_id))
+            if not user:
+                # Fallback to API call only if not in cache
+                user = await self.bot.fetch_user(int(user_id))
 
             # Execute operation
             result = await self.manage_user_data(

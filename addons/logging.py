@@ -673,25 +673,35 @@ class LoggerAdapter:
             return colorize(line, level_color or "white")
 
     # Convenience API methods
-    def info(self, message: Optional[str] = None, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
+    def info(self, message: Optional[str] = None, *args: Any, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
         """Emit an INFO event.
  
-        Accept both calling styles used across the codebase:
-        - logger.info("text", user_id=..., action=..., ...)  (positional message)
-        - logger.info(user_id=..., action=..., message="text") (message in kwargs)
-        - logger.info("text", message="...") (prefer positional message and avoid duplicate)
+        Accept calling styles:
+        - logger.info("text %s", "arg") (printf-style)
+        - logger.info("text", user_id=...) (positional message)
+        - logger.info(user_id=..., message="text") (message in kwargs)
         """
-        # Normalize message from positional or event_fields, avoid duplicate 'message' key.
+        if args and message:
+            try:
+                message = message % args
+            except Exception:
+                message = f"{message} {args}"
+
         if message is None and "message" in event_fields:
             msg = event_fields.pop("message")
         else:
-            # If both provided, prefer positional 'message' and remove kwarg to avoid duplication.
             event_fields.pop("message", None)
             msg = message or ""
         self._emit("INFO", msg, exception, **event_fields)
  
-    def warning(self, message: Optional[str] = None, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
-        """Emit a WARNING event (handles same calling conventions as info)."""
+    def warning(self, message: Optional[str] = None, *args: Any, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
+        """Emit a WARNING event."""
+        if args and message:
+            try:
+                message = message % args
+            except Exception:
+                message = f"{message} {args}"
+
         if message is None and "message" in event_fields:
             msg = event_fields.pop("message")
         else:
@@ -699,8 +709,14 @@ class LoggerAdapter:
             msg = message or ""
         self._emit("WARNING", msg, exception, **event_fields)
  
-    def error(self, message: Optional[str] = None, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
-        """Emit an ERROR event (handles same calling conventions as info)."""
+    def error(self, message: Optional[str] = None, *args: Any, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
+        """Emit an ERROR event."""
+        if args and message:
+            try:
+                message = message % args
+            except Exception:
+                message = f"{message} {args}"
+
         if message is None and "message" in event_fields:
             msg = event_fields.pop("message")
         else:
@@ -708,8 +724,14 @@ class LoggerAdapter:
             msg = message or ""
         self._emit("ERROR", msg, exception, **event_fields)
  
-    def debug(self, message: Optional[str] = None, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
-        """Emit a DEBUG event (handles same calling conventions as info)."""
+    def debug(self, message: Optional[str] = None, *args: Any, exception: Optional[BaseException] = None, **event_fields: Any) -> None:
+        """Emit a DEBUG event."""
+        if args and message:
+            try:
+                message = message % args
+            except Exception:
+                message = f"{message} {args}"
+
         if message is None and "message" in event_fields:
             msg = event_fields.pop("message")
         else:
@@ -718,19 +740,16 @@ class LoggerAdapter:
         self._emit("DEBUG", msg, exception, **event_fields)
     
     def exception(self, message: Optional[str] = None, *args: Any, **event_fields: Any) -> None:
-        """Log an ERROR-level event with the current exception traceback (like logging.exception)."""
-        # Capture the current exception (if any) and forward it as 'exception' to _emit.
+        """Log an ERROR-level event with the current exception traceback."""
         try:
             exc = sys.exc_info()[1]
         except Exception:
             exc = None
         
-        # Handle potential printf-style formatting if args are present
         if args and message:
             try:
                 message = message % args
             except Exception:
-                # If formatting fails, just append args to message to preserve info
                 message = f"{message} {args}"
 
         if message is None and "message" in event_fields:
@@ -738,7 +757,6 @@ class LoggerAdapter:
         else:
             event_fields.pop("message", None)
             msg = message or ""
-        # Use ERROR level and include the captured exception object so stack trace is emitted
         self._emit("ERROR", msg, exc, **event_fields)
 
 

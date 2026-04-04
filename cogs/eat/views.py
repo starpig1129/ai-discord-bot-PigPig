@@ -3,6 +3,7 @@ import discord
 import json
 
 from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
 
 from cogs.eat.db.db import DB
@@ -154,8 +155,11 @@ class EatWhatView(discord.ui.View):
                     continue
                 
                 try:
+                    # Instantiate model with zero retries for fast fallback
+                    model_instance = init_chat_model(current_model, max_retries=0)
+                    
                     review_agent = create_agent(
-                        model=current_model,
+                        model=model_instance,
                         tools=[],
                         system_prompt=system_prompt,
                         middleware=[],

@@ -253,63 +253,31 @@ class UserMemoryTools:
                             int_id = int(effective_id)
                         except Exception:
                             int_id = None
+                        
                         if int_id is not None:
-                            # prefer cache to avoid unnecessary API calls
+                            # 1) Try local cache first
                             fetched_user = bot.get_user(int_id)
+                            
+                            # 2) Only if not in cache, and we have a valid int_id, try fetch_user
                             if not fetched_user:
                                 try:
                                     fetched_user = await bot.fetch_user(int_id)
                                 except discord.NotFound:
-                                    # user does not exist / was deleted - not an exception to escalate
-                                    logger.warning(
-                                        f"fetch_user: unknown user {int_id}",
-                                        extra={"provided_user_id": user_id}
-                                    )
-                                    fetched_user = None
-
-                                    # Fallback to message author if the provided ID is invalid/unknown
-                                    # This handles cases where LLM hallucinates an ID (e.g. Guild ID)
+                                    logger.warning(f"fetch_user: unknown user {int_id}")
+                                    # Fallback to message author if LLM hallucinated an ID
                                     msg = getattr(runtime, "message", None)
                                     if msg and getattr(msg, "author", None):
-                                        author_id = getattr(msg.author, "id", None)
+                                        author_id = msg.author.id
                                         if author_id and author_id != int_id:
-                                            logger.info(
-                                                f"Falling back to message author {author_id} after invalid user_id {int_id}",
-                                                extra={"original_id": int_id, "new_id": author_id}
-                                            )
                                             effective_id = author_id
                                             fetched_user = msg.author
-
-                                except discord.HTTPException as he:
-                                    # transient HTTP error - report and continue with fallback
-                                    logger.warning(
-                                        f"fetch_user HTTP error for {int_id}: {he}",
-                                        extra={"provided_user_id": user_id}
-                                    )
-                                    await func.report_error(he, f"Failed to fetch user {int_id}")
                                 except Exception as e:
-                                    # unexpected error - log and report
-                                    logger.exception(
-                                        f"Unexpected error fetching user {int_id}: {e}"
-                                    )
-                                    await func.report_error(e, f"Failed to fetch user {int_id}")
-                        # If we obtained a user object, prefer its display_name/name
+                                    logger.warning(f"Failed to fetch user {int_id}: {e}")
+
                         if fetched_user:
-                            display_name = getattr(
-                                fetched_user,
-                                "display_name",
-                                getattr(fetched_user, "name", display_name)
-                            )
-                    except Exception as fetch_err:
-                        # Ensure any unexpected outer errors are at least warned; report for observability.
-                        logger.warning(
-                            f"Failed to fetch display_name for user {effective_id}: {fetch_err}",
-                            extra={"provided_user_id": user_id}
-                        )
-                        try:
-                            await func.report_error(fetch_err, f"Failed to fetch display_name for user {effective_id}")
-                        except Exception:
-                            pass
+                            display_name = getattr(fetched_user, "display_name", getattr(fetched_user, "name", display_name))
+                    except Exception as e:
+                        logger.warning(f"Display name resolution error: {e}")
     
                 # Debug details about what will be saved
                 logger.debug(

@@ -11,6 +11,7 @@ from function import func
 
 from llm.model_manager import ModelManager
 from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
 
 from .database import StoryDB, CharacterDB
@@ -438,13 +439,15 @@ class StoryManager:
                             content=f"Recent plot summary: {summary}"
                         ))
 
-                # Call GM agent
-                story_gm_model, fallback = ModelManager().get_model("story_gm_model")
+                # Call GM agent with zero retries for fast fallback
+                story_gm_model_name, fallback = ModelManager().get_model("story_gm_model")
+                story_gm_model_instance = init_chat_model(story_gm_model_name, max_retries=0)
+                
                 agent = create_agent(
-                    story_gm_model, 
+                    story_gm_model_instance, 
                     tools=[], 
                     system_prompt=gm_prompt, 
-                    response_format=GMActionPlan,
+                    response_format=GMActionPlan, 
                     middleware=[fallback]
                 )
                 message_list = [HumanMessage(content=message.content)] + gm_dialogue_history
@@ -549,10 +552,12 @@ class StoryManager:
                                     time=latest_time
                                 )
 
-                            # Call character agent
-                            story_character_model, fallback =                                 ModelManager().get_model("story_character_model")
+                            # Call character agent with zero retries
+                            story_character_model_name, fallback =                                 ModelManager().get_model("story_character_model")
+                            story_character_model_instance = init_chat_model(story_character_model_name, max_retries=0)
+                            
                             agent = create_agent(
-                                story_character_model, 
+                                story_character_model_instance, 
                                 tools=[],
                                 system_prompt=char_system_prompt, 
                                 response_format=CharacterAction, 
@@ -808,10 +813,12 @@ class StoryManager:
                 "including a one-paragraph summary, key events, and character developments."
             )
 
-            # Call summary model with structured output
-            story_summary_model, fallback = ModelManager().get_model("story_summary_model")
+            # Call summary model with structured output and zero retries
+            story_summary_model_name, fallback = ModelManager().get_model("story_summary_model")
+            story_summary_model_instance = init_chat_model(story_summary_model_name, max_retries=0)
+            
             agent = create_agent(
-                story_summary_model, 
+                story_summary_model_instance, 
                 tools=[], 
                 system_prompt=summary_system_prompt,
                 response_format=StorySummary,  # 使用結構化輸出
@@ -892,10 +899,12 @@ class StoryManager:
         dialogue_history = HumanMessage(f"## Recent Plot Summaries\n{formatted_summaries}")
 
         try:
-            # Call outline model with structured output
-            story_outline_model, fallback = ModelManager().get_model("story_outline_model")
+            # Call outline model with structured output and zero retries
+            story_outline_model_name, fallback = ModelManager().get_model("story_outline_model")
+            story_outline_model_instance = init_chat_model(story_outline_model_name, max_retries=0)
+            
             agent = create_agent(
-                story_outline_model, 
+                story_outline_model_instance, 
                 tools=[], 
                 system_prompt=outline_system_prompt,
                 response_format=StoryOutline,  # 使用結構化輸出
@@ -1068,10 +1077,12 @@ class StoryManager:
                     characters
                 )
                 
-                # Call GM Model for initial scene
-                story_gm_model, fallback = ModelManager().get_model("story_gm_model")
+                # Call GM Model for initial scene with zero retries
+                story_gm_model_name, fallback = ModelManager().get_model("story_gm_model")
+                story_gm_model_instance = init_chat_model(story_gm_model_name, max_retries=0)
+                
                 agent = create_agent(
-                    story_gm_model, 
+                    story_gm_model_instance, 
                     tools=[], 
                     system_prompt=gm_prompt, 
                     response_format=GMActionPlan, 
