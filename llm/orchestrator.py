@@ -1,6 +1,6 @@
 from __future__ import annotations
 import asyncio
-from typing import Any, List
+from typing import Any, List, Optional
 import re
 
 from addons.logging import get_logger
@@ -27,6 +27,7 @@ from .prompting.protected_prompt_manager import get_protected_prompt_manager
 from llm.context_manager import ContextManager
 from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.procedural import ProceduralMemoryProvider
+from llm.memory.episodic import EpisodicMemoryProvider
 from llm.callbacks import ToolFeedbackCallbackHandler
 from llm.model_circuit_breaker import get_model_circuit_breaker
 
@@ -73,9 +74,15 @@ class Orchestrator:
         short_term_provider = ShortTermMemoryProvider(bot=bot, limit=15)
         procedural_provider = ProceduralMemoryProvider(user_manager=user_manager)
 
+        # Episodic provider: only when memory is enabled and vector store is available
+        episodic_provider: Optional[EpisodicMemoryProvider] = None
+        if memory_enabled and getattr(bot, "vector_manager", None) is not None:
+            episodic_provider = EpisodicMemoryProvider(bot=bot, top_k=3, max_chars=1500)
+
         self.context_manager = ContextManager(
             short_term_provider=short_term_provider,
             procedural_provider=procedural_provider,
+            episodic_provider=episodic_provider,
         )
 
     def _build_info_agent_prompt(self, bot_id: int, message: Message) -> str:
