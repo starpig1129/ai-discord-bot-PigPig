@@ -9,13 +9,14 @@ import asyncio
 
 import re
 from datetime import datetime
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 import discord
 
 from function import func
 from llm.memory.procedural import ProceduralMemoryProvider
 from llm.memory.short_term import ShortTermMemoryProvider
+from llm.memory.episodic import EpisodicMemoryProvider
 from llm.memory.schema import ProceduralMemory
 from langchain_core.messages import BaseMessage
 from addons.logging import get_logger
@@ -30,10 +31,12 @@ class ContextManager:
         self,
         short_term_provider: ShortTermMemoryProvider,
         procedural_provider: ProceduralMemoryProvider,
+        episodic_provider: Optional[EpisodicMemoryProvider] = None,
     ) -> None:
         """Initialize with memory providers."""
         self.short_term_provider = short_term_provider
         self.procedural_provider = procedural_provider
+        self.episodic_provider = episodic_provider
 
     async def get_context(self, message: discord.Message) -> Tuple[str, List[BaseMessage]]:
         """Return (procedural_context_str, short_term_msgs).
@@ -62,22 +65,39 @@ class ContextManager:
             _LOGGER.error("extract_user_ids failed", exception=e)
             user_ids = []
 
-        # 3) Fetch procedural memory (resilient: on failure continue with empty mapping)
-        try:
-            procedural_memory = await self.procedural_provider.get(user_ids)
-        except Exception as e:
-            asyncio.create_task(
-                func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
-            )
-            _LOGGER.error("procedural_provider.get failed", exception=e)
-            procedural_memory = ProceduralMemory(user_info={})
+        # 3) Fetch procedural memory AND episodic context in parallel to minimize latency
+        async def _fetch_procedural() -> ProceduralMemory:
+            try:
+                return await self.procedural_provider.get(user_ids)
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
+                )
+                _LOGGER.error("procedural_provider.get failed", exception=e)
+                return ProceduralMemory(user_info={})
+
+        async def _fetch_episodic() -> Optional[str]:
+            if self.episodic_provider is None:
+                return None
+            try:
+                return await self.episodic_provider.get(message)
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: episodic_provider.get failed")
+                )
+                return None
+
+        procedural_memory, episodic_str = await asyncio.gather(
+            _fetch_procedural(),
+            _fetch_episodic(),
+        )
 
         # 4) Format procedural memory into string (no STM serialization here)
         try:
             channel_name = getattr(message.channel, "name", str(getattr(message.channel, "id", "")))
         except Exception:
             channel_name = ""
- 
+
         # Use message.created_at when available; fallback to current UTC timestamp (float seconds)
         try:
             if getattr(message, "created_at", None) is not None:
@@ -87,14 +107,16 @@ class ContextManager:
         except Exception:
             timestamp = datetime.utcnow().timestamp()
 
+        procedural_str = ""
         try:
-            procedural_str = self._format_context_for_prompt(procedural_memory, channel_name, timestamp)
+            procedural_str = self._format_context_for_prompt(
+                procedural_memory, channel_name, timestamp, episodic_str=episodic_str
+            )
         except Exception as e:
             asyncio.create_task(
                 func.report_error(e, "ContextManager.get_context: _format_context_for_prompt failed")
             )
             _LOGGER.error("Formatting procedural context failed", exception=e)
-            procedural_str = ""
 
         return procedural_str, short_term_msgs
 
@@ -137,7 +159,13 @@ class ContextManager:
 
         return list(ids)
 
-    def _format_context_for_prompt(self, procedural_memory: ProceduralMemory, channel_name: str, timestamp: float) -> str:
+    def _format_context_for_prompt(
+        self,
+        procedural_memory: ProceduralMemory,
+        channel_name: str,
+        timestamp: float,
+        episodic_str: Optional[str] = None,
+    ) -> str:
         """Format procedural memory and current state into a single string.
  
         This method intentionally does NOT serialize short-term memory; callers
@@ -169,6 +197,9 @@ class ContextManager:
                 func.report_error(e, "ContextManager._format_context_for_prompt/channel_ts")
             )
             _LOGGER.error("Formatting channel/timestamp failed", exception=e)
+
+        if episodic_str:
+            parts.append(episodic_str)
 
         parts.append("--- End System Context ---")
         return "\n\n".join(parts)
