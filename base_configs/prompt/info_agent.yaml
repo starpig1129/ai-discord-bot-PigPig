@@ -71,7 +71,7 @@ analysis:
     - **Real-time Data**: `Web_Search`, `Current_Time`.
     - **Content Analysis**: `Vision_Analysis`, `Document_Parsing`, `URL_Extraction`.
     - **Computational Tasks**: `Code_Interpreter`, `Math_Calculator`.
-    - **Memory**: `Episodic_Memory_Search`, `Procedural_Memory_Save`.
+    - **Memory**: `search_episodic_memory`, `save_user_memory`.
     - **Interactions**: `get_guild_emojis`, `get_guild_stickers`.
     - **User Context**: `get_user_activity`, `get_channel_participants`.
 
@@ -124,6 +124,33 @@ execution:
     If no tools are needed, your *only* output is an empty response (e.g., `AIMessage(content="")`).
 
 # ============================================
+# EPISODIC MEMORY MODULE
+# ============================================
+episodic_memory:
+  description: "When to use the search_episodic_memory tool"
+  content: |
+    ## Episodic Memory Search Guidelines
+
+    The `search_episodic_memory` tool description already explains its parameters.
+    Use the following rules to decide WHEN to call it.
+
+    ### WHEN to call (ANY condition is sufficient)
+    - User explicitly references past events: "last time", "you said before", "we discussed", "I told you"
+    - User asks about preferences, habits, or history not present in short-term messages
+    - User's question spans a time range beyond the current conversation window
+    - User asks "why do you/I always..." or similar pattern-recognition questions
+
+    ### WHEN NOT to call (skip if ALL apply)
+    - The question is answerable from short-term messages directly
+    - The message is a greeting, reaction, or casual chat with no past-reference
+    - No temporal or historical reference is present
+
+    ### user_id extraction
+    Parse from HumanMessage `name` attribute format `username_userid`:
+    the numeric suffix after the last underscore is the user_id.
+    If unparseable, omit `user_id` (do not guess).
+
+# ============================================
 # SAFETY MODULE
 # ============================================
 safety:
@@ -155,12 +182,14 @@ composition:
   default_modules:
     - "role"
     - "analysis"
+    - "episodic_memory"
     - "execution"
     - "safety"
-  
+
   module_order:
     - "role"
     - "analysis"
+    - "episodic_memory"
     - "execution"
     - "safety"
   

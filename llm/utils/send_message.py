@@ -412,31 +412,39 @@ async def _process_token_stream(
         while i < len(current_str):
             # Check for potential start of a tag
             if current_str[i] == '<':
-                # Check if it's a complete tag
-                if current_str[i:].startswith('<som>'):
+                # Check if it's a complete tag (supports <som>, </som>, <eom>, </eom>)
+                remaining = current_str[i:]
+                if remaining.startswith('<som>'):
                     markers_detected = True
-                    # If we hit a new <som>, merge any intermediate content from previous <eom>
                     if intermediate_content:
                         display_str += intermediate_content
                         intermediate_content = ''
                     is_capturing = True
                     i += 5
                     continue
-                elif current_str[i:].startswith('<eom>'):
+                elif remaining.startswith('</som>'):
+                    is_capturing = False
+                    i += 6
+                    continue
+                elif remaining.startswith('<eom>'):
                     markers_detected = True
-                    # If we hit an <eom>, all previous intermediate content is now confirmed
                     if intermediate_content:
                         display_str += intermediate_content
                         intermediate_content = ''
                     is_capturing = False
                     i += 5
                     continue
+                elif remaining.startswith('</eom>'):
+                    is_capturing = False
+                    i += 6
+                    continue
                 
                 # Check if it could be a partial tag
-                remaining = current_str[i:]
-                if '<som>'.startswith(remaining) or '<eom>'.startswith(remaining):
-                    # It's a partial tag, buffer it and stop processing this chunk
-                    tag_buffer = remaining
+                if any('<som>'.startswith(remaining[:k]) or '</som>'.startswith(remaining[:k]) or 
+                       '<eom>'.startswith(remaining[:k]) or '</eom>'.startswith(remaining[:k]) 
+                       for k in range(1, len(remaining) + 1)):
+                    # If the start of a tag is detected but not yet complete, buffer it
+                    tag_buffer = current_str[i:]
                     break
             
             # Capture content based on state
