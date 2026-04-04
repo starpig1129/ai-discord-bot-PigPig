@@ -399,17 +399,22 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
                 # Use the analysis from info_agent for message generation
                 # Compose messages for message_agent with analysis output and context
-                # Filter out ToolMessage and AIMessage with tool_calls — local models (e.g. Ollama)
-                # don't support these formats in conversation history and will fail immediately.
+                # Filter and transform ToolMessage and AIMessage with tool_calls.
+                # Local models (e.g. Ollama) often don't support these specific message types/attributes,
+                # so we convert them to plain text messages to preserve context without crashing.
                 clean_info_messages: List[BaseMessage] = []
                 for _msg in info_message:
                     if isinstance(_msg, ToolMessage):
-                        continue  # skip tool execution results
+                        # Convert ToolMessage to HumanMessage with English prefix and structured formatting
+                        tool_name = getattr(_msg, "name", "unknown")
+                        clean_info_messages.append(HumanMessage(content=f"[System: Tool Result ({tool_name})]\n{_msg.content}"))
                     elif isinstance(_msg, AIMessage) and _msg.tool_calls:
-                        # keep text content only, drop tool_calls
+                        # Preserve text content; provide English placeholder if empty
                         _text = _msg.content if isinstance(_msg.content, str) else ""
-                        if _text.strip():
-                            clean_info_messages.append(AIMessage(content=_text))
+                        if not _text.strip():
+                            tool_names = ", ".join([tc.get("name", "unknown") for tc in _msg.tool_calls])
+                            _text = f"[Assistant: Calling tool(s): {tool_names}]"
+                        clean_info_messages.append(AIMessage(content=_text))
                     else:
                         clean_info_messages.append(_msg)
                 messages_for_message_agent = clean_info_messages
