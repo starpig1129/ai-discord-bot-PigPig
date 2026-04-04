@@ -1,23 +1,34 @@
-from typing import List, Dict
+import asyncio
+import time
+from typing import Dict, List, Optional, Tuple
 
 from llm.memory.schema import ProceduralMemory, UserInfo
 from cogs.memory.users.manager import SQLiteUserManager
 from function import func
 
+# Cache TTL in seconds. Procedural memory is low-frequency data; 300s is sufficient.
+_CACHE_TTL_SECONDS: float = 300.0
+
 
 class ProceduralMemoryProvider:
-    """Provides procedural memory for multiple users.
+    """Provides procedural memory for multiple users with per-user TTL cache.
 
     The provider fetches UserInfo for each user_id using the provided user manager
-    and returns a ProceduralMemory mapping user_id -> UserInfo.
+    and caches results per user_id to avoid redundant DB calls within the TTL window.
     """
 
-    def __init__(self, user_manager: SQLiteUserManager):
+    def __init__(self, user_manager: SQLiteUserManager) -> None:
         """Initializes the provider with a user manager instance."""
         self.user_manager = user_manager
+        # key: user_id (str), value: (UserInfo, expire_at: float monotonic)
+        self._cache: Dict[str, Tuple[UserInfo, float]] = {}
+        self._lock = asyncio.Lock()
 
     async def get(self, user_ids: List[str]) -> ProceduralMemory:
-        """Fetch procedural memory for a list of user IDs.
+        """Fetch procedural memory with per-user TTL cache.
+
+        Cache hit: return cached UserInfo without DB call.
+        Cache miss: fetch from DB and store in cache.
 
         Args:
             user_ids: List of user id strings to fetch info for.
@@ -28,14 +39,43 @@ class ProceduralMemoryProvider:
         if not user_ids or not self.user_manager:
             return ProceduralMemory(user_info={})
 
-        try:
-            # Use user_manager's batch method which already reports per-user errors.
-            users: Dict[str, UserInfo] = await self.user_manager.get_multiple_users(
-                [str(uid) for uid in user_ids]
-            )
-        except Exception as e:
-            # Report and return empty mapping to keep flow resilient.
-            await func.report_error(e, "ProceduralMemoryProvider.get failed while fetching users")
-            users = {}
+        now = time.monotonic()
+        result: Dict[str, UserInfo] = {}
+        missing_ids: List[str] = []
 
-        return ProceduralMemory(user_info=users)
+        async with self._lock:
+            for uid in user_ids:
+                entry = self._cache.get(uid)
+                if entry is not None and entry[1] > now:
+                    result[uid] = entry[0]
+                else:
+                    missing_ids.append(uid)
+
+        if missing_ids:
+            try:
+                fetched: Dict[str, UserInfo] = await self.user_manager.get_multiple_users(
+                    [str(uid) for uid in missing_ids]
+                )
+            except Exception as e:
+                await func.report_error(e, "ProceduralMemoryProvider.get failed while fetching users")
+                fetched = {}
+
+            expire_at = time.monotonic() + _CACHE_TTL_SECONDS
+            async with self._lock:
+                for uid, info in fetched.items():
+                    self._cache[uid] = (info, expire_at)
+                    result[uid] = info
+
+        return ProceduralMemory(user_info=result)
+
+    async def invalidate(self, user_id: str) -> None:
+        """Evict a single user from the cache.
+
+        Call this after a successful /memory save to ensure the next request
+        reflects the updated data without waiting for TTL expiry.
+
+        Args:
+            user_id: The user_id string to remove from cache.
+        """
+        async with self._lock:
+            self._cache.pop(str(user_id), None)

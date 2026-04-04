@@ -287,7 +287,7 @@ class UserMemoryTools:
     
                 # Call the internal method from UserDataCog with correct parameter order:
                 # (user_id: str, display_name: str, user_data: str, context)
-                return await cog._save_user_data(
+                result_msg = await cog._save_user_data(
                     str(effective_id),
                     display_name,
                     memory_to_save,
@@ -296,6 +296,23 @@ class UserMemoryTools:
                         getattr(runtime, "message", None)
                     ),
                 )
+
+                # Invalidate ProceduralMemoryProvider cache so the next request
+                # reflects the updated data without waiting for TTL expiry.
+                try:
+                    orchestrator = getattr(bot, "orchestrator", None)
+                    if orchestrator:
+                        provider = getattr(
+                            getattr(orchestrator, "context_manager", None),
+                            "procedural_provider",
+                            None,
+                        )
+                        if provider and hasattr(provider, "invalidate"):
+                            await provider.invalidate(str(effective_id))
+                except Exception:
+                    pass  # Cache invalidation is best-effort; never block the save result
+
+                return result_msg
             except Exception as e:
                 await func.report_error(
                     e, f"Failed to save personal memory for user_id={user_id}"
