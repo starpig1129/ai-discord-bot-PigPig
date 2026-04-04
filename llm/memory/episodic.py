@@ -7,7 +7,6 @@ Silent failure design: any error returns None without raising.
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
 import discord
@@ -83,14 +82,28 @@ class EpisodicMemoryProvider:
         total_chars = len(lines[0])
 
         for i, frag in enumerate(fragments, 1):
-            ts = frag.metadata.get("timestamp") or frag.metadata.get("start_timestamp")
-            ts_str = ""
-            if ts:
+            ts = frag.metadata.get("start_timestamp") or frag.metadata.get("timestamp")
+            jump_url = frag.metadata.get("jump_url")
+
+            # Build source label: prefer a Discord message link over plain timestamp
+            if jump_url and ts:
                 try:
-                    ts_str = f" [{datetime.utcfromtimestamp(float(ts)).strftime('%Y-%m-%d %H:%M')} UTC]"
+                    unix_ts = int(float(ts))
+                    source_str = f" [[來源 <t:{unix_ts}:R>]({jump_url})]"
                 except Exception:
-                    pass
-            entry = f"{i}. {frag.content}{ts_str}"
+                    source_str = f" [[來源]({jump_url})]"
+            elif jump_url:
+                source_str = f" [[來源]({jump_url})]"
+            elif ts:
+                try:
+                    unix_ts = int(float(ts))
+                    source_str = f" [<t:{unix_ts}:R>]"
+                except Exception:
+                    source_str = ""
+            else:
+                source_str = ""
+
+            entry = f"[memory #{i}] {frag.content}{source_str}"
 
             if total_chars + len(entry) + 1 > self.max_chars:
                 break

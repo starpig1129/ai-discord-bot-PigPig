@@ -438,6 +438,21 @@ class LoggerAdapter:
         "CRITICAL": "🚨"
     }
 
+    # Standard log levels
+    DEBUG = 10
+    INFO = 20
+    WARNING = 30
+    ERROR = 40
+    CRITICAL = 50
+
+    _LEVEL_NAME_TO_INT = {
+        "DEBUG": 10,
+        "INFO": 20,
+        "WARNING": 30,
+        "ERROR": 40,
+        "CRITICAL": 50,
+    }
+
     def __init__(
         self,
         server_id: str,
@@ -450,6 +465,16 @@ class LoggerAdapter:
         self.channel = channel or ""
         self.bound_context: Dict[str, Any] = dict(bound or {})
         self._writer = BackgroundWriter.get_instance()
+
+    def isEnabledFor(self, level: int) -> bool:
+        """Check if the given numeric level is enabled based on current CONFIG."""
+        try:
+            # We check against council level as a proxy for "is this level active"
+            config_level_str = CONFIG.get("console", {}).get("level", "INFO").upper()
+            config_level_int = self._LEVEL_NAME_TO_INT.get(config_level_str, 20)
+            return level >= config_level_int
+        except Exception:
+            return True  # Fallback to True if config is missing or invalid
 
     def bind(self, **context: Any) -> "LoggerAdapter":
         """Return a new LoggerAdapter with merged context, similar to structlog.bind."""

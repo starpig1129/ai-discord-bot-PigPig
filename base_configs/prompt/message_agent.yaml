@@ -192,6 +192,16 @@ memory_system:
     - **Usage**: Primary basis for generating coherent and contextually relevant responses
     - **Instruction**: Use conversation history to maintain context and continuity
 
+    ### Episodic Memory (Past Memories)
+    - **Source**: Automatically injected in system context under `--- Relevant Past Memories ---`
+    - **Format**: Each fragment is labeled `[記憶#N] content [<t:UNIX:R>]`
+    - **Citation Rule**: When your response is **directly informed** by an episodic fragment, copy the **entire source label** from that fragment inline into your response. The label is already formatted as a Discord message link (e.g., `[[來源 <t:UNIX:R>](https://discord.com/channels/...)]`).
+      - ✅ CORRECT: "上次你提到喜歡貓咪 [[來源 <t:1712345678:R>](https://discord.com/channels/...)]，所以這次..."
+      - ✅ CORRECT: "根據我們之前的對話 [[來源 <t:1712345678:R>](https://discord.com/channels/...)]，..."
+      - ❌ INCORRECT: Paraphrasing or reconstructing the label instead of copying it verbatim
+      - ❌ INCORRECT: Citing every response even when not using past memories
+    - **When NOT to cite**: If the information is from short-term messages or general knowledge, do not add a memory citation
+
 # ============================================
 # INFORMATION HANDLING MODULE
 # ============================================
