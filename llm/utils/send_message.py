@@ -236,6 +236,7 @@ async def _process_token_stream(
     last_update_time = 0  # Initialize to 0 to allow immediate first update
     pending_content = ''  # Content waiting to be sent to Discord
     is_capturing = False  # Only capture content between <som> and <eom> markers
+    intermediate_content = '' # Buffer for content between <eom> and next <som> or <eom>
     
     # Tool execution tracking
     tool_call_chunks = []
@@ -400,7 +401,7 @@ async def _process_token_stream(
             <som> and <eom> is returned. If no markers detected, all content
             is passed through.
         """
-        nonlocal is_capturing, tag_buffer, markers_detected
+        nonlocal is_capturing, tag_buffer, markers_detected, intermediate_content
         
         # Prepend any buffered content
         current_str = tag_buffer + token_str
@@ -414,11 +415,19 @@ async def _process_token_stream(
                 # Check if it's a complete tag
                 if current_str[i:].startswith('<som>'):
                     markers_detected = True
+                    # If we hit a new <som>, merge any intermediate content from previous <eom>
+                    if intermediate_content:
+                        display_str += intermediate_content
+                        intermediate_content = ''
                     is_capturing = True
                     i += 5
                     continue
                 elif current_str[i:].startswith('<eom>'):
                     markers_detected = True
+                    # If we hit an <eom>, all previous intermediate content is now confirmed
+                    if intermediate_content:
+                        display_str += intermediate_content
+                        intermediate_content = ''
                     is_capturing = False
                     i += 5
                     continue
@@ -430,10 +439,14 @@ async def _process_token_stream(
                     tag_buffer = remaining
                     break
             
-            # If we are capturing (or no markers detected yet), append the character
-            # When no markers are used by the model, we capture everything
+            # Capture content based on state
             if is_capturing:
                 display_str += current_str[i]
+            elif markers_detected:
+                # If we've seen markers but are not currently capturing (e.g. after an <eom>),
+                # buffer the content in case it's followed by another <eom> (intermediate content)
+                intermediate_content += current_str[i]
+            
             i += 1
             
         return display_str
