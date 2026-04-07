@@ -3,6 +3,7 @@
 *.pyc
 .roomodes
 .roo
+.claude
 __pycache__/
 
 # 忽略資料庫檔案與向量儲存
