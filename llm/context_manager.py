@@ -102,15 +102,20 @@ class ContextManager:
         try:
             if getattr(message, "created_at", None) is not None:
                 timestamp = message.created_at.timestamp()
+                human_time = message.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
             else:
-                timestamp = datetime.utcnow().timestamp()
+                now = datetime.utcnow()
+                timestamp = now.timestamp()
+                human_time = now.strftime('%Y-%m-%d %H:%M:%S UTC')
         except Exception:
-            timestamp = datetime.utcnow().timestamp()
+            now = datetime.utcnow()
+            timestamp = now.timestamp()
+            human_time = now.strftime('%Y-%m-%d %H:%M:%S UTC')
 
         procedural_str = ""
         try:
             procedural_str = self._format_context_for_prompt(
-                procedural_memory, channel_name, timestamp, episodic_str=episodic_str
+                procedural_memory, channel_name, timestamp, episodic_str=episodic_str, human_time=human_time
             )
         except Exception as e:
             asyncio.create_task(
@@ -165,6 +170,7 @@ class ContextManager:
         channel_name: str,
         timestamp: float,
         episodic_str: Optional[str] = None,
+        human_time: Optional[str] = None,
     ) -> str:
         """Format procedural memory and current state into a single string.
  
@@ -191,7 +197,11 @@ class ContextManager:
             _LOGGER.error("Formatting procedural memory failed", exception=e)
 
         try:
-            parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}")
+            # Provide both Unix timestamp and human-readable time for better LLM comprehension
+            if human_time:
+                parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}\nCurrent Time: {human_time}")
+            else:
+                parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}")
         except Exception as e:
             asyncio.create_task(
                 func.report_error(e, "ContextManager._format_context_for_prompt/channel_ts")

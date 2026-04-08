@@ -1,5 +1,6 @@
 from typing import List, Any
 import re
+from datetime import datetime
 
 import discord
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -54,7 +55,12 @@ class ShortTermMemoryProvider:
                 # Include reference info if it's a reply
                 if msg.reference:
                     content_suffix.append(f"reply_to: {msg.reference.message_id}")
-                content_suffix.append(f"timestamp: {msg.created_at.timestamp()}")
+
+                # Provide both Unix timestamp and human-readable time
+                ts = msg.created_at.timestamp()
+                human_time = msg.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
+                content_suffix.append(f"timestamp: {ts} ({human_time})")
+
                 if msg.content:
                     cleaned_content = re.sub(rf'<@!?{self.bot.user.id}>', '', msg.content).strip()
                     content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> {cleaned_content} <eom> [{' | '.join(content_suffix)}]"})
