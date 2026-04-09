@@ -8,7 +8,7 @@ This module implements the new ContextManager per docs/llm/context_manager.md:
 import asyncio
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
 import discord
@@ -80,16 +80,17 @@ class ContextManager:
             return procedural_memory, short_term_msgs
 
 
-        async def _fetch_episodic() -> Optional[str]:
-            if self.episodic_provider is None:
-                return None
+        if episodic_task:
             try:
-                return await self.episodic_provider.get(message)
+                episodic_str = await episodic_task
+            except asyncio.CancelledError:
+                episodic_str = None
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: episodic_provider.get failed")
                 )
-                return None
+                _LOGGER.error("episodic_provider.get failed", exception=e)
+                episodic_str = None
 
         # Fetch short-term/procedural memory AND episodic context in parallel to minimize latency
         (procedural_memory, short_term_msgs), episodic_str = await asyncio.gather(
@@ -106,16 +107,26 @@ class ContextManager:
         # Use message.created_at when available; fallback to current UTC timestamp (float seconds)
         try:
             if getattr(message, "created_at", None) is not None:
-                timestamp = message.created_at.timestamp()
+                created_at = message.created_at
+                if getattr(created_at, "tzinfo", None) is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                else:
+                    created_at = created_at.astimezone(timezone.utc)
+                timestamp = created_at.timestamp()
+                human_time = created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
             else:
-                timestamp = datetime.utcnow().timestamp()
+                now = datetime.now(timezone.utc)
+                timestamp = now.timestamp()
+                human_time = now.strftime('%Y-%m-%d %H:%M:%S UTC')
         except Exception:
-            timestamp = datetime.utcnow().timestamp()
+            now = datetime.now(timezone.utc)
+            timestamp = now.timestamp()
+            human_time = now.strftime('%Y-%m-%d %H:%M:%S UTC')
 
         procedural_str = ""
         try:
             procedural_str = self._format_context_for_prompt(
-                procedural_memory, channel_name, timestamp, episodic_str=episodic_str
+                procedural_memory, channel_name, timestamp, episodic_str=episodic_str, human_time=human_time
             )
         except Exception as e:
             asyncio.create_task(
@@ -190,6 +201,7 @@ class ContextManager:
         channel_name: str,
         timestamp: float,
         episodic_str: Optional[str] = None,
+        human_time: Optional[str] = None,
     ) -> str:
         """Format procedural memory and current state into a single string.
  
@@ -216,7 +228,11 @@ class ContextManager:
             _LOGGER.error("Formatting procedural memory failed", exception=e)
 
         try:
-            parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}")
+            # Provide both Unix timestamp and human-readable time for better LLM comprehension
+            if human_time:
+                parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}\nCurrent Time: {human_time}")
+            else:
+                parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}")
         except Exception as e:
             asyncio.create_task(
                 func.report_error(e, "ContextManager._format_context_for_prompt/channel_ts")
