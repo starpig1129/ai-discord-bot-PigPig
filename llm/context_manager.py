@@ -44,37 +44,41 @@ class ContextManager:
         The short_term_msgs are returned in oldest->newest order as produced by
         ShortTermMemoryProvider.
         """
-        # 1) Fetch short-term messages
-        try:
-            short_term_msgs = await self.short_term_provider.get(message)
-        except Exception as e:
-            # Report and return safe fallback per design
-            asyncio.create_task(
-                func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
-            )
-            _LOGGER.error("short_term_provider.get failed", exception=e)
-            return "", []
 
-        # 2) Extract user ids to fetch procedural memory
-        try:
-            user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
-        except Exception as e:
-            asyncio.create_task(
-                func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
-            )
-            _LOGGER.error("extract_user_ids failed", exception=e)
-            user_ids = []
-
-        # 3) Fetch procedural memory AND episodic context in parallel to minimize latency
-        async def _fetch_procedural() -> ProceduralMemory:
+        async def _fetch_short_term_and_procedural() -> Tuple[ProceduralMemory, List[BaseMessage]]:
+            # 1) Fetch short-term messages
             try:
-                return await self.procedural_provider.get(user_ids)
+                short_term_msgs = await self.short_term_provider.get(message)
+            except Exception as e:
+                # Report and return safe fallback per design
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
+                )
+                _LOGGER.error("short_term_provider.get failed", exception=e)
+                return ProceduralMemory(user_info={}), []
+
+            # 2) Extract user ids to fetch procedural memory
+            try:
+                user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
+                )
+                _LOGGER.error("extract_user_ids failed", exception=e)
+                user_ids = []
+
+            # 3) Fetch procedural memory
+            try:
+                procedural_memory = await self.procedural_provider.get(user_ids)
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
                 )
                 _LOGGER.error("procedural_provider.get failed", exception=e)
-                return ProceduralMemory(user_info={})
+                procedural_memory = ProceduralMemory(user_info={})
+
+            return procedural_memory, short_term_msgs
+
 
         async def _fetch_episodic() -> Optional[str]:
             if self.episodic_provider is None:
@@ -87,8 +91,9 @@ class ContextManager:
                 )
                 return None
 
-        procedural_memory, episodic_str = await asyncio.gather(
-            _fetch_procedural(),
+        # Fetch short-term/procedural memory AND episodic context in parallel to minimize latency
+        (procedural_memory, short_term_msgs), episodic_str = await asyncio.gather(
+            _fetch_short_term_and_procedural(),
             _fetch_episodic(),
         )
 
