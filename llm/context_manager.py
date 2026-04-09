@@ -58,14 +58,23 @@ class ContextManager:
                 )
                 return None
 
-        # 1) Fetch short-term messages AND episodic context in parallel to minimize latency
+        episodic_task = (
+            asyncio.create_task(_fetch_episodic()) if self.episodic_provider is not None else None
+        )
+
         try:
-            short_term_msgs, episodic_str = await asyncio.gather(
-                _fetch_short_term(),
-                _fetch_episodic(),
-            )
+            short_term_msgs = await _fetch_short_term()
         except Exception as e:
-            # Report and return safe fallback per design
+            if episodic_task:
+                episodic_task.cancel()
+                try:
+                    await episodic_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    # best-effort cancellation; errors already reported downstream
+                    pass
+
             asyncio.create_task(
                 func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
             )
@@ -82,9 +91,23 @@ class ContextManager:
             _LOGGER.error("extract_user_ids failed", exception=e)
             user_ids = []
 
-        # 3) Fetch procedural memory
+        procedural_task = asyncio.create_task(self.procedural_provider.get(user_ids))
+        episodic_str: Optional[str] = None
+
+        if episodic_task:
+            try:
+                episodic_str = await episodic_task
+            except asyncio.CancelledError:
+                episodic_str = None
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: episodic_provider.get failed")
+                )
+                _LOGGER.error("episodic_provider.get failed", exception=e)
+                episodic_str = None
+
         try:
-            procedural_memory = await self.procedural_provider.get(user_ids)
+            procedural_memory = await procedural_task
         except Exception as e:
             asyncio.create_task(
                 func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
