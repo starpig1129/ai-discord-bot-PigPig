@@ -8,7 +8,7 @@ This module implements the new ContextManager per docs/llm/context_manager.md:
 import asyncio
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
 import discord
@@ -101,14 +101,19 @@ class ContextManager:
         # Use message.created_at when available; fallback to current UTC timestamp (float seconds)
         try:
             if getattr(message, "created_at", None) is not None:
-                timestamp = message.created_at.timestamp()
-                human_time = message.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
+                created_at = message.created_at
+                if getattr(created_at, "tzinfo", None) is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                else:
+                    created_at = created_at.astimezone(timezone.utc)
+                timestamp = created_at.timestamp()
+                human_time = created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
             else:
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 timestamp = now.timestamp()
                 human_time = now.strftime('%Y-%m-%d %H:%M:%S UTC')
         except Exception:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             timestamp = now.timestamp()
             human_time = now.strftime('%Y-%m-%d %H:%M:%S UTC')
 
