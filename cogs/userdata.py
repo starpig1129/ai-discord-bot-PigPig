@@ -62,8 +62,10 @@ FALLBACK_TRANSLATIONS = {
     "data_not_found": "I currently have no specific memory about you.",
     "data_updated": "Got it! I've remembered it!\nMy updated memory:\n{data}",
     "data_created": "Got it! I've remembered it!\nMy new memory:\n{data}",
+    "clear_success": "I have forgotten everything about you.",
+    "clear_failed": "Failed to clear your memory or you had no memory stored.",
     "sqlite_not_available": "Personal memory system not initialized",
-    "invalid_action": "Invalid action. Please use 'save' or 'show'.",
+    "invalid_action": "Invalid action. Please use 'read', 'save', or 'clear'.",
     "database_error": "Database operation error: {error}",
     "ai_processing_failed": "AI processing error for your memory: {error}",
     "update_failed": "Failed to update your memory: {error}",
@@ -569,6 +571,30 @@ class UserDataCog(commands.Cog):
         await interaction.followup.send(result, ephemeral=True)
 
     @memory_group.command(
+        name="clear",
+        description="Clear all your personal memory"
+    )
+    async def memory_clear(self, interaction: discord.Interaction) -> None:
+        """Handles /memory clear command to clear user preferences.
+
+        Args:
+            interaction: Discord interaction object.
+        """
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        result = await self.manage_user_data(
+            context=interaction,
+            user=interaction.user,
+            user_data='',
+            action='clear'
+        )
+
+        await interaction.followup.send(result, ephemeral=True)
+
+    @memory_group.command(
         name="show",
         description="View everything I currently remember about you"
     )
@@ -606,7 +632,7 @@ class UserDataCog(commands.Cog):
             context: Interaction or message context.
             user: Target user object.
             user_data: Optional data to save (only used for 'save' action).
-            action: Either 'read' or 'save'.
+            action: Either 'read', 'save', or 'clear'.
             message_to_edit: Optional message object to edit during processing.
             
         Returns:
@@ -630,7 +656,8 @@ class UserDataCog(commands.Cog):
         if message_to_edit:
             status_key_map = {
                 'read': 'searching',
-                'save': 'updating'
+                'save': 'updating',
+                'clear': 'updating'
             }
             message_key = status_key_map.get(action, 'processing')
             
@@ -657,11 +684,72 @@ class UserDataCog(commands.Cog):
                 user_data,
                 context
             )
+        elif action == 'clear':
+            return await self._clear_user_data(user_id, context)
         else:
             return self._translate(
                 guild_id,
                 "commands", "userdata", "responses", "invalid_action",
                 fallback_key="invalid_action"
+            )
+
+    async def _clear_user_data(self, user_id: str, context: Union[discord.Interaction, discord.Message]) -> str:
+        """Core logic for clearing user data.
+
+        Args:
+            user_id: Target user ID to clear data for.
+            context: Discord context for guild ID.
+
+        Returns:
+            Success or error message string.
+        """
+        guild_id = self._get_guild_id_from_context(context)
+
+        try:
+            if not self.user_manager:
+                return self._translate(
+                    guild_id,
+                    "commands", "userdata", "errors", "sqlite_not_available",
+                    fallback_key="sqlite_not_available"
+                )
+
+            success = await self.user_manager.delete_user_data(user_id)
+            if success:
+                # Invalidate ProceduralMemoryProvider cache
+                try:
+                    orchestrator = getattr(self.bot, "orchestrator", None)
+                    if orchestrator:
+                        provider = getattr(
+                            getattr(orchestrator, "context_manager", None),
+                            "procedural_provider",
+                            None,
+                        )
+                        if provider and hasattr(provider, "invalidate"):
+                            await provider.invalidate(str(user_id))
+                except Exception:
+                    pass
+
+                return self._translate(
+                    guild_id,
+                    "commands", "userdata", "responses", "clear_success",
+                    fallback_key="clear_success"
+                )
+            else:
+                return self._translate(
+                    guild_id,
+                    "commands", "userdata", "responses", "clear_failed",
+                    fallback_key="clear_failed"
+                )
+
+        except Exception as e:
+            self.logger.error(f"Failed to clear user data for {user_id}: {e}")
+            await func.report_error(e, f"Clear user data failed (user: {user_id})")
+
+            return self._translate(
+                guild_id,
+                "commands", "userdata", "errors", "database_error",
+                fallback_key="database_error",
+                error=str(e)
             )
 
     async def manage_user_data_message(
@@ -798,4 +886,3 @@ async def setup(bot: commands.Bot) -> None:
     user_manager = getattr(bot, 'user_manager', None)
     cog = UserDataCog(bot, user_manager=user_manager)
     await bot.add_cog(cog)
-

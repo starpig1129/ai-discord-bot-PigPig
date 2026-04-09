@@ -193,6 +193,69 @@ class UserMemoryTools:
                 return f"An unexpected error occurred while reading memory: {e}"
 
         @tool
+        async def clear_user_memory(user_id: int) -> str:
+            """Clears all personal memory and preferences stored for a specific user.
+
+            Use this tool when the user **explicitly asks** you to forget everything
+            about them or clear their memory/preferences.
+
+            Args:
+                user_id: The Discord user's ID.
+
+            Returns:
+                A string confirming that the memory was successfully cleared,
+                or an error message if the operation failed.
+            """
+            cog = get_cog()
+            if not cog:
+                return "Error: Personal memory system (UserDataCog) is not loaded."
+
+            try:
+                logger.info("Clearing personal memory", extra={"requested_user_id": user_id})
+
+                # Always clear for the requesting user when context is available.
+                context = cast(
+                    Optional[Union[discord.Interaction, discord.Message]],
+                    getattr(runtime, "message", None) or getattr(runtime, "interaction", None)
+                )
+                requester_id = None
+
+                if isinstance(context, discord.Message) and getattr(context, "author", None):
+                    requester_id = getattr(context.author, "id", None)
+                elif isinstance(context, discord.Interaction) and getattr(context, "user", None):
+                    requester_id = getattr(context.user, "id", None)
+
+                if requester_id:
+                    if str(requester_id) != str(user_id):
+                        logger.warning(
+                            "clear_user_memory: overriding provided user_id with requesting user",
+                            extra={"provided_user_id": user_id, "requester_id": requester_id}
+                        )
+                    effective_id = requester_id
+                else:
+                    try:
+                        effective_id = int(user_id)
+                    except Exception:
+                        logger.error(
+                            "clear_user_memory: unable to determine requesting user",
+                            extra={"provided_user_id": user_id}
+                        )
+                        return "Error: Unable to identify the requesting user to clear memory."
+
+                if not context:
+                    logger.error("clear_user_memory: no interaction or message context available")
+                    return "Error: Cannot clear memory without a message or interaction context."
+
+                result_msg = await cog._clear_user_data(str(effective_id), context)
+                return result_msg
+
+            except Exception as e:
+                await func.report_error(
+                    e, f"Failed to clear personal memory for user_id={user_id}"
+                )
+                return f"An unexpected error occurred while clearing memory: {e}"
+
+        @tool
         async def save_user_memory(user_id: int, memory_to_save: str) -> str:
             """Saves or updates a personal memory or preference for a specific user.
     
@@ -319,4 +382,4 @@ class UserMemoryTools:
                 )
                 return f"An unexpected error occurred while saving memory: {e}"
 
-        return [read_user_memory, save_user_memory]
+        return [read_user_memory, save_user_memory, clear_user_memory]

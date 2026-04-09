@@ -3,13 +3,14 @@
         "name": "userdata",
         "description": "ユーザーデータを管理",
         "options": {
-            "action": "アクションを選択（読み取り/保存）",
+            "action": "アクションを選択（読み取り/保存/クリア）",
             "user": "対象ユーザー",
             "user_data": "保存するユーザーデータ"
         },
         "choices": {
             "read": "読み取り",
-            "save": "保存"
+            "save": "保存",
+            "clear": "クリア"
         },
         "responses": {
             "searching": "ユーザーデータを検索中...",
@@ -18,7 +19,9 @@
             "data_not_found": "ユーザー <@{user_id}> のデータが見つかりません。",
             "data_updated": "ユーザー <@{user_id}> のデータを更新：{data}",
             "data_created": "ユーザー <@{user_id}> のデータを作成：{data}",
-            "invalid_action": "無効なアクション。'読み取り'または'保存'を使用してください。",
+            "clear_success": "ユーザー <@{user_id}> のデータを消去しました。",
+            "clear_failed": "ユーザー <@{user_id}> のデータを消去できませんでした、またはデータがありませんでした。",
+            "invalid_action": "無効なアクションです。「読み取り」「保存」または「クリア」を使用してください。",
             "no_data_provided": "覚える内容を教えてください。"
         },
         "errors": {

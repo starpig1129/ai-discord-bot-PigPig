@@ -3,13 +3,14 @@
         "name": "userdata",
         "description": "管理用戶數據",
         "options": {
-            "action": "選擇動作（讀取/保存）",
+            "action": "選擇動作（讀取/保存/清除）",
             "user": "目標用戶",
             "user_data": "要保存的用戶數據"
         },
         "choices": {
             "read": "讀取",
-            "save": "保存"
+            "save": "保存",
+            "clear": "清除"
         },
         "responses": {
             "searching": "查詢用戶資料中...",
@@ -18,7 +19,9 @@
             "data_not_found": "找不到用戶 <@{user_id}> 的資料。",
             "data_updated": "已更新用戶 <@{user_id}> 的資料：{data}",
             "data_created": "已為用戶 <@{user_id}> 創建資料：{data}",
-            "invalid_action": "無效的操作。請使用 '讀取' 或 '保存'。",
+            "clear_success": "已清除用戶 <@{user_id}> 的個人資料。",
+            "clear_failed": "清除用戶 <@{user_id}> 的資料失敗，或沒有資料可以清除。",
+            "invalid_action": "無效的操作。請使用「讀取」、「保存」或「清除」。",
             "no_data_provided": "你沒有告訴我需要記住什麼。"
         },
         "errors": {
