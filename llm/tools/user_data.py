@@ -211,31 +211,40 @@ class UserMemoryTools:
                 return "Error: Personal memory system (UserDataCog) is not loaded."
 
             try:
-                logger.info("Clearing personal memory", extra={"user_id": user_id})
+                logger.info("Clearing personal memory", extra={"requested_user_id": user_id})
 
-                effective_id = None
-                try:
-                    effective_id = int(user_id)
-                except Exception:
-                    msg = getattr(runtime, "message", None)
-                    if msg and getattr(msg, "author", None):
-                        logger.warning(
-                            "clear_user_memory: LLM provided invalid user_id; defaulting to message author",
-                            extra={"provided_user_id": user_id, "author_id": getattr(msg.author, "id", None)}
-                        )
-                        effective_id = msg.author.id
-                    else:
-                        logger.warning(
-                            "clear_user_memory: invalid user_id and no message context; using raw value",
-                            extra={"user_id": user_id}
-                        )
-                        effective_id = user_id
-
-                # Using manage_user_data with action 'clear' requires an Interaction or Message context
+                # Always clear for the requesting user when context is available.
                 context = cast(
-                    Union[discord.Interaction, discord.Message],
-                    getattr(runtime, "message", None)
+                    Optional[Union[discord.Interaction, discord.Message]],
+                    getattr(runtime, "message", None) or getattr(runtime, "interaction", None)
                 )
+                requester_id = None
+
+                if isinstance(context, discord.Message) and getattr(context, "author", None):
+                    requester_id = getattr(context.author, "id", None)
+                elif isinstance(context, discord.Interaction) and getattr(context, "user", None):
+                    requester_id = getattr(context.user, "id", None)
+
+                if requester_id:
+                    if str(requester_id) != str(user_id):
+                        logger.warning(
+                            "clear_user_memory: overriding provided user_id with requesting user",
+                            extra={"provided_user_id": user_id, "requester_id": requester_id}
+                        )
+                    effective_id = requester_id
+                else:
+                    try:
+                        effective_id = int(user_id)
+                    except Exception:
+                        logger.error(
+                            "clear_user_memory: unable to determine requesting user",
+                            extra={"provided_user_id": user_id}
+                        )
+                        return "Error: Unable to identify the requesting user to clear memory."
+
+                if not context:
+                    logger.error("clear_user_memory: no interaction or message context available")
+                    return "Error: Cannot clear memory without a message or interaction context."
 
                 result_msg = await cog._clear_user_data(str(effective_id), context)
                 return result_msg

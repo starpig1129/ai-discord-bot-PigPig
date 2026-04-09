@@ -3,13 +3,14 @@
         "name": "userdata",
         "description": "管理用户数据",
         "options": {
-            "action": "选择动作（读取/保存）",
+            "action": "选择动作（读取/保存/清除）",
             "user": "目标用户",
             "user_data": "要保存的用户数据"
         },
         "choices": {
             "read": "读取",
-            "save": "保存"
+            "save": "保存",
+            "clear": "清除"
         },
         "responses": {
             "searching": "查询用户资料中...",
@@ -18,7 +19,9 @@
             "data_not_found": "找不到用户 <@{user_id}> 的资料。",
             "data_updated": "已更新用户 <@{user_id}> 的资料：{data}",
             "data_created": "已为用户 <@{user_id}> 创建资料：{data}",
-            "invalid_action": "无效的操作。请使用 '读取' 或 '保存'。",
+            "clear_success": "已清除用户 <@{user_id}> 的个人资料。",
+            "clear_failed": "清除用户 <@{user_id}> 的资料失败，或没有资料可以清除。",
+            "invalid_action": "无效的操作。请使用“读取”、“保存”或“清除”。",
             "no_data_provided": "你没有告诉我需要记住什么。"
         },
         "errors": {

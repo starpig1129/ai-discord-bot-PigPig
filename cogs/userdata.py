@@ -65,7 +65,7 @@ FALLBACK_TRANSLATIONS = {
     "clear_success": "I have forgotten everything about you.",
     "clear_failed": "Failed to clear your memory or you had no memory stored.",
     "sqlite_not_available": "Personal memory system not initialized",
-    "invalid_action": "Invalid action. Please use 'save' or 'show'.",
+    "invalid_action": "Invalid action. Please use 'read', 'save', or 'clear'.",
     "database_error": "Database operation error: {error}",
     "ai_processing_failed": "AI processing error for your memory: {error}",
     "update_failed": "Failed to update your memory: {error}",
@@ -632,7 +632,7 @@ class UserDataCog(commands.Cog):
             context: Interaction or message context.
             user: Target user object.
             user_data: Optional data to save (only used for 'save' action).
-            action: Either 'read' or 'save'.
+            action: Either 'read', 'save', or 'clear'.
             message_to_edit: Optional message object to edit during processing.
             
         Returns:
@@ -886,4 +886,3 @@ async def setup(bot: commands.Bot) -> None:
     user_manager = getattr(bot, 'user_manager', None)
     cog = UserDataCog(bot, user_manager=user_manager)
     await bot.add_cog(cog)
-
