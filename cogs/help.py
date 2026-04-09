@@ -15,6 +15,7 @@ class HelpCog(commands.Cog):
 
     @app_commands.command(name="help", description="Display all commands")
     async def help_command(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
 
@@ -61,7 +62,7 @@ class HelpCog(commands.Cog):
                     inline=False
                 )
         
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(HelpCog(bot))
