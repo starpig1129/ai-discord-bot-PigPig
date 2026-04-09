@@ -221,12 +221,16 @@ class SimpleRestartManager:
             # 獲取當前進程 PID
             current_pid = os.getpid()
             
+            # Escape characters that trigger cmd expansion
+            safe_current_dir = current_dir.replace('%', '%%').replace('"', '""')
+            safe_python_exe = python_exe.replace('%', '%%').replace('"', '""')
+
             # 創建強力關閉原始 CMD 的重啟批次檔
             batch_content = f"""@echo off
 chcp 65001 >nul 2>&1
 timeout /t 3 /nobreak >nul
-cd /d "{current_dir}"
-"{python_exe}" main.py
+cd /d "{safe_current_dir}"
+"{safe_python_exe}" main.py
 rem 重啟完成後，嘗試關閉原始 CMD 視窗
 taskkill /F /PID {current_pid} >nul 2>&1
 exit
@@ -239,15 +243,18 @@ exit
             
             self.logger.info(f"重啟批次檔已創建: {batch_file}")
             
-            # 使用 start 命令執行批次檔，不等待完成直接分離
-            cmd = f'start "PigPig Bot Restart" /B "{batch_file}"'
+            # 使用 cmd.exe /c start 命令執行批次檔，不等待完成直接分離
+            cmd_exe = os.environ.get('COMSPEC', 'cmd.exe')
+            batch_file_arg = batch_file.replace('%', '%%').replace('"', '""')
+            quoted_batch_file = f'"{batch_file_arg}"'
+            cmd_args = [cmd_exe, '/c', 'start', '""', '/B', quoted_batch_file]
             
-            self.logger.info(f"執行重啟命令: {cmd}")
+            self.logger.info(f"執行重啟命令: {' '.join(cmd_args)}")
             
             # 使用 Popen 進行真正的進程分離
             process = subprocess.Popen(
-                cmd,
-                shell=True,
+                cmd_args,
+                shell=False,
                 cwd=current_dir,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -283,14 +290,18 @@ exit
     
     def _unix_simple_restart(self, python_exe: str, current_dir: str) -> bool:
         """Unix/Linux 簡單重啟方法"""
+        import shlex
         try:
             self.logger.info("使用 Unix/Linux 簡單重啟方法")
             
+            safe_current_dir = shlex.quote(current_dir)
+            safe_python_exe = shlex.quote(python_exe)
+
             # 創建簡單的重啟腳本
             script_content = f"""#!/bin/bash
 sleep 3
-cd "{current_dir}"
-"{python_exe}" main.py
+cd {safe_current_dir}
+{safe_python_exe} main.py
 """
             
             script_file = os.path.join(current_dir, "temp_restart.sh")
