@@ -2,5 +2,7 @@
     "name": "help",
     "description": "顯示此幫助訊息",
     "help_description": "可用指令與說明的詳細列表。",
-    "help_title": "機器人幫助中心"
+    "help_title": "機器人幫助中心",
+    "no_commands": "目前沒有可用的指令。",
+    "error_message": "生成指令列表時發生錯誤，請稍後再試。"
 }
