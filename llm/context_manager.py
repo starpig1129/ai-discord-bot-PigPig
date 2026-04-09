@@ -44,55 +44,41 @@ class ContextManager:
         The short_term_msgs are returned in oldest->newest order as produced by
         ShortTermMemoryProvider.
         """
-        async def _fetch_short_term() -> List[BaseMessage]:
-            return await self.short_term_provider.get(message)
 
-        async def _fetch_episodic() -> Optional[str]:
-            if self.episodic_provider is None:
-                return None
+        async def _fetch_short_term_and_procedural() -> Tuple[ProceduralMemory, List[BaseMessage]]:
+            # 1) Fetch short-term messages
             try:
-                return await self.episodic_provider.get(message)
+                short_term_msgs = await self.short_term_provider.get(message)
+            except Exception as e:
+                # Report and return safe fallback per design
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
+                )
+                _LOGGER.error("short_term_provider.get failed", exception=e)
+                return ProceduralMemory(user_info={}), []
+
+            # 2) Extract user ids to fetch procedural memory
+            try:
+                user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
             except Exception as e:
                 asyncio.create_task(
-                    func.report_error(e, "ContextManager.get_context: episodic_provider.get failed")
+                    func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
                 )
-                return None
+                _LOGGER.error("extract_user_ids failed", exception=e)
+                user_ids = []
 
-        episodic_task = (
-            asyncio.create_task(_fetch_episodic()) if self.episodic_provider is not None else None
-        )
+            # 3) Fetch procedural memory
+            try:
+                procedural_memory = await self.procedural_provider.get(user_ids)
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
+                )
+                _LOGGER.error("procedural_provider.get failed", exception=e)
+                procedural_memory = ProceduralMemory(user_info={})
 
-        try:
-            short_term_msgs = await _fetch_short_term()
-        except Exception as e:
-            if episodic_task:
-                episodic_task.cancel()
-                try:
-                    await episodic_task
-                except asyncio.CancelledError:
-                    pass
-                except Exception:
-                    # best-effort cancellation; errors already reported downstream
-                    pass
+            return procedural_memory, short_term_msgs
 
-            asyncio.create_task(
-                func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
-            )
-            _LOGGER.error("short_term_provider.get failed", exception=e)
-            return "", []
-
-        # 2) Extract user ids to fetch procedural memory
-        try:
-            user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
-        except Exception as e:
-            asyncio.create_task(
-                func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
-            )
-            _LOGGER.error("extract_user_ids failed", exception=e)
-            user_ids = []
-
-        procedural_task = asyncio.create_task(self.procedural_provider.get(user_ids))
-        episodic_str: Optional[str] = None
 
         if episodic_task:
             try:
@@ -106,14 +92,11 @@ class ContextManager:
                 _LOGGER.error("episodic_provider.get failed", exception=e)
                 episodic_str = None
 
-        try:
-            procedural_memory = await procedural_task
-        except Exception as e:
-            asyncio.create_task(
-                func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
-            )
-            _LOGGER.error("procedural_provider.get failed", exception=e)
-            procedural_memory = ProceduralMemory(user_info={})
+        # Fetch short-term/procedural memory AND episodic context in parallel to minimize latency
+        (procedural_memory, short_term_msgs), episodic_str = await asyncio.gather(
+            _fetch_short_term_and_procedural(),
+            _fetch_episodic(),
+        )
 
         # 4) Format procedural memory into string (no STM serialization here)
         try:
@@ -177,10 +160,30 @@ class ContextManager:
         try:
             for m in messages or []:
                 try:
-                    content = getattr(m, "content", "") or ""
-                    match = re.match(r"^\[(?P<id>\d{4,})\]", content.strip())
-                    if match:
-                        ids.add(match.group("id"))
+                    msg_name = getattr(m, "name", None)
+                    if isinstance(msg_name, str):
+                        for match in re.findall(r"(\d{4,})", msg_name):
+                            ids.add(match)
+
+                    content = getattr(m, "content", None)
+                    candidate_texts: List[str] = []
+                    if isinstance(content, str):
+                        candidate_texts.append(content)
+                    elif isinstance(content, list):
+                        for part in content:
+                            if isinstance(part, dict):
+                                text_val = part.get("text")
+                                if isinstance(text_val, str):
+                                    candidate_texts.append(text_val)
+                            elif isinstance(part, str):
+                                candidate_texts.append(part)
+
+                    for text in candidate_texts:
+                        for match in re.findall(r"UserID:(\d+)", text):
+                            ids.add(match)
+                        bracket_match = re.match(r"^\[(?P<id>\d{4,})\]", text.strip())
+                        if bracket_match:
+                            ids.add(bracket_match.group("id"))
                 except Exception:
                     # tolerate single message parse errors
                     continue
