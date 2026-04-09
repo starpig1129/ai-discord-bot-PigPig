@@ -96,6 +96,19 @@ class SQLiteUserManager:
             await func.report_error(e, f"Failed to update user data (user: {user_id})")
             return False
 
+    async def delete_user_data(self, user_id: str) -> bool:
+        """Delegate deletion to storage and invalidate cache."""
+        try:
+            if hasattr(self.storage, "delete_user_data"):
+                success = await getattr(self.storage, "delete_user_data")(user_id)
+                if success and user_id in self._user_cache:
+                    del self._user_cache[user_id]
+                return success
+            return False
+        except Exception as e:
+            await func.report_error(e, f"Failed to delete user data (user: {user_id})")
+            return False
+
     async def update_user_activity(self, user_id: str, display_name: str = "") -> bool:
         """Delegate activity update to storage and invalidate cache."""
         try:

@@ -193,6 +193,60 @@ class UserMemoryTools:
                 return f"An unexpected error occurred while reading memory: {e}"
 
         @tool
+        async def clear_user_memory(user_id: int) -> str:
+            """Clears all personal memory and preferences stored for a specific user.
+
+            Use this tool when the user **explicitly asks** you to forget everything
+            about them or clear their memory/preferences.
+
+            Args:
+                user_id: The Discord user's ID.
+
+            Returns:
+                A string confirming that the memory was successfully cleared,
+                or an error message if the operation failed.
+            """
+            cog = get_cog()
+            if not cog:
+                return "Error: Personal memory system (UserDataCog) is not loaded."
+
+            try:
+                logger.info("Clearing personal memory", extra={"user_id": user_id})
+
+                effective_id = None
+                try:
+                    effective_id = int(user_id)
+                except Exception:
+                    msg = getattr(runtime, "message", None)
+                    if msg and getattr(msg, "author", None):
+                        logger.warning(
+                            "clear_user_memory: LLM provided invalid user_id; defaulting to message author",
+                            extra={"provided_user_id": user_id, "author_id": getattr(msg.author, "id", None)}
+                        )
+                        effective_id = msg.author.id
+                    else:
+                        logger.warning(
+                            "clear_user_memory: invalid user_id and no message context; using raw value",
+                            extra={"user_id": user_id}
+                        )
+                        effective_id = user_id
+
+                # Using manage_user_data with action 'clear' requires an Interaction or Message context
+                context = cast(
+                    Union[discord.Interaction, discord.Message],
+                    getattr(runtime, "message", None)
+                )
+
+                result_msg = await cog._clear_user_data(str(effective_id), context)
+                return result_msg
+
+            except Exception as e:
+                await func.report_error(
+                    e, f"Failed to clear personal memory for user_id={user_id}"
+                )
+                return f"An unexpected error occurred while clearing memory: {e}"
+
+        @tool
         async def save_user_memory(user_id: int, memory_to_save: str) -> str:
             """Saves or updates a personal memory or preference for a specific user.
     
@@ -319,4 +373,4 @@ class UserMemoryTools:
                 )
                 return f"An unexpected error occurred while saving memory: {e}"
 
-        return [read_user_memory, save_user_memory]
+        return [read_user_memory, save_user_memory, clear_user_memory]

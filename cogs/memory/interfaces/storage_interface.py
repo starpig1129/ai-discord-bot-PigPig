@@ -14,6 +14,10 @@ class ProceduralStorageInterface(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    async def delete_user_data(self, discord_id: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
     async def update_user_data(
         self,
         discord_id: str,
