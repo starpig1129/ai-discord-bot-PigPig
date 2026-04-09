@@ -34,6 +34,9 @@ test_*.py
 *_test.py
 *.log
 dialogue_migration.log
+# 保留專案的測試套件
+!tests/
+!tests/test_*.py
 
 # 忽略備份檔案（保留結構）
 data/backups/**/*.db

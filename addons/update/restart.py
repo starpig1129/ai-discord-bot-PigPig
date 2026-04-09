@@ -221,8 +221,9 @@ class SimpleRestartManager:
             # 獲取當前進程 PID
             current_pid = os.getpid()
             
-            safe_current_dir = current_dir.replace('"', '""')
-            safe_python_exe = python_exe.replace('"', '""')
+            # Escape characters that trigger cmd expansion
+            safe_current_dir = current_dir.replace('%', '%%').replace('"', '""')
+            safe_python_exe = python_exe.replace('%', '%%').replace('"', '""')
 
             # 創建強力關閉原始 CMD 的重啟批次檔
             batch_content = f"""@echo off
@@ -244,7 +245,9 @@ exit
             
             # 使用 cmd.exe /c start 命令執行批次檔，不等待完成直接分離
             cmd_exe = os.environ.get('COMSPEC', 'cmd.exe')
-            cmd_args = [cmd_exe, '/c', 'start', 'PigPig Bot Restart', '/B', batch_file]
+            batch_file_arg = batch_file.replace('%', '%%').replace('"', '""')
+            quoted_batch_file = f'"{batch_file_arg}"'
+            cmd_args = [cmd_exe, '/c', 'start', '""', '/B', quoted_batch_file]
             
             self.logger.info(f"執行重啟命令: {' '.join(cmd_args)}")
             
