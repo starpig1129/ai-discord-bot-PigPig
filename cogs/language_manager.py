@@ -392,25 +392,28 @@ class LanguageManager(commands.Cog):
                 "errors",
                 "permission_denied"
             )
-            await interaction.response.send_message(error_message)
+            await interaction.response.send_message(error_message, ephemeral=True)
             return
         
         guild_id = str(interaction.guild_id)
         
         if language not in self.supported_languages:
             await interaction.response.send_message(
-                self.translate(guild_id, "commands", "set_language", "responses", "unsupported")
+                self.translate(guild_id, "commands", "set_language", "responses", "unsupported"),
+                ephemeral=True
             )
             return
 
         if self.save_server_lang(guild_id, language):
             lang_name = self.supported_languages[language]
             await interaction.response.send_message(
-                self.translate(guild_id, "commands", "set_language", "responses", "success", language=lang_name)
+                self.translate(guild_id, "commands", "set_language", "responses", "success", language=lang_name),
+                ephemeral=True
             )
         else:
             await interaction.response.send_message(
-                self.translate(guild_id, "commands", "set_language", "responses", "error")
+                self.translate(guild_id, "commands", "set_language", "responses", "error"),
+                ephemeral=True
             )
 
     @app_commands.command(
@@ -431,7 +434,8 @@ class LanguageManager(commands.Cog):
                 "responses",
                 "current",
                 language=lang_name
-            )
+            ),
+            ephemeral=True
         )
 
     @staticmethod
