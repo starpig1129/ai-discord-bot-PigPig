@@ -149,10 +149,30 @@ class ContextManager:
         try:
             for m in messages or []:
                 try:
-                    content = getattr(m, "content", "") or ""
-                    match = re.match(r"^\[(?P<id>\d{4,})\]", content.strip())
-                    if match:
-                        ids.add(match.group("id"))
+                    msg_name = getattr(m, "name", None)
+                    if isinstance(msg_name, str):
+                        for match in re.findall(r"(\d{4,})", msg_name):
+                            ids.add(match)
+
+                    content = getattr(m, "content", None)
+                    candidate_texts: List[str] = []
+                    if isinstance(content, str):
+                        candidate_texts.append(content)
+                    elif isinstance(content, list):
+                        for part in content:
+                            if isinstance(part, dict):
+                                text_val = part.get("text")
+                                if isinstance(text_val, str):
+                                    candidate_texts.append(text_val)
+                            elif isinstance(part, str):
+                                candidate_texts.append(part)
+
+                    for text in candidate_texts:
+                        for match in re.findall(r"UserID:(\d+)", text):
+                            ids.add(match)
+                        bracket_match = re.match(r"^\[(?P<id>\d{4,})\]", text.strip())
+                        if bracket_match:
+                            ids.add(bracket_match.group("id"))
                 except Exception:
                     # tolerate single message parse errors
                     continue
