@@ -84,8 +84,6 @@ class ContextManager:
                 return None
             try:
                 return await self.episodic_provider.get(message)
-            except asyncio.CancelledError:
-                return None
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: episodic_provider.get failed")
@@ -205,7 +203,7 @@ class ContextManager:
         human_time: Optional[str] = None,
     ) -> str:
         """Format procedural memory and current state into a single string.
- 
+
         This method intentionally does NOT serialize short-term memory; callers
         receive STM as LangChain messages separately.
         The `timestamp` parameter is a numeric UNIX timestamp (float seconds). If a
