@@ -73,6 +73,7 @@ class ChannelManager(commands.Cog):
 
     async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
         """檢查是否有管理員權限"""
+        await interaction.response.defer(ephemeral=True, thinking=True)
         # 使用設定檔中的 BOT_OWNER_ID，如果設定檔中沒有則使用預設值
         bot_owner_id = getattr(self.tokens, 'bot_owner_id', 0)
         if interaction.user.guild_permissions.administrator or interaction.user.id == bot_owner_id:
@@ -89,7 +90,7 @@ class ChannelManager(commands.Cog):
             # 備用訊息，當語言管理器尚未初始化時
             error_message = "您沒有權限執行此操作，僅限管理員使用此命令。"
         
-        await interaction.response.send_message(error_message, ephemeral=True)
+        await interaction.followup.send(error_message, ephemeral=True)
         return False
 
     @app_commands.command(name="set_server_mode", description="設定整個伺服器的回應模式 (白名單/黑名單)")
@@ -127,7 +128,7 @@ class ChannelManager(commands.Cog):
         else:
             response = f"已將 **整個伺服器** 的回應模式設定為：{mode.name}"
 
-        await interaction.response.send_message(response, ephemeral=True)
+        await interaction.followup.send(response, ephemeral=True)
 
     @app_commands.command(name="set_channel_mode", description="為特定頻道設定特殊模式 (例如：故事模式)")
     @app_commands.describe(channel="要設定的頻道", mode="要為此頻道設定的模式")
@@ -155,7 +156,7 @@ class ChannelManager(commands.Cog):
             message = f"已將頻道 {channel.mention} 的模式設定為：**{mode.name}**。"
 
         self.save_config(guild_id, config)
-        await interaction.response.send_message(message, ephemeral=True)
+        await interaction.followup.send(message, ephemeral=True)
 
     @app_commands.command(name="add_channel", description="新增頻道到白名單或黑名單")
     @app_commands.choices(list_type=[
@@ -200,7 +201,7 @@ class ChannelManager(commands.Cog):
             else:
                 success_message = f"已將頻道 <#{channel_id}> 新增到 {list_type_name}"
             
-            await interaction.response.send_message(success_message, ephemeral=True)
+            await interaction.followup.send(success_message, ephemeral=True)
         else:
             if self.lang_manager:
                 exists_message = self.lang_manager.translate(
@@ -215,7 +216,7 @@ class ChannelManager(commands.Cog):
             else:
                 exists_message = f"頻道 <#{channel_id}> 已存在於 {list_type_name}"
             
-            await interaction.response.send_message(exists_message, ephemeral=True)
+            await interaction.followup.send(exists_message, ephemeral=True)
 
     @app_commands.command(name="remove_channel", description="移除頻道從白名單或黑名單")
     @app_commands.choices(list_type=[
@@ -260,7 +261,7 @@ class ChannelManager(commands.Cog):
             else:
                 success_message = f"已將頻道 <#{channel_id}> 移除從 {list_type_name}"
             
-            await interaction.response.send_message(success_message, ephemeral=True)
+            await interaction.followup.send(success_message, ephemeral=True)
         else:
             if self.lang_manager:
                 not_found_message = self.lang_manager.translate(
@@ -275,7 +276,7 @@ class ChannelManager(commands.Cog):
             else:
                 not_found_message = f"頻道 <#{channel_id}> 不存在於 {list_type_name}"
             
-            await interaction.response.send_message(not_found_message, ephemeral=True)
+            await interaction.followup.send(not_found_message, ephemeral=True)
 
     @app_commands.command(name="auto_response", description="設定頻道自動回覆")
     async def auto_response_command(self, interaction: discord.Interaction, channel: discord.TextChannel, enabled: bool):
@@ -304,7 +305,7 @@ class ChannelManager(commands.Cog):
             # 備用訊息
             success_message = f"已將頻道 <#{channel_id}> 自動回覆設定為：{enabled}"
         
-        await interaction.response.send_message(success_message, ephemeral=True)
+        await interaction.followup.send(success_message, ephemeral=True)
 
     def is_allowed_channel(self, channel: discord.TextChannel, guild_id: str) -> Tuple[bool, bool, Optional[str]]:
         """
