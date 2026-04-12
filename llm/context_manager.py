@@ -80,17 +80,19 @@ class ContextManager:
             return procedural_memory, short_term_msgs
 
 
-        if episodic_task:
+        async def _fetch_episodic() -> Optional[str]:
+            if not self.episodic_provider:
+                return None
             try:
-                episodic_str = await episodic_task
+                return await self.episodic_provider.get(message)
             except asyncio.CancelledError:
-                episodic_str = None
+                return None
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: episodic_provider.get failed")
                 )
                 _LOGGER.error("episodic_provider.get failed", exception=e)
-                episodic_str = None
+                return None
 
         # Fetch short-term/procedural memory AND episodic context in parallel to minimize latency
         (procedural_memory, short_term_msgs), episodic_str = await asyncio.gather(
