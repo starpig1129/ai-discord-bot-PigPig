@@ -230,6 +230,58 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             return get_system_prompt(str(bot_id), message)
 
 
+    async def _sanitize_messages_for_model(self, messages: List[BaseMessage], model_name: str) -> List[BaseMessage]:
+        """
+        Sanitize messages for the specific model.
+        - Ollama requires base64 images instead of direct HTTP URLs.
+        - We apply this uniformly to all Ollama models to support appropriately configured vision models.
+        """
+        if not model_name.startswith("ollama:"):
+            return messages
+
+        import aiohttp
+        import base64
+        import copy
+        
+        sanitized = []
+        
+        async with aiohttp.ClientSession() as session:
+            for msg in messages:
+                if isinstance(msg.content, list):
+                    new_content = []
+                    for part in msg.content:
+                        if isinstance(part, dict) and part.get("type") == "image_url":
+                            url = part.get("image_url", {}).get("url", "")
+                            if url.startswith("http"):
+                                try:
+                                    async with session.get(url) as resp:
+                                        if resp.status == 200:
+                                            img_data = await resp.read()
+                                            b64_data = base64.b64encode(img_data).decode('utf-8')
+                                            mime_type = resp.headers.get('Content-Type', 'image/jpeg')
+                                            new_content.append({
+                                                "type": "image_url",
+                                                "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}
+                                            })
+                                        else:
+                                            new_content.append({"type": "text", "text": f"[Image attached: {url}]"})
+                                except Exception as e:
+                                    logger.warning(f"Failed to fetch image for Ollama: {e}")
+                                    new_content.append({"type": "text", "text": f"[Image attached: {url}]"})
+                            else:
+                                new_content.append(part)
+                        else:
+                            new_content.append(part)
+                    
+                    new_msg = copy.copy(msg)
+                    new_msg.content = new_content
+                        
+                    sanitized.append(new_msg)
+                else:
+                    sanitized.append(msg)
+                    
+        return sanitized
+
     async def handle_message(
         self, bot: Any, message_edit: Message, message: Message, logger: Any
     ) -> OrchestratorResponse:
@@ -348,10 +400,12 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             middleware=[DirectToolOutputMiddleware()],
                         )
 
+                        sanitized_messages = await self._sanitize_messages_for_model(messages_for_info_agent, current_info_model)
+
                         # Execute info_agent to process user message and tools
                         info_result = await asyncio.wait_for(
                             info_agent.ainvoke(
-                                {"messages": messages_for_info_agent},
+                                {"messages": sanitized_messages},
                                 config={"callbacks": callbacks}
                             ),
                             timeout=_LLM_CALL_TIMEOUT_SECONDS,
@@ -456,8 +510,10 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
                         )
                         
+                        sanitized_messages = await self._sanitize_messages_for_model(messages_for_message_agent, current_model)
+                        
                         streamer = message_agent.astream(
-                            {"messages": messages_for_message_agent},
+                            {"messages": sanitized_messages},
                             stream_mode="messages",
                         )
                         
