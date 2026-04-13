@@ -1,3 +1,4 @@
+import datetime
 from sqlalchemy import create_engine, select, update
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session
@@ -37,12 +38,6 @@ class DB:
             session.add(keyword_data)
             session.commit()
 
-    def storeModel():
-        pass
-
-    def getModelFromUser():
-        pass
-
     def storeSearchRecord(self, discord_id:str, title:str, keyword:str, map_rate:str, tag:str, map_address:str) -> int:
         searchRecord = SearchRecord(discord_id=discord_id, title=title, keyword=keyword, map_rate=map_rate, tag=tag, address=map_address, self_rate=0.5)
 
@@ -75,7 +70,34 @@ class DB:
             session.commit()
 
             return True
-            
 
-    
-    
+    def getRecentRecords(self, discord_id: str, days: int = 7) -> list:
+        """取得最近 N 天內的搜尋記錄，用於避免重複推薦"""
+        cutoff = datetime.datetime.now() - datetime.timedelta(days=days)
+        getCommand = select(SearchRecord).where(
+            SearchRecord.discord_id == discord_id,
+            SearchRecord.date >= cutoff
+        )
+        with Session(self.engine) as session:
+            result = session.execute(getCommand)
+            return result.all()
+
+    def getLikedRecords(self, discord_id: str) -> list:
+        """取得 self_rate >= 1 的記錄（用戶喜歡的）"""
+        getCommand = select(SearchRecord).where(
+            SearchRecord.discord_id == discord_id,
+            SearchRecord.self_rate >= 1
+        )
+        with Session(self.engine) as session:
+            result = session.execute(getCommand)
+            return result.all()
+
+    def getDislikedRecords(self, discord_id: str) -> list:
+        """取得 self_rate <= -1 的記錄（用戶不喜歡的）"""
+        getCommand = select(SearchRecord).where(
+            SearchRecord.discord_id == discord_id,
+            SearchRecord.self_rate <= -1
+        )
+        with Session(self.engine) as session:
+            result = session.execute(getCommand)
+            return result.all()

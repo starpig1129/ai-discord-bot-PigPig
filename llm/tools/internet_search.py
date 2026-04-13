@@ -100,9 +100,12 @@ class InternetSearchTools:
             logger = getattr(runtime, "logger", _logger)
             logger.info("Tool 'internet_search' called", extra={"query": query, "search_type": search_type, "search_instructions": bool(search_instructions)})
     
-            # Determine preferred provider based on environment
-            gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-            preferred_provider = "gemini" if gemini_key else "selenium"
+            # Determine preferred provider based on search type and available API keys
+            if search_type == "eat":
+                preferred_provider = "foursquare" if os.getenv("FOURSQUARE_API_KEY") else "selenium"
+            else:
+                gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+                preferred_provider = "gemini" if gemini_key else "selenium"
             logger.debug("Preferred search provider determined", extra={"preferred_provider": preferred_provider})
     
             # Retrieve bot instance from runtime
