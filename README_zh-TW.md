@@ -123,6 +123,7 @@ CONFIG_ROOT="/path/to/your/config"
 
 ### 步驟 3：設定長期記憶系統
 如果您不希望啟用長期記憶系統，請在 `base_configs/memory.yaml` 中將 `enabled` 設為 `false`。
+若要調整快取行為，可在 `base_configs/memory.yaml` 中設定 `procedural_cache_ttl`（秒）；數值越大越省資料庫查詢，越小則能更快同步使用者資料。
 如果您使用雲端向量資料庫（如 Qdrant），請在 `.env` 檔案中設定 `VECTOR_STORE_API_KEY`。
 並且確保在 `base_configs/memory.yaml` 中正確設定向量資料庫的 URL 和其他參數。
 本地安裝方式或是雲端設定方法可以參考[Qdrant 官方文件](https://qdrant.tech/documentation/).

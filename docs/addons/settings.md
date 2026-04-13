@@ -235,6 +235,7 @@ Manages the memory subsystem configuration for persistent conversation storage.
 #### Properties
 
 - **`enabled`** (bool): Whether memory system is enabled (default: true)
+- **`procedural_cache_ttl`** (float): In-process procedural cache TTL in seconds (default: 300.0)
 - **`procedural_data_path`** (str): Path to procedural memory database
 - **`episodic_data_path`** (str): Path to episodic memory database
 - **`vector_store_type`** (str): Vector store provider (default: "qdrant")
@@ -254,6 +255,7 @@ Manages the memory subsystem configuration for persistent conversation storage.
 
 ```yaml
 enabled: true
+procedural_cache_ttl: 300.0
 procedural_data_path: "data/memory/procedural.db"
 episodic_data_path: "data/memory/episodic.db"
 vector_store_type: "qdrant"

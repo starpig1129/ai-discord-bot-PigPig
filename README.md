@@ -123,6 +123,7 @@ The bot's default files are in the [./base_configs](./base_configs) folder. You 
 
 ### Step 3: Configure Long-term Memory System
 If you do not want to enable the long-term memory system, set `enabled` to `false` in `base_configs/memory.yaml`.
+To tune cache behavior, adjust `procedural_cache_ttl` (seconds) in `base_configs/memory.yaml`; larger values reduce DB reads, smaller values refresh user data more aggressively.
 If you use a cloud vector database (like Qdrant), set the `VECTOR_STORE_API_KEY` in the `.env` file.
 And ensure that the vector database URL and other parameters are correctly set in `base_configs/memory.yaml`.
 For local installation or cloud setup methods, refer to [Qdrant official documentation](https://qdrant.tech/documentation/).
