@@ -247,6 +247,23 @@ class UserMemoryTools:
                     return "Error: Cannot clear memory without a message or interaction context."
 
                 result_msg = await cog._clear_user_data(str(effective_id), context)
+
+                # Invalidate ProceduralMemoryProvider cache so the next request
+                # reflects the updated data without waiting for TTL expiry.
+                try:
+                    bot = get_bot()
+                    orchestrator = getattr(bot, "orchestrator", None)
+                    if orchestrator:
+                        provider = getattr(
+                            getattr(orchestrator, "context_manager", None),
+                            "procedural_provider",
+                            None,
+                        )
+                        if provider and hasattr(provider, "invalidate"):
+                            await provider.invalidate(str(effective_id))
+                except Exception as e:
+                    logger.warning(f"clear_user_memory cache invalidation failed: {e}")
+
                 return result_msg
 
             except Exception as e:
