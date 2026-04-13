@@ -5,9 +5,7 @@ from typing import Dict, List, Optional, Tuple
 from llm.memory.schema import ProceduralMemory, UserInfo
 from cogs.memory.users.manager import SQLiteUserManager
 from function import func
-
-# Cache TTL in seconds. Procedural memory is low-frequency data; 300s is sufficient.
-_CACHE_TTL_SECONDS: float = 300.0
+from addons.settings import memory_config
 
 
 class ProceduralMemoryProvider:
@@ -60,7 +58,7 @@ class ProceduralMemoryProvider:
                 await func.report_error(e, "ProceduralMemoryProvider.get failed while fetching users")
                 fetched = {}
 
-            expire_at = time.monotonic() + _CACHE_TTL_SECONDS
+            expire_at = time.monotonic() + memory_config.procedural_cache_ttl
             async with self._lock:
                 for uid, info in fetched.items():
                     self._cache[uid] = (info, expire_at)

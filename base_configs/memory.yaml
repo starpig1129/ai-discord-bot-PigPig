@@ -2,6 +2,7 @@
 # enabled: whether to enable the memory / episodic memory subsystem.
 # If false, all memory-related components will not be instantiated or initialized.
 enabled: true
+procedural_cache_ttl: 300.0 # TTL (seconds) for the procedural memory in-process cache
 procedural_data_path: data/memory/procedural.db # Path to procedural data file
 episodic_data_path: data/memory/episodic.db # Path to episodic memory file
 vector_store_type: qdrant # options: qdrant, faiss, sqlite, in_memory
