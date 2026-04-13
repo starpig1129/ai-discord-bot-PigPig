@@ -105,6 +105,28 @@ class UserMemoryTools:
         logger = self.logger
         get_bot = self._get_bot
         get_cog = self._get_cog
+
+        async def _invalidate_procedural_cache(effective_id: Any) -> None:
+            """Best-effort invalidation of procedural memory cache."""
+            try:
+                bot = get_bot()
+                if not bot:
+                    return
+                orchestrator = getattr(bot, "orchestrator", None)
+                if orchestrator:
+                    provider = getattr(
+                        getattr(orchestrator, "context_manager", None),
+                        "procedural_provider",
+                        None,
+                    )
+                    if provider and hasattr(provider, "invalidate"):
+                        await provider.invalidate(str(effective_id))
+            except Exception as e:
+                logger.warning(
+                    "Procedural cache invalidation failed",
+                    extra={"effective_id": effective_id},
+                    exception=e,
+                )
         
         @tool
         async def read_user_memory(user_id: int) -> str:
@@ -250,19 +272,7 @@ class UserMemoryTools:
 
                 # Invalidate ProceduralMemoryProvider cache so the next request
                 # reflects the updated data without waiting for TTL expiry.
-                try:
-                    bot = get_bot()
-                    orchestrator = getattr(bot, "orchestrator", None)
-                    if orchestrator:
-                        provider = getattr(
-                            getattr(orchestrator, "context_manager", None),
-                            "procedural_provider",
-                            None,
-                        )
-                        if provider and hasattr(provider, "invalidate"):
-                            await provider.invalidate(str(effective_id))
-                except Exception as e:
-                    logger.warning(f"clear_user_memory cache invalidation failed: {e}")
+                await _invalidate_procedural_cache(effective_id)
 
                 return result_msg
 
@@ -379,18 +389,7 @@ class UserMemoryTools:
 
                 # Invalidate ProceduralMemoryProvider cache so the next request
                 # reflects the updated data without waiting for TTL expiry.
-                try:
-                    orchestrator = getattr(bot, "orchestrator", None)
-                    if orchestrator:
-                        provider = getattr(
-                            getattr(orchestrator, "context_manager", None),
-                            "procedural_provider",
-                            None,
-                        )
-                        if provider and hasattr(provider, "invalidate"):
-                            await provider.invalidate(str(effective_id))
-                except Exception:
-                    pass  # Cache invalidation is best-effort; never block the save result
+                await _invalidate_procedural_cache(effective_id)
 
                 return result_msg
             except Exception as e:
