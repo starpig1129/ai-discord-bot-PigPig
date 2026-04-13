@@ -439,12 +439,11 @@ async def _process_token_stream(
                     i += 6
                     continue
                 
-                # Check if it could be a partial tag
-                if any('<som>'.startswith(remaining[:k]) or '</som>'.startswith(remaining[:k]) or 
-                       '<eom>'.startswith(remaining[:k]) or '</eom>'.startswith(remaining[:k]) 
-                       for k in range(1, len(remaining) + 1)):
+                # Check if it could be a partial tag (e.g., "<s" as prefix of "<som>")
+                potential_tags = ['<som>', '</som>', '<eom>', '</eom>']
+                if any(tag.startswith(remaining) for tag in potential_tags):
                     # If the start of a tag is detected but not yet complete, buffer it
-                    tag_buffer = current_str[i:]
+                    tag_buffer = remaining
                     break
             
             # Capture content based on state
