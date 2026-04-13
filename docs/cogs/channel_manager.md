@@ -84,7 +84,7 @@ class ChannelManager(commands.Cog):
     def get_config_path(self, guild_id) -> str
     def load_config(self, guild_id) -> dict
     def save_config(self, guild_id, config)
-    async def check_admin_permissions(self, interaction: discord.Interaction) -> bool
+    async def check_admin_permissions(self, interaction: discord.Interaction, *, defer: bool = False) -> bool
     
     # Command handlers
     async def set_server_mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str])
@@ -117,14 +117,19 @@ class ChannelManager(commands.Cog):
 
 #### Administrator Validation
 ```python
-async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
+async def check_admin_permissions(self, interaction: discord.Interaction, *, defer: bool = False) -> bool:
+    if defer and not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True, thinking=True)
     bot_owner_id = getattr(self.tokens, 'bot_owner_id', 0)
     if interaction.user.guild_permissions.administrator or interaction.user.id == bot_owner_id:
         return True
     
     # Send localized permission denied message
-    error_message = self.lang_manager.translate(...)
-    await interaction.response.send_message(error_message, ephemeral=True)
+    error_message = self.lang_manager.translate(...) or "您沒有權限執行此操作，僅限管理員使用此命令。"
+    if interaction.response.is_done():
+        await interaction.followup.send(error_message, ephemeral=True)
+    else:
+        await interaction.response.send_message(error_message, ephemeral=True)
     return False
 ```
 

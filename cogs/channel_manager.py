@@ -71,9 +71,10 @@ class ChannelManager(commands.Cog):
         except Exception as e:
             asyncio.create_task(func.report_error(e, f"saving config for guild {guild_id}"))
 
-    async def check_admin_permissions(self, interaction: discord.Interaction) -> bool:
+    async def check_admin_permissions(self, interaction: discord.Interaction, *, defer: bool = False) -> bool:
         """檢查是否有管理員權限"""
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        if defer and not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=True)
         # 使用設定檔中的 BOT_OWNER_ID，如果設定檔中沒有則使用預設值
         bot_owner_id = getattr(self.tokens, 'bot_owner_id', 0)
         if interaction.user.guild_permissions.administrator or interaction.user.id == bot_owner_id:
@@ -90,7 +91,10 @@ class ChannelManager(commands.Cog):
             # 備用訊息，當語言管理器尚未初始化時
             error_message = "您沒有權限執行此操作，僅限管理員使用此命令。"
         
-        await interaction.followup.send(error_message, ephemeral=True)
+        if interaction.response.is_done():
+            await interaction.followup.send(error_message, ephemeral=True)
+        else:
+            await interaction.response.send_message(error_message, ephemeral=True)
         return False
 
     @app_commands.command(name="set_server_mode", description="設定整個伺服器的回應模式 (白名單/黑名單)")
@@ -101,7 +105,7 @@ class ChannelManager(commands.Cog):
     ])
     async def set_server_mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
         """Sets the server-wide response mode."""
-        if not await self.check_admin_permissions(interaction):
+        if not await self.check_admin_permissions(interaction, defer=True):
             return
             
         guild_id = str(interaction.guild_id)
@@ -138,7 +142,7 @@ class ChannelManager(commands.Cog):
     ])
     async def set_channel_mode(self, interaction: discord.Interaction, channel: discord.TextChannel, mode: app_commands.Choice[str]):
         """Sets a special mode for a specific channel."""
-        if not await self.check_admin_permissions(interaction):
+        if not await self.check_admin_permissions(interaction, defer=True):
             return
 
         guild_id = str(interaction.guild_id)
@@ -165,7 +169,7 @@ class ChannelManager(commands.Cog):
     ])
     async def add_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
         # 檢查權限
-        if not await self.check_admin_permissions(interaction):
+        if not await self.check_admin_permissions(interaction, defer=True):
             return
             
         guild_id = str(interaction.guild_id)
@@ -225,7 +229,7 @@ class ChannelManager(commands.Cog):
     ])
     async def remove_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
         # 檢查權限
-        if not await self.check_admin_permissions(interaction):
+        if not await self.check_admin_permissions(interaction, defer=True):
             return
             
         guild_id = str(interaction.guild_id)
@@ -281,7 +285,7 @@ class ChannelManager(commands.Cog):
     @app_commands.command(name="auto_response", description="設定頻道自動回覆")
     async def auto_response_command(self, interaction: discord.Interaction, channel: discord.TextChannel, enabled: bool):
         # 檢查權限
-        if not await self.check_admin_permissions(interaction):
+        if not await self.check_admin_permissions(interaction, defer=True):
             return
             
         guild_id = str(interaction.guild_id)
