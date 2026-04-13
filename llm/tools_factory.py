@@ -23,8 +23,8 @@ logger = get_logger(server_id="Bot", source="llm.tools_factory")
 from langchain_core.tools import StructuredTool,BaseTool
 from function import func
 
-# 快取變數：儲存已解析出的 decorated tools 以及對應的檔案最大 mtime
-_cached_collected_tools: Optional[List[Any]] = None
+# 快取變數：儲存已解析出的模組列表以及對應的檔案最大 mtime
+_cached_modules: Optional[List[Any]] = None
 _cached_collected_mtime: float = 0.0
 _cache_lock = threading.Lock()
 
@@ -268,7 +268,7 @@ def get_tools(
     Returns:
         List[BaseTool]: 可供 LangChain 使用的工具清單（靜態類型上會 cast 為 List[BaseTool]）。
     """
-    global _cached_collected_tools, _cached_collected_mtime
+    global _cached_modules, _cached_collected_mtime
 
     collected: List[Any] = []
 
@@ -283,21 +283,22 @@ def get_tools(
 
     with _cache_lock:
         if (
-            _cached_collected_tools is None
+            _cached_modules is None
             or current_mtime != _cached_collected_mtime
         ):
             try:
-                temp_collected: List[Any] = []
-                for mod in _discover_tools_package():
-                    # 傳入專案的 OrchestratorRequest，確保工具類別建構子接收正確型態
-                    temp_collected.extend(_extract_tools_from_module(mod, runtime))
-                _cached_collected_tools = temp_collected
+                # 僅快取模組對象，不快取工具實例，以避免 runtime context 殘留問題
+                _cached_modules = list(_discover_tools_package())
                 _cached_collected_mtime = current_mtime
             except Exception as e:
-                _report_async(e, "llm.tools: scanning tools for cache")
-                _cached_collected_tools = _cached_collected_tools or []
+                _report_async(e, "llm.tools: scanning modules for cache")
+                _cached_modules = _cached_modules or []
 
-        collected = list(_cached_collected_tools or [])
+        cached_modules = list(_cached_modules or [])
+
+    # 每次呼叫皆重新實例化工具，傳入當前的 runtime
+    for mod in cached_modules:
+        collected.extend(_extract_tools_from_module(mod, runtime))
 
     # 根據使用者權限過濾
     perms = _get_user_permissions(user, guid)
