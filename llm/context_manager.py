@@ -84,8 +84,6 @@ class ContextManager:
                 return None
             try:
                 return await self.episodic_provider.get(message)
-            except asyncio.CancelledError:
-                return None
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: episodic_provider.get failed")
