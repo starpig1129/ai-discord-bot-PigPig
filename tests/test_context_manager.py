@@ -50,7 +50,7 @@ fake_logging.get_logger = lambda **kwargs: _DummyLogger()
 fake_settings = types.ModuleType("addons.settings")
 fake_settings.base_config = {}
 fake_settings.llm_config = types.SimpleNamespace(llm_call_timeout=60)
-fake_settings.memory_config = types.SimpleNamespace(enabled=True)
+fake_settings.memory_config = types.SimpleNamespace(enabled=True, procedural_cache_ttl=300.0)
 
 fake_addons = types.ModuleType("addons")
 fake_addons.logging = fake_logging
