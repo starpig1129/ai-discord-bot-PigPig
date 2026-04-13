@@ -47,29 +47,42 @@ class ContextManager:
 
         async def _fetch_short_term_and_procedural() -> Tuple[ProceduralMemory, List[BaseMessage]]:
             # 1) Fetch short-term messages
+            short_term_msgs: List[BaseMessage] = []
             try:
                 short_term_msgs = await self.short_term_provider.get(message)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                # Report and return safe fallback per design
+                # Report and continue with safe fallback per design
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
                 )
                 _LOGGER.error("short_term_provider.get failed", exception=e)
-                return ProceduralMemory(user_info={}), []
 
             # 2) Extract user ids to fetch procedural memory
             try:
                 user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
                 )
                 _LOGGER.error("extract_user_ids failed", exception=e)
                 user_ids = []
+                try:
+                    fallback_author_id = getattr(getattr(message, "author", None), "id", None)
+                    if fallback_author_id is not None:
+                        user_ids.append(str(fallback_author_id))
+                except Exception:
+                    # Best-effort fallback; proceed with empty user_ids
+                    pass
 
             # 3) Fetch procedural memory
             try:
                 procedural_memory = await self.procedural_provider.get(user_ids)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
