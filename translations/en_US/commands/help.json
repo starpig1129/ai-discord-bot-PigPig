@@ -2,5 +2,7 @@
     "name": "help",
     "description": "Show this help message",
     "help_description": "Detailed list of available commands and instructions.",
-    "help_title": "Bot Help Center"
+    "help_title": "Bot Help Center",
+    "no_commands": "No commands are available right now.",
+    "error_message": "Something went wrong while building the help list. Please try again later."
 }

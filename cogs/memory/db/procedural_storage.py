@@ -154,6 +154,20 @@ class ProceduralStorage:
             await func.report_error(e, f"update_user_data failed (user: {discord_id})")
             return False
 
+    async def delete_user_data(self, discord_id: str) -> bool:
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.execute("DELETE FROM users WHERE discord_id = ?", (discord_id,))
+                conn.commit()
+                deleted = cursor.rowcount > 0
+
+                if deleted and discord_id in self._user_cache:
+                    del self._user_cache[discord_id]
+                return deleted
+        except Exception as e:
+            await func.report_error(e, f"delete_user_data failed (user: {discord_id})")
+            return False
+
     async def update_user_activity(self, discord_id: str, discord_name: str) -> bool:
         try:
             with self.db.get_connection() as conn:

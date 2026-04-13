@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `ContextManager` class is responsible for building procedural context strings and managing short-term memory messages for LLM interactions. It serves as a bridge between the Discord message system and the LLM by providing formatted context and conversation history.
+The `ContextManager` class is responsible for building procedural context strings, retrieving episodic memories (when available), and managing short-term memory messages for LLM interactions. It serves as a bridge between the Discord message system and the LLM by providing formatted context and conversation history.
 
 ## Architecture
 
@@ -19,11 +19,14 @@ graph TD
     A[Discord Message] --> B[ContextManager]
     B --> C[ShortTermMemoryProvider]
     B --> D[ProceduralMemoryProvider]
+    B --> E[EpisodicMemoryProvider]
     C --> E[BaseMessage List]
     D --> F[ProceduralMemory]
-    F --> G[Formatted Context String]
-    E --> H[Agent Messages]
-    G --> I[System Prompt]
+    E --> G[Episodic Context]
+    F --> H[Formatted Context String]
+    C --> I[Agent Messages]
+    G --> H
+    H --> J[System Prompt]
 ```
 
 ## Class Reference
@@ -58,7 +61,7 @@ async def get_context(self, message: discord.Message) -> Tuple[str, List[BaseMes
 - `short_term_msgs`: List of LangChain BaseMessage objects
 
 **Description:**
-Retrieves both procedural context and short-term messages, formatted appropriately for LLM consumption. Short-term messages are returned in oldest-to-newest order.
+Retrieves procedural context, episodic context (if configured), and short-term messages, formatted appropriately for LLM consumption. Short-term messages are returned in oldest-to-newest order, and procedural memory still attempts to load even if short-term fetching fails (falls back to the current message author). Task cancellations propagate instead of being swallowed to keep orchestrator timeouts working as expected.
 
 **Error Handling:**
 - Uses `func.report_error` for centralized error logging

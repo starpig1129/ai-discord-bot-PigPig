@@ -8,7 +8,7 @@ This module implements the new ContextManager per docs/llm/context_manager.md:
 import asyncio
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
 import discord
@@ -44,51 +44,72 @@ class ContextManager:
         The short_term_msgs are returned in oldest->newest order as produced by
         ShortTermMemoryProvider.
         """
-        # 1) Fetch short-term messages
-        try:
-            short_term_msgs = await self.short_term_provider.get(message)
-        except Exception as e:
-            # Report and return safe fallback per design
-            asyncio.create_task(
-                func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
-            )
-            _LOGGER.error("short_term_provider.get failed", exception=e)
-            return "", []
 
-        # 2) Extract user ids to fetch procedural memory
-        try:
-            user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
-        except Exception as e:
-            asyncio.create_task(
-                func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
-            )
-            _LOGGER.error("extract_user_ids failed", exception=e)
-            user_ids = []
-
-        # 3) Fetch procedural memory AND episodic context in parallel to minimize latency
-        async def _fetch_procedural() -> ProceduralMemory:
+        async def _fetch_short_term_and_procedural() -> Tuple[ProceduralMemory, List[BaseMessage]]:
+            # 1) Fetch short-term messages
+            short_term_msgs: List[BaseMessage] = []
             try:
-                return await self.procedural_provider.get(user_ids)
+                short_term_msgs = await self.short_term_provider.get(message)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                # Report and continue with safe fallback per design
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
+                )
+                _LOGGER.error("short_term_provider.get failed", exception=e)
+
+            # 2) Extract user ids to fetch procedural memory
+            try:
+                user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
+                )
+                _LOGGER.error("extract_user_ids failed", exception=e)
+                user_ids = []
+                try:
+                    fallback_author_id = getattr(getattr(message, "author", None), "id", None)
+                    if fallback_author_id is not None:
+                        user_ids.append(str(fallback_author_id))
+                except Exception:
+                    # Best-effort fallback; proceed with empty user_ids
+                    pass
+
+            # 3) Fetch procedural memory
+            try:
+                procedural_memory = await self.procedural_provider.get(user_ids)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
                 )
                 _LOGGER.error("procedural_provider.get failed", exception=e)
-                return ProceduralMemory(user_info={})
+                procedural_memory = ProceduralMemory(user_info={})
+
+            return procedural_memory, short_term_msgs
+
 
         async def _fetch_episodic() -> Optional[str]:
-            if self.episodic_provider is None:
+            if not self.episodic_provider:
                 return None
             try:
                 return await self.episodic_provider.get(message)
+            except asyncio.CancelledError:
+                return None
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: episodic_provider.get failed")
                 )
+                _LOGGER.error("episodic_provider.get failed", exception=e)
                 return None
 
-        procedural_memory, episodic_str = await asyncio.gather(
-            _fetch_procedural(),
+        # Fetch short-term/procedural memory AND episodic context in parallel to minimize latency
+        (procedural_memory, short_term_msgs), episodic_str = await asyncio.gather(
+            _fetch_short_term_and_procedural(),
             _fetch_episodic(),
         )
 
@@ -101,16 +122,26 @@ class ContextManager:
         # Use message.created_at when available; fallback to current UTC timestamp (float seconds)
         try:
             if getattr(message, "created_at", None) is not None:
-                timestamp = message.created_at.timestamp()
+                created_at = message.created_at
+                if getattr(created_at, "tzinfo", None) is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                else:
+                    created_at = created_at.astimezone(timezone.utc)
+                timestamp = created_at.timestamp()
+                human_time = created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
             else:
-                timestamp = datetime.utcnow().timestamp()
+                now = datetime.now(timezone.utc)
+                timestamp = now.timestamp()
+                human_time = now.strftime('%Y-%m-%d %H:%M:%S UTC')
         except Exception:
-            timestamp = datetime.utcnow().timestamp()
+            now = datetime.now(timezone.utc)
+            timestamp = now.timestamp()
+            human_time = now.strftime('%Y-%m-%d %H:%M:%S UTC')
 
         procedural_str = ""
         try:
             procedural_str = self._format_context_for_prompt(
-                procedural_memory, channel_name, timestamp, episodic_str=episodic_str
+                procedural_memory, channel_name, timestamp, episodic_str=episodic_str, human_time=human_time
             )
         except Exception as e:
             asyncio.create_task(
@@ -144,10 +175,30 @@ class ContextManager:
         try:
             for m in messages or []:
                 try:
-                    content = getattr(m, "content", "") or ""
-                    match = re.match(r"^\[(?P<id>\d{4,})\]", content.strip())
-                    if match:
-                        ids.add(match.group("id"))
+                    msg_name = getattr(m, "name", None)
+                    if isinstance(msg_name, str):
+                        for match in re.findall(r"(\d{4,})", msg_name):
+                            ids.add(match)
+
+                    content = getattr(m, "content", None)
+                    candidate_texts: List[str] = []
+                    if isinstance(content, str):
+                        candidate_texts.append(content)
+                    elif isinstance(content, list):
+                        for part in content:
+                            if isinstance(part, dict):
+                                text_val = part.get("text")
+                                if isinstance(text_val, str):
+                                    candidate_texts.append(text_val)
+                            elif isinstance(part, str):
+                                candidate_texts.append(part)
+
+                    for text in candidate_texts:
+                        for match in re.findall(r"UserID:(\d+)", text):
+                            ids.add(match)
+                        bracket_match = re.match(r"^\[(?P<id>\d{4,})\]", text.strip())
+                        if bracket_match:
+                            ids.add(bracket_match.group("id"))
                 except Exception:
                     # tolerate single message parse errors
                     continue
@@ -165,6 +216,7 @@ class ContextManager:
         channel_name: str,
         timestamp: float,
         episodic_str: Optional[str] = None,
+        human_time: Optional[str] = None,
     ) -> str:
         """Format procedural memory and current state into a single string.
  
@@ -191,7 +243,11 @@ class ContextManager:
             _LOGGER.error("Formatting procedural memory failed", exception=e)
 
         try:
-            parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}")
+            # Provide both Unix timestamp and human-readable time for better LLM comprehension
+            if human_time:
+                parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}\nCurrent Time: {human_time}")
+            else:
+                parts.append(f"Channel: #{channel_name}\nTimestamp: {timestamp}")
         except Exception as e:
             asyncio.create_task(
                 func.report_error(e, "ContextManager._format_context_for_prompt/channel_ts")

@@ -291,6 +291,9 @@ class MemoryConfig:
         # Toggle to enable/disable memory subsystem
         self.enabled: bool = bool(data.get("enabled", True))
 
+        # Procedural memory cache TTL in seconds
+        self.procedural_cache_ttl: float = float(data.get("procedural_cache_ttl", 300.0))
+
         # Storage / vector store configuration
         self.procedural_data_path: str = data.get("procedural_data_path", "data/memory/procedural.db")
         self.episodic_data_path: str = data.get("episodic_data_path", "data/memory/episodic.db")

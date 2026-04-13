@@ -3,13 +3,14 @@
         "name": "userdata",
         "description": "Manage user data",
         "options": {
-            "action": "Choose action (read/save)",
+            "action": "Choose action (read/save/clear)",
             "user": "Target user",
             "user_data": "User data to save"
         },
         "choices": {
             "read": "Read",
-            "save": "Save"
+            "save": "Save",
+            "clear": "Clear"
         },
         "responses": {
             "searching": "Searching user data...",
@@ -18,7 +19,9 @@
             "data_not_found": "User <@{user_id}> data not found.",
             "data_updated": "Updated user <@{user_id}> data: {data}",
             "data_created": "Created data for user <@{user_id}>: {data}",
-            "invalid_action": "Invalid action. Please use 'read' or 'save'.",
+            "clear_success": "Cleared personal data for <@{user_id}>.",
+            "clear_failed": "Failed to clear data for <@{user_id}> or no data existed.",
+            "invalid_action": "Invalid action. Please use 'read', 'save', or 'clear'.",
             "no_data_provided": "You didn't tell me what to remember."
         },
         "errors": {
