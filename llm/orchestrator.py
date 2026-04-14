@@ -234,8 +234,25 @@ Focus on understanding what the user actually needs and prepare a clear analysis
         """
         Sanitize messages for the specific model.
         - Ollama requires base64 images instead of direct HTTP URLs.
-        - We apply this uniformly to all Ollama models to support appropriately configured vision models.
+        - Gemini 3.x models require thought_signature for tool_calls. To prevent 400 errors, we convert past tool calls to text.
         """
+        if "gemini-3" in model_name:
+            from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+            sanitized = []
+            for msg in messages:
+                if isinstance(msg, ToolMessage):
+                    tool_name = getattr(msg, "name", "unknown")
+                    sanitized.append(HumanMessage(content=f"[System: Tool Result ({tool_name})]\n{msg.content}"))
+                elif isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+                    _text = msg.content if isinstance(msg.content, str) else ""
+                    if not _text.strip():
+                        tool_names = ", ".join([tc.get("name", "unknown") for tc in msg.tool_calls])
+                        _text = f"[Assistant: Calling tool(s): {tool_names}]"
+                    sanitized.append(AIMessage(content=_text))
+                else:
+                    sanitized.append(msg)
+            return sanitized
+
         if not model_name.startswith("ollama:"):
             return messages
 
@@ -358,8 +375,8 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     raise RuntimeError(f"Failed to get info_model priority list: {e}") from e
 
                 info_system_prompt = self._build_info_agent_prompt(bot_id=bot.user.id, message=message)
-                # IMPORTANT: full_info_prompt should only include procedural_context_str (string) and system prompt.
-                full_info_prompt = f"{procedural_context_str}\n\n{info_system_prompt}"
+                # IMPORTANT: Place static info_system_prompt before dynamic procedural_context_str to maximize KV cache reuse!
+                full_info_prompt = f"{info_system_prompt}\n\n{procedural_context_str}"
 
                 # Inject short-term memory messages directly before current user input
                 messages_for_info_agent = list(short_term_msgs)
@@ -423,8 +440,11 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         logger.warning(f"Info agent model {current_info_model} failed: {e}")
                         # Continue to next model immediately
                 
-                if info_result is None and last_info_exception is not None:
-                    raise last_info_exception
+                if info_result is None:
+                    if last_info_exception is not None:
+                        raise last_info_exception
+                    else:
+                        raise RuntimeError("All models skipped for info_agent due to circuit breaker cooldown.")
                 
                 # Extract the analysis output from info_agent result
                 # Info agent should return analysis in a format suitable for message generation
@@ -455,8 +475,8 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 # are protected from user modification
                 message_system_prompt = self._build_message_agent_prompt(bot.user.id, message)
 
-                # full_message_prompt must only include procedural_context_str and system prompt
-                full_message_prompt = f"{procedural_context_str}\n\n{message_system_prompt}"
+                # IMPORTANT: Place static message_system_prompt before dynamic procedural_context_str to maximize KV cache reuse!
+                full_message_prompt = f"{message_system_prompt}\n\n{procedural_context_str}"
 
                 # Use the analysis from info_agent for message generation
                 # Compose messages for message_agent with analysis output and context
@@ -550,8 +570,11 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         break
                 
                 # If all models failed, raise the last exception
-                if message_result is None and last_exception is not None:
-                    raise last_exception
+                if message_result is None:
+                    if last_exception is not None:
+                        raise last_exception
+                    else:
+                        raise RuntimeError("All models skipped due to circuit breaker cooldown.")
 
             except Exception as e:
                 await asyncio.create_task(func.report_error(e, "message_agent failed"))
