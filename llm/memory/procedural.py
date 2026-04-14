@@ -16,7 +16,18 @@ class ProceduralMemoryProvider:
     """
 
     def __init__(self, user_manager: SQLiteUserManager, max_cache_size: int = 1000) -> None:
-        """Initializes the provider with a user manager instance."""
+        """Initializes the provider with a user manager instance and cache size limit.
+
+        Args:
+            user_manager: Manager used to fetch user information from storage.
+            max_cache_size: Maximum number of user entries to retain in the cache
+                before pruning. Must be a non-negative integer.
+
+        Raises:
+            ValueError: If max_cache_size is negative.
+        """
+        if max_cache_size < 0:
+            raise ValueError("max_cache_size must be >= 0")
         self.user_manager = user_manager
         self.max_cache_size = max_cache_size
         # key: user_id (str), value: (UserInfo, expire_at: float monotonic)

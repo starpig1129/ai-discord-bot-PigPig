@@ -52,3 +52,53 @@ def test_procedural_cache_respects_configured_ttl(monkeypatch):
         assert manager.calls == 2
 
     asyncio.run(run_checks())
+
+
+def test_max_cache_size_evicts_oldest_entries(monkeypatch):
+    """Cache should not exceed max_cache_size; oldest entries are evicted first."""
+    monkeypatch.setattr(memory_config, "procedural_cache_ttl", 60)
+    manager = StubUserManager()
+    max_size = 3
+    provider = ProceduralMemoryProvider(manager, max_cache_size=max_size)
+
+    async def run_checks():
+        # Fill the cache beyond its limit
+        for i in range(max_size + 2):
+            await provider.get([str(i)])
+
+        assert len(provider._cache) <= max_size
+
+    asyncio.run(run_checks())
+
+
+def test_max_cache_size_prunes_expired_entries_first(monkeypatch):
+    """Expired entries should be pruned before evicting live entries."""
+    monkeypatch.setattr(memory_config, "procedural_cache_ttl", 0.05)
+    manager = StubUserManager()
+    provider = ProceduralMemoryProvider(manager, max_cache_size=3)
+
+    async def run_checks():
+        # Populate the cache with entries that will expire
+        for i in range(3):
+            await provider.get([str(i)])
+
+        # Wait for those entries to expire
+        await asyncio.sleep(0.1)
+
+        # Fetch new entries; expired entries should be pruned first
+        for i in range(10, 14):
+            await provider.get([str(i)])
+
+        assert len(provider._cache) <= 3
+
+    asyncio.run(run_checks())
+
+
+def test_max_cache_size_negative_raises():
+    """Passing a negative max_cache_size should raise ValueError."""
+    manager = StubUserManager()
+    try:
+        ProceduralMemoryProvider(manager, max_cache_size=-1)
+        assert False, "Expected ValueError"
+    except ValueError as exc:
+        assert "max_cache_size" in str(exc).lower() or ">= 0" in str(exc)
