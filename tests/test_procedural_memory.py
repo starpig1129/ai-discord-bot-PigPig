@@ -3,6 +3,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
@@ -97,8 +99,5 @@ def test_max_cache_size_prunes_expired_entries_first(monkeypatch):
 def test_max_cache_size_negative_raises():
     """Passing a negative max_cache_size should raise ValueError."""
     manager = StubUserManager()
-    try:
+    with pytest.raises(ValueError, match=r"max_cache_size"):
         ProceduralMemoryProvider(manager, max_cache_size=-1)
-        assert False, "Expected ValueError"
-    except ValueError as exc:
-        assert "max_cache_size" in str(exc).lower() or ">= 0" in str(exc)
