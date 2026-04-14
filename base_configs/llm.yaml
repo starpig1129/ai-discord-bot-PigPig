@@ -113,3 +113,4 @@ model_priorities:
       - gemini-2.5-pro
 google_search_agent: gemini-3.1-flash-lite-preview
 llm_call_timeout: 180
+reasoning_optimization_prompt: "\n\n[CRITICAL SYSTEM RULE]: Think efficiently and use minimal reasoning. Strict limit: keep any internal reasoning or <think> process extremely brief (under 3 sentences). Output final results and call tools immediately without extensive reflection."

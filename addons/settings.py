@@ -158,6 +158,10 @@ class LLMConfig:
         # Ollama server URL (defaults to localhost:11434)
         self.ollama_url: Optional[str] = self.data.get("ollama_url", "http://localhost:11434")
         self.llm_call_timeout: float = float(self.data.get("llm_call_timeout", 60))
+        self.reasoning_optimization_prompt: str = self.data.get(
+            "reasoning_optimization_prompt", 
+            "\n\n[CRITICAL SYSTEM RULE]: Think efficiently and use minimal reasoning. Strict limit: keep any internal reasoning or <think> process extremely brief (under 3 sentences). Output final results and call tools immediately without extensive reflection."
+        )
 
 
 class UpdateConfig:

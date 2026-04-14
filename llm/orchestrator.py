@@ -407,13 +407,18 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     try:
                         logger.info(f"Info agent: trying model {current_info_model} ({model_index + 1}/{len(info_model_list)})")
                         
+                        # Apply thought-budget control prompt for reasoning models
+                        model_specific_prompt = full_info_prompt
+                        if any(x in current_info_model.lower() for x in ["ollama", "deepseek", "gemma", "r1"]):
+                            model_specific_prompt += llm_config.reasoning_optimization_prompt
+
                         # Instantiate model with zero retries to ensure immediate fallback on quota exhaustion
                         info_model_instance = init_chat_model(current_info_model, max_retries=0)
                         
                         info_agent = create_agent(
                             model=info_model_instance,
                             tools=info_agent_tools,
-                            system_prompt=full_info_prompt,
+                            system_prompt=model_specific_prompt,
                             middleware=[DirectToolOutputMiddleware()],
                         )
 
@@ -520,13 +525,18 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     try:
                         logger.info(f"Message agent: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
                         
+                        # Apply thought-budget control prompt for reasoning models
+                        model_specific_message_prompt = full_message_prompt
+                        if any(x in current_model.lower() for x in ["ollama", "deepseek", "gemma", "r1"]):
+                            model_specific_message_prompt += llm_config.reasoning_optimization_prompt
+
                         # Create agent with current model configured for zero retries
                         message_model_instance = init_chat_model(current_model, max_retries=0)
                         
                         message_agent = create_agent(
                             model=message_model_instance,
                             tools=message_agent_tools,
-                            system_prompt=full_message_prompt,
+                            system_prompt=model_specific_message_prompt,
                             middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
                         )
                         
