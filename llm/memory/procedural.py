@@ -15,9 +15,10 @@ class ProceduralMemoryProvider:
     and caches results per user_id to avoid redundant DB calls within the TTL window.
     """
 
-    def __init__(self, user_manager: SQLiteUserManager) -> None:
+    def __init__(self, user_manager: SQLiteUserManager, max_cache_size: int = 1000) -> None:
         """Initializes the provider with a user manager instance."""
         self.user_manager = user_manager
+        self.max_cache_size = max_cache_size
         # key: user_id (str), value: (UserInfo, expire_at: float monotonic)
         self._cache: Dict[str, Tuple[UserInfo, float]] = {}
         self._lock = asyncio.Lock()
@@ -63,6 +64,14 @@ class ProceduralMemoryProvider:
                 for uid, info in fetched.items():
                     self._cache[uid] = (info, expire_at)
                     result[uid] = info
+
+                if len(self._cache) > self.max_cache_size:
+                    now_insert = time.monotonic()
+                    self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+
+                    while len(self._cache) > self.max_cache_size:
+                        oldest_key = next(iter(self._cache))
+                        self._cache.pop(oldest_key)
 
         return ProceduralMemory(user_info=result)
 
