@@ -61,21 +61,41 @@ class UserActivityTools:
                 status = status_map.get(target_member.status, str(target_member.status))
                 return f"User {target_member.display_name} is currently {status} with no specific activities."
 
+            import datetime
+            def _format_duration(start_time):
+                if not start_time: return ""
+                try:
+                    now = datetime.datetime.now(datetime.timezone.utc)
+                    # Some activity.start are naive datetimes, some are aware
+                    if start_time.tzinfo is None:
+                        start_time = start_time.replace(tzinfo=datetime.timezone.utc)
+                    diff = now - start_time
+                    if diff.total_seconds() < 0: return ""
+                    hours, remainder = divmod(int(diff.total_seconds()), 3600)
+                    minutes, _ = divmod(remainder, 60)
+                    duration_strs = []
+                    if hours > 0: duration_strs.append(f"{hours}h")
+                    if minutes > 0: duration_strs.append(f"{minutes}m")
+                    return f" (for {' '.join(duration_strs)} so far)" if duration_strs else " (just started)"
+                except Exception:
+                    return ""
+
             activity_list = []
             for activity in activities:
+                duration_str = _format_duration(getattr(activity, "start", None))
                 if isinstance(activity, discord.Spotify):
-                    activity_list.append(f"- Listening to Spotify: {activity.title} by {activity.artist}")
+                    activity_list.append(f"- Listening to Spotify: {activity.title} by {activity.artist}{duration_str}")
                 elif isinstance(activity, discord.Game):
-                    activity_list.append(f"- Playing Game: {activity.name}")
+                    activity_list.append(f"- Playing Game: {activity.name}{duration_str}")
                 elif isinstance(activity, discord.Streaming):
-                    activity_list.append(f"- Streaming: {activity.name} (URL: {activity.url})")
+                    activity_list.append(f"- Streaming: {activity.name} (URL: {activity.url}){duration_str}")
                 elif isinstance(activity, discord.CustomActivity):
                     emoji = str(activity.emoji) + " " if activity.emoji else ""
                     activity_list.append(f"- Custom Status: {emoji}{activity.name}")
                 else:
                     # Generic activity fallback
                     type_name = activity.type.name.capitalize()
-                    activity_list.append(f"- {type_name}: {activity.name}")
+                    activity_list.append(f"- {type_name}: {activity.name}{duration_str}")
 
             return f"## Activity Status for {target_member.display_name}\n" + "\n".join(activity_list)
 
@@ -125,7 +145,17 @@ class UserActivityTools:
                 member_list = []
                 for m in display_members:
                     status_icon = "🟢" if m.status == discord.Status.online else "🌙" if m.status == discord.Status.idle else "⛔"
-                    member_list.append(f"- {status_icon} {m.display_name}")
+                    
+                    device_info = []
+                    if getattr(m, "mobile_status", discord.Status.offline) != discord.Status.offline:
+                        device_info.append("Mobile")
+                    if getattr(m, "desktop_status", discord.Status.offline) != discord.Status.offline:
+                        device_info.append("Desktop")
+                    if getattr(m, "web_status", discord.Status.offline) != discord.Status.offline:
+                        device_info.append("Web")
+                        
+                    dev_str = f" [{'/'.join(device_info)}]" if device_info else ""
+                    member_list.append(f"- {status_icon} {m.display_name}{dev_str}")
                 
                 footer = f"\n...and {count - 20} more." if count > 20 else ""
                 return f"## Active Users in '{channel.name}' ({count} total)\n" + "\n".join(member_list) + footer

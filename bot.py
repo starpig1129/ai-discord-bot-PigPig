@@ -268,7 +268,18 @@ class PigPig(commands.Bot):
                     return  # In story mode, don't continue with general message processing
 
                 # Only trigger handle_message if in allowed channel and mentioned or auto-response enabled
-                if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
+                is_reply_to_bot = False
+                if message.reference:
+                    ref_msg = None
+                    if hasattr(message.reference, 'resolved') and isinstance(message.reference.resolved, discord.Message):
+                        ref_msg = message.reference.resolved
+                    elif hasattr(message.reference, 'cached_message') and message.reference.cached_message:
+                        ref_msg = message.reference.cached_message
+                        
+                    if ref_msg and ref_msg.author.id == self.user.id:
+                        is_reply_to_bot = True
+
+                if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled or is_reply_to_bot):
                     message_edit = await message.reply("...")
                     await self.orchestrator.handle_message(self, message_edit, message, bound_log)
         except Exception as e:
@@ -327,7 +338,18 @@ class PigPig(commands.Bot):
                                 await story_manager_cog.handle_story_message(after)
                             return  # In story mode, don't continue with general message processing
                         
-                        if is_allowed and (self.user.id in after.raw_mentions and not after.mention_everyone or auto_response_enabled):
+                        is_reply_to_bot = False
+                        if after.reference:
+                            ref_msg = None
+                            if hasattr(after.reference, 'resolved') and isinstance(after.reference.resolved, discord.Message):
+                                ref_msg = after.reference.resolved
+                            elif hasattr(after.reference, 'cached_message') and after.reference.cached_message:
+                                ref_msg = after.reference.cached_message
+                                
+                            if ref_msg and ref_msg.author.id == self.user.id:
+                                is_reply_to_bot = True
+
+                        if is_allowed and (self.user.id in after.raw_mentions and not after.mention_everyone or auto_response_enabled or is_reply_to_bot):
                             message_edit = await after.reply("...")
                             await self.orchestrator.handle_message(self,message_edit, after, logger)
                             

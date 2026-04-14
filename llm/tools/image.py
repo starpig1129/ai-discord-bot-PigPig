@@ -79,8 +79,10 @@ class ImageTools:
         ) -> str:
             """Generates an image based on a text prompt.
 
-            This tool creates images using AI generation. Optionally accepts
-            a base image URL for image-to-image generation.
+            This tool creates images using AI generation. If the user provides a very basic
+            or short idea, PLEASE expand it into a very detailed, descriptive prompt suitable
+            for high-quality generation (like Midjourney). Briefly describe the subject, 
+            environment, lighting, style, and atmosphere.
 
             Args:
                 prompt: Text description of the desired image.
@@ -150,7 +152,17 @@ class ImageTools:
             )
             channel_id = getattr(getattr(message_obj, "channel", None), "id", 0)
 
+            # Proactive Message Notification
+            transient_msg = None
+            channel = getattr(message_obj, "channel", None)
+            if channel:
+                try:
+                    transient_msg = await channel.send(f"🎨 正在繪製您的圖片，請稍候...\n> `{prompt}`")
+                except Exception:
+                    pass
+
             # Call image generation logic
+            process_error = None
             try:
                 result = await cog._generate_image_logic(
                     prompt=prompt,
@@ -163,7 +175,17 @@ class ImageTools:
                 await func.report_error(
                     e, "calling ImageGenerationCog._generate_image_logic failed"
                 )
-                return f"Error: Image generation failed: {e}"
+                process_error = f"Error: Image generation failed: {e}"
+
+            # Cleanup transient message
+            if transient_msg:
+                try:
+                    await transient_msg.delete()
+                except Exception:
+                    pass
+                
+            if process_error:
+                return process_error
 
             # Process result
             if not isinstance(result, dict):
