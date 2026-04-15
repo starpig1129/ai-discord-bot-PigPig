@@ -326,6 +326,9 @@ class MemoryConfig:
         self.message_threshold: int = data.get("message_threshold", 100)
         # Time threshold for triggering memory processing (in seconds)
         self.time_threshold: int = data.get("time_threshold", 3600)
+        # Background memory processing concurrency and delay
+        self.processing_concurrency: int = int(data.get("processing_concurrency", 1))
+        self.processing_delay: float = float(data.get("processing_delay", 30.0))
 
 try:
     base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")
