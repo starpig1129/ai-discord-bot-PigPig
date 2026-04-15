@@ -230,12 +230,15 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             return get_system_prompt(str(bot_id), message)
 
 
-    async def _sanitize_messages_for_model(self, messages: List[BaseMessage], model_name: str) -> List[BaseMessage]:
+    async def _sanitize_messages_for_model(self, messages: List[BaseMessage], model_name: str, image_cache: Optional[dict] = None) -> List[BaseMessage]:
         """
         Sanitize messages for the specific model.
         - Ollama requires base64 images instead of direct HTTP URLs.
         - Gemini 3.x models require thought_signature for tool_calls. To prevent 400 errors, we convert past tool calls to text.
         """
+        if image_cache is None:
+            image_cache = {}
+
         if "gemini-3" in model_name:
             from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
             sanitized = []
@@ -260,43 +263,64 @@ Focus on understanding what the user actually needs and prepare a clear analysis
         import base64
         import copy
         
+        # 1. Collect all unique URLs that need fetching
+        urls_to_fetch = set()
+        for msg in messages:
+            if isinstance(msg.content, list):
+                for part in msg.content:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        url = part.get("image_url", {}).get("url", "")
+                        if url.startswith("http") and url not in image_cache:
+                            urls_to_fetch.add(url)
+
+        # 2. Fetch all missing URLs concurrently
+        if urls_to_fetch:
+            async def fetch_image(session: aiohttp.ClientSession, url: str):
+                try:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            img_data = await resp.read()
+                            b64_data = base64.b64encode(img_data).decode('utf-8')
+                            mime_type = resp.headers.get('Content-Type', 'image/jpeg')
+                            return url, {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}}
+                        else:
+                            return url, {"type": "text", "text": f"[Image attached: {url}]"}
+                except Exception as e:
+                    logger.warning(f"Failed to fetch image for Ollama: {e}")
+                    return url, {"type": "text", "text": f"[Image attached: {url}]"}
+
+            async with aiohttp.ClientSession() as session:
+                tasks = [fetch_image(session, url) for url in urls_to_fetch]
+                results = await asyncio.gather(*tasks)
+                for url, content_part in results:
+                    image_cache[url] = content_part
+
+        # 3. Reconstruct messages using the cache
         sanitized = []
-        
-        async with aiohttp.ClientSession() as session:
-            for msg in messages:
-                if isinstance(msg.content, list):
-                    new_content = []
-                    for part in msg.content:
-                        if isinstance(part, dict) and part.get("type") == "image_url":
-                            url = part.get("image_url", {}).get("url", "")
-                            if url.startswith("http"):
-                                try:
-                                    async with session.get(url) as resp:
-                                        if resp.status == 200:
-                                            img_data = await resp.read()
-                                            b64_data = base64.b64encode(img_data).decode('utf-8')
-                                            mime_type = resp.headers.get('Content-Type', 'image/jpeg')
-                                            new_content.append({
-                                                "type": "image_url",
-                                                "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}
-                                            })
-                                        else:
-                                            new_content.append({"type": "text", "text": f"[Image attached: {url}]"})
-                                except Exception as e:
-                                    logger.warning(f"Failed to fetch image for Ollama: {e}")
-                                    new_content.append({"type": "text", "text": f"[Image attached: {url}]"})
+        for msg in messages:
+            if isinstance(msg.content, list):
+                new_content = []
+                for part in msg.content:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        url = part.get("image_url", {}).get("url", "")
+                        if url.startswith("http"):
+                            # This URL should now be in the cache
+                            cached_part = image_cache.get(url)
+                            if cached_part:
+                                new_content.append(cached_part)
                             else:
-                                new_content.append(part)
+                                new_content.append({"type": "text", "text": f"[Image attached: {url}]"})
                         else:
                             new_content.append(part)
-                    
-                    new_msg = copy.copy(msg)
-                    new_msg.content = new_content
-                        
-                    sanitized.append(new_msg)
-                else:
-                    sanitized.append(msg)
-                    
+                    else:
+                        new_content.append(part)
+
+                new_msg = copy.copy(msg)
+                new_msg.content = new_content
+                sanitized.append(new_msg)
+            else:
+                sanitized.append(msg)
+
         return sanitized
 
     async def handle_message(
@@ -322,6 +346,11 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
         # Provide feedback to the user that the bot is processing
         async with message.channel.typing():
+            # Create a shared image cache for this entire message processing cycle
+            # This prevents re-downloading identical image URLs across multiple model fallback attempts
+            # in both the info_agent and message_agent phases.
+            image_cache = {}
+
             # 1) Acquire contextual data from ContextManager with resilient error handling
             try:
                 ctx = await self.context_manager.get_context(message)
@@ -422,7 +451,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             middleware=[DirectToolOutputMiddleware()],
                         )
 
-                        sanitized_messages = await self._sanitize_messages_for_model(messages_for_info_agent, current_info_model)
+                        sanitized_messages = await self._sanitize_messages_for_model(messages_for_info_agent, current_info_model, image_cache)
 
                         # Execute info_agent to process user message and tools
                         info_result = await asyncio.wait_for(
@@ -540,7 +569,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
                         )
                         
-                        sanitized_messages = await self._sanitize_messages_for_model(messages_for_message_agent, current_model)
+                        sanitized_messages = await self._sanitize_messages_for_model(messages_for_message_agent, current_model, image_cache)
                         
                         streamer = message_agent.astream(
                             {"messages": sanitized_messages},
