@@ -603,12 +603,22 @@ class PigPig(commands.Bot):
     async def send_error_report(self, embed: discord.Embed):
         bug_report_channel_id = tokens.bug_report_channel_id
         if bug_report_channel_id:
-            channel = self.get_channel(int(bug_report_channel_id))
-            if channel:
-                await channel.send(embed=embed)
-            else:
+            try:
+                # Try to get from cache first
+                channel = self.get_channel(int(bug_report_channel_id))
+                # Fallback to API call if not in cache (ensures reaching channel even after long inactivity)
+                if not channel:
+                    channel = await self.fetch_channel(int(bug_report_channel_id))
+                
+                if channel:
+                    await channel.send(embed=embed)
+                else:
+                    logger = self.get_logger_for_guild("Bot")
+                    logger.error(f"找不到指定的錯誤報告頻道: {bug_report_channel_id}")
+            except Exception as e:
                 logger = self.get_logger_for_guild("Bot")
-                logger.error(f"找不到指定的錯誤報告頻道: {bug_report_channel_id}")
+                logger.error(f"發送錯誤報告至頻道 {bug_report_channel_id} 失敗: {e}")
+
                 
     async def close(self):
         """Gracefully shut down the bot and all systems.

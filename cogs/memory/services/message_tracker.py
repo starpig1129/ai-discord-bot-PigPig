@@ -53,6 +53,7 @@ class MessageTracker:
         # Global semaphore to limit concurrent background memory processing
         concurrency = getattr(self.settings, "processing_concurrency", 1)
         self._processing_semaphore = asyncio.Semaphore(concurrency)
+        self._active_summarization_task = None
 
     async def track_message(self, message: discord.Message):
         """
@@ -137,6 +138,22 @@ class MessageTracker:
         # Schedule the new task
         self._processing_tasks[channel_id] = asyncio.create_task(delayed_process())
 
+    def interrupt_all(self):
+        """
+        Interrupts all pending and active memory processing tasks.
+        This is called when a high-priority conversation task (handle_message) starts.
+        """
+        # 1. Cancel all pending debounce/delay tasks
+        for channel_id, task in list(self._processing_tasks.items()):
+            if not task.done():
+                task.cancel()
+        self._processing_tasks.clear()
+        
+        # 2. Cancel the active LLM summarization task if it exists
+        if self._active_summarization_task and not self._active_summarization_task.done():
+            logger.info("High-priority message detected: Interrupting active background memory processing.")
+            self._active_summarization_task.cancel()
+
     async def _process_channel_memory(self, channel: discord.TextChannel):
         """
         Processes memory for a channel when threshold is reached.
@@ -144,6 +161,9 @@ class MessageTracker:
         Args:
             channel (discord.TextChannel): The channel to process memory for.
         """
+        # Register current task as the active summarization task for global interruption
+        self._active_summarization_task = asyncio.current_task()
+        
         try:
             logger.info(f"Processing memory for channel {channel.id}")
             
@@ -238,8 +258,17 @@ class MessageTracker:
             # Log successful update of channel memory state
             logger.info(f"Successfully updated memory state for channel {channel.id}, new start_message_id: {messages_to_process[-1].id}")
             
+        except asyncio.CancelledError:
+            logger.info(f"Memory processing for channel {channel.id} was interrupted to prioritize user conversation.")
+            # Do not re-raise; we want to exit gracefully without updating DB state
+            # Next time threshold is reached, it will try again from original state.
+            return
         except Exception as e:
             await func.report_error(e, f"Failed to process memory for channel {channel.id}")
+        finally:
+            # Clear active task reference if we are the one registered
+            if self._active_summarization_task == asyncio.current_task():
+                self._active_summarization_task = None
 
     def get_pending_count(self) -> int:
         """

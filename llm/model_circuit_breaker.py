@@ -151,13 +151,16 @@ class ModelCircuitBreaker:
         model_name: str,
         error: Exception,
         category: Optional[ErrorCategory] = None
-    ) -> None:
+    ) -> ErrorCategory:
         """Record a model failure and start the cooldown period.
         
         Args:
             model_name: The model identifier that failed.
             error: The exception that occurred.
             category: Optional explicit category (auto-detected if not provided).
+            
+        Returns:
+            The ErrorCategory assigned to this failure.
         """
         with self._lock:
             if category is None:
@@ -190,6 +193,8 @@ class ModelCircuitBreaker:
                 f"category={category.name}, cooldown={cooldown_duration:.0f}s, "
                 f"failures={consecutive}"
             )
+            return category
+
     
     def get_available_models(self, model_list: list[str]) -> list[str]:
         """Filter a model list to only include available models.

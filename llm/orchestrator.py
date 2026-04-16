@@ -322,6 +322,10 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
         # Provide feedback to the user that the bot is processing
         async with message.channel.typing():
+            # Interrupt any active background memory tasks to prioritize this conversation
+            if hasattr(bot, "message_tracker") and bot.message_tracker:
+                bot.message_tracker.interrupt_all()
+            
             # 1) Acquire contextual data from ContextManager with resilient error handling
             try:
                 ctx = await self.context_manager.get_context(message)
@@ -441,8 +445,12 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     except Exception as e:
                         last_info_exception = e
                         # Record failure in circuit breaker
-                        circuit_breaker.record_failure(current_info_model, e)
-                        logger.warning(f"Info agent model {current_info_model} failed: {e}")
+                        category = circuit_breaker.record_failure(current_info_model, e)
+                        logger.exception(f"Info agent model {current_info_model} failed (Category: {category.name}): {e}")
+                        
+                        # Briefly wait if transient to allow network/model state to stabilize
+                        if category.name == "TRANSIENT":
+                            await asyncio.sleep(0.5)
                         # Continue to next model immediately
                 
                 if info_result is None:
@@ -571,8 +579,12 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     except Exception as e:
                         last_exception = e
                         # Record failure in circuit breaker
-                        circuit_breaker.record_failure(current_model, e)
-                        logger.warning(f"Model {current_model} failed: {e}")
+                        category = circuit_breaker.record_failure(current_model, e)
+                        logger.exception(f"Model {current_model} failed (Category: {category.name}): {e}")
+                        
+                        # Briefly wait if transient to allow network/model state to stabilize
+                        if category.name == "TRANSIENT":
+                            await asyncio.sleep(0.5)
                         # Continue to next model immediately
                     
                     # If we got a result, break out of the model loop
