@@ -238,10 +238,6 @@ def _get_user_permissions(user: discord.Member, guid: discord.Guild) -> dict:
 from llm.schema import OrchestratorRequest
 
 
-# Tools specific to the message agent (action-oriented interaction tools)
-# Currently empty - message agent uses text-only responses
-MESSAGE_AGENT_TOOLS = set()
-
 def get_tools(
     user: discord.Member, 
     guid: discord.Guild, 
@@ -334,20 +330,28 @@ def get_tools(
                 if not allowed:
                     continue
 
-            # Filter based on agent_mode
-            tool_name = getattr(t, "name", getattr(t, "__name__", repr(t)))
+            # Filter based on agent_mode using target_agent_mode attribute
+            target_agent_mode = "info"
             
-            if agent_mode == "info":
-                if tool_name in MESSAGE_AGENT_TOOLS:
-                    continue
-            elif agent_mode == "message":
-                if tool_name not in MESSAGE_AGENT_TOOLS:
-                    continue
+            # Check metadata or custom attributes on the original wrapped function if present
+            # Langchain's StructuredTool hides custom attributes, so we try multiple ways
+            try:
+                if hasattr(t, "metadata") and getattr(t, "metadata") and "target_agent_mode" in getattr(t, "metadata"):
+                    target_agent_mode = getattr(t, "metadata")["target_agent_mode"]
+                elif hasattr(t, "target_agent_mode"):
+                    target_agent_mode = getattr(t, "target_agent_mode")
+                elif hasattr(t, "func") and hasattr(t.func, "target_agent_mode"):
+                    target_agent_mode = getattr(t.func, "target_agent_mode")
+            except Exception:
+                pass
+
+            if agent_mode == "info" and target_agent_mode == "message":
+                continue
+            elif agent_mode == "message" and target_agent_mode == "info":
+                continue
             
             # Assign agent_mode to the tool for identification
-            # Note: This modifies the tool instance in place. Since tools are disjoint
-            # between info/message modes (based on MESSAGE_AGENT_TOOLS logic above),
-            # this is generally safe. For "all" mode, it will be "all".
+            # Note: This modifies the tool instance in place.
             try:
                 t.agent_mode = agent_mode
             except Exception:
