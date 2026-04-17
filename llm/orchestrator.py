@@ -593,9 +593,10 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                                 message,
                                 streamer,
                                 raise_exception=not is_last_available,
-                                tools=all_tools
+                                tools=all_tools,
+                                inactivity_timeout=_LLM_CALL_TIMEOUT_SECONDS  # Use config value for inactivity
                             ),
-                            timeout=_LLM_CALL_TIMEOUT_SECONDS,
+                            timeout=180.0,  # Much larger total safety timeout
                         )
                         
                         # Success!
