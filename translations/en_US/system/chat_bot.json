@@ -19,6 +19,8 @@
             "get_channel_participants": "👥 Checking channel members...",
             "get_guild_emojis": "😀 Reading server emojis...",
             "get_guild_stickers": "🖼️ Reading server stickers...",
+            "update_guild_knowledge": "📜 Archiving guild culture lore...",
+            "update_channel_knowledge": "📍 Recording channel-specific memes...",
             "default": "🛠️ Using {tool_name}..."
         }
     }

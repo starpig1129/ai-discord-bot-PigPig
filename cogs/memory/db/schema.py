@@ -34,10 +34,10 @@ def create_tables(conn: sqlite3.Connection) -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS user_profiles (
-            user_id INTEGER PRIMARY KEY,
+            user_id TEXT PRIMARY KEY,
             profile_data TEXT,
             updated_at REAL NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users (discord_id) ON DELETE CASCADE
         )
         """
     )
@@ -49,6 +49,19 @@ def create_tables(conn: sqlite3.Connection) -> None:
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )
+        """
+    )
+
+    # Table for Guild and Channel Knowledge (Internal Memes, Relationships, etc.)
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge (
+            target_type TEXT, -- 'guild' or 'channel'
+            target_id TEXT,
+            content TEXT, -- Stored as a structured text block managed by AI Merge
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (target_type, target_id)
+        );
         """
     )
     logger.info("Database tables created or verified successfully.")

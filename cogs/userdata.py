@@ -26,6 +26,7 @@ This module provides commands and utilities for managing personalized user data,
 including preferences, display names, and interaction rules stored in a database.
 """
 
+import asyncio
 import json
 from addons.logging import get_logger
 import re
@@ -45,6 +46,7 @@ from pydantic import BaseModel, Field
 from addons.settings import prompt_config
 from cogs.memory.users.manager import SQLiteUserManager
 from cogs.memory.users.models import UserInfo
+from cogs.memory.db.knowledge_storage import KnowledgeStorage
 from function import func
 from langchain.chat_models import init_chat_model
 from llm.model_manager import ModelManager
@@ -127,17 +129,23 @@ class UserDataCog(commands.Cog):
         bot: commands.Bot,
         user_manager: Optional[SQLiteUserManager] = None
     ) -> None:
-        """Initializes the UserDataCog.
-        
-        Args:
-            bot: The Discord bot instance.
-            user_manager: Optional user manager instance. If None, will be
-                injected during cog_load from bot.user_manager.
-        """
+        """Initializes the UserDataCog."""
         self.bot = bot
         self.user_manager = user_manager
+        self._knowledge_lock = asyncio.Lock()  # Prevent race conditions during parallel merges
         self.lang_manager: Optional[LanguageManager] = None
-        self.logger = log
+        self.logger = log # Use module-level log
+
+        # Knowledge Storage
+        self.knowledge_storage = None
+        if user_manager:
+            storage = getattr(user_manager, "storage", None)
+            if storage:
+                # storage.db is a DatabaseConnection instance
+                db_conn = getattr(storage, "db", None)
+                if db_conn:
+                    self.knowledge_storage = KnowledgeStorage(db_conn)
+                    self.logger.info("KnowledgeStorage initialized from UserManager connection.")
 
     async def cog_load(self) -> None:
         """Initializes language manager and user manager when cog loads."""
@@ -418,6 +426,94 @@ class UserDataCog(commands.Cog):
         ])
 
         return response
+
+    async def _invoke_knowledge_merge_agent(
+        self,
+        existing_knowledge: Optional[str],
+        new_knowledge: str,
+        target_type: str,
+        category: str = "general"
+    ) -> str:
+        """Invokes AI agent to merge existing and new guild/channel knowledge."""
+        system_prompt = (
+            prompt_config.get_system_prompt('knowledge_merge_agent') or
+            "You are a Knowledge Architect for a Discord community. Your job is to maintain a structured Knowledge Base.\n"
+            "Categories to track:\n"
+            "- Internal Memes/Jokes (內梗)\n"
+            "- Relationships (人物關係)\n"
+            "- Aliases/Nicknames (代稱)\n"
+            "- Special Events (特別事件)\n"
+            "- General Info\n\n"
+            "Format the output using Markdown headers for each category. Keep it concise but descriptive."
+        )
+
+        try:
+            # Use 'user_data_model' as fallback or same model for consistency
+            model_id, _ = ModelManager().get_model("user_data_model")
+            llm = init_chat_model(model_id, max_retries=1)
+        except Exception as e:
+            await func.report_error(e, "Failed to get model for knowledge merge")
+            raise RuntimeError(f"Failed to get model: {e}") from e
+
+        existing_str = existing_knowledge if existing_knowledge else "No existing knowledge."
+        user_prompt = (
+            f"Existing Knowledge for this {target_type}:\n{existing_str}\n\n"
+            f"New information to add (Category: {category}):\n{new_knowledge}\n\n"
+            "Please merge this into the Knowledge Base under the correct category. "
+            "Return the FULL updated Knowledge Base in Markdown format."
+        )
+
+        self.logger.info(f"Merging knowledge for {target_type} (Category: {category})...")
+        response = await llm.ainvoke([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ])
+
+        merged_content = str(response.content)
+        self.logger.info(f"Merge successful. New content length: {len(merged_content)}")
+        return merged_content
+
+
+    async def _save_knowledge_data(
+        self,
+        target_type: str,
+        target_id: str,
+        content: str,
+        category: str,
+        context: Union[discord.Interaction, discord.Message]
+    ) -> str:
+        """Core logic for saving guild/channel knowledge with AI merge."""
+        async with self._knowledge_lock:
+            guild_id = self._get_guild_id_from_context(context)
+            self.logger.info(f"Initiating sequential knowledge update for {target_type} {target_id}...")
+
+        try:
+            if not self.knowledge_storage:
+                return "Knowledge storage not initialized."
+
+            existing = await self.knowledge_storage.get_knowledge(target_type, target_id)
+            
+            merged = await self._invoke_knowledge_merge_agent(
+                existing,
+                content,
+                target_type,
+                category
+            )
+
+            self.logger.info(f"Saving merged {target_type} knowledge to database for {target_id}...")
+            success = await self.knowledge_storage.update_knowledge(target_type, target_id, merged)
+            
+            if success:
+                self.logger.info(f"Successfully persisted {target_type} knowledge.")
+                return f"Successfully updated {target_type} knowledge."
+            else:
+                self.logger.error(f"Failed to persist {target_type} knowledge to database.")
+                return f"Failed to persist {target_type} knowledge to database."
+
+        except Exception as e:
+            self.logger.error(f"Failed to save {target_type} knowledge for {target_id}: {e}")
+            await func.report_error(e, f"save_knowledge_data failed ({target_type}:{target_id})")
+            return f"Error: {str(e)}"
 
     async def _save_user_data(
         self,

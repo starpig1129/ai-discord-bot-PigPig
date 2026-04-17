@@ -17,6 +17,7 @@ from function import func
 from llm.memory.procedural import ProceduralMemoryProvider
 from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.episodic import EpisodicMemoryProvider
+from llm.memory.knowledge import KnowledgeMemoryProvider, KnowledgeMemory
 from llm.memory.schema import ProceduralMemory
 from langchain_core.messages import BaseMessage
 from addons.logging import get_logger
@@ -32,11 +33,13 @@ class ContextManager:
         short_term_provider: ShortTermMemoryProvider,
         procedural_provider: ProceduralMemoryProvider,
         episodic_provider: Optional[EpisodicMemoryProvider] = None,
+        knowledge_provider: Optional[KnowledgeMemoryProvider] = None,
     ) -> None:
         """Initialize with memory providers."""
         self.short_term_provider = short_term_provider
         self.procedural_provider = procedural_provider
         self.episodic_provider = episodic_provider
+        self.knowledge_provider = knowledge_provider
 
     async def get_context(self, message: discord.Message) -> Tuple[str, List[BaseMessage]]:
         """Return (procedural_context_str, short_term_msgs).
@@ -107,10 +110,27 @@ class ContextManager:
                 _LOGGER.error("episodic_provider.get failed", exception=e)
                 return None
 
-        # Fetch short-term/procedural memory AND episodic context in parallel to minimize latency
-        (procedural_memory, short_term_msgs), episodic_str = await asyncio.gather(
+        async def _fetch_knowledge() -> Optional[KnowledgeMemory]:
+            if not self.knowledge_provider:
+                return None
+            try:
+                guild_id = str(message.guild.id) if message.guild else None
+                channel_id = str(message.channel.id)
+                return await self.knowledge_provider.get(guild_id, channel_id)
+            except asyncio.CancelledError:
+                return None
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: knowledge_provider.get failed")
+                )
+                _LOGGER.error("knowledge_provider.get failed", exception=e)
+                return None
+
+        # Fetch all memory components in parallel to minimize latency
+        (procedural_memory, short_term_msgs), episodic_str, knowledge = await asyncio.gather(
             _fetch_short_term_and_procedural(),
             _fetch_episodic(),
+            _fetch_knowledge(),
         )
 
         # 4) Format procedural memory into string (no STM serialization here)
@@ -141,7 +161,12 @@ class ContextManager:
         procedural_str = ""
         try:
             procedural_str = self._format_context_for_prompt(
-                procedural_memory, channel_name, timestamp, episodic_str=episodic_str, human_time=human_time
+                procedural_memory, 
+                channel_name, 
+                timestamp, 
+                episodic_str=episodic_str, 
+                human_time=human_time,
+                knowledge=knowledge
             )
         except Exception as e:
             asyncio.create_task(
@@ -217,6 +242,7 @@ class ContextManager:
         timestamp: float,
         episodic_str: Optional[str] = None,
         human_time: Optional[str] = None,
+        knowledge: Optional[KnowledgeMemory] = None,
     ) -> str:
         """Format procedural memory and current state into a single string.
  
@@ -256,6 +282,12 @@ class ContextManager:
 
         if episodic_str:
             parts.append(episodic_str)
+
+        if knowledge:
+            if knowledge.guild_knowledge:
+                parts.append(f"--- Guild Knowledge ---\n{knowledge.guild_knowledge}")
+            if knowledge.channel_knowledge:
+                parts.append(f"--- Channel Knowledge (Inside Jokes) ---\n{knowledge.channel_knowledge}")
 
         parts.append("--- End System Context ---")
         return "\n\n".join(parts)

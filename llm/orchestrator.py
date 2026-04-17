@@ -28,6 +28,8 @@ from llm.context_manager import ContextManager
 from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.procedural import ProceduralMemoryProvider
 from llm.memory.episodic import EpisodicMemoryProvider
+from llm.memory.knowledge import KnowledgeMemoryProvider
+from cogs.memory.db.knowledge_storage import KnowledgeStorage
 from llm.callbacks import ToolFeedbackCallbackHandler
 from llm.model_circuit_breaker import get_model_circuit_breaker
 
@@ -76,6 +78,19 @@ class Orchestrator:
 
         # Episodic provider: only when memory is enabled and vector store is available
         episodic_provider: Optional[EpisodicMemoryProvider] = None
+        
+        # Initialize Knowledge Provider
+        knowledge_provider = None
+        db = getattr(user_manager, "storage", None)
+        if db:
+            # Assuming db has a DatabaseConnection instance named 'db'
+            # Based on procedural_storage.py, it uses self.db
+            conn = getattr(db, "db", None)
+            if conn:
+                knowledge_storage = KnowledgeStorage(conn)
+                knowledge_provider = KnowledgeMemoryProvider(knowledge_storage)
+
+        from addons.settings import memory_config
         if memory_enabled and getattr(bot, "vector_manager", None) is not None:
             episodic_provider = EpisodicMemoryProvider(bot=bot, top_k=3, max_chars=1500)
 
@@ -83,6 +98,7 @@ class Orchestrator:
             short_term_provider=short_term_provider,
             procedural_provider=procedural_provider,
             episodic_provider=episodic_provider,
+            knowledge_provider=knowledge_provider,
         )
 
     def _build_info_agent_prompt(self, bot_id: int, message: Message) -> str:

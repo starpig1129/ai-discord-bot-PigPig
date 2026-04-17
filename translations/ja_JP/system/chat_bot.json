@@ -19,6 +19,8 @@
             "get_channel_participants": "👥 チャンネルのメンバーを確認しています...",
             "get_guild_emojis": "😀 サーバーの絵文字を読み込んでいます...",
             "get_guild_stickers": "🖼️ サーバーのスタンプを読み込んでいます...",
+            "update_guild_knowledge": "📜 サーバーの文化を記録中...",
+            "update_channel_knowledge": "📍 チャンネル専用のネタを記録中...",
             "default": "🛠️ {tool_name} を使用中..."
         }
     }

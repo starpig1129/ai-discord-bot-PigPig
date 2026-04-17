@@ -355,12 +355,11 @@ def get_tools(
                 pass
 
             result.append(t)
-
         except Exception as e:
             _report_async(
                 e, f"llm.tools: filtering tool {getattr(t, 'name', repr(t))}"
             )
-
+    
     try:
         return cast(List[BaseTool], result)
     except Exception as e:

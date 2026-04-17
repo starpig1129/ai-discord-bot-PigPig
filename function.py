@@ -167,9 +167,15 @@ class Function:
             )
             return
         
+        # Safely stringify the error to avoid issues with specialized proxy objects
+        try:
+            error_msg_str = str(error)
+        except Exception:
+            error_msg_str = f"Unstringifiable {type(error).__name__}"
+
         # Detect quota/rate limit errors - these should be warnings, not errors
-        error_str = str(error).lower()
-        is_quota_error = any(kw in error_str for kw in [
+        error_str_lower = error_msg_str.lower()
+        is_quota_error = any(kw in error_str_lower for kw in [
             "quota", "resourceexhausted", "429", "rate limit", "ratelimit",
             "exceeded your current quota", "too many requests"
         ])
@@ -177,16 +183,16 @@ class Function:
         # Only pass exception parameter if error is actually an Exception object
         if isinstance(error, BaseException):
             if is_quota_error:
-                log.warning(message=f"quota/rate limit: {error} details: {details}", exception=error, action="report_warning")
+                log.warning(message=f"quota/rate limit: {error_msg_str} details: {details}", exception=error, action="report_warning")
             else:
-                log.error(message=f"error: {error} details: {details}", exception=error, action="report_error")
+                log.error(message=f"error: {error_msg_str} details: {details}", exception=error, action="report_error")
             traceback_str = "".join(traceback.format_exception(type(error), error, error.__traceback__))
         else:
             # If error is not an Exception (e.g., a string), log without exception parameter
             if is_quota_error:
-                log.warning(message=f"quota/rate limit: {error} details: {details}", action="report_warning")
+                log.warning(message=f"quota/rate limit: {error_msg_str} details: {details}", action="report_warning")
             else:
-                log.error(message=f"error: {error} details: {details}", action="report_error")
+                log.error(message=f"error: {error_msg_str} details: {details}", action="report_error")
             traceback_str = f"No traceback available (error is {type(error).__name__}, not Exception)"
 
         # Use different colors and titles based on error type

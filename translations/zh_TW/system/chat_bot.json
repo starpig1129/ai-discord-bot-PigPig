@@ -19,6 +19,8 @@
             "get_channel_participants": "👥 正在查看頻道成員...",
             "get_guild_emojis": "😀 正在讀取伺服器表情符號...",
             "get_guild_stickers": "🖼️ 正在讀取伺服器貼圖...",
+            "update_guild_knowledge": "📜 正在建立伺服器文化檔案...",
+            "update_channel_knowledge": "📍 正在紀錄頻道專屬黑話...",
             "default": "🛠️ 正在使用 {tool_name}..."
         }
     }
