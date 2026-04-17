@@ -243,12 +243,23 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 if isinstance(msg, ToolMessage):
                     tool_name = getattr(msg, "name", "unknown")
                     sanitized.append(HumanMessage(content=f"[System: Tool Result ({tool_name})]\n{msg.content}"))
-                elif isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
-                    _text = msg.content if isinstance(msg.content, str) else ""
-                    if not _text.strip():
-                        tool_names = ", ".join([tc.get("name", "unknown") for tc in msg.tool_calls])
-                        _text = f"[Assistant: Calling tool(s): {tool_names}]"
-                    sanitized.append(AIMessage(content=_text))
+                elif isinstance(msg, AIMessage):
+                    has_tool_calls = bool(getattr(msg, "tool_calls", None))
+                    has_function_call = "function_call" in msg.additional_kwargs or "tool_calls" in msg.additional_kwargs
+                    
+                    if has_tool_calls or has_function_call:
+                        _text = msg.content if isinstance(msg.content, str) else ""
+                        tool_names = []
+                        if has_tool_calls:
+                            tool_names = [tc.get("name", "unknown") for tc in getattr(msg, "tool_calls", [])]
+                        if not _text.strip() and tool_names:
+                            _text = f"[Assistant: Calling tool(s): {', '.join(tool_names)}]"
+                        elif not _text.strip():
+                            _text = "[Assistant: Internal process executed]"
+                        # Create new AIMessage with clean kwargs to avoid triggering functionCall serialization
+                        sanitized.append(AIMessage(content=_text))
+                    else:
+                        sanitized.append(msg)
                 else:
                     sanitized.append(msg)
             return sanitized
