@@ -6,12 +6,15 @@ Silent failure design: any error returns None without raising.
 """
 from __future__ import annotations
 
+import asyncio
 import re
-from typing import TYPE_CHECKING, Any, Optional
+import time
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import discord
 
 from addons.logging import get_logger
+from addons.settings import memory_config
 from function import func
 
 _LOGGER = get_logger(server_id="Bot", source="llm.memory.episodic")
@@ -40,6 +43,11 @@ class EpisodicMemoryProvider:
         self.bot = bot
         self.top_k = top_k
         self.max_chars = max_chars
+        self.cache_ttl = getattr(memory_config, "episodic_cache_ttl", 300.0)
+        self.max_cache_size = getattr(memory_config, "episodic_max_cache_size", 1000)
+        # key: (query, channel_id), value: (formatted_string, expire_at)
+        self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
+        self._lock = asyncio.Lock()
 
     async def get(self, message: discord.Message) -> Optional[str]:
         """Return formatted episodic context string, or None if nothing relevant.
@@ -65,17 +73,32 @@ class EpisodicMemoryProvider:
         if len(query.split()) < _MIN_QUERY_TOKENS:
             return None
 
+        channel_id = str(message.channel.id)
+        cache_key = (query, channel_id)
+        now = time.monotonic()
+
+        async with self._lock:
+            if cache_key in self._cache:
+                cached_result, expire_at = self._cache[cache_key]
+                if expire_at > now:
+                    return cached_result
+                else:
+                    del self._cache[cache_key]
+
         try:
             fragments = await vector_manager.store.search_memories_by_vector(
                 query_text=query,
                 limit=self.top_k,
-                channel_id=str(message.channel.id),
+                channel_id=channel_id,
             )
         except Exception as e:
             await func.report_error(e, "EpisodicMemoryProvider.get: vector search failed")
             return None
 
         if not fragments:
+            async with self._lock:
+                self._cache[cache_key] = (None, now + self.cache_ttl)
+                self._prune_cache()
             return None
 
         lines = ["--- Relevant Past Memories ---"]
@@ -112,4 +135,28 @@ class EpisodicMemoryProvider:
 
         lines.append("--- End Past Memories ---")
         _LOGGER.debug(f"Injecting {len(lines) - 2} episodic fragments into context.")
-        return "\n".join(lines)
+
+        result_str = "\n".join(lines)
+
+        async with self._lock:
+            self._cache[cache_key] = (result_str, now + self.cache_ttl)
+            self._prune_cache()
+
+        return result_str
+
+    def _prune_cache(self) -> None:
+        """Removes the oldest entries from the cache if it exceeds the max size."""
+        if len(self._cache) > self.max_cache_size:
+            # Sort by expiration time, keep the newest ones
+            now = time.monotonic()
+
+            # First, filter out any already expired items
+            expired_keys = [k for k, v in self._cache.items() if v[1] <= now]
+            for k in expired_keys:
+                del self._cache[k]
+
+            # If still too large, remove the ones that will expire soonest
+            while len(self._cache) > self.max_cache_size:
+                # Find the key with the smallest expiration time
+                oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][1])
+                del self._cache[oldest_key]

@@ -298,6 +298,10 @@ class MemoryConfig:
         # Procedural memory cache TTL in seconds
         self.procedural_cache_ttl: float = float(data.get("procedural_cache_ttl", 300.0))
 
+        # Episodic memory cache settings
+        self.episodic_cache_ttl: float = float(data.get("episodic_cache_ttl", 300.0))
+        self.episodic_max_cache_size: int = int(data.get("episodic_max_cache_size", 1000))
+
         # Storage / vector store configuration
         self.procedural_data_path: str = data.get("procedural_data_path", "data/memory/procedural.db")
         self.episodic_data_path: str = data.get("episodic_data_path", "data/memory/episodic.db")
