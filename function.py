@@ -200,16 +200,19 @@ class Function:
             embed = discord.Embed(
                 title="⚠️ 配額警告",
                 description=details or "API 配額已達上限，正在使用備用模型。",
-                color=discord.Color.yellow()
-            )
+                color=discord.Color.yellow())
         else:
             embed = discord.Embed(
                 title="錯誤報告",
-                description=details or "發生了一個未處理的錯誤。",
+                description=str(details) if details else "發生了一個未處理的錯誤。",
                 color=discord.Color.red()
             )
 
-        error_field_value = f"```{type(error).__name__}: {error}```"
+        # Explicitly stringify all fields to prevent crashes if 'error' is a complex object (like a Discord Context)
+        safe_error_name = str(type(error).__name__)
+        safe_error_str = str(error)
+        
+        error_field_value = f"```{safe_error_name}: {safe_error_str}```"
         if len(error_field_value) > 1024:
             error_field_value = error_field_value[:1010] + "...```"
         embed.add_field(name="錯誤", value=error_field_value, inline=False)

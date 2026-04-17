@@ -598,7 +598,7 @@ class PigPig(commands.Bot):
                 logger.error("Failed replying error message", exception=e)
             else:
                 log.error(f"Failed replying error message: {e}", exception=e)
-            await func.report_error(ctx, error)
+            await func.report_error(error, f"on_command_error_reply_fail: {ctx.command}")
             
     async def send_error_report(self, embed: discord.Embed):
         bug_report_channel_id = tokens.bug_report_channel_id
