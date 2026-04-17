@@ -4,6 +4,7 @@
         "thinking": "🧠 返信を考え中...",
         "processing": "処理中...",
         "continuation": "出力を継続中...",
+        "empty_fallback": "どう答えたらいいか分かりません...",
         "tools": {
             "internet_search": "🌍 ネットで答えを探しています...",
             "search_episodic_memory": "🧠 過去の会話を思い出しています...",

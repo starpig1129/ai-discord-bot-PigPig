@@ -175,10 +175,12 @@ class Function:
 
         # Detect quota/rate limit errors - these should be warnings, not errors
         error_str_lower = error_msg_str.lower()
-        is_quota_error = any(kw in error_str_lower for kw in [
+        quota_keywords = [
             "quota", "resourceexhausted", "429", "rate limit", "ratelimit",
-            "exceeded your current quota", "too many requests"
-        ])
+            "exceeded your current quota", "too many requests",
+            "billing", "limit reached", "exhausted", "insufficient_quota"
+        ]
+        is_quota_error = any(kw in error_str_lower for kw in quota_keywords)
         
         # Only pass exception parameter if error is actually an Exception object
         if isinstance(error, BaseException):
@@ -199,7 +201,7 @@ class Function:
         if is_quota_error:
             embed = discord.Embed(
                 title="⚠️ 配額警告",
-                description=details or "API 配額已達上限，正在使用備用模型。",
+                description=str(details) if details else "API 配額已達上限，正在使用備用模型。",
                 color=discord.Color.yellow())
         else:
             embed = discord.Embed(
@@ -212,10 +214,12 @@ class Function:
         safe_error_name = str(type(error).__name__)
         safe_error_str = str(error)
         
+        # Ensure name and value are strings
+        error_field_name = "錯誤"
         error_field_value = f"```{safe_error_name}: {safe_error_str}```"
         if len(error_field_value) > 1024:
             error_field_value = error_field_value[:1010] + "...```"
-        embed.add_field(name="錯誤", value=error_field_value, inline=False)
+        embed.add_field(name=str(error_field_name), value=str(error_field_value), inline=False)
 
         if len(traceback_str) > 1024:
             traceback_str = traceback_str[:1010] + "..."

@@ -4,6 +4,7 @@
         "thinking": "🧠 思考回复中...",
         "processing": "处理中...",
         "continuation": "继续输出中...",
+        "empty_fallback": "不知道该怎么回复你了...",
         "tools": {
             "internet_search": "🌍 正在网上寻找答案...",
             "search_episodic_memory": "🧠 正在回忆过去的对话...",

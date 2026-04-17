@@ -4,6 +4,7 @@
         "thinking": "🧠 Thinking about reply...",
         "processing": "Processing...",
         "continuation": "Continuing output...",
+        "empty_fallback": "I'm not sure how to respond to that...",
         "tools": {
             "internet_search": "🌍 Searching the web...",
             "search_episodic_memory": "🧠 Recalling past conversations...",

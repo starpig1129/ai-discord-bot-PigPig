@@ -602,22 +602,46 @@ class PigPig(commands.Bot):
             
     async def send_error_report(self, embed: discord.Embed):
         bug_report_channel_id = tokens.bug_report_channel_id
-        if bug_report_channel_id:
-            try:
-                # Try to get from cache first
-                channel = self.get_channel(int(bug_report_channel_id))
-                # Fallback to API call if not in cache (ensures reaching channel even after long inactivity)
-                if not channel:
+        if not bug_report_channel_id:
+            return
+
+        # Attempt to get logger; fallback to default if not available
+        try:
+            logger = self.get_logger_for_guild("Bot")
+        except Exception:
+            from addons.logging import log as fallback_log
+            logger = fallback_log
+
+        try:
+            # 1. Ensure the bot is connected and internal cache/HTTP client is ready
+            # Calling fetch_channel when not ready triggers AttributeError: '_MissingSentinel' object has no attribute 'is_set'
+            if not self.is_ready():
+                logger.warning(f"Bot not ready; skipping remote error report to channel {bug_report_channel_id}")
+                return
+
+            # 2. Try to get from cache first
+            channel = self.get_channel(int(bug_report_channel_id))
+            
+            # 3. Fallback to API call if not in cache (ensures reaching channel even after long inactivity)
+            if not channel:
+                try:
                     channel = await self.fetch_channel(int(bug_report_channel_id))
-                
-                if channel:
+                except Exception as fetch_exc:
+                    logger.error(f"Failed to fetch error report channel {bug_report_channel_id}: {fetch_exc}")
+                    return
+            
+            # 4. Final attempt to send the embed
+            if channel:
+                try:
                     await channel.send(embed=embed)
-                else:
-                    logger = self.get_logger_for_guild("Bot")
-                    logger.error(f"找不到指定的錯誤報告頻道: {bug_report_channel_id}")
-            except Exception as e:
-                logger = self.get_logger_for_guild("Bot")
-                logger.error(f"發送錯誤報告至頻道 {bug_report_channel_id} 失敗: {e}")
+                except Exception as send_exc:
+                    logger.error(f"Failed to send embed to channel {bug_report_channel_id}: {send_exc}")
+            else:
+                logger.error(f"找不到指定的錯誤報告頻道: {bug_report_channel_id}")
+
+        except Exception as e:
+            # Catch any remaining unexpected errors to prevent loop (error reporting failing during error reporting)
+            logger.error(f"發送錯誤報告至頻道 {bug_report_channel_id} 發生未預期錯誤: {e}")
 
                 
     async def close(self):

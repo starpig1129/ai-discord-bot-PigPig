@@ -521,7 +521,26 @@ async def _process_token_stream(
         has_tool_calls = len(tool_call_chunks) > 0
         
         if not has_text_content and not has_tool_calls:
-            raise ValueError("Generated response is empty and no tools were called")
+            # Instead of raising ValueError (which triggers crash loops), provide a silent fallback
+            _logger.warning("Generated response is empty and no tools were called. Applying fallback.")
+            
+            # Fallback message content (localized if possible, otherwise simple)
+            fallback = "..."
+            if lang_manager:
+                try:
+                    # Generic "I don't know what to say" or just "..."
+                    fallback = lang_manager.translate(
+                        str(message.guild.id) if message.guild else "0",
+                        "system", "chat_bot", "responses", "empty_fallback"
+                    )
+                    if "Translation not found" in fallback or "TRANSLATION_ERROR" in fallback:
+                         fallback = "..."
+                except Exception:
+                    fallback = "..."
+            
+            pending_content = fallback
+            await update_message()
+            message_result = fallback
         
         # If we only have tool calls but no text content, delete the "processing" message
         if has_tool_calls and not has_text_content:
