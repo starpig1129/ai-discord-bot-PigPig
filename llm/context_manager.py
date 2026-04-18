@@ -49,20 +49,44 @@ class ContextManager:
         """
 
         async def _fetch_short_term_and_procedural() -> Tuple[ProceduralMemory, List[BaseMessage]]:
-            # 1) Fetch short-term messages
-            short_term_msgs: List[BaseMessage] = []
+            # Extract author ID early to kick off parallel fetch
+            author_ids = []
             try:
-                short_term_msgs = await self.short_term_provider.get(message)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                # Report and continue with safe fallback per design
-                asyncio.create_task(
-                    func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
-                )
-                _LOGGER.error("short_term_provider.get failed", exception=e)
+                fallback_author_id = getattr(getattr(message, "author", None), "id", None)
+                if fallback_author_id is not None:
+                    author_ids.append(str(fallback_author_id))
+            except Exception:
+                pass
 
-            # 2) Extract user ids to fetch procedural memory
+            # 1) Fetch short-term messages AND author's procedural memory concurrently
+            # This hides the DB latency of the author's profile lookup behind the Discord API call
+            async def _safe_short_term():
+                try:
+                    return await self.short_term_provider.get(message)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    asyncio.create_task(
+                        func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
+                    )
+                    _LOGGER.error("short_term_provider.get failed", exception=e)
+                    return []
+
+            async def _safe_author_procedural():
+                if not author_ids:
+                    return ProceduralMemory(user_info={})
+                try:
+                    return await self.procedural_provider.get(author_ids)
+                except Exception:
+                    # Ignore errors here; they will be handled in step 3
+                    return ProceduralMemory(user_info={})
+
+            short_term_msgs, _ = await asyncio.gather(
+                _safe_short_term(),
+                _safe_author_procedural()
+            )
+
+            # 2) Extract all user ids from the fetched short-term messages
             try:
                 user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
             except asyncio.CancelledError:
@@ -72,16 +96,10 @@ class ContextManager:
                     func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
                 )
                 _LOGGER.error("extract_user_ids failed", exception=e)
-                user_ids = []
-                try:
-                    fallback_author_id = getattr(getattr(message, "author", None), "id", None)
-                    if fallback_author_id is not None:
-                        user_ids.append(str(fallback_author_id))
-                except Exception:
-                    # Best-effort fallback; proceed with empty user_ids
-                    pass
+                user_ids = author_ids
 
-            # 3) Fetch procedural memory
+            # 3) Fetch procedural memory for ALL users involved
+            # The author's profile is now cached, so this is instantaneous if no other users are found
             try:
                 procedural_memory = await self.procedural_provider.get(user_ids)
             except asyncio.CancelledError:
