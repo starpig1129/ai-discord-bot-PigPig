@@ -6,8 +6,10 @@ Silent failure design: any error returns None without raising.
 """
 from __future__ import annotations
 
+import asyncio
 import re
-from typing import TYPE_CHECKING, Any, Optional
+import time
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import discord
 
@@ -34,12 +36,19 @@ class EpisodicMemoryProvider:
         bot: Discord bot instance (must have vector_manager attribute).
         top_k: Maximum number of fragments to retrieve. Default 3.
         max_chars: Hard character limit for the returned string. Default 1500.
+        max_cache_size: Maximum entries in the TTL cache. Default 500.
+        cache_ttl: Time-to-live for cache entries in seconds. Default 300.0.
     """
 
-    def __init__(self, bot: Any, top_k: int = 3, max_chars: int = 1500) -> None:
+    def __init__(self, bot: Any, top_k: int = 3, max_chars: int = 1500, max_cache_size: int = 500, cache_ttl: float = 300.0) -> None:
         self.bot = bot
         self.top_k = top_k
         self.max_chars = max_chars
+        self.max_cache_size = max_cache_size
+        self.cache_ttl = cache_ttl
+        # Key: (channel_id, query_text), Value: (formatted_string or None, expire_at)
+        self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
+        self._lock = asyncio.Lock()
 
     async def get(self, message: discord.Message) -> Optional[str]:
         """Return formatted episodic context string, or None if nothing relevant.
@@ -65,51 +74,90 @@ class EpisodicMemoryProvider:
         if len(query.split()) < _MIN_QUERY_TOKENS:
             return None
 
+        channel_id_str = str(message.channel.id)
+        cache_key = (channel_id_str, query)
+        now = time.monotonic()
+
+        async with self._lock:
+            entry = self._cache.get(cache_key)
+            if entry is not None and entry[1] > now:
+                return entry[0]
+
         try:
             fragments = await vector_manager.store.search_memories_by_vector(
                 query_text=query,
                 limit=self.top_k,
-                channel_id=str(message.channel.id),
+                channel_id=channel_id_str,
             )
         except Exception as e:
             await func.report_error(e, "EpisodicMemoryProvider.get: vector search failed")
             return None
 
         if not fragments:
-            return None
+            result = None
+        else:
+            lines = ["--- Relevant Past Memories ---"]
+            total_chars = len(lines[0])
 
-        lines = ["--- Relevant Past Memories ---"]
-        total_chars = len(lines[0])
+            for i, frag in enumerate(fragments, 1):
+                ts = frag.metadata.get("start_timestamp") or frag.metadata.get("timestamp")
+                jump_url = frag.metadata.get("jump_url")
 
-        for i, frag in enumerate(fragments, 1):
-            ts = frag.metadata.get("start_timestamp") or frag.metadata.get("timestamp")
-            jump_url = frag.metadata.get("jump_url")
-
-            # Build source label: prefer a Discord message link over plain timestamp
-            if jump_url and ts:
-                try:
-                    unix_ts = int(float(ts))
-                    source_str = f" [[來源 <t:{unix_ts}:R>]({jump_url})]"
-                except Exception:
+                # Build source label: prefer a Discord message link over plain timestamp
+                if jump_url and ts:
+                    try:
+                        unix_ts = int(float(ts))
+                        source_str = f" [[來源 <t:{unix_ts}:R>]({jump_url})]"
+                    except Exception:
+                        source_str = f" [[來源]({jump_url})]"
+                elif jump_url:
                     source_str = f" [[來源]({jump_url})]"
-            elif jump_url:
-                source_str = f" [[來源]({jump_url})]"
-            elif ts:
-                try:
-                    unix_ts = int(float(ts))
-                    source_str = f" [<t:{unix_ts}:R>]"
-                except Exception:
+                elif ts:
+                    try:
+                        unix_ts = int(float(ts))
+                        source_str = f" [<t:{unix_ts}:R>]"
+                    except Exception:
+                        source_str = ""
+                else:
                     source_str = ""
-            else:
-                source_str = ""
 
-            entry = f"[memory #{i}] {frag.content}{source_str}"
+                entry = f"[memory #{i}] {frag.content}{source_str}"
 
-            if total_chars + len(entry) + 1 > self.max_chars:
-                break
-            lines.append(entry)
-            total_chars += len(entry) + 1
+                if total_chars + len(entry) + 1 > self.max_chars:
+                    break
+                lines.append(entry)
+                total_chars += len(entry) + 1
 
-        lines.append("--- End Past Memories ---")
-        _LOGGER.debug(f"Injecting {len(lines) - 2} episodic fragments into context.")
-        return "\n".join(lines)
+            lines.append("--- End Past Memories ---")
+            _LOGGER.debug(f"Injecting {len(lines) - 2} episodic fragments into context.")
+            result = "\n".join(lines)
+
+        async with self._lock:
+            self._cache[cache_key] = (result, now + self.cache_ttl)
+
+            if len(self._cache) > self.max_cache_size:
+                # Prune expired entries first
+                self._cache = {k: v for k, v in self._cache.items() if v[1] > now}
+                # If still over limit, pop arbitrary items (since dict preserves insertion order, popping first item removes oldest)
+                while len(self._cache) > self.max_cache_size:
+                    oldest_key = next(iter(self._cache))
+                    self._cache.pop(oldest_key)
+
+        return result
+
+    async def invalidate(self, channel_id: Optional[str] = None, query: Optional[str] = None) -> None:
+        """Invalidate cache entries.
+
+        If both channel_id and query are provided, invalidates the exact match.
+        If only channel_id is provided, invalidates all queries for that channel.
+        If neither is provided, clears the entire cache.
+        """
+        async with self._lock:
+            if channel_id is None and query is None:
+                self._cache.clear()
+            elif channel_id is not None and query is None:
+                self._cache = {k: v for k, v in self._cache.items() if k[0] != channel_id}
+            elif channel_id is not None and query is not None:
+                self._cache.pop((channel_id, query), None)
+            else: # query is not None and channel_id is None (unlikely, but handled)
+                self._cache = {k: v for k, v in self._cache.items() if k[1] != query}
