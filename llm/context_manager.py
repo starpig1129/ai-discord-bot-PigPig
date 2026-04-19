@@ -49,6 +49,19 @@ class ContextManager:
         """
 
         async def _fetch_short_term_and_procedural() -> Tuple[ProceduralMemory, List[BaseMessage]]:
+            # 0) Concurrently pre-fetch author's procedural memory to warm cache
+            author_id_str = None
+            try:
+                author_id = getattr(getattr(message, "author", None), "id", None)
+                if author_id is not None:
+                    author_id_str = str(author_id)
+            except Exception:
+                pass
+
+            prefetch_task = None
+            if author_id_str:
+                prefetch_task = asyncio.create_task(self.procedural_provider.get([author_id_str]))
+
             # 1) Fetch short-term messages
             short_term_msgs: List[BaseMessage] = []
             try:
@@ -80,6 +93,13 @@ class ContextManager:
                 except Exception:
                     # Best-effort fallback; proceed with empty user_ids
                     pass
+
+            # Await the prefetch task to ensure the cache is warmed
+            if prefetch_task:
+                try:
+                    await prefetch_task
+                except Exception:
+                    pass # ignore prefetch errors, will be caught in final get
 
             # 3) Fetch procedural memory
             try:
