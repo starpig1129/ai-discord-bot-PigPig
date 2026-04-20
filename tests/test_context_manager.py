@@ -100,11 +100,14 @@ class StubShortTermProvider:
 class StubProceduralProvider:
     def __init__(self):
         self.requested_ids = None
+        self.all_calls: list = []
 
     async def get(self, user_ids):
-        self.requested_ids = list(user_ids)
+        ids = list(user_ids)
+        self.requested_ids = ids
+        self.all_calls.append(ids)
         return ProceduralMemory(
-            user_info={uid: UserInfo(user_background="bg") for uid in user_ids}
+            user_info={uid: UserInfo(user_background="bg") for uid in ids}
         )
 
 
@@ -154,6 +157,49 @@ async def test_short_term_cancellation_propagates(monkeypatch):
     short_term_provider = StubShortTermProvider(fail_with=asyncio.CancelledError())
     procedural_provider = StubProceduralProvider()
     manager = ContextManager(short_term_provider, procedural_provider, episodic_provider=None)
+
+    with pytest.raises(asyncio.CancelledError):
+        await manager.get_context(_make_message())
+
+
+@pytest.mark.asyncio
+async def test_additional_users_from_stm_fetches_procedural_for_all(monkeypatch):
+    """Procedural provider is invoked for both author and additional STM user ids."""
+    monkeypatch.setattr(context_manager, "func", types.SimpleNamespace(report_error=_noop_report_error))
+
+    # STM returns a message whose content references a second user
+    second_user_id = "789"
+    stm_message = _BaseMessage(content=f"UserID:{second_user_id} said hello")
+    short_term_provider = StubShortTermProvider(messages=[stm_message])
+    procedural_provider = StubProceduralProvider()
+    manager = ContextManager(short_term_provider, procedural_provider, episodic_provider=None)
+
+    author_id = "123"
+    procedural_str, short_term_msgs = await manager.get_context(_make_message(author_id))
+
+    # All user ids that were requested across all provider calls
+    all_fetched_ids: set = set()
+    for call in procedural_provider.all_calls:
+        all_fetched_ids.update(call)
+
+    assert author_id in all_fetched_ids, "author id must be fetched"
+    assert second_user_id in all_fetched_ids, "additional user id from STM must be fetched"
+    assert f"User: {author_id}" in procedural_str
+    assert f"User: {second_user_id}" in procedural_str
+
+
+@pytest.mark.asyncio
+async def test_episodic_cancellation_propagates(monkeypatch):
+    """CancelledError from episodic provider must propagate out of get_context."""
+    monkeypatch.setattr(context_manager, "func", types.SimpleNamespace(report_error=_noop_report_error))
+
+    class _CancellingEpisodicProvider:
+        async def get(self, message):
+            raise asyncio.CancelledError()
+
+    short_term_provider = StubShortTermProvider(messages=[])
+    procedural_provider = StubProceduralProvider()
+    manager = ContextManager(short_term_provider, procedural_provider, episodic_provider=_CancellingEpisodicProvider())
 
     with pytest.raises(asyncio.CancelledError):
         await manager.get_context(_make_message())
