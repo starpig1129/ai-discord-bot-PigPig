@@ -109,8 +109,10 @@ class StubShortTermProvider:
 class StubProceduralProvider:
     def __init__(self):
         self.requested_ids = None
+        self.call_count = 0
 
     async def get(self, user_ids):
+        self.call_count += 1
         self.requested_ids = list(user_ids)
         return ProceduralMemory(
             user_info={uid: UserInfo(user_background="bg") for uid in user_ids}
@@ -166,3 +168,19 @@ async def test_short_term_cancellation_propagates(monkeypatch):
 
     with pytest.raises(asyncio.CancelledError):
         await manager.get_context(_make_message())
+
+
+@pytest.mark.asyncio
+async def test_author_only_reuses_prefetch_skips_second_call(monkeypatch):
+    """When user_ids extracted equals author_ids, the prefetched result is reused
+    and procedural_provider.get is called only once (for the prefetch)."""
+    monkeypatch.setattr(context_manager, "func", types.SimpleNamespace(report_error=_noop_report_error))
+    short_term_provider = StubShortTermProvider(messages=[])
+    procedural_provider = StubProceduralProvider()
+    manager = ContextManager(short_term_provider, procedural_provider, episodic_provider=None)
+
+    procedural_str, _ = await manager.get_context(_make_message("789"))
+
+    assert procedural_provider.call_count == 1
+    assert procedural_provider.requested_ids == ["789"]
+    assert "User: 789" in procedural_str

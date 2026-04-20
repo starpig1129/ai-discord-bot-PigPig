@@ -77,11 +77,13 @@ class ContextManager:
                     return ProceduralMemory(user_info={})
                 try:
                     return await self.procedural_provider.get(author_ids)
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     # Ignore errors here; they will be handled in step 3
                     return ProceduralMemory(user_info={})
 
-            short_term_msgs, _ = await asyncio.gather(
+            short_term_msgs, author_procedural_memory = await asyncio.gather(
                 _safe_short_term(),
                 _safe_author_procedural()
             )
@@ -98,18 +100,22 @@ class ContextManager:
                 _LOGGER.error("extract_user_ids failed", exception=e)
                 user_ids = author_ids
 
-            # 3) Fetch procedural memory for ALL users involved
-            # The author's profile is now cached, so this is instantaneous if no other users are found
-            try:
-                procedural_memory = await self.procedural_provider.get(user_ids)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                asyncio.create_task(
-                    func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
-                )
-                _LOGGER.error("procedural_provider.get failed", exception=e)
-                procedural_memory = ProceduralMemory(user_info={})
+            # 3) Fetch procedural memory for ALL users involved.
+            # If user_ids is exactly the author set (already prefetched), reuse the cached result
+            # to avoid a redundant provider call.
+            if set(user_ids) == set(author_ids):
+                procedural_memory = author_procedural_memory
+            else:
+                try:
+                    procedural_memory = await self.procedural_provider.get(user_ids)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    asyncio.create_task(
+                        func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
+                    )
+                    _LOGGER.error("procedural_provider.get failed", exception=e)
+                    procedural_memory = ProceduralMemory(user_info={})
 
             return procedural_memory, short_term_msgs
 
