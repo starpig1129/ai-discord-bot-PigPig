@@ -178,7 +178,7 @@ async def test_additional_users_from_stm_fetches_procedural_for_all(monkeypatch)
     procedural_str, short_term_msgs = await manager.get_context(_make_message(author_id))
 
     # All user ids that were requested across all provider calls
-    all_fetched_ids: set = set()
+    all_fetched_ids: set[str] = set()
     for call in procedural_provider.all_calls:
         all_fetched_ids.update(call)
 
