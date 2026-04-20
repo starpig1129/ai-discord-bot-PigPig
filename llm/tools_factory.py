@@ -348,15 +348,15 @@ def get_tools(
             
             # Check metadata or custom attributes on the original wrapped function if present
             # Langchain's StructuredTool hides custom attributes, so we try multiple ways
-            _raw_mode: object = None
+            raw_mode: object = None
             try:
                 metadata = getattr(t, "metadata", None)
                 if isinstance(metadata, dict) and "target_agent_mode" in metadata:
-                    _raw_mode = metadata["target_agent_mode"]
+                    raw_mode = metadata["target_agent_mode"]
                 elif hasattr(t, "target_agent_mode"):
-                    _raw_mode = getattr(t, "target_agent_mode")
+                    raw_mode = getattr(t, "target_agent_mode")
                 elif hasattr(t, "func") and hasattr(t.func, "target_agent_mode"):
-                    _raw_mode = getattr(t.func, "target_agent_mode")
+                    raw_mode = getattr(t.func, "target_agent_mode")
             except (AttributeError, KeyError, TypeError) as e:
                 logger.warning(
                     "Failed to extract target_agent_mode for tool %s: %s",
@@ -364,15 +364,15 @@ def get_tools(
                     e,
                 )
 
-            if _raw_mode is not None:
-                _normalized = str(_raw_mode).lower()
-                if _normalized in _VALID_AGENT_MODES:
-                    target_agent_mode = _normalized
+            if raw_mode is not None:
+                normalized_mode = str(raw_mode).lower()
+                if normalized_mode in _VALID_AGENT_MODES:
+                    target_agent_mode = normalized_mode
                 else:
                     logger.warning(
                         "Tool %s has unknown target_agent_mode %r; falling back to 'info'.",
                         getattr(t, "name", repr(t)),
-                        _raw_mode,
+                        raw_mode,
                     )
 
             if agent_mode == "info" and target_agent_mode == "message":
