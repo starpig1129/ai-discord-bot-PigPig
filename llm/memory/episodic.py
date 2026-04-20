@@ -41,6 +41,10 @@ class EpisodicMemoryProvider:
     """
 
     def __init__(self, bot: Any, top_k: int = 3, max_chars: int = 1500, max_cache_size: int = 500, cache_ttl: float = 300.0) -> None:
+        if max_cache_size < 0:
+            raise ValueError("max_cache_size must be >= 0")
+        if cache_ttl < 0:
+            raise ValueError("cache_ttl must be >= 0")
         self.bot = bot
         self.top_k = top_k
         self.max_chars = max_chars
@@ -133,12 +137,15 @@ class EpisodicMemoryProvider:
             result = "\n".join(lines)
 
         async with self._lock:
-            self._cache[cache_key] = (result, now + self.cache_ttl)
+            now_insert = time.monotonic()
+            # Pop then reinsert to move updated entries to the end (FIFO eviction)
+            self._cache.pop(cache_key, None)
+            self._cache[cache_key] = (result, now_insert + self.cache_ttl)
 
             if len(self._cache) > self.max_cache_size:
                 # Prune expired entries first
-                self._cache = {k: v for k, v in self._cache.items() if v[1] > now}
-                # If still over limit, pop arbitrary items (since dict preserves insertion order, popping first item removes oldest)
+                self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+                # If still over limit, pop oldest inserted items first
                 while len(self._cache) > self.max_cache_size:
                     oldest_key = next(iter(self._cache))
                     self._cache.pop(oldest_key)
@@ -159,5 +166,5 @@ class EpisodicMemoryProvider:
                 self._cache = {k: v for k, v in self._cache.items() if k[0] != channel_id}
             elif channel_id is not None and query is not None:
                 self._cache.pop((channel_id, query), None)
-            else: # query is not None and channel_id is None (unlikely, but handled)
+            else:  # query is not None and channel_id is None (unlikely, but handled)
                 self._cache = {k: v for k, v in self._cache.items() if k[1] != query}
