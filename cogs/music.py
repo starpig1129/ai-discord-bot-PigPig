@@ -94,11 +94,14 @@ class YTMusic(commands.Cog):
     async def play(self, interaction: discord.Interaction, query: Optional[str] = None):
         """播放音樂或刷新UI命令"""
         guild_id = interaction.guild.id
-        
+        if not self.lang_manager: # Ensure lang_manager is loaded
+            self.lang_manager = self.bot.get_cog("LanguageManager")
+            if not self.lang_manager:
+                await interaction.response.send_message("Language manager not loaded.", ephemeral=True)
+                return
+
         # 檢查使用者是否已在語音頻道
         if not interaction.user.voice:
-            if not self.lang_manager:
-                self.lang_manager = self.bot.get_cog("LanguageManager")
             title = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "no_voice_channel")
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -134,10 +137,12 @@ class YTMusic(commands.Cog):
                     self
                 )
                 refresh_message = self.lang_manager.translate(str(guild_id), "commands", "play", "responses", "refreshed_ui")
-                await interaction.followup.send(refresh_message, ephemeral=True)
+                msg = await interaction.followup.send(refresh_message, ephemeral=True, wait=True)
+                await msg.delete(delay=5)
             else:
                 no_song_message = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "nothing_playing")
-                await interaction.followup.send(no_song_message, ephemeral=True)
+                msg = await interaction.followup.send(no_song_message, ephemeral=True, wait=True)
+                await msg.delete(delay=5)
             return
 
         # 如果有提供查詢，將音樂加入播放清單
