@@ -1,6 +1,6 @@
 from __future__ import annotations
 import asyncio
-from typing import Any, List, Optional
+from typing import Any, List, MutableMapping, Optional
 import re
 
 from addons.logging import get_logger
@@ -21,6 +21,8 @@ from function import func
 from addons.settings import llm_config, prompt_config
 
 _LLM_CALL_TIMEOUT_SECONDS: float = llm_config.llm_call_timeout
+_IMAGE_FETCH_TIMEOUT_SECONDS: float = 15.0
+
 from .prompting.system_prompt import get_system_prompt
 from .prompting.protected_prompt_manager import get_protected_prompt_manager
 
@@ -230,14 +232,13 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             return get_system_prompt(str(bot_id), message)
 
 
-    async def _sanitize_messages_for_model(self, messages: List[BaseMessage], model_name: str, image_cache: Optional[dict] = None) -> List[BaseMessage]:
+    async def _sanitize_messages_for_model(self, messages: List[BaseMessage], model_name: str, image_cache: Optional[MutableMapping[str, dict[str, Any]]] = None) -> List[BaseMessage]:
         """
         Sanitize messages for the specific model.
         - Ollama requires base64 images instead of direct HTTP URLs.
         - Gemini 3.x models require thought_signature for tool_calls. To prevent 400 errors, we convert past tool calls to text.
         """
-        if image_cache is None:
-            image_cache = {}
+        cache: MutableMapping[str, dict[str, Any]] = image_cache if image_cache is not None else {}
 
         if "gemini-3" in model_name:
             from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
@@ -270,7 +271,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 for part in msg.content:
                     if isinstance(part, dict) and part.get("type") == "image_url":
                         url = part.get("image_url", {}).get("url", "")
-                        if url.startswith("http") and url not in image_cache:
+                        if url.startswith("http") and url not in cache:
                             urls_to_fetch.add(url)
 
         # 2. Fetch all missing URLs concurrently
@@ -281,7 +282,8 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         if resp.status == 200:
                             img_data = await resp.read()
                             b64_data = base64.b64encode(img_data).decode('utf-8')
-                            mime_type = resp.headers.get('Content-Type', 'image/jpeg')
+                            raw_content_type = resp.headers.get('Content-Type', 'image/jpeg')
+                            mime_type = raw_content_type.split(';', 1)[0].strip() or 'image/jpeg'
                             return url, {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}}
                         else:
                             return url, {"type": "text", "text": f"[Image attached: {url}]"}
@@ -289,11 +291,36 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     logger.warning(f"Failed to fetch image for Ollama: {e}")
                     return url, {"type": "text", "text": f"[Image attached: {url}]"}
 
-            async with aiohttp.ClientSession() as session:
-                tasks = [fetch_image(session, url) for url in urls_to_fetch]
-                results = await asyncio.gather(*tasks)
+            timeout = aiohttp.ClientTimeout(total=_IMAGE_FETCH_TIMEOUT_SECONDS)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                tasks = {asyncio.create_task(fetch_image(session, url)): url for url in urls_to_fetch}
+                done, pending = await asyncio.wait(tasks.keys(), timeout=_IMAGE_FETCH_TIMEOUT_SECONDS)
+
+                results = []
+                if pending:
+                    logger.warning("Timed out fetching images for Ollama; using placeholders")
+                    for task in pending:
+                        task.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
+
+                for task in done:
+                    if task.cancelled():
+                        url = tasks[task]
+                        results.append((url, {"type": "text", "text": f"[Image attached: {url}]"}))
+                        continue
+                    try:
+                        results.append(task.result())
+                    except Exception as e:
+                        url = tasks[task]
+                        logger.warning(f"Failed to process fetched image task: {e}")
+                        results.append((url, {"type": "text", "text": f"[Image attached: {url}]"}))
+
+                for task in pending:
+                    url = tasks[task]
+                    results.append((url, {"type": "text", "text": f"[Image attached: {url}]"}))
+
                 for url, content_part in results:
-                    image_cache[url] = content_part
+                    cache[url] = content_part
 
         # 3. Reconstruct messages using the cache
         sanitized = []
@@ -305,7 +332,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         url = part.get("image_url", {}).get("url", "")
                         if url.startswith("http"):
                             # This URL should now be in the cache
-                            cached_part = image_cache.get(url)
+                            cached_part = cache.get(url)
                             if cached_part:
                                 new_content.append(cached_part)
                             else:
