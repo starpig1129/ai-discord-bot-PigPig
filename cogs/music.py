@@ -264,7 +264,7 @@ class YTMusic(commands.Cog):
             color=discord.Color.blue()
         )
         
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        await interaction.edit_original_response(embed=embed, view=view)
 
     async def play_next(self, interaction: discord.Interaction, force_new: bool = False):
         """Play the next song in queue"""
