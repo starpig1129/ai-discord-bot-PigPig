@@ -6,7 +6,7 @@ This module implements the new ContextManager per docs/llm/context_manager.md:
 """
 
 import asyncio
-
+import contextlib
 import re
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
@@ -94,26 +94,40 @@ class ContextManager:
                     # Best-effort fallback; proceed with empty user_ids
                     pass
 
-            # Await the prefetch task to ensure the cache is warmed
-            if prefetch_task:
-                try:
-                    await prefetch_task
-                except Exception:
-                    pass # ignore prefetch errors, will be caught in final get
-
-            # 3) Fetch procedural memory
             try:
-                procedural_memory = await self.procedural_provider.get(user_ids)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                asyncio.create_task(
-                    func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
-                )
-                _LOGGER.error("procedural_provider.get failed", exception=e)
-                procedural_memory = ProceduralMemory(user_info={})
+                # Observe prefetch without extending critical path
+                if prefetch_task:
+                    if prefetch_task.done():
+                        try:
+                            prefetch_task.result()
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception:
+                            # Ignore prefetch failures; final fetch will surface issues
+                            pass
+                    else:
+                        prefetch_task.cancel()
+                        prefetch_task.add_done_callback(lambda task: task.exception())
 
-            return procedural_memory, short_term_msgs
+                # 3) Fetch procedural memory
+                try:
+                    procedural_memory = await self.procedural_provider.get(user_ids)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    asyncio.create_task(
+                        func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
+                    )
+                    _LOGGER.error("procedural_provider.get failed", exception=e)
+                    procedural_memory = ProceduralMemory(user_info={})
+
+                return procedural_memory, short_term_msgs
+            except asyncio.CancelledError:
+                if prefetch_task and not prefetch_task.done():
+                    prefetch_task.cancel()
+                    with contextlib.suppress(Exception):
+                        await asyncio.gather(prefetch_task, return_exceptions=True)
+                raise
 
 
         async def _fetch_episodic() -> Optional[str]:

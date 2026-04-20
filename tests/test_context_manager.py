@@ -118,6 +118,26 @@ class StubProceduralProvider:
         )
 
 
+class CancelAwareProceduralProvider:
+    def __init__(self):
+        self.calls = []
+        self.prefetch_started = asyncio.Event()
+        self.prefetch_cancelled = asyncio.Event()
+
+    async def get(self, user_ids):
+        self.calls.append(list(user_ids))
+        if len(self.calls) == 1:
+            self.prefetch_started.set()
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                self.prefetch_cancelled.set()
+                raise
+        return ProceduralMemory(
+            user_info={uid: UserInfo(user_background="bg") for uid in user_ids}
+        )
+
+
 def _make_message(user_id: str = "123"):
     return types.SimpleNamespace(
         author=types.SimpleNamespace(id=user_id),
@@ -167,3 +187,20 @@ async def test_short_term_cancellation_propagates(monkeypatch):
 
     with pytest.raises(asyncio.CancelledError):
         await manager.get_context(_make_message())
+
+
+@pytest.mark.asyncio
+async def test_prefetch_cancellation_is_propagated(monkeypatch):
+    monkeypatch.setattr(context_manager, "func", types.SimpleNamespace(report_error=_noop_report_error))
+    short_term_provider = StubShortTermProvider(messages=[])
+    procedural_provider = CancelAwareProceduralProvider()
+    manager = ContextManager(short_term_provider, procedural_provider, episodic_provider=None)
+
+    ctx_task = asyncio.create_task(manager.get_context(_make_message()))
+    await procedural_provider.prefetch_started.wait()
+    ctx_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await ctx_task
+
+    assert procedural_provider.prefetch_cancelled.is_set()
