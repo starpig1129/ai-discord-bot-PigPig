@@ -49,11 +49,26 @@ class ContextManager:
         """
 
         async def _fetch_short_term_and_procedural() -> Tuple[ProceduralMemory, List[BaseMessage]]:
-            # 1) Fetch short-term messages
+            # 1) Pre-fetch author procedural memory to warm the TTL cache concurrently with short term messages
+            author_id = None
+            prefetch_task = None
+            try:
+                if getattr(message, "author", None) is not None:
+                    aid = getattr(message.author, "id", None)
+                    if aid is not None:
+                        author_id = str(aid)
+                        # Fire and forget to warm cache; we will await the final result later
+                        prefetch_task = asyncio.create_task(self.procedural_provider.get([author_id]))
+            except Exception:
+                pass
+
+            # 2) Fetch short-term messages
             short_term_msgs: List[BaseMessage] = []
             try:
                 short_term_msgs = await self.short_term_provider.get(message)
             except asyncio.CancelledError:
+                if prefetch_task:
+                    prefetch_task.cancel()
                 raise
             except Exception as e:
                 # Report and continue with safe fallback per design
@@ -62,7 +77,14 @@ class ContextManager:
                 )
                 _LOGGER.error("short_term_provider.get failed", exception=e)
 
-            # 2) Extract user ids to fetch procedural memory
+            # Ensure prefetch completes before we proceed to main procedural fetch
+            if prefetch_task:
+                try:
+                    await prefetch_task
+                except Exception:
+                    pass
+
+            # 3) Extract user ids to fetch procedural memory
             try:
                 user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
             except asyncio.CancelledError:
@@ -81,7 +103,7 @@ class ContextManager:
                     # Best-effort fallback; proceed with empty user_ids
                     pass
 
-            # 3) Fetch procedural memory
+            # 4) Fetch procedural memory (this will hit TTL cache for author)
             try:
                 procedural_memory = await self.procedural_provider.get(user_ids)
             except asyncio.CancelledError:
