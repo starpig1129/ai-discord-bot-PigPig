@@ -104,6 +104,8 @@ class YTMusic(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
             
+        await interaction.response.defer(ephemeral=True)
+
         # 連接至語音頻道
         channel = interaction.user.voice.channel
         if interaction.guild.voice_client is None:
@@ -113,7 +115,7 @@ class YTMusic(commands.Cog):
                 await func.report_error(e, "music.py/play/channel.connect")
                 title = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "voice_connect_failed")
                 embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
                 return
 
         # 如果沒有提供查詢，刷新UI
@@ -132,10 +134,12 @@ class YTMusic(commands.Cog):
                     self
                 )
                 refresh_message = self.lang_manager.translate(str(guild_id), "commands", "play", "responses", "refreshed_ui")
-                await interaction.response.send_message(refresh_message, ephemeral=True, delete_after=5)
+                msg = await interaction.followup.send(refresh_message, ephemeral=True)
+                # Note: `delete_after` is not supported in followup.send.
+                # We can't delete it automatically via the kwarg, but we will let it just be ephemeral.
             else:
                 no_song_message = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "nothing_playing")
-                await interaction.response.send_message(no_song_message, ephemeral=True, delete_after=5)
+                msg = await interaction.followup.send(no_song_message, ephemeral=True)
             return
 
         # 如果有提供查詢，將音樂加入播放清單
@@ -143,7 +147,6 @@ class YTMusic(commands.Cog):
         
         # 檢查是否為URL
         if "youtube.com" in query or "youtu.be" in query:
-            await interaction.response.defer(ephemeral=True)
             # 檢查是否為播放清單
             if "list" in query:
                 await self._handle_playlist(interaction, query)
@@ -239,7 +242,6 @@ class YTMusic(commands.Cog):
 
     async def _handle_search(self, interaction: discord.Interaction, query: str):
         """Handle search query"""
-        await interaction.response.defer(ephemeral=True, thinking=True)
         results = await self.youtube.search_videos(query)
         guild_id = interaction.guild.id
         if not results:
