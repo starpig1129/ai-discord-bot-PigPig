@@ -126,11 +126,23 @@ class ContextManager:
                 _LOGGER.error("knowledge_provider.get failed", exception=e)
                 return None
 
+        async def _warm_author_cache() -> None:
+            """Pre-fetch the message author's procedural memory to warm the TTL cache."""
+            try:
+                author_id = getattr(getattr(message, "author", None), "id", None)
+                if author_id is not None:
+                    await self.procedural_provider.get([str(author_id)])
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                _LOGGER.error("_warm_author_cache failed", exception=e)
+
         # Fetch all memory components in parallel to minimize latency
-        (procedural_memory, short_term_msgs), episodic_str, knowledge = await asyncio.gather(
+        (procedural_memory, short_term_msgs), episodic_str, knowledge, _ = await asyncio.gather(
             _fetch_short_term_and_procedural(),
             _fetch_episodic(),
             _fetch_knowledge(),
+            _warm_author_cache(),
         )
 
         # 4) Format procedural memory into string (no STM serialization here)
