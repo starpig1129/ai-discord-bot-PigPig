@@ -6,8 +6,10 @@ Silent failure design: any error returns None without raising.
 """
 from __future__ import annotations
 
+import asyncio
 import re
-from typing import TYPE_CHECKING, Any, Optional
+import time
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import discord
 
@@ -34,12 +36,26 @@ class EpisodicMemoryProvider:
         bot: Discord bot instance (must have vector_manager attribute).
         top_k: Maximum number of fragments to retrieve. Default 3.
         max_chars: Hard character limit for the returned string. Default 1500.
+        max_cache_size: Maximum number of queries to cache.
+        cache_ttl: Time to live for cache entries in seconds.
     """
 
-    def __init__(self, bot: Any, top_k: int = 3, max_chars: int = 1500) -> None:
+    def __init__(
+        self,
+        bot: Any,
+        top_k: int = 3,
+        max_chars: int = 1500,
+        max_cache_size: int = 1000,
+        cache_ttl: float = 300.0,
+    ) -> None:
         self.bot = bot
         self.top_k = top_k
         self.max_chars = max_chars
+        self.max_cache_size = max_cache_size
+        self.cache_ttl = cache_ttl
+        # key: "{channel_id}:{query}", value: (formatted_str, expire_at)
+        self._cache: Dict[str, Tuple[Optional[str], float]] = {}
+        self._lock = asyncio.Lock()
 
     async def get(self, message: discord.Message) -> Optional[str]:
         """Return formatted episodic context string, or None if nothing relevant.
@@ -65,6 +81,14 @@ class EpisodicMemoryProvider:
         if len(query.split()) < _MIN_QUERY_TOKENS:
             return None
 
+        cache_key = f"{message.channel.id}:{query}"
+        now = time.monotonic()
+
+        async with self._lock:
+            entry = self._cache.get(cache_key)
+            if entry is not None and entry[1] > now:
+                return entry[0]
+
         try:
             fragments = await vector_manager.store.search_memories_by_vector(
                 query_text=query,
@@ -76,40 +100,55 @@ class EpisodicMemoryProvider:
             return None
 
         if not fragments:
-            return None
+            result_str = None
+        else:
+            lines = ["--- Relevant Past Memories ---"]
+            total_chars = len(lines[0])
 
-        lines = ["--- Relevant Past Memories ---"]
-        total_chars = len(lines[0])
+            for i, frag in enumerate(fragments, 1):
+                ts = frag.metadata.get("start_timestamp") or frag.metadata.get("timestamp")
+                jump_url = frag.metadata.get("jump_url")
 
-        for i, frag in enumerate(fragments, 1):
-            ts = frag.metadata.get("start_timestamp") or frag.metadata.get("timestamp")
-            jump_url = frag.metadata.get("jump_url")
-
-            # Build source label: prefer a Discord message link over plain timestamp
-            if jump_url and ts:
-                try:
-                    unix_ts = int(float(ts))
-                    source_str = f" [[來源 <t:{unix_ts}:R>]({jump_url})]"
-                except Exception:
+                # Build source label: prefer a Discord message link over plain timestamp
+                if jump_url and ts:
+                    try:
+                        unix_ts = int(float(ts))
+                        source_str = f" [[來源 <t:{unix_ts}:R>]({jump_url})]"
+                    except Exception:
+                        source_str = f" [[來源]({jump_url})]"
+                elif jump_url:
                     source_str = f" [[來源]({jump_url})]"
-            elif jump_url:
-                source_str = f" [[來源]({jump_url})]"
-            elif ts:
-                try:
-                    unix_ts = int(float(ts))
-                    source_str = f" [<t:{unix_ts}:R>]"
-                except Exception:
+                elif ts:
+                    try:
+                        unix_ts = int(float(ts))
+                        source_str = f" [<t:{unix_ts}:R>]"
+                    except Exception:
+                        source_str = ""
+                else:
                     source_str = ""
-            else:
-                source_str = ""
 
-            entry = f"[memory #{i}] {frag.content}{source_str}"
+                entry_str = f"[memory #{i}] {frag.content}{source_str}"
 
-            if total_chars + len(entry) + 1 > self.max_chars:
-                break
-            lines.append(entry)
-            total_chars += len(entry) + 1
+                if total_chars + len(entry_str) + 1 > self.max_chars:
+                    break
+                lines.append(entry_str)
+                total_chars += len(entry_str) + 1
 
-        lines.append("--- End Past Memories ---")
-        _LOGGER.debug(f"Injecting {len(lines) - 2} episodic fragments into context.")
-        return "\n".join(lines)
+            lines.append("--- End Past Memories ---")
+            _LOGGER.debug(f"Injecting {len(lines) - 2} episodic fragments into context.")
+            result_str = "\n".join(lines)
+
+        async with self._lock:
+            expire_at = time.monotonic() + self.cache_ttl
+            self._cache[cache_key] = (result_str, expire_at)
+
+            # Evict if cache exceeds max size using Python 3.7+ dict insertion order
+            if len(self._cache) > self.max_cache_size:
+                now_insert = time.monotonic()
+                self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+
+                while len(self._cache) > self.max_cache_size:
+                    oldest_key = next(iter(self._cache))
+                    self._cache.pop(oldest_key)
+
+        return result_str

@@ -72,6 +72,14 @@ sys.modules["cogs.memory"] = fake_cogs_memory
 fake_cogs_memory_users = types.ModuleType("cogs.memory.users")
 fake_cogs_memory_users.__path__ = []
 sys.modules["cogs.memory.users"] = fake_cogs_memory_users
+fake_cogs_memory_db = types.ModuleType("cogs.memory.db")
+fake_cogs_memory_db.__path__ = []
+sys.modules["cogs.memory.db"] = fake_cogs_memory_db
+fake_cogs_memory_db_knowledge_storage = types.ModuleType("cogs.memory.db.knowledge_storage")
+class _DummyKnowledgeStorage:
+    pass
+fake_cogs_memory_db_knowledge_storage.KnowledgeStorage = _DummyKnowledgeStorage
+sys.modules["cogs.memory.db.knowledge_storage"] = fake_cogs_memory_db_knowledge_storage
 fake_cogs_memory_users_manager = types.ModuleType("cogs.memory.users.manager")
 class _DummySQLiteUserManager:
     async def get_multiple_users(self, user_ids):
