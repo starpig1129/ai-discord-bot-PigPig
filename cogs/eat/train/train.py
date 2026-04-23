@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional
 from torch.autograd import Variable
 
-import pickle
+import json
 
 from .data_loader import DataLoader
 from .model import Net
@@ -77,21 +77,25 @@ class Train():
         model.eval()
         torch.save(model.state_dict(), SAVE_URI + f"{discord_id}.model")
 
-        with open(SAVE_URI + f"{discord_id}.pickle", "wb") as file:
-            pickle.dump((dataX, voc_to_int, int_to_voc, vocabulary), file)
+        with open(SAVE_URI + f"{discord_id}.json", "w") as file:
+            json.dump([dataX, voc_to_int, int_to_voc, vocabulary], file)
 
-        return (SAVE_URI + f"{discord_id}.model", SAVE_URI + f"{discord_id}.pickle")
+        return (SAVE_URI + f"{discord_id}.model", SAVE_URI + f"{discord_id}.json")
 
 
     def predict(self, discord_id:str):
-        if os.path.exists(SAVE_URI + f"{discord_id}.pickle") and os.path.exists(SAVE_URI + f"{discord_id}.model"):
-            with open(SAVE_URI + f"{discord_id}.pickle", "rb") as file:
-                dataX, voc_to_int, int_to_voc, vocabulary = pickle.load(file)
+        if os.path.exists(SAVE_URI + f"{discord_id}.json") and os.path.exists(SAVE_URI + f"{discord_id}.model"):
+            with open(SAVE_URI + f"{discord_id}.json", "r") as file:
+                data = json.load(file)
+                dataX = data[0]
+                voc_to_int = data[1]
+                int_to_voc = {int(k): v for k, v in data[2].items()}
+                vocabulary = data[3]
             
             dataLoader = DataLoader(db=self.db)
             model = Net(len(vocabulary), self.embedding_dim, self.hidden_dim, self.dropout)
             
-            model.load_state_dict(torch.load(SAVE_URI + f"{discord_id}.model"))
+            model.load_state_dict(torch.load(SAVE_URI + f"{discord_id}.model", weights_only=True))
 
             n_voc = len(dataX)
 

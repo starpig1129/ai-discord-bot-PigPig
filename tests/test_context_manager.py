@@ -76,8 +76,18 @@ fake_cogs_memory_users_manager = types.ModuleType("cogs.memory.users.manager")
 class _DummySQLiteUserManager:
     async def get_multiple_users(self, user_ids):
         return {}
+
 fake_cogs_memory_users_manager.SQLiteUserManager = _DummySQLiteUserManager
 sys.modules["cogs.memory.users.manager"] = fake_cogs_memory_users_manager
+
+fake_cogs_memory_db = types.ModuleType("cogs.memory.db")
+fake_cogs_memory_db.__path__ = []
+sys.modules["cogs.memory.db"] = fake_cogs_memory_db
+fake_cogs_memory_db_knowledge_storage = types.ModuleType("cogs.memory.db.knowledge_storage")
+class _DummyKnowledgeStorage:
+    pass
+fake_cogs_memory_db_knowledge_storage.KnowledgeStorage = _DummyKnowledgeStorage
+sys.modules["cogs.memory.db.knowledge_storage"] = fake_cogs_memory_db_knowledge_storage
 
 import llm.context_manager as context_manager
 from llm.context_manager import ContextManager
