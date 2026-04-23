@@ -79,6 +79,13 @@ class _DummySQLiteUserManager:
 fake_cogs_memory_users_manager.SQLiteUserManager = _DummySQLiteUserManager
 sys.modules["cogs.memory.users.manager"] = fake_cogs_memory_users_manager
 
+fake_knowledge_storage = types.ModuleType("cogs.memory.db.knowledge_storage")
+class _KnowledgeStorage:
+    pass
+fake_knowledge_storage.KnowledgeStorage = _KnowledgeStorage
+sys.modules.setdefault("cogs.memory.db", types.ModuleType("cogs.memory.db"))
+sys.modules.setdefault("cogs.memory.db.knowledge_storage", fake_knowledge_storage)
+
 import llm.context_manager as context_manager
 from llm.context_manager import ContextManager
 from llm.memory.schema import ProceduralMemory, UserInfo
