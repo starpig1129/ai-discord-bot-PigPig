@@ -1,4 +1,5 @@
 import json
+import asyncio
 import discord
 
 from langchain.agents import create_agent
@@ -225,9 +226,40 @@ class EatBrowseView(discord.ui.View):
         self.discord_id = discord_id
         self.provider = provider
         self.current_index = initial_index
+        self._max_viewed_index = initial_index  # 僅讓使用者在選單看到「已探索」的項目
+        self._is_fetching = False  # 標記按鈕點擊後的抓取狀態
 
         self._rebuild_select()
         self._update_nav_buttons()
+
+        # 啟動背景預取任務（僅針對標記為未詳細的項目）
+        self._prefetch_task = None
+        if any(not r.get("is_detailed", True) for r in self.results):
+            self._prefetch_task = asyncio.create_task(self._background_prefetch())
+
+    async def _background_prefetch(self):
+        """在後台逐一補全餐廳的詳細資訊。"""
+        # 為了效能，我們只預取前 10-15 個候選者
+        limit = min(15, len(self.results))
+        for i in range(limit):
+            if self.results[i].get("is_detailed", False):
+                continue
+            
+            url = self.results[i].get("maps_url", "")
+            if url:
+                try:
+                    # 這裡是耗時的操作（Selenium 導航）
+                    detail = await self.provider.async_fetch_detail(url)
+                    if detail:
+                        # 更新快取中的資料，保留原有的排序
+                        self.results[i].update(detail)
+                        self.results[i]["is_detailed"] = True
+                        logger.info(f"背景已完成預取：{self.results[i].get('name')}")
+                except Exception as e:
+                    logger.warning(f"背景預取失敗 ({url}): {e}")
+            
+            # 給予一點間隔避免過度競爭 WebDriver 鎖
+            await asyncio.sleep(1)
 
     def _rebuild_select(self):
         """重建下拉選單（動態選項需每次重建）。"""
@@ -236,8 +268,20 @@ class EatBrowseView(discord.ui.View):
             if isinstance(child, discord.ui.Select):
                 self.remove_item(child)
 
+        # 決定顯示的範圍（僅顯示已探索過或當前正在看的項目）
+        # 根據使用者要求：「搜尋結果應該要在使用者按下重新搜尋 才會添加到清單」
+        # 所以我們只循環到 _max_viewed_index
+        viewable_results = self.results[:self._max_viewed_index + 1]
+        
+        start_idx = 0
+        if len(viewable_results) > 25:
+            start_idx = max(0, self.current_index - 12)
+            if start_idx + 25 > len(viewable_results):
+                start_idx = len(viewable_results) - 25
+
         options = []
-        for i, place in enumerate(self.results[:25]):
+        for i in range(start_idx, min(start_idx + 25, len(viewable_results))):
+            place = viewable_results[i]
             name = place.get("name", f"餐廳 {i+1}")
             rating = place.get("rating", 0)
             category = place.get("category", "")
@@ -253,7 +297,7 @@ class EatBrowseView(discord.ui.View):
             description = " | ".join(desc_parts)[:100]
 
             options.append(discord.SelectOption(
-                label=name[:100],
+                label=f"{i+1}. {name}"[:100],
                 description=description or None,
                 value=str(i),
                 default=(i == self.current_index),
@@ -329,45 +373,45 @@ class EatBrowseView(discord.ui.View):
         )
         await interaction.response.edit_message(embed=embed, view=detail_view)
 
-    @discord.ui.button(label="重新搜尋", emoji="🔄", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="下一個推薦", emoji="🔄", style=discord.ButtonStyle.primary, row=2)
     async def regenerate_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """重新用同一關鍵字搜尋，顯示 loading embed。"""
-        # 禁用所有按鈕以防重複點擊，同時顯示 loading
-        for child in self.children:
-            child.disabled = True
-        await interaction.response.edit_message(embed=loadingEmbed(self.keyword), view=self)
-        try:
-            new_results = await self.provider.search(self.keyword)
-            if not new_results:
-                await interaction.edit_original_response(
-                    content=f"找不到「{self.keyword}」相關餐廳", embed=None, view=None
-                )
-                return
-            
-            # 將新結果「加入」原有列表，並過濾掉已存在的餐廳
-            seen_names = {r.get("name", "") for r in self.results}
-            added_count = 0
-            for r in new_results:
-                if r.get("name", "") not in seen_names:
-                    self.results.append(r)
-                    added_count += 1
-            
-            if added_count == 0:
-                await interaction.followup.send("找不到更多不同的餐廳囉！", ephemeral=True)
-                
-            self.current_index = 0
-            # 恢復按鈕（重建 select 同時更新導航按鈕狀態）
-            for child in self.children:
-                child.disabled = False
+        """切換到下一個結果。如果資料尚未準備好，則進行即時抓取。"""
+        if not self.results:
+            return
+
+        next_index = (self.current_index + 1) % len(self.results)
+        
+        # 使用者點擊「重新搜尋」才解鎖下一筆
+        if next_index > self._max_viewed_index:
+            self._max_viewed_index = next_index
+
+        self.current_index = next_index
+        target_res = self.results[self.current_index]
+
+        # 檢查是否需要即時抓取詳細資訊（如果背景任務還沒跑完）
+        if not target_res.get("is_detailed", False):
+            await interaction.response.edit_message(embed=loadingEmbed(target_res.get("name", "餐廳")), view=None)
+            self._is_fetching = True
+            try:
+                url = target_res.get("maps_url", "")
+                detail = await self.provider.async_fetch_detail(url)
+                if detail:
+                    self.results[self.current_index].update(detail)
+                    self.results[self.current_index]["is_detailed"] = True
+            except Exception as e:
+                logger.error(f"即時抓取詳細資訊失敗: {e}")
+            self._is_fetching = False
+            # 抓完後更新
             self._rebuild_select()
             self._update_nav_buttons()
-            embed = browseEmbed(self.results, 0)
+            embed = browseEmbed(self.results, self.current_index)
             await interaction.edit_original_response(embed=embed, view=self)
-        except Exception as e:
-            await func.report_error(e, "EatBrowseView.regenerate_button")
-            await interaction.edit_original_response(
-                content=f"重新搜尋失敗：{str(e)[:100]}", embed=None, view=None
-            )
+        else:
+            # 資料已就緒，直接更新
+            self._rebuild_select()
+            self._update_nav_buttons()
+            embed = browseEmbed(self.results, self.current_index)
+            await interaction.response.edit_message(embed=embed, view=self)
 
     async def on_timeout(self):
         for child in self.children:

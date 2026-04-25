@@ -517,9 +517,16 @@ class InternetSearchCog(commands.Cog):
             followup_msg = None
 
         try:
-            # Step 3：非同步搜尋
+            # Step 3：非同步搜尋（先抓取候選清單，追求快速響應）
             current_lang = self.lang_manager.get_server_lang(guild_id) if self.lang_manager else "zh_TW"
-            results = await self.provider.search(keyword, lang=current_lang)
+            
+            # 如果 provider 是 GoogleMapCrawler，先抓取候選清單
+            if hasattr(self.provider, "async_search_list"):
+                results = await self.provider.async_search_list(keyword, lang=current_lang)
+            else:
+                # Foursquare 或其他 provider 可能直接返回完整結果
+                results = await self.provider.search(keyword, lang=current_lang)
+
             if not results:
                 error_msg = self.lang_manager.translate(
                     guild_id, "commands", "internet_search", "errors", "eat_system_error",
@@ -527,18 +534,26 @@ class InternetSearchCog(commands.Cog):
                 ) if self.lang_manager else f"找不到「{keyword}」相關餐廳"
                 return error_msg
 
-            # Step 4：推薦器排序
+            # Step 4：即時抓取第一筆的詳細資訊（如果是 Crawler）
+            if not results[0].get("is_detailed", False) and hasattr(self.provider, "async_fetch_detail"):
+                first_detail = await self.provider.async_fetch_detail(results[0].get("maps_url", ""), lang=current_lang)
+                if first_detail:
+                    results[0].update(first_detail)
+                    results[0]["is_detailed"] = True
+
+            # Step 5：推薦器排序
+            # 由於目前只有第一筆有詳細資料，我們暫時先以原始順序呈現或僅對第一筆加權
             ranked = self.recommender.rank_candidates(guild_id, results)
             if not ranked:
-                ranked = results  # fallback 到原始順序
+                ranked = results
 
-            # Step 5：儲存搜尋到的新標籤關鍵字
-            for place in ranked[:3]:
-                tag = place.get("category", "")
-                if tag and not self.db.checkKeyword(keyword=tag):
-                    self.db.storeKeyword(tag)
+            # Step 6：儲存搜尋到的新標籤關鍵字
+            first_place = ranked[0]
+            tag = first_place.get("category", "")
+            if tag and not self.db.checkKeyword(keyword=tag):
+                self.db.storeKeyword(tag)
 
-            # Step 6：建立 Browse View 和 Embed
+            # Step 7：建立 Browse View 和 Embed
             view = EatBrowseView(
                 results=ranked,
                 keyword=keyword,
@@ -548,7 +563,7 @@ class InternetSearchCog(commands.Cog):
             )
             embed = browseEmbed(ranked, 0)
 
-            # Step 7：更新訊息
+            # Step 8：更新訊息
             if isinstance(ctx, discord.Interaction):
                 try:
                     await ctx.edit_original_response(embed=embed, view=view)

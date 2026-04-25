@@ -30,8 +30,15 @@ class _SeleniumFallbackProvider:
     def __init__(self, crawler):
         self._crawler = crawler
 
+    async def async_search_list(self, keyword: str, lang: str = "zh_TW") -> list[dict]:
+        return await self._crawler.async_search_list(keyword, lang)
+
+    async def async_fetch_detail(self, url: str, lang: str = "zh_TW") -> dict:
+        return await self._crawler.async_fetch_detail(url, lang)
+
     async def search(self, keyword: str, lang: str = "zh_TW") -> list[dict]:
-        return await self._crawler.async_search(keyword, lang)
+        # 向後相容，預設執行 list 搜尋
+        return await self.async_search_list(keyword, lang)
 
     async def close(self):
         try:

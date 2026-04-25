@@ -60,7 +60,7 @@ class FoursquareProvider:
                 return []
 
             # 並行取得前 5 筆的照片（詳細資訊已在 search 回應中包含）
-            photo_tasks = [self._get_first_photo(p.get("fsq_id", "")) for p in raw_places[:5]]
+            photo_tasks = [self._get_first_photo(p.get("fsq_id", "")) for p in raw_places[:10]]
             photos = await asyncio.gather(*photo_tasks, return_exceptions=True)
 
             results = []
@@ -85,7 +85,7 @@ class FoursquareProvider:
         params = {
             "query": f"{keyword}餐廳",
             "categories": FOOD_CATEGORY_ID,
-            "limit": 10,
+            "limit": 50,
             "fields": "fsq_id,name,rating,categories,location,geocodes,hours,tel,price",
         }
         url = f"{FSQ_API_BASE}/places/search"
