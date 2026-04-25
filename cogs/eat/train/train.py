@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional
 from torch.autograd import Variable
 
+import json
 import pickle
 
 from .data_loader import DataLoader
@@ -77,21 +78,36 @@ class Train():
         model.eval()
         torch.save(model.state_dict(), SAVE_URI + f"{discord_id}.model")
 
-        with open(SAVE_URI + f"{discord_id}.pickle", "wb") as file:
-            pickle.dump((dataX, voc_to_int, int_to_voc, vocabulary), file)
+        try:
+            with open(SAVE_URI + f"{discord_id}.json", "w") as file:
+                json.dump((dataX, voc_to_int, int_to_voc, list(vocabulary) if isinstance(vocabulary, set) else vocabulary), file)
+        except TypeError:
+            # Fallback if there are other un-serializable objects (though dataX is list of lists, and vocabulary is sorted list from data_loader)
+            with open(SAVE_URI + f"{discord_id}.json", "w") as file:
+                json.dump((dataX, voc_to_int, int_to_voc, list(vocabulary) if isinstance(vocabulary, set) else vocabulary), file, default=lambda o: o.tolist() if hasattr(o, 'tolist') else str(o))
 
-        return (SAVE_URI + f"{discord_id}.model", SAVE_URI + f"{discord_id}.pickle")
+        return (SAVE_URI + f"{discord_id}.model", SAVE_URI + f"{discord_id}.json")
 
 
     def predict(self, discord_id:str):
-        if os.path.exists(SAVE_URI + f"{discord_id}.pickle") and os.path.exists(SAVE_URI + f"{discord_id}.model"):
+        if not os.path.exists(SAVE_URI + f"{discord_id}.model"):
+            return None
+
+        dataX, voc_to_int, int_to_voc, vocabulary = None, None, None, None
+
+        if os.path.exists(SAVE_URI + f"{discord_id}.json"):
+            with open(SAVE_URI + f"{discord_id}.json", "r") as file:
+                dataX, voc_to_int, int_to_voc_raw, vocabulary = json.load(file)
+                int_to_voc = {int(k): v for k, v in int_to_voc_raw.items()}
+        elif os.path.exists(SAVE_URI + f"{discord_id}.pickle"):
             with open(SAVE_URI + f"{discord_id}.pickle", "rb") as file:
                 dataX, voc_to_int, int_to_voc, vocabulary = pickle.load(file)
-            
+
+        if dataX is not None:
             dataLoader = DataLoader(db=self.db)
             model = Net(len(vocabulary), self.embedding_dim, self.hidden_dim, self.dropout)
             
-            model.load_state_dict(torch.load(SAVE_URI + f"{discord_id}.model"))
+            model.load_state_dict(torch.load(SAVE_URI + f"{discord_id}.model", weights_only=True))
 
             n_voc = len(dataX)
 
@@ -104,7 +120,14 @@ class Train():
 
             pred = model(voc_in)
             vec = torch.nn.functional.softmax(pred, dim=1).data[0].numpy()
-            pred = [v / sum(vec) for v in vec]
+
+            # Ensure proper casting and normalization to exactly sum to 1.0
+            vec = np.array([float(v) for v in vec], dtype=np.float64)
+            vec_sum = np.sum(vec)
+            if vec_sum > 0:
+                pred = vec / vec_sum
+            else:
+                pred = np.ones(len(vec)) / len(vec)
 
             voc_pred = np.random.choice(vocabulary, p=pred)
 
