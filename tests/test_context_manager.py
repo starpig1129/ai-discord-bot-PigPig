@@ -13,6 +13,21 @@ fake_discord = types.ModuleType("discord")
 fake_discord.Message = object
 sys.modules.setdefault("discord", fake_discord)
 
+# Mock cogs.memory.db and cogs.memory.db.knowledge_storage.KnowledgeStorage
+fake_cogs_memory = types.ModuleType("cogs.memory")
+fake_cogs_memory.__path__ = []
+fake_cogs_memory_db = types.ModuleType("cogs.memory.db")
+fake_cogs_memory_db.__path__ = []
+fake_cogs_memory_db_knowledge_storage = types.ModuleType("cogs.memory.db.knowledge_storage")
+class _KnowledgeStorage:
+    pass
+fake_cogs_memory_db_knowledge_storage.KnowledgeStorage = _KnowledgeStorage
+sys.modules["cogs"] = types.ModuleType("cogs")
+sys.modules["cogs.__path__"] = []
+sys.modules["cogs.memory"] = fake_cogs_memory
+sys.modules["cogs.memory.db"] = fake_cogs_memory_db
+sys.modules["cogs.memory.db.knowledge_storage"] = fake_cogs_memory_db_knowledge_storage
+
 fake_langchain_messages = types.ModuleType("langchain_core.messages")
 class _BaseMessage:
     def __init__(self, content=None, name=None):
