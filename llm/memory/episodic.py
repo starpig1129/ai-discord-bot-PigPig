@@ -133,7 +133,7 @@ class EpisodicMemoryProvider:
             formatted_result = "\n".join(lines)
 
         # Update cache
-        expire_at = time.monotonic() + self.cache_ttl
+        expire_at = now + self.cache_ttl
         self._cache[cache_key] = (formatted_result, expire_at)
 
         # Prune expired items if cache is getting large
