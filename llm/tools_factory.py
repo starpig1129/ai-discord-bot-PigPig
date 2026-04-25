@@ -20,6 +20,8 @@ import threading
 from addons.logging import get_logger
 logger = get_logger(server_id="Bot", source="llm.tools_factory")
 
+_VALID_AGENT_MODES: frozenset = frozenset({"info", "message", "all"})
+
 from langchain_core.tools import StructuredTool,BaseTool
 from function import func
 
@@ -343,7 +345,6 @@ def get_tools(
                     continue
 
             # Filter based on agent_mode using target_agent_mode attribute
-            _VALID_AGENT_MODES = {"info", "message", "all"}
             target_agent_mode = "info"
             
             # Check metadata or custom attributes on the original wrapped function if present
