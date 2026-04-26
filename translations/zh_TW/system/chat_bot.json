@@ -16,7 +16,6 @@
             "add_reaction": "😊 正在添加表情回應...",
             "send_sticker": "🎭 正在貼貼圖...",
             "list_tools": "🔧 正在查看可用工具...",
-            "get_user_activity": "👀 正在查看使用者動態...",
             "get_channel_participants": "👥 正在查看頻道成員...",
             "get_guild_emojis": "😀 正在讀取伺服器表情符號...",
             "get_guild_stickers": "🖼️ 正在讀取伺服器貼圖...",

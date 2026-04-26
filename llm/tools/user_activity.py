@@ -1,5 +1,5 @@
 from addons.logging import get_logger
-from typing import Optional, Any, TYPE_CHECKING, List, Dict
+from typing import TYPE_CHECKING
 
 import discord
 from langchain_core.tools import tool
@@ -19,85 +19,6 @@ class UserActivityTools:
 
     def get_tools(self) -> list:
         runtime = self.runtime
-        
-        @tool
-        def get_user_activity(target_user_id: Optional[str] = None) -> str:
-            """
-            Gets the current activity status of a user (game, stream, music, etc.).
-            
-            Use this tool when you want to know what a user is currently doing, playing, or listening to.
-            If no target_user_id is provided, it checks the user who sent the message.
-            
-            Args:
-                target_user_id: Optional ID of the user to check.
-            """
-            message = getattr(runtime, "message", None)
-            if not message or not message.guild:
-                return "No guild context available."
-
-            # Determine target member
-            target_member = None
-            if target_user_id:
-                try:
-                    target_member = message.guild.get_member(int(target_user_id))
-                except ValueError:
-                    return f"Invalid user ID format: {target_user_id}"
-            else:
-                target_member = message.author
-
-            if not target_member:
-                return "User not found in this server."
-
-            # Collect activities
-            activities = target_member.activities
-            if not activities:
-                status_map = {
-                    discord.Status.online: "Online",
-                    discord.Status.idle: "Idle",
-                    discord.Status.dnd: "Do Not Disturb",
-                    discord.Status.offline: "Offline",
-                    discord.Status.invisible: "Invisible"
-                }
-                status = status_map.get(target_member.status, str(target_member.status))
-                return f"User {target_member.display_name} is currently {status} with no specific activities."
-
-            import datetime
-            def _format_duration(start_time):
-                if not start_time: return ""
-                try:
-                    now = datetime.datetime.now(datetime.timezone.utc)
-                    # Some activity.start are naive datetimes, some are aware
-                    if start_time.tzinfo is None:
-                        start_time = start_time.replace(tzinfo=datetime.timezone.utc)
-                    diff = now - start_time
-                    if diff.total_seconds() < 0: return ""
-                    hours, remainder = divmod(int(diff.total_seconds()), 3600)
-                    minutes, _ = divmod(remainder, 60)
-                    duration_strs = []
-                    if hours > 0: duration_strs.append(f"{hours}h")
-                    if minutes > 0: duration_strs.append(f"{minutes}m")
-                    return f" (for {' '.join(duration_strs)} so far)" if duration_strs else " (just started)"
-                except Exception:
-                    return ""
-
-            activity_list = []
-            for activity in activities:
-                duration_str = _format_duration(getattr(activity, "start", None))
-                if isinstance(activity, discord.Spotify):
-                    activity_list.append(f"- Listening to Spotify: {activity.title} by {activity.artist}{duration_str}")
-                elif isinstance(activity, discord.Game):
-                    activity_list.append(f"- Playing Game: {activity.name}{duration_str}")
-                elif isinstance(activity, discord.Streaming):
-                    activity_list.append(f"- Streaming: {activity.name} (URL: {activity.url}){duration_str}")
-                elif isinstance(activity, discord.CustomActivity):
-                    emoji = str(activity.emoji) + " " if activity.emoji else ""
-                    activity_list.append(f"- Custom Status: {emoji}{activity.name}")
-                else:
-                    # Generic activity fallback
-                    type_name = activity.type.name.capitalize()
-                    activity_list.append(f"- {type_name}: {activity.name}{duration_str}")
-
-            return f"## Activity Status for {target_member.display_name}\n" + "\n".join(activity_list)
 
         @tool
         def get_channel_participants() -> str:
@@ -162,4 +83,4 @@ class UserActivityTools:
             
             return "Cannot determine participants for this channel type."
 
-        return [get_user_activity, get_channel_participants]
+        return [get_channel_participants]

@@ -16,7 +16,6 @@
             "add_reaction": "😊 Adding a reaction...",
             "send_sticker": "🎭 Sending a sticker...",
             "list_tools": "🔧 Checking available tools...",
-            "get_user_activity": "👀 Checking user activity...",
             "get_channel_participants": "👥 Checking channel members...",
             "get_guild_emojis": "😀 Reading server emojis...",
             "get_guild_stickers": "🖼️ Reading server stickers...",

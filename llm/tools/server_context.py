@@ -128,13 +128,15 @@ class ServerContextTools:
             return "\n".join(lines)
 
         def get_user_discord_info(user_id: Optional[str] = None) -> str:
-            """Queries a member's Discord profile within this server.
+            """Queries a member's Discord profile and current activity within this server.
 
-            Returns join date, roles, nickname, current activity/status.
+            Returns join date, roles, nickname, current status, and detailed
+            activity info (game, stream, Spotify, custom status with duration).
             If no user_id is provided, returns info about the message sender.
 
             Args:
-                user_id: Optional Discord user ID. Defaults to message author.
+                user_id: Optional Discord user ID (numeric string or <@id> mention).
+                         Defaults to message author.
             """
             message = getattr(runtime, "message", None)
             if not message or not message.guild:
@@ -143,23 +145,28 @@ class ServerContextTools:
             guild: discord.Guild = message.guild
             member: Optional[discord.Member] = None
 
-            if user_id:
+            if user_id is not None and str(user_id).strip():
+                raw = str(user_id).strip()
+                # Accept mention format: <@123456> or <@!123456>
+                if raw.startswith("<@") and raw.endswith(">"):
+                    raw = raw[2:-1].lstrip("!")
                 try:
-                    member = guild.get_member(int(user_id))
+                    member = guild.get_member(int(raw))
                 except (ValueError, TypeError):
-                    return f"Invalid user ID format: {user_id}"
+                    return f"Invalid user ID format: {user_id!r}"
+                if not member:
+                    return f"User {user_id!r} not found in this server."
             else:
                 member = (
                     message.author
                     if isinstance(message.author, discord.Member)
                     else guild.get_member(message.author.id)
                 )
-
-            if not member:
-                return f"User {user_id or 'author'} not found in this server."
+                if not member:
+                    return "Message author not found in this server."
 
             lines = [
-                f"## User: {member.display_name} ({member.name}#{member.discriminator})",
+                f"## User: {member.display_name} ({member.name})",
                 f"- User ID: {member.id}",
             ]
 
@@ -177,30 +184,51 @@ class ServerContextTools:
             if roles:
                 lines.append(f"- Roles: {', '.join(reversed(roles))}")
 
+            if member.top_role and member.top_role.name != "@everyone":
+                lines.append(f"- Top Role Color: {member.top_role.color}")
+
             status_map = {
-                discord.Status.online: "🟢 Online",
-                discord.Status.idle: "🌙 Idle",
-                discord.Status.dnd: "⛔ Do Not Disturb",
-                discord.Status.offline: "⚫ Offline",
+                discord.Status.online: "Online",
+                discord.Status.idle: "Idle",
+                discord.Status.dnd: "Do Not Disturb",
+                discord.Status.offline: "Offline",
+                discord.Status.invisible: "Invisible",
             }
             lines.append(f"- Status: {status_map.get(member.status, str(member.status))}")
 
             if member.activities:
-                for activity in member.activities[:3]:
+                import datetime as _dt
+
+                def _duration(start) -> str:
+                    if not start:
+                        return ""
+                    try:
+                        now = _dt.datetime.now(_dt.timezone.utc)
+                        if start.tzinfo is None:
+                            start = start.replace(tzinfo=_dt.timezone.utc)
+                        diff = now - start
+                        if diff.total_seconds() < 0:
+                            return ""
+                        h, rem = divmod(int(diff.total_seconds()), 3600)
+                        m, _ = divmod(rem, 60)
+                        parts = ([f"{h}h"] if h else []) + ([f"{m}m"] if m else [])
+                        return f" (for {' '.join(parts)})" if parts else " (just started)"
+                    except Exception:
+                        return ""
+
+                for activity in member.activities:
+                    dur = _duration(getattr(activity, "start", None))
                     if isinstance(activity, discord.Spotify):
-                        lines.append(f"- 🎵 Spotify: {activity.title} by {activity.artist}")
+                        lines.append(f"- Spotify: {activity.title} by {activity.artist}{dur}")
                     elif isinstance(activity, discord.Game):
-                        lines.append(f"- 🎮 Playing: {activity.name}")
+                        lines.append(f"- Playing: {activity.name}{dur}")
+                    elif isinstance(activity, discord.Streaming):
+                        lines.append(f"- Streaming: {activity.name}{dur}")
                     elif isinstance(activity, discord.CustomActivity):
                         emoji = f"{activity.emoji} " if activity.emoji else ""
                         lines.append(f"- Custom Status: {emoji}{activity.name or ''}")
-                    elif isinstance(activity, discord.Streaming):
-                        lines.append(f"- 📺 Streaming: {activity.name}")
                     else:
-                        lines.append(f"- {activity.type.name.capitalize()}: {activity.name}")
-
-            if member.top_role and member.top_role.name != "@everyone":
-                lines.append(f"- Top Role Color: {member.top_role.color}")
+                        lines.append(f"- {activity.type.name.capitalize()}: {activity.name}{dur}")
 
             return "\n".join(lines)
 
