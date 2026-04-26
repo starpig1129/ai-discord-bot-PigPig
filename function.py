@@ -232,7 +232,10 @@ class Function:
         embed.add_field(name="追蹤記錄", value=traceback_field_value, inline=False)
         embed.set_footer(text=f"時間: {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
-        await self.bot.send_error_report(embed)
+        try:
+            await self.bot.send_error_report(embed)
+        except Exception as e:
+            log.error(f"Failed to send error report to Discord: {e}", action="report_error_failed")
 
     def open_json(self, path: str) -> dict:
         try:
