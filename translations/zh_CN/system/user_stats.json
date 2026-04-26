@@ -1,0 +1,28 @@
+{
+    "card": {
+        "title": "📊 {name} 统计数据",
+        "total_messages": "总消息数: {total}",
+        "most_active": "最活跃时段: {peak}",
+        "peak_detail": "{period} {h}:00-{h_end}:00 ({count} 条)",
+        "streak": "连续活跃: {streak} 天",
+        "top_channels": "常用频道: {channels}",
+        "top_words": "常用词汇: {words}",
+        "top_emojis": "常用表情: {emojis}",
+        "first_message": "首次发言: {date} ({days_ago})",
+        "days_ago": "{days} 天前"
+    },
+    "periods": {
+        "morning": "早上",
+        "noon": "中午",
+        "afternoon": "下午",
+        "evening": "晚上",
+        "midnight": "深夜",
+        "dawn": "凌晨"
+    },
+    "image": {
+        "header": "总计: {total} 条  |  连续: {streak} 天",
+        "top_channels": "常用频道:",
+        "activity_by_hour": "活跃时段:",
+        "top_emojis": "常用表情: {emojis}"
+    }
+}

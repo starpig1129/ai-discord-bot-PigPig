@@ -22,6 +22,10 @@
             "get_guild_stickers": "🖼️ 正在讀取伺服器貼圖...",
             "update_guild_knowledge": "📜 正在建立伺服器文化檔案...",
             "update_channel_knowledge": "📍 正在紀錄頻道專屬黑話...",
+            "get_server_context": "🏠 正在查詢伺服器資訊...",
+            "get_channel_context": "📢 正在查詢頻道資訊...",
+            "get_user_discord_info": "👤 正在查詢使用者 Discord 資料...",
+            "get_user_stats": "📊 正在生成統計名片...",
             "default": "🛠️ 正在使用 {tool_name}..."
         }
     }

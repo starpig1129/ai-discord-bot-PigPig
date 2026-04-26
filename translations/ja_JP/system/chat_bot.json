@@ -22,6 +22,10 @@
             "get_guild_stickers": "🖼️ サーバーのスタンプを読み込んでいます...",
             "update_guild_knowledge": "📜 サーバーの文化を記録中...",
             "update_channel_knowledge": "📍 チャンネル専用のネタを記録中...",
+            "get_server_context": "🏠 サーバー情報を確認しています...",
+            "get_channel_context": "📢 チャンネル情報を確認しています...",
+            "get_user_discord_info": "👤 ユーザーの Discord プロフィールを確認しています...",
+            "get_user_stats": "📊 統計カードを生成しています...",
             "default": "🛠️ {tool_name} を使用中..."
         }
     }

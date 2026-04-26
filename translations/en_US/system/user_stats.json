@@ -1,0 +1,28 @@
+{
+    "card": {
+        "title": "📊 {name}'s Stats",
+        "total_messages": "Total Messages: {total}",
+        "most_active": "Most Active: {peak}",
+        "peak_detail": "{period} {h}:00-{h_end}:00 ({count} msgs)",
+        "streak": "Streak: {streak} days",
+        "top_channels": "Top Channels: {channels}",
+        "top_words": "Top Words: {words}",
+        "top_emojis": "Top Emojis: {emojis}",
+        "first_message": "First Message: {date} ({days_ago})",
+        "days_ago": "{days} days ago"
+    },
+    "periods": {
+        "morning": "Morning",
+        "noon": "Noon",
+        "afternoon": "Afternoon",
+        "evening": "Evening",
+        "midnight": "Late Night",
+        "dawn": "Early Morning"
+    },
+    "image": {
+        "header": "Total: {total} msgs  |  Streak: {streak} days",
+        "top_channels": "Top Channels:",
+        "activity_by_hour": "Activity by Hour:",
+        "top_emojis": "Top Emojis: {emojis}"
+    }
+}

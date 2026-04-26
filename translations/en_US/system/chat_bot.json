@@ -22,6 +22,10 @@
             "get_guild_stickers": "🖼️ Reading server stickers...",
             "update_guild_knowledge": "📜 Archiving guild culture lore...",
             "update_channel_knowledge": "📍 Recording channel-specific memes...",
+            "get_server_context": "🏠 Looking up server info...",
+            "get_channel_context": "📢 Looking up channel info...",
+            "get_user_discord_info": "👤 Looking up user Discord profile...",
+            "get_user_stats": "📊 Generating stats card...",
             "default": "🛠️ Using {tool_name}..."
         }
     }
