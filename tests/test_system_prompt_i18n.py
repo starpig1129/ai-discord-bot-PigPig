@@ -180,3 +180,67 @@ def test_localized_view_t_returns_fallback_on_exception():
     view = _make_localized_view(bot=mock_bot)
     result = view._t("commands", "system_prompt", "ui", "buttons", "set_prompt", fallback="Fallback")
     assert result == "Fallback"
+
+
+# ─── Unit tests for _ti() ─────────────────────────────────────────────────────
+
+def test_ti_calls_translate_with_guild_id_from_interaction():
+    mock_lm = MagicMock()
+    mock_lm.translate.return_value = "Translated"
+    mock_client = MagicMock()
+    mock_client.get_cog.return_value = mock_lm
+    mock_guild = MagicMock()
+    mock_guild.id = 42
+    mock_interaction = MagicMock()
+    mock_interaction.client = mock_client
+    mock_interaction.guild = mock_guild
+
+    from cogs.system_prompt.views import _ti
+    result = _ti(mock_interaction, "commands", "system_prompt", "ui", "buttons", "set_prompt")
+
+    mock_lm.translate.assert_called_once_with(
+        "42", "commands", "system_prompt", "ui", "buttons", "set_prompt"
+    )
+    assert result == "Translated"
+
+
+def test_ti_uses_system_guild_id_when_no_guild():
+    mock_lm = MagicMock()
+    mock_lm.translate.return_value = "Fallback"
+    mock_client = MagicMock()
+    mock_client.get_cog.return_value = mock_lm
+    mock_interaction = MagicMock()
+    mock_interaction.client = mock_client
+    mock_interaction.guild = None
+
+    from cogs.system_prompt.views import _ti
+    _ti(mock_interaction, "commands", "system_prompt", "ui", "buttons", "set_prompt")
+
+    mock_lm.translate.assert_called_once_with(
+        "system", "commands", "system_prompt", "ui", "buttons", "set_prompt"
+    )
+
+
+def test_ti_returns_fallback_when_no_client():
+    mock_interaction = MagicMock()
+    mock_interaction.client = None
+    mock_interaction.guild = MagicMock()
+    mock_interaction.guild.id = 99
+
+    from cogs.system_prompt.views import _ti
+    result = _ti(mock_interaction, "commands", "system_prompt", "ui", "buttons", "set_prompt", fallback="Set Prompt")
+    assert result == "Set Prompt"
+
+
+def test_ti_returns_fallback_on_exception():
+    mock_client = MagicMock()
+    mock_client.get_cog.side_effect = RuntimeError("cog error")
+    mock_guild = MagicMock()
+    mock_guild.id = 77
+    mock_interaction = MagicMock()
+    mock_interaction.client = mock_client
+    mock_interaction.guild = mock_guild
+
+    from cogs.system_prompt.views import _ti
+    result = _ti(mock_interaction, "commands", "system_prompt", "ui", "buttons", "set_prompt", fallback="Fallback")
+    assert result == "Fallback"
