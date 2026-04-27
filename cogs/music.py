@@ -735,7 +735,7 @@ class YTMusic(commands.Cog):
         
         title = self.lang_manager.translate(str(guild_id), "system", "music", "autoplay", "toggled", status=status_str)
         
-        await interaction.response.send_message(f"✅ | {title}", ephemeral=True, delete_after=5)
+        await interaction.response.send_message(f"✅ | {title}", ephemeral=True)
 
         # If autoplay is enabled, check if the upcoming queue is empty to fill it
         if state.autoplay and len(self.queue_manager.get_queue_snapshot(interaction.guild.id)) == 0:
