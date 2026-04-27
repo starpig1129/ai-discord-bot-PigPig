@@ -136,7 +136,7 @@ def test_changelog_error_handling():
     import llm.tools.bot_info as bi
 
     class _ErrorChecker:
-        def __init__(self, _): pass
+        def __init__(self, github_config=None): pass
         async def check_for_updates(self):
             raise RuntimeError("network failure")
 

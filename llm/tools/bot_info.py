@@ -26,10 +26,12 @@ class BotInfoTools:
     def __init__(self, runtime: "OrchestratorRequest") -> None:
         self.runtime = runtime
         self.logger = getattr(runtime, "logger", _logger)
+        self._checker = VersionChecker(github_config=update_config.github)
 
     def get_tools(self) -> list:
         """Return bot info tools."""
         logger = self.logger
+        checker = self._checker
 
         async def get_bot_changelog() -> str:
             """Fetches the bot's latest GitHub release notes to show recent updates.
@@ -39,7 +41,6 @@ class BotInfoTools:
             Use when the user asks what the bot was recently updated with.
             """
             try:
-                checker = VersionChecker(github_config=update_config.github)
                 info = await checker.check_for_updates()
 
                 if "error" in info:
