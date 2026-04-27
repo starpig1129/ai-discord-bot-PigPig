@@ -383,11 +383,12 @@ class EditModeSelectionView(LocalizedView):
             elif edit_mode == "module":
                 await self._handle_module_edit(interaction)
         except Exception as e:
-            self.logger.error(f"處理編輯模式選擇時發生錯誤: {e}", exc_info=True)
+            self.logger.error(f"EditModeButton callback error: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 操作失敗：{str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 操作失敗：{str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
     async def _handle_direct_edit(self, interaction: discord.Interaction):
@@ -479,7 +480,10 @@ class EditModeSelectionView(LocalizedView):
         try:
             modules = self.manager.get_available_modules()
             if not modules:
-                await interaction.response.send_message("❌ 暫無可用的模組", ephemeral=True)
+                await interaction.response.send_message(
+                    f"❌ {_ti(interaction, 'commands', 'system_prompt', 'messages', 'info', 'modules_none', fallback='No modules available')}",
+                    ephemeral=True,
+                )
                 return
 
             view = ModuleEditView(
@@ -511,7 +515,11 @@ class EditModeSelectionView(LocalizedView):
                 await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         except Exception as e:
             self.logger.error(f"載入模組時發生錯誤: {e}", exc_info=True)
-            await interaction.response.send_message(f"❌ 載入模組時發生錯誤：{str(e)}", ephemeral=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
     async def _handle_direct_set_callback(self, interaction: discord.Interaction, content: str):
         """處理直接設定回調"""
@@ -569,7 +577,11 @@ class EditModeSelectionView(LocalizedView):
                 # Modal callbacks should use followup if initial response was to send the modal
                 await interaction.response.send_message(embed=embed, ephemeral=True) 
             else:
-                await interaction.response.send_message(f"❌ 設定失敗：操作未成功返回。", ephemeral=True)
+                err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ {err}", ephemeral=True)
 
         except Exception as e:
             self.logger.error(f"設定系統提示時發生錯誤: {e}", exc_info=True)
