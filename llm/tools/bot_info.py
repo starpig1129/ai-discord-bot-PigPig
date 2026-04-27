@@ -19,6 +19,15 @@ if TYPE_CHECKING:
 
 _logger = get_logger(server_id="Bot", source="llm.tools.bot_info")
 
+_shared_checker: "VersionChecker | None" = None
+
+
+def _get_checker() -> "VersionChecker":
+    global _shared_checker
+    if _shared_checker is None or not isinstance(_shared_checker, VersionChecker):
+        _shared_checker = VersionChecker(github_config=update_config.github)
+    return _shared_checker
+
 
 class BotInfoTools:
     """Container for bot self-information tools."""
@@ -26,7 +35,7 @@ class BotInfoTools:
     def __init__(self, runtime: "OrchestratorRequest") -> None:
         self.runtime = runtime
         self.logger = getattr(runtime, "logger", _logger)
-        self._checker = VersionChecker(github_config=update_config.github)
+        self._checker = _get_checker()
 
     def get_tools(self) -> list:
         """Return bot info tools."""
@@ -50,7 +59,7 @@ class BotInfoTools:
                 latest = info.get("latest_version", "unknown")
                 update_available = info.get("update_available", False)
                 notes = info.get("release_notes", "").strip()
-                published = info.get("published_at", "")[:10]  # YYYY-MM-DD
+                published = str(info.get("published_at") or "")[:10]  # YYYY-MM-DD
 
                 lines = [
                     f"## 機器人版本資訊",
