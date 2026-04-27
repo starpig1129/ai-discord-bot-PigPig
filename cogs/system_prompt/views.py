@@ -585,11 +585,12 @@ class EditModeSelectionView(LocalizedView):
                     await interaction.followup.send(f"❌ {err}", ephemeral=True)
 
         except Exception as e:
-            self.logger.error(f"設定系統提示時發生錯誤: {e}", exc_info=True)
+            self.logger.error(f"Error in _handle_direct_set_callback: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 設定失敗: {str(e)}", ephemeral=True)
-            else: # Should be from modal, so initial response is done
-                await interaction.followup.send(f"❌ 設定失敗: {str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
 class EditModeButton(discord.ui.Button):
@@ -924,7 +925,7 @@ class ModuleSelect(discord.ui.Select):
         self.scope = scope
         self.channel = channel # This is the target channel for "channel" scope
         self.guild = guild
-        self.scope_text = scope_text or ("伺服器預設" if scope == "server" else (f"頻道 #{channel.name}" if channel else "未知頻道"))
+        self.scope_text = scope_text or ("Server Default" if scope == "server" else (f"#{channel.name}" if channel else "unknown"))
         self.logger = get_logger(server_id="system", source=__name__)
 
         if 'options' in kwargs and self.guild:
@@ -1005,11 +1006,12 @@ class ModuleSelect(discord.ui.Select):
             await interaction.response.send_modal(modal)
 
         except Exception as e:
-            self.logger.error(f"開啟模組編輯器失敗: {e}", exc_info=True)
-            if not interaction.response.is_done(): # Should not happen for select callback
-                await interaction.response.send_message(f"❌ 開啟編輯器失敗：{str(e)}", ephemeral=True)
-            else: # For select, interaction response is already done implicitly by edit_message or send_message from parent
-                await interaction.followup.send(f"❌ 開啟編輯器失敗：{str(e)}", ephemeral=True)
+            self.logger.error(f"ModuleSelect callback error: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
     async def _handle_module_callback(self, interaction: discord.Interaction, module_name: str, content: str):
@@ -1077,13 +1079,18 @@ class ModuleSelect(discord.ui.Select):
                 # ... (verification logic as in original) ...
 
                 embed = discord.Embed(
-                    title="✅ 模組設定成功",
-                    description=f"已成功設定 {display_scope_text} 的 **{module_name}** 模組",
-                    color=discord.Color.green()
+                    title=_ti(interaction, "commands", "system_prompt", "messages", "success", "set",
+                              fallback="✅ Module set successfully"),
+                    description=_ti(interaction, "commands", "system_prompt", "messages", "success", "set_description",
+                                    fallback="Successfully set {scope} system prompt").format(scope=display_scope_text),
+                    color=discord.Color.green(),
                 )
-                embed.add_field(name="模組名稱", value=module_name, inline=True)
-                embed.add_field(name="內容長度", value=f"{len(content)} 字元", inline=True)
-                embed.add_field(name="驗證狀態", value=verification_msg, inline=True) # Add verification status
+                embed.add_field(
+                    name=_ti(interaction, "commands", "system_prompt", "messages", "info", "content_length",
+                             fallback="Content length"),
+                    value=f"{len(content)} characters",
+                    inline=True,
+                )
 
                 await interaction.response.send_message(embed=embed, ephemeral=True) # From modal
             else:
