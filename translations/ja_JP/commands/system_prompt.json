@@ -37,7 +37,9 @@
             "confirm_copy": "コピー確認",
             "cancel": "キャンセル",
             "edit": "編集",
-            "preview": "プレビュー"
+            "preview": "プレビュー",
+            "reload_config": "設定を再読込",
+            "direct_edit": "直接編集"
         },
         "menus": {
             "set_prompt_title": "⚙️ システムプロンプト設定",
@@ -53,7 +55,9 @@
             "remove_prompt_title": "🗑️ システムプロンプト削除",
             "remove_prompt_description": "削除する範囲を選択してください",
             "reset_config_title": "🔄 システムプロンプトリセット",
-            "reset_config_description": "リセットする範囲を選択してください"
+            "reset_config_description": "リセットする範囲を選択してください",
+            "edit_mode_title": "⚙️ {scope} プロンプトを編集",
+            "edit_mode_description": "編集モードを選択してください"
         },
         "modals": {
             "system_prompt": {
@@ -94,7 +98,8 @@
             "reset": "✅ リセット成功",
             "reset_description": "{scope}システムプロンプト設定を正常にリセットしました",
             "operation_confirmed": "✅ 操作確認済み",
-            "operation_cancelled": "❌ 操作キャンセル"
+            "operation_cancelled": "❌ 操作キャンセル",
+            "reload": "✅ 設定の再読込が成功しました"
         },
         "info": {
             "scope_channel": "チャンネル #{channel}",
@@ -120,7 +125,8 @@
             "modules_none": "利用可能なモジュールなし",
             "preview_content": "内容",
             "preview_source": "ソース",
-            "preview_length": "長さ"
+            "preview_length": "長さ",
+            "reload_unavailable": "⚠️ 再読込機能は現在利用できません"
         },
         "confirm": {
             "remove_channel": "チャンネル #{channel} のシステムプロンプトを削除しますか？",
