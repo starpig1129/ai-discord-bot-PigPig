@@ -104,45 +104,53 @@ class ContextManager:
                 _LOGGER.error("procedural_provider.get failed", exception=e)
                 return ProceduralMemory(user_info={})
 
-        # 1. Extract author ID to start their procedural memory fetch immediately
-        author_ids = []
-        try:
-            fallback_author_id = getattr(getattr(message, "author", None), "id", None)
-            if fallback_author_id is not None:
-                author_ids.append(str(fallback_author_id))
-        except Exception:
-            pass
+        async def _fetch_short_term_and_procedural() -> Tuple[List[BaseMessage], ProceduralMemory]:
+            # 1. Extract author ID to start their procedural memory fetch immediately
+            author_ids = []
+            try:
+                fallback_author_id = getattr(getattr(message, "author", None), "id", None)
+                if fallback_author_id is not None:
+                    author_ids.append(str(fallback_author_id))
+            except Exception:
+                pass
 
-        # 2. Fetch short-term, episodic, author procedural, and knowledge memory in parallel
-        short_term_msgs, episodic_str, author_procedural, knowledge = await asyncio.gather(
-            _fetch_short_term(),
+            # 2. Fetch short-term and author procedural in parallel
+            short_term_msgs, author_procedural = await asyncio.gather(
+                _fetch_short_term(),
+                _fetch_procedural(author_ids),
+            )
+
+            # 3. Extract any additional user IDs from the fetched short-term messages
+            try:
+                extracted_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
+                )
+                _LOGGER.error("extract_user_ids failed", exception=e)
+                extracted_ids = []
+
+            # 4. Fetch procedural memory for any additional users
+            additional_ids = [uid for uid in extracted_ids if uid not in author_ids]
+            if additional_ids:
+                additional_procedural = await _fetch_procedural(additional_ids)
+                # Merge procedural memories
+                merged_info = dict(getattr(author_procedural, "user_info", {}))
+                merged_info.update(getattr(additional_procedural, "user_info", {}))
+                procedural_memory = ProceduralMemory(user_info=merged_info)
+            else:
+                procedural_memory = author_procedural
+
+            return short_term_msgs, procedural_memory
+
+        # 5. Fetch episodic, knowledge, and combined short-term/procedural memory in parallel
+        (short_term_msgs, procedural_memory), episodic_str, knowledge = await asyncio.gather(
+            _fetch_short_term_and_procedural(),
             _fetch_episodic(),
-            _fetch_procedural(author_ids),
             _fetch_knowledge(),
         )
 
-        # 3. Extract any additional user IDs from the fetched short-term messages
-        try:
-            extracted_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
-        except Exception as e:
-            asyncio.create_task(
-                func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
-            )
-            _LOGGER.error("extract_user_ids failed", exception=e)
-            extracted_ids = []
-
-        # 4. Fetch procedural memory for any additional users
-        additional_ids = [uid for uid in extracted_ids if uid not in author_ids]
-        if additional_ids:
-            additional_procedural = await _fetch_procedural(additional_ids)
-            # Merge procedural memories
-            merged_info = dict(getattr(author_procedural, "user_info", {}))
-            merged_info.update(getattr(additional_procedural, "user_info", {}))
-            procedural_memory = ProceduralMemory(user_info=merged_info)
-        else:
-            procedural_memory = author_procedural
-
-        # 5) Format procedural memory into string (no STM serialization here)
+        # 6. Format procedural memory into string (no STM serialization here)
         try:
             channel_name = getattr(message.channel, "name", str(getattr(message.channel, "id", "")))
         except Exception:
