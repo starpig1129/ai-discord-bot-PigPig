@@ -144,6 +144,7 @@ class SystemPromptMainView(LocalizedView):
 
     async def _handle_set_function(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        # TODO(Tasks 4-6): pass guild_id to sub-view
         view = SystemPromptSetView(
             manager=self.manager,
             permission_validator=self.permission_validator,
@@ -155,6 +156,7 @@ class SystemPromptMainView(LocalizedView):
 
     async def _handle_view_function(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        # TODO(Tasks 4-6): pass guild_id to sub-view
         view = SystemPromptViewOptionsView(
             manager=self.manager,
             permission_validator=self.permission_validator,
@@ -184,6 +186,7 @@ class SystemPromptMainView(LocalizedView):
 
     async def _handle_remove_function(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        # TODO(Tasks 4-6): pass guild_id to sub-view
         view = SystemPromptRemoveView(
             manager=self.manager,
             permission_validator=self.permission_validator,
@@ -195,6 +198,7 @@ class SystemPromptMainView(LocalizedView):
 
     async def _handle_reset_function(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        # TODO(Tasks 4-6): pass guild_id to sub-view
         view = SystemPromptResetView(
             manager=self.manager,
             permission_validator=self.permission_validator,
@@ -206,6 +210,7 @@ class SystemPromptMainView(LocalizedView):
 
     async def _handle_reload_function(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
+        # TODO(Tasks 4-6): pass guild_id to sub-view
         try:
             if hasattr(self.manager, "reload_all_configs") and callable(self.manager.reload_all_configs):
                 import asyncio as _asyncio
@@ -1079,6 +1084,7 @@ class BackButton(discord.ui.Button):
     """返回主選單按鈕"""
     def __init__(self, row: int = 4): # Default row or specified
         super().__init__(label="返回主選單", emoji="🔙", style=discord.ButtonStyle.secondary, row=row)
+        self.guild_id: str = "system"
         self.logger = get_logger(server_id="system", source=__name__)
 
     async def callback(self, interaction: discord.Interaction):
@@ -1091,12 +1097,13 @@ class BackButton(discord.ui.Button):
                 manager = commands_cog.get_system_prompt_manager()
                 permission_validator = commands_cog.permission_validator
 
-                main_view = SystemPromptMainView(manager, permission_validator)
-                embed = discord.Embed(
-                    title="🤖 系統提示管理",
-                    description="請選擇要執行的功能",
-                    color=discord.Color.blue()
-                )
+                guild_id = str(interaction.guild.id) if interaction.guild else self.guild_id
+                main_view = SystemPromptMainView(manager, permission_validator, guild_id=guild_id)
+                title = _ti(interaction, "commands", "system_prompt", "ui", "main_menu", "title",
+                            fallback="🤖 System Prompt Management")
+                description = _ti(interaction, "commands", "system_prompt", "ui", "main_menu", "description",
+                                  fallback="Please select a function")
+                embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
                 await interaction.response.edit_message(embed=embed, view=main_view)
             else:
                 self.logger.error("SystemPromptCommands cog or its methods not found for BackButton.")
