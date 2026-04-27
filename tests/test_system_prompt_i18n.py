@@ -31,6 +31,15 @@ def _get(d: dict, keys: tuple):
 
 
 @pytest.mark.parametrize("lang", LANGUAGES)
+def test_edit_mode_title_contains_scope_placeholder(lang):
+    data = _load(lang)
+    value = _get(data, ("ui", "menus", "edit_mode_title"))
+    assert value and "{scope}" in value, (
+        f"edit_mode_title missing {{scope}} placeholder in {lang}"
+    )
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
 @pytest.mark.parametrize("key_path", REQUIRED_KEYS)
 def test_required_key_exists(lang, key_path):
     data = _load(lang)
