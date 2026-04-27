@@ -25,6 +25,7 @@
             "get_channel_context": "📢 Looking up channel info...",
             "get_user_discord_info": "👤 Looking up user Discord profile...",
             "get_user_stats": "📊 Generating stats card...",
+            "get_bot_changelog": "📋 Checking bot update log...",
             "default": "🛠️ Using {tool_name}..."
         }
     }

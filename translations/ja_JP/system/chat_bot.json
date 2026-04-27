@@ -25,6 +25,7 @@
             "get_channel_context": "📢 チャンネル情報を確認しています...",
             "get_user_discord_info": "👤 ユーザーの Discord プロフィールを確認しています...",
             "get_user_stats": "📊 統計カードを生成しています...",
+            "get_bot_changelog": "📋 ボットの更新ログを確認しています...",
             "default": "🛠️ {tool_name} を使用中..."
         }
     }

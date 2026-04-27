@@ -25,6 +25,7 @@
             "get_channel_context": "📢 正在查詢頻道資訊...",
             "get_user_discord_info": "👤 正在查詢使用者 Discord 資料...",
             "get_user_stats": "📊 正在生成統計名片...",
+            "get_bot_changelog": "📋 正在查詢機器人更新日誌...",
             "default": "🛠️ 正在使用 {tool_name}..."
         }
     }
