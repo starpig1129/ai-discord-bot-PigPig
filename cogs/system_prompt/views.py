@@ -133,12 +133,9 @@ class SystemPromptMainView(LocalizedView):
 
         except Exception as e:
             self.logger.error(f"處理功能 {function} 時發生錯誤: {e}", exc_info=True)
-            lang_manager = interaction.client.get_cog("LanguageManager")
-            guild_id = str(interaction.guild.id) if interaction.guild else "system"
-            
-            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "operation_failed") if lang_manager else "Operation failed"
-            full_message = f"❌ {error_msg}: {str(e)}"
-            
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            full_message = f"❌ {err}: {str(e)}"
+
             if not interaction.response.is_done():
                 await interaction.response.send_message(full_message, ephemeral=True)
             else:
@@ -208,6 +205,7 @@ class SystemPromptMainView(LocalizedView):
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_reload_function(self, interaction: discord.Interaction):
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
         try:
             if hasattr(self.manager, "reload_all_configs") and callable(self.manager.reload_all_configs):
                 import asyncio as _asyncio
