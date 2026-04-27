@@ -504,6 +504,20 @@ class UserDataCog(commands.Cog):
             success = await self.knowledge_storage.update_knowledge(target_type, target_id, merged)
             
             if success:
+                # Invalidate KnowledgeMemoryProvider cache
+                try:
+                    orchestrator = getattr(self.bot, "orchestrator", None)
+                    if orchestrator:
+                        provider = getattr(
+                            getattr(orchestrator, "context_manager", None),
+                            "knowledge_provider",
+                            None,
+                        )
+                        if provider and hasattr(provider, "invalidate"):
+                            await provider.invalidate(target_type, target_id)
+                except Exception as cache_err:
+                    self.logger.warning(f"Failed to invalidate knowledge cache for {target_type} {target_id}: {cache_err}")
+
                 self.logger.info(f"Successfully persisted {target_type} knowledge.")
 
                 # Invalidate KnowledgeMemoryProvider cache
