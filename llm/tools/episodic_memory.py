@@ -65,6 +65,10 @@ class EpisodicMemoryTools:
             bot = get_bot()
             if not bot:
                 return "Error: Bot runtime is not available."
+
+            # Ensure at least one search parameter is provided
+            if not vector_query and not keyword_query:
+                return "Error: Please provide at least a `vector_query` (semantic search) or `keyword_query` (exact match) to search memories."
     
             try:
                 vector_manager = getattr(bot, "vector_manager", None)

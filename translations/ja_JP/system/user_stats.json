@@ -1,0 +1,28 @@
+{
+    "card": {
+        "title": "📊 {name} の統計",
+        "total_messages": "総メッセージ数: {total}",
+        "most_active": "最も活発な時間帯: {peak}",
+        "peak_detail": "{period} {h}:00-{h_end}:00 ({count} 件)",
+        "streak": "連続活動: {streak} 日",
+        "top_channels": "よく使うチャンネル: {channels}",
+        "top_words": "よく使う言葉: {words}",
+        "top_emojis": "よく使う絵文字: {emojis}",
+        "first_message": "初投稿: {date} ({days_ago})",
+        "days_ago": "{days} 日前"
+    },
+    "periods": {
+        "morning": "朝",
+        "noon": "昼",
+        "afternoon": "午後",
+        "evening": "夜",
+        "midnight": "深夜",
+        "dawn": "明け方"
+    },
+    "image": {
+        "header": "合計: {total} 件  |  連続: {streak} 日",
+        "top_channels": "チャンネル:",
+        "activity_by_hour": "時間別活動:",
+        "top_emojis": "絵文字: {emojis}"
+    }
+}

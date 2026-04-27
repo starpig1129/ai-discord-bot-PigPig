@@ -94,16 +94,21 @@ class YTMusic(commands.Cog):
     async def play(self, interaction: discord.Interaction, query: Optional[str] = None):
         """播放音樂或刷新UI命令"""
         guild_id = interaction.guild.id
-        
+        if not self.lang_manager: # Ensure lang_manager is loaded
+            self.lang_manager = self.bot.get_cog("LanguageManager")
+            if not self.lang_manager:
+                await interaction.response.send_message("Language manager not loaded.", ephemeral=True)
+                return
+
         # 檢查使用者是否已在語音頻道
         if not interaction.user.voice:
-            if not self.lang_manager:
-                self.lang_manager = self.bot.get_cog("LanguageManager")
             title = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "no_voice_channel")
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
             
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
         # 連接至語音頻道
         channel = interaction.user.voice.channel
         if interaction.guild.voice_client is None:
@@ -113,7 +118,7 @@ class YTMusic(commands.Cog):
                 await func.report_error(e, "music.py/play/channel.connect")
                 title = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "voice_connect_failed")
                 embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
                 return
 
         # 如果沒有提供查詢，刷新UI
@@ -132,10 +137,24 @@ class YTMusic(commands.Cog):
                     self
                 )
                 refresh_message = self.lang_manager.translate(str(guild_id), "commands", "play", "responses", "refreshed_ui")
-                await interaction.response.send_message(refresh_message, ephemeral=True, delete_after=5)
+                msg = await interaction.followup.send(refresh_message, ephemeral=True, wait=True)
+                async def _delete_refresh():
+                    await asyncio.sleep(5)
+                    try:
+                        await msg.delete()
+                    except Exception:
+                        pass
+                asyncio.create_task(_delete_refresh())
             else:
                 no_song_message = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "nothing_playing")
-                await interaction.response.send_message(no_song_message, ephemeral=True, delete_after=5)
+                msg = await interaction.followup.send(no_song_message, ephemeral=True, wait=True)
+                async def _delete_no_song():
+                    await asyncio.sleep(5)
+                    try:
+                        await msg.delete()
+                    except Exception:
+                        pass
+                asyncio.create_task(_delete_no_song())
             return
 
         # 如果有提供查詢，將音樂加入播放清單
@@ -143,7 +162,6 @@ class YTMusic(commands.Cog):
         
         # 檢查是否為URL
         if "youtube.com" in query or "youtu.be" in query:
-            await interaction.response.defer(ephemeral=True)
             # 檢查是否為播放清單
             if "list" in query:
                 await self._handle_playlist(interaction, query)
@@ -239,7 +257,6 @@ class YTMusic(commands.Cog):
 
     async def _handle_search(self, interaction: discord.Interaction, query: str):
         """Handle search query"""
-        await interaction.response.defer(ephemeral=True, thinking=True)
         results = await self.youtube.search_videos(query)
         guild_id = interaction.guild.id
         if not results:
@@ -718,7 +735,7 @@ class YTMusic(commands.Cog):
         
         title = self.lang_manager.translate(str(guild_id), "system", "music", "autoplay", "toggled", status=status_str)
         
-        await interaction.response.send_message(f"✅ | {title}", ephemeral=True, delete_after=5)
+        await interaction.response.send_message(f"✅ | {title}", ephemeral=True)
 
         # If autoplay is enabled, check if the upcoming queue is empty to fill it
         if state.autoplay and len(self.queue_manager.get_queue_snapshot(interaction.guild.id)) == 0:

@@ -17,6 +17,7 @@ from function import func
 from llm.memory.procedural import ProceduralMemoryProvider
 from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.episodic import EpisodicMemoryProvider
+from llm.memory.knowledge import KnowledgeMemoryProvider, KnowledgeMemory
 from llm.memory.schema import ProceduralMemory
 from langchain_core.messages import BaseMessage
 from addons.logging import get_logger
@@ -32,11 +33,13 @@ class ContextManager:
         short_term_provider: ShortTermMemoryProvider,
         procedural_provider: ProceduralMemoryProvider,
         episodic_provider: Optional[EpisodicMemoryProvider] = None,
+        knowledge_provider: Optional[KnowledgeMemoryProvider] = None,
     ) -> None:
         """Initialize with memory providers."""
         self.short_term_provider = short_term_provider
         self.procedural_provider = procedural_provider
         self.episodic_provider = episodic_provider
+        self.knowledge_provider = knowledge_provider
 
     async def get_context(self, message: discord.Message) -> Tuple[str, List[BaseMessage]]:
         """Return (procedural_context_str, short_term_msgs).
@@ -45,53 +48,17 @@ class ContextManager:
         ShortTermMemoryProvider.
         """
 
-        async def _fetch_short_term_and_procedural() -> Tuple[ProceduralMemory, List[BaseMessage]]:
-            # 1) Fetch short-term messages
-            short_term_msgs: List[BaseMessage] = []
+        async def _fetch_short_term() -> List[BaseMessage]:
             try:
-                short_term_msgs = await self.short_term_provider.get(message)
+                return await self.short_term_provider.get(message)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                # Report and continue with safe fallback per design
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: short_term_provider.get failed")
                 )
                 _LOGGER.error("short_term_provider.get failed", exception=e)
-
-            # 2) Extract user ids to fetch procedural memory
-            try:
-                user_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                asyncio.create_task(
-                    func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
-                )
-                _LOGGER.error("extract_user_ids failed", exception=e)
-                user_ids = []
-                try:
-                    fallback_author_id = getattr(getattr(message, "author", None), "id", None)
-                    if fallback_author_id is not None:
-                        user_ids.append(str(fallback_author_id))
-                except Exception:
-                    # Best-effort fallback; proceed with empty user_ids
-                    pass
-
-            # 3) Fetch procedural memory
-            try:
-                procedural_memory = await self.procedural_provider.get(user_ids)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                asyncio.create_task(
-                    func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
-                )
-                _LOGGER.error("procedural_provider.get failed", exception=e)
-                procedural_memory = ProceduralMemory(user_info={})
-
-            return procedural_memory, short_term_msgs
-
+                return []
 
         async def _fetch_episodic() -> Optional[str]:
             if not self.episodic_provider:
@@ -99,7 +66,7 @@ class ContextManager:
             try:
                 return await self.episodic_provider.get(message)
             except asyncio.CancelledError:
-                return None
+                raise
             except Exception as e:
                 asyncio.create_task(
                     func.report_error(e, "ContextManager.get_context: episodic_provider.get failed")
@@ -107,13 +74,83 @@ class ContextManager:
                 _LOGGER.error("episodic_provider.get failed", exception=e)
                 return None
 
-        # Fetch short-term/procedural memory AND episodic context in parallel to minimize latency
-        (procedural_memory, short_term_msgs), episodic_str = await asyncio.gather(
+        async def _fetch_knowledge() -> Optional[KnowledgeMemory]:
+            if not self.knowledge_provider:
+                return None
+            try:
+                guild_id = str(message.guild.id) if message.guild else None
+                channel_id = str(message.channel.id)
+                return await self.knowledge_provider.get(guild_id, channel_id)
+            except asyncio.CancelledError:
+                return None
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: knowledge_provider.get failed")
+                )
+                _LOGGER.error("knowledge_provider.get failed", exception=e)
+                return None
+
+        async def _fetch_procedural(uids: List[str]) -> ProceduralMemory:
+            if not uids:
+                return ProceduralMemory(user_info={})
+            try:
+                return await self.procedural_provider.get(uids)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: procedural_provider.get failed")
+                )
+                _LOGGER.error("procedural_provider.get failed", exception=e)
+                return ProceduralMemory(user_info={})
+
+        async def _fetch_short_term_and_procedural() -> Tuple[List[BaseMessage], ProceduralMemory]:
+            # 1. Extract author ID to start their procedural memory fetch immediately
+            author_ids = []
+            try:
+                fallback_author_id = getattr(getattr(message, "author", None), "id", None)
+                if fallback_author_id is not None:
+                    author_ids.append(str(fallback_author_id))
+            except Exception:
+                pass
+
+            # 2. Fetch short-term and author procedural in parallel
+            short_term_msgs, author_procedural = await asyncio.gather(
+                _fetch_short_term(),
+                _fetch_procedural(author_ids),
+            )
+
+            # 3. Extract any additional user IDs from the fetched short-term messages
+            try:
+                extracted_ids = self._extract_user_ids_from_messages(short_term_msgs, message)
+            except Exception as e:
+                asyncio.create_task(
+                    func.report_error(e, "ContextManager.get_context: extract_user_ids failed")
+                )
+                _LOGGER.error("extract_user_ids failed", exception=e)
+                extracted_ids = []
+
+            # 4. Fetch procedural memory for any additional users
+            additional_ids = [uid for uid in extracted_ids if uid not in author_ids]
+            if additional_ids:
+                additional_procedural = await _fetch_procedural(additional_ids)
+                # Merge procedural memories
+                merged_info = dict(getattr(author_procedural, "user_info", {}))
+                merged_info.update(getattr(additional_procedural, "user_info", {}))
+                procedural_memory = ProceduralMemory(user_info=merged_info)
+            else:
+                procedural_memory = author_procedural
+
+            return short_term_msgs, procedural_memory
+
+        # 5. Fetch episodic, knowledge, and combined short-term/procedural memory in parallel
+        (short_term_msgs, procedural_memory), episodic_str, knowledge = await asyncio.gather(
             _fetch_short_term_and_procedural(),
             _fetch_episodic(),
+            _fetch_knowledge(),
         )
 
-        # 4) Format procedural memory into string (no STM serialization here)
+        # 6. Format procedural memory into string (no STM serialization here)
         try:
             channel_name = getattr(message.channel, "name", str(getattr(message.channel, "id", "")))
         except Exception:
@@ -141,7 +178,12 @@ class ContextManager:
         procedural_str = ""
         try:
             procedural_str = self._format_context_for_prompt(
-                procedural_memory, channel_name, timestamp, episodic_str=episodic_str, human_time=human_time
+                procedural_memory, 
+                channel_name, 
+                timestamp, 
+                episodic_str=episodic_str, 
+                human_time=human_time,
+                knowledge=knowledge
             )
         except Exception as e:
             asyncio.create_task(
@@ -217,6 +259,7 @@ class ContextManager:
         timestamp: float,
         episodic_str: Optional[str] = None,
         human_time: Optional[str] = None,
+        knowledge: Optional[KnowledgeMemory] = None,
     ) -> str:
         """Format procedural memory and current state into a single string.
  
@@ -256,6 +299,12 @@ class ContextManager:
 
         if episodic_str:
             parts.append(episodic_str)
+
+        if knowledge:
+            if knowledge.guild_knowledge:
+                parts.append(f"--- Guild Knowledge ---\n{knowledge.guild_knowledge}")
+            if knowledge.channel_knowledge:
+                parts.append(f"--- Channel Knowledge (Inside Jokes) ---\n{knowledge.channel_knowledge}")
 
         parts.append("--- End System Context ---")
         return "\n\n".join(parts)

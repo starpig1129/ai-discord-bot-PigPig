@@ -1,6 +1,6 @@
 from __future__ import annotations
 import asyncio
-from typing import Any, List, Optional
+from typing import Any, List, MutableMapping, Optional
 import re
 
 from addons.logging import get_logger
@@ -21,6 +21,8 @@ from function import func
 from addons.settings import llm_config, prompt_config
 
 _LLM_CALL_TIMEOUT_SECONDS: float = llm_config.llm_call_timeout
+_IMAGE_FETCH_TIMEOUT_SECONDS: float = 15.0
+
 from .prompting.system_prompt import get_system_prompt
 from .prompting.protected_prompt_manager import get_protected_prompt_manager
 
@@ -28,6 +30,8 @@ from llm.context_manager import ContextManager
 from llm.memory.short_term import ShortTermMemoryProvider
 from llm.memory.procedural import ProceduralMemoryProvider
 from llm.memory.episodic import EpisodicMemoryProvider
+from llm.memory.knowledge import KnowledgeMemoryProvider
+from cogs.memory.db.knowledge_storage import KnowledgeStorage
 from llm.callbacks import ToolFeedbackCallbackHandler
 from llm.model_circuit_breaker import get_model_circuit_breaker
 
@@ -76,6 +80,19 @@ class Orchestrator:
 
         # Episodic provider: only when memory is enabled and vector store is available
         episodic_provider: Optional[EpisodicMemoryProvider] = None
+        
+        # Initialize Knowledge Provider
+        knowledge_provider = None
+        db = getattr(user_manager, "storage", None)
+        if db:
+            # Assuming db has a DatabaseConnection instance named 'db'
+            # Based on procedural_storage.py, it uses self.db
+            conn = getattr(db, "db", None)
+            if conn:
+                knowledge_storage = KnowledgeStorage(conn)
+                knowledge_provider = KnowledgeMemoryProvider(knowledge_storage)
+
+        from addons.settings import memory_config
         if memory_enabled and getattr(bot, "vector_manager", None) is not None:
             episodic_provider = EpisodicMemoryProvider(bot=bot, top_k=3, max_chars=1500)
 
@@ -83,6 +100,7 @@ class Orchestrator:
             short_term_provider=short_term_provider,
             procedural_provider=procedural_provider,
             episodic_provider=episodic_provider,
+            knowledge_provider=knowledge_provider,
         )
 
     def _build_info_agent_prompt(self, bot_id: int, message: Message) -> str:
@@ -230,6 +248,132 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             return get_system_prompt(str(bot_id), message)
 
 
+    async def _sanitize_messages_for_model(self, messages: List[BaseMessage], model_name: str, image_cache: Optional[MutableMapping[str, dict[str, Any]]] = None) -> List[BaseMessage]:
+        """
+        Sanitize messages for the specific model.
+        - Ollama requires base64 images instead of direct HTTP URLs.
+        - Gemini 3.x models require thought_signature for tool_calls. To prevent 400 errors, we convert past tool calls to text.
+        """
+        cache: MutableMapping[str, dict[str, Any]] = image_cache if image_cache is not None else {}
+
+        if "gemini-3" in model_name:
+            from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+            sanitized = []
+            for msg in messages:
+                if isinstance(msg, ToolMessage):
+                    tool_name = getattr(msg, "name", "unknown")
+                    sanitized.append(HumanMessage(content=f"[System: Tool Result ({tool_name})]\n{msg.content}"))
+                elif isinstance(msg, AIMessage):
+                    has_tool_calls = bool(getattr(msg, "tool_calls", None))
+                    has_function_call = "function_call" in msg.additional_kwargs or "tool_calls" in msg.additional_kwargs
+                    
+                    if has_tool_calls or has_function_call:
+                        _text = msg.content if isinstance(msg.content, str) else ""
+                        tool_names = []
+                        if has_tool_calls:
+                            tool_names = [tc.get("name", "unknown") for tc in getattr(msg, "tool_calls", [])]
+                        if not _text.strip() and tool_names:
+                            _text = f"[Assistant: Calling tool(s): {', '.join(tool_names)}]"
+                        elif not _text.strip():
+                            _text = "[Assistant: Internal process executed]"
+                        # Create new AIMessage with clean kwargs to avoid triggering functionCall serialization
+                        sanitized.append(AIMessage(content=_text))
+                    else:
+                        sanitized.append(msg)
+                else:
+                    sanitized.append(msg)
+            return sanitized
+
+        if not model_name.startswith("ollama:"):
+            return messages
+
+        import aiohttp
+        import base64
+        import copy
+        
+        # 1. Collect all unique URLs that need fetching
+        urls_to_fetch = set()
+        for msg in messages:
+            if isinstance(msg.content, list):
+                for part in msg.content:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        url = part.get("image_url", {}).get("url", "")
+                        if url.startswith("http") and url not in cache:
+                            urls_to_fetch.add(url)
+
+        # 2. Fetch all missing URLs concurrently
+        if urls_to_fetch:
+            async def fetch_image(session: aiohttp.ClientSession, url: str):
+                try:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            img_data = await resp.read()
+                            b64_data = base64.b64encode(img_data).decode('utf-8')
+                            raw_content_type = resp.headers.get('Content-Type', 'image/jpeg')
+                            mime_type = raw_content_type.split(';', 1)[0].strip() or 'image/jpeg'
+                            return url, {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_data}"}}
+                        else:
+                            return url, {"type": "text", "text": f"[Image attached: {url}]"}
+                except Exception as e:
+                    logger.warning(f"Failed to fetch image for Ollama: {e}")
+                    return url, {"type": "text", "text": f"[Image attached: {url}]"}
+
+            timeout = aiohttp.ClientTimeout(total=_IMAGE_FETCH_TIMEOUT_SECONDS)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                tasks = {asyncio.create_task(fetch_image(session, url)): url for url in urls_to_fetch}
+                done, pending = await asyncio.wait(tasks.keys(), timeout=_IMAGE_FETCH_TIMEOUT_SECONDS)
+
+                results = []
+                if pending:
+                    logger.warning("Timed out fetching images for Ollama; using placeholders")
+                    for task in pending:
+                        task.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
+
+                for task in done:
+                    if task.cancelled():
+                        url = tasks[task]
+                        results.append((url, {"type": "text", "text": f"[Image attached: {url}]"}))
+                        continue
+                    try:
+                        results.append(task.result())
+                    except Exception as e:
+                        url = tasks[task]
+                        logger.warning(f"Failed to process fetched image task: {e}")
+                        results.append((url, {"type": "text", "text": f"[Image attached: {url}]"}))
+
+
+                for url, content_part in results:
+                    cache[url] = content_part
+
+        # 3. Reconstruct messages using the cache
+        sanitized = []
+        for msg in messages:
+            if isinstance(msg.content, list):
+                new_content = []
+                for part in msg.content:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        url = part.get("image_url", {}).get("url", "")
+                        if url.startswith("http"):
+                            # This URL should now be in the cache
+                            cached_part = cache.get(url)
+                            if cached_part:
+                                new_content.append(cached_part)
+                            else:
+                                new_content.append({"type": "text", "text": f"[Image attached: {url}]"})
+                        else:
+                            new_content.append(part)
+                    else:
+                        new_content.append(part)
+
+                new_msg = copy.copy(msg)
+                new_msg.content = new_content
+                sanitized.append(new_msg)
+            else:
+                sanitized.append(msg)
+
+        return sanitized
+
     async def handle_message(
         self, bot: Any, message_edit: Message, message: Message, logger: Any
     ) -> OrchestratorResponse:
@@ -253,6 +397,14 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
         # Provide feedback to the user that the bot is processing
         async with message.channel.typing():
+            # Interrupt any active background memory tasks to prioritize this conversation
+            if hasattr(bot, "message_tracker") and bot.message_tracker:
+                bot.message_tracker.interrupt_all()
+
+            # Create a shared image cache for this entire message processing cycle
+            # This prevents re-downloading identical image URLs across multiple model fallback attempts
+            # in both the info_agent and message_agent phases.
+            image_cache = {}
             # 1) Acquire contextual data from ContextManager with resilient error handling
             try:
                 ctx = await self.context_manager.get_context(message)
@@ -306,8 +458,8 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     raise RuntimeError(f"Failed to get info_model priority list: {e}") from e
 
                 info_system_prompt = self._build_info_agent_prompt(bot_id=bot.user.id, message=message)
-                # IMPORTANT: full_info_prompt should only include procedural_context_str (string) and system prompt.
-                full_info_prompt = f"{procedural_context_str}\n\n{info_system_prompt}"
+                # IMPORTANT: Place static info_system_prompt before dynamic procedural_context_str to maximize KV cache reuse!
+                full_info_prompt = f"{info_system_prompt}\n\n{procedural_context_str}"
 
                 # Inject short-term memory messages directly before current user input
                 messages_for_info_agent = list(short_term_msgs)
@@ -338,20 +490,27 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     try:
                         logger.info(f"Info agent: trying model {current_info_model} ({model_index + 1}/{len(info_model_list)})")
                         
+                        # Apply thought-budget control prompt for reasoning models
+                        model_specific_prompt = full_info_prompt
+                        if any(x in current_info_model.lower() for x in ["ollama", "deepseek", "gemma", "r1"]):
+                            model_specific_prompt += llm_config.reasoning_optimization_prompt
+
                         # Instantiate model with zero retries to ensure immediate fallback on quota exhaustion
                         info_model_instance = init_chat_model(current_info_model, max_retries=0)
                         
                         info_agent = create_agent(
                             model=info_model_instance,
                             tools=info_agent_tools,
-                            system_prompt=full_info_prompt,
+                            system_prompt=model_specific_prompt,
                             middleware=[DirectToolOutputMiddleware()],
                         )
+
+                        sanitized_messages = await self._sanitize_messages_for_model(messages_for_info_agent, current_info_model, image_cache)
 
                         # Execute info_agent to process user message and tools
                         info_result = await asyncio.wait_for(
                             info_agent.ainvoke(
-                                {"messages": messages_for_info_agent},
+                                {"messages": sanitized_messages},
                                 config={"callbacks": callbacks}
                             ),
                             timeout=_LLM_CALL_TIMEOUT_SECONDS,
@@ -365,12 +524,19 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     except Exception as e:
                         last_info_exception = e
                         # Record failure in circuit breaker
-                        circuit_breaker.record_failure(current_info_model, e)
-                        logger.warning(f"Info agent model {current_info_model} failed: {e}")
+                        category = circuit_breaker.record_failure(current_info_model, e)
+                        logger.exception(f"Info agent model {current_info_model} failed (Category: {category.name}): {e}")
+                        
+                        # Briefly wait if transient to allow network/model state to stabilize
+                        if category.name == "TRANSIENT":
+                            await asyncio.sleep(0.5)
                         # Continue to next model immediately
                 
-                if info_result is None and last_info_exception is not None:
-                    raise last_info_exception
+                if info_result is None:
+                    if last_info_exception is not None:
+                        raise last_info_exception
+                    else:
+                        raise RuntimeError("All models skipped for info_agent due to circuit breaker cooldown.")
                 
                 # Extract the analysis output from info_agent result
                 # Info agent should return analysis in a format suitable for message generation
@@ -401,8 +567,8 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 # are protected from user modification
                 message_system_prompt = self._build_message_agent_prompt(bot.user.id, message)
 
-                # full_message_prompt must only include procedural_context_str and system prompt
-                full_message_prompt = f"{procedural_context_str}\n\n{message_system_prompt}"
+                # IMPORTANT: Place static message_system_prompt before dynamic procedural_context_str to maximize KV cache reuse!
+                full_message_prompt = f"{message_system_prompt}\n\n{procedural_context_str}"
 
                 # Use the analysis from info_agent for message generation
                 # Compose messages for message_agent with analysis output and context
@@ -446,18 +612,25 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     try:
                         logger.info(f"Message agent: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
                         
+                        # Apply thought-budget control prompt for reasoning models
+                        model_specific_message_prompt = full_message_prompt
+                        if any(x in current_model.lower() for x in ["ollama", "deepseek", "gemma", "r1"]):
+                            model_specific_message_prompt += llm_config.reasoning_optimization_prompt
+
                         # Create agent with current model configured for zero retries
                         message_model_instance = init_chat_model(current_model, max_retries=0)
                         
                         message_agent = create_agent(
                             model=message_model_instance,
                             tools=message_agent_tools,
-                            system_prompt=full_message_prompt,
+                            system_prompt=model_specific_message_prompt,
                             middleware=[ModelCallLimitMiddleware(run_limit=1, exit_behavior="end")],
                         )
                         
+                        sanitized_messages = await self._sanitize_messages_for_model(messages_for_message_agent, current_model, image_cache)
+                        
                         streamer = message_agent.astream(
-                            {"messages": messages_for_message_agent},
+                            {"messages": sanitized_messages},
                             stream_mode="messages",
                         )
                         
@@ -472,9 +645,10 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                                 message,
                                 streamer,
                                 raise_exception=not is_last_available,
-                                tools=all_tools
+                                tools=all_tools,
+                                inactivity_timeout=_LLM_CALL_TIMEOUT_SECONDS  # Use config value for inactivity
                             ),
-                            timeout=_LLM_CALL_TIMEOUT_SECONDS,
+                            timeout=180.0,  # Much larger total safety timeout
                         )
                         
                         # Success!
@@ -485,8 +659,12 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     except Exception as e:
                         last_exception = e
                         # Record failure in circuit breaker
-                        circuit_breaker.record_failure(current_model, e)
-                        logger.warning(f"Model {current_model} failed: {e}")
+                        category = circuit_breaker.record_failure(current_model, e)
+                        logger.exception(f"Model {current_model} failed (Category: {category.name}): {e}")
+                        
+                        # Briefly wait if transient to allow network/model state to stabilize
+                        if category.name == "TRANSIENT":
+                            await asyncio.sleep(0.5)
                         # Continue to next model immediately
                     
                     # If we got a result, break out of the model loop
@@ -494,8 +672,11 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         break
                 
                 # If all models failed, raise the last exception
-                if message_result is None and last_exception is not None:
-                    raise last_exception
+                if message_result is None:
+                    if last_exception is not None:
+                        raise last_exception
+                    else:
+                        raise RuntimeError("All models skipped due to circuit breaker cooldown.")
 
             except Exception as e:
                 await asyncio.create_task(func.report_error(e, "message_agent failed"))

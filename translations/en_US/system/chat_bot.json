@@ -4,6 +4,7 @@
         "thinking": "🧠 Thinking about reply...",
         "processing": "Processing...",
         "continuation": "Continuing output...",
+        "empty_fallback": "I'm not sure how to respond to that...",
         "tools": {
             "internet_search": "🌍 Searching the web...",
             "search_episodic_memory": "🧠 Recalling past conversations...",
@@ -15,10 +16,16 @@
             "add_reaction": "😊 Adding a reaction...",
             "send_sticker": "🎭 Sending a sticker...",
             "list_tools": "🔧 Checking available tools...",
-            "get_user_activity": "👀 Checking user activity...",
             "get_channel_participants": "👥 Checking channel members...",
             "get_guild_emojis": "😀 Reading server emojis...",
             "get_guild_stickers": "🖼️ Reading server stickers...",
+            "update_guild_knowledge": "📜 Archiving guild culture lore...",
+            "update_channel_knowledge": "📍 Recording channel-specific memes...",
+            "get_server_context": "🏠 Looking up server info...",
+            "get_channel_context": "📢 Looking up channel info...",
+            "get_user_discord_info": "👤 Looking up user Discord profile...",
+            "get_user_stats": "📊 Generating stats card...",
+            "get_bot_changelog": "📋 Checking bot update log...",
             "default": "🛠️ Using {tool_name}..."
         }
     }

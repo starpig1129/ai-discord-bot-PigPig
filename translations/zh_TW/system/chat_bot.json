@@ -4,6 +4,7 @@
         "thinking": "🧠 思考回覆中...",
         "processing": "處理中...",
         "continuation": "繼續輸出中...",
+        "empty_fallback": "不知道該怎麼回覆你了...",
         "tools": {
             "internet_search": "🌍 正在網路上尋找答案...",
             "search_episodic_memory": "🧠 正在回憶過去的對話...",
@@ -15,10 +16,16 @@
             "add_reaction": "😊 正在添加表情回應...",
             "send_sticker": "🎭 正在貼貼圖...",
             "list_tools": "🔧 正在查看可用工具...",
-            "get_user_activity": "👀 正在查看使用者動態...",
             "get_channel_participants": "👥 正在查看頻道成員...",
             "get_guild_emojis": "😀 正在讀取伺服器表情符號...",
             "get_guild_stickers": "🖼️ 正在讀取伺服器貼圖...",
+            "update_guild_knowledge": "📜 正在建立伺服器文化檔案...",
+            "update_channel_knowledge": "📍 正在紀錄頻道專屬黑話...",
+            "get_server_context": "🏠 正在查詢伺服器資訊...",
+            "get_channel_context": "📢 正在查詢頻道資訊...",
+            "get_user_discord_info": "👤 正在查詢使用者 Discord 資料...",
+            "get_user_stats": "📊 正在生成統計名片...",
+            "get_bot_changelog": "📋 正在查詢機器人更新日誌...",
             "default": "🛠️ 正在使用 {tool_name}..."
         }
     }

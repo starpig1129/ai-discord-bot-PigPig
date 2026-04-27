@@ -35,7 +35,6 @@ class ShortTermMemoryProvider:
         try:
             history = [
                 msg async for msg in message.channel.history(limit=self.limit)
-                if msg.author.id != self.bot.user.id
             ]
             history.reverse()
 
@@ -53,7 +52,24 @@ class ShortTermMemoryProvider:
                     content_suffix.append(f"reactions: {reactions_info}")
                 # Include reference info if it's a reply
                 if msg.reference:
-                    content_suffix.append(f"reply_to: {msg.reference.message_id}")
+                    ref_text = f"reply_to: {msg.reference.message_id}"
+                    ref_msg = None
+                    if hasattr(msg.reference, "resolved") and isinstance(msg.reference.resolved, discord.Message):
+                        ref_msg = msg.reference.resolved
+                    elif hasattr(msg.reference, "cached_message") and msg.reference.cached_message:
+                        ref_msg = msg.reference.cached_message
+
+                    if ref_msg:
+                        ref_author = ref_msg.author.name
+                        # Create a brief summary of the referenced content
+                        ref_content = ref_msg.content.replace('\n', ' ')[:50]
+                        if len(ref_msg.content) > 50:
+                            ref_content += "..."
+                        if not ref_content and ref_msg.attachments:
+                            ref_content = "[圖片/附件]"
+                        ref_text = f"回覆給 @{ref_author}: '{ref_content}' (MessageID:{msg.reference.message_id})"
+                        
+                    content_suffix.append(ref_text)
 
                 # Provide both Unix timestamp and human-readable time
                 ts = msg.created_at.timestamp()

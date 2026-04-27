@@ -268,7 +268,18 @@ class PigPig(commands.Bot):
                     return  # In story mode, don't continue with general message processing
 
                 # Only trigger handle_message if in allowed channel and mentioned or auto-response enabled
-                if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled):
+                is_reply_to_bot = False
+                if message.reference:
+                    ref_msg = None
+                    if hasattr(message.reference, 'resolved') and isinstance(message.reference.resolved, discord.Message):
+                        ref_msg = message.reference.resolved
+                    elif hasattr(message.reference, 'cached_message') and message.reference.cached_message:
+                        ref_msg = message.reference.cached_message
+                        
+                    if ref_msg and ref_msg.author.id == self.user.id:
+                        is_reply_to_bot = True
+
+                if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled or is_reply_to_bot):
                     message_edit = await message.reply("...")
                     await self.orchestrator.handle_message(self, message_edit, message, bound_log)
         except Exception as e:
@@ -327,7 +338,18 @@ class PigPig(commands.Bot):
                                 await story_manager_cog.handle_story_message(after)
                             return  # In story mode, don't continue with general message processing
                         
-                        if is_allowed and (self.user.id in after.raw_mentions and not after.mention_everyone or auto_response_enabled):
+                        is_reply_to_bot = False
+                        if after.reference:
+                            ref_msg = None
+                            if hasattr(after.reference, 'resolved') and isinstance(after.reference.resolved, discord.Message):
+                                ref_msg = after.reference.resolved
+                            elif hasattr(after.reference, 'cached_message') and after.reference.cached_message:
+                                ref_msg = after.reference.cached_message
+                                
+                            if ref_msg and ref_msg.author.id == self.user.id:
+                                is_reply_to_bot = True
+
+                        if is_allowed and (self.user.id in after.raw_mentions and not after.mention_everyone or auto_response_enabled or is_reply_to_bot):
                             message_edit = await after.reply("...")
                             await self.orchestrator.handle_message(self,message_edit, after, logger)
                             
@@ -576,17 +598,51 @@ class PigPig(commands.Bot):
                 logger.error("Failed replying error message", exception=e)
             else:
                 log.error(f"Failed replying error message: {e}", exception=e)
-            await func.report_error(ctx, error)
+            await func.report_error(error, f"on_command_error_reply_fail: {ctx.command}")
             
     async def send_error_report(self, embed: discord.Embed):
         bug_report_channel_id = tokens.bug_report_channel_id
-        if bug_report_channel_id:
+        if not bug_report_channel_id:
+            return
+
+        # Attempt to get logger; fallback to default if not available
+        try:
+            logger = self.get_logger_for_guild("Bot")
+        except Exception:
+            from addons.logging import log as fallback_log
+            logger = fallback_log
+
+        try:
+            # 1. Ensure the bot is connected and internal cache/HTTP client is ready
+            # Calling fetch_channel when not ready triggers AttributeError: '_MissingSentinel' object has no attribute 'is_set'
+            if not self.is_ready():
+                logger.warning(f"Bot not ready; skipping remote error report to channel {bug_report_channel_id}")
+                return
+
+            # 2. Try to get from cache first
             channel = self.get_channel(int(bug_report_channel_id))
+            
+            # 3. Fallback to API call if not in cache (ensures reaching channel even after long inactivity)
+            if not channel:
+                try:
+                    channel = await self.fetch_channel(int(bug_report_channel_id))
+                except Exception as fetch_exc:
+                    logger.error(f"Failed to fetch error report channel {bug_report_channel_id}: {fetch_exc}")
+                    return
+            
+            # 4. Final attempt to send the embed
             if channel:
-                await channel.send(embed=embed)
+                try:
+                    await channel.send(embed=embed)
+                except Exception as send_exc:
+                    logger.error(f"Failed to send embed to channel {bug_report_channel_id}: {send_exc}")
             else:
-                logger = self.get_logger_for_guild("Bot")
                 logger.error(f"找不到指定的錯誤報告頻道: {bug_report_channel_id}")
+
+        except Exception as e:
+            # Catch any remaining unexpected errors to prevent loop (error reporting failing during error reporting)
+            logger.error(f"發送錯誤報告至頻道 {bug_report_channel_id} 發生未預期錯誤: {e}")
+
                 
     async def close(self):
         """Gracefully shut down the bot and all systems.

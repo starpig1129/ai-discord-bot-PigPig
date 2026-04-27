@@ -4,6 +4,7 @@
         "thinking": "🧠 返信を考え中...",
         "processing": "処理中...",
         "continuation": "出力を継続中...",
+        "empty_fallback": "どう答えたらいいか分かりません...",
         "tools": {
             "internet_search": "🌍 ネットで答えを探しています...",
             "search_episodic_memory": "🧠 過去の会話を思い出しています...",
@@ -15,10 +16,16 @@
             "add_reaction": "😊 リアクションを追加しています...",
             "send_sticker": "🎭 スタンプを送信しています...",
             "list_tools": "🔧 利用可能なツールを確認しています...",
-            "get_user_activity": "👀 ユーザーのアクティビティを確認しています...",
             "get_channel_participants": "👥 チャンネルのメンバーを確認しています...",
             "get_guild_emojis": "😀 サーバーの絵文字を読み込んでいます...",
             "get_guild_stickers": "🖼️ サーバーのスタンプを読み込んでいます...",
+            "update_guild_knowledge": "📜 サーバーの文化を記録中...",
+            "update_channel_knowledge": "📍 チャンネル専用のネタを記録中...",
+            "get_server_context": "🏠 サーバー情報を確認しています...",
+            "get_channel_context": "📢 チャンネル情報を確認しています...",
+            "get_user_discord_info": "👤 ユーザーの Discord プロフィールを確認しています...",
+            "get_user_stats": "📊 統計カードを生成しています...",
+            "get_bot_changelog": "📋 ボットの更新ログを確認しています...",
             "default": "🛠️ {tool_name} を使用中..."
         }
     }

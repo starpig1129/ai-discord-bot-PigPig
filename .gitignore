@@ -5,7 +5,7 @@
 .roo
 .claude
 __pycache__/
-
+graphify-out
 # 忽略資料庫檔案與向量儲存
 data/channel_configs
 data/*.json

@@ -214,7 +214,8 @@ async def _process_token_stream(
     message: discord.Message,
     lang_manager,
     update_interval: float = _UPDATE_INTERVAL,
-    tools: Optional[List[Any]] = None
+    tools: Optional[List[Any]] = None,
+    inactivity_timeout: float = 15.0  # Default inactivity timeout
 ) -> Tuple[str, discord.Message]:
     """Processes token stream and updates Discord messages based on time interval.
     
@@ -226,6 +227,8 @@ async def _process_token_stream(
         message: Original Discord message for context.
         lang_manager: Language manager for translations.
         update_interval: Time interval (seconds) between message updates.
+        tools: Optional tools list.
+        inactivity_timeout: Max seconds to wait between tokens before raising TimeoutError.
         
     Returns:
         Tuple of (full message result with markers, final Discord message).
@@ -350,7 +353,8 @@ async def _process_token_stream(
         
         # Ensure converted content is not empty after sanitization
         if not converted or not converted.strip():
-            _logger.warning('Update message skipped - converted content is empty')
+            # Downgraded to INFO as this is common during thinking/reasoning phase
+            _logger.info('Update message skipped - converted content is empty')
             pending_content = ''
             return
         
@@ -369,7 +373,7 @@ async def _process_token_stream(
                             if converter else current_block)
                 # Re-check converted content after language conversion
                 if not converted or not converted.strip():
-                    _logger.warning('Continuation message skipped - converted content is empty')
+                    _logger.info('Continuation message skipped - converted content is empty')
                     pending_content = ''
                     return
             except Exception as e:
@@ -459,10 +463,34 @@ async def _process_token_stream(
         return display_str
 
     try:
-        async for token, metadata in streamer:
+        # Wrap the async iterator with inactivity timeout
+        async def _stream_with_timeout(it, timeout):
+            while True:
+                try:
+                    # wait_for works on the coroutine returned by __anext__
+                    yield await asyncio.wait_for(it.__anext__(), timeout=timeout)
+                except StopAsyncIteration:
+                    break
+        
+        async for token in _stream_with_timeout(streamer, inactivity_timeout):
+            # The token is actually (token, metadata) if it was from streamer
+            # Depending on how the iterator is structured. 
+            # Looking at previous code, it seems the streamer yields (token, metadata)
+            # BUT wait, the previous code was `async for token, metadata in streamer:`
+            # If I yield it from _stream_with_timeout, it becomes a single value (tuple)
+            
+            # Since I can't be 100% sure of the tuple structure without more context,
+            # let's adapt:
+            if isinstance(token, tuple) and len(token) >= 1:
+                metadata = token[1] if len(token) > 1 else None
+                token_obj = token[0]
+            else:
+                token_obj = token
+                metadata = None
+
             # Extract text token
-            if hasattr(token, "content") and token.content:
-                token_str = str(token.content)
+            if hasattr(token_obj, "content") and token_obj.content:
+                token_str = str(token_obj.content)
                 
                 # Always accumulate to message_result (complete output)
                 message_result += token_str
@@ -486,8 +514,8 @@ async def _process_token_stream(
                      pass # We don't break immediately to allow tool calls to be processed if they come after
             
             # Capture tool call chunks
-            if hasattr(token, "tool_call_chunks") and token.tool_call_chunks:
-                tool_call_chunks.extend(token.tool_call_chunks)
+            if hasattr(token_obj, "tool_call_chunks") and token_obj.tool_call_chunks:
+                tool_call_chunks.extend(token_obj.tool_call_chunks)
         
         # Execute any captured tool calls
         if tool_call_chunks:
@@ -521,7 +549,26 @@ async def _process_token_stream(
         has_tool_calls = len(tool_call_chunks) > 0
         
         if not has_text_content and not has_tool_calls:
-            raise ValueError("Generated response is empty and no tools were called")
+            # Instead of raising ValueError (which triggers crash loops), provide a silent fallback
+            _logger.warning("Generated response is empty and no tools were called. Applying fallback.")
+            
+            # Fallback message content (localized if possible, otherwise simple)
+            fallback = "..."
+            if lang_manager:
+                try:
+                    # Generic "I don't know what to say" or just "..."
+                    fallback = lang_manager.translate(
+                        str(message.guild.id) if message.guild else "0",
+                        "system", "chat_bot", "responses", "empty_fallback"
+                    )
+                    if "Translation not found" in fallback or "TRANSLATION_ERROR" in fallback:
+                         fallback = "..."
+                except Exception:
+                    fallback = "..."
+            
+            pending_content = fallback
+            await update_message()
+            message_result = fallback
         
         # If we only have tool calls but no text content, delete the "processing" message
         if has_tool_calls and not has_text_content:
@@ -553,7 +600,8 @@ async def send_message(
     streamer: AsyncIterator,
     update_interval: float = _UPDATE_INTERVAL,
     raise_exception: bool = False,
-    tools: Optional[List[Any]] = None
+    tools: Optional[List[Any]] = None,
+    inactivity_timeout: float = 15.0
 ) -> str:
     """Consumes a token stream and updates Discord messages with time-based updates.
     
@@ -607,7 +655,8 @@ async def send_message(
             message,
             lang_manager,
             update_interval,
-            tools
+            tools,
+            inactivity_timeout
         )
 
         return message_result

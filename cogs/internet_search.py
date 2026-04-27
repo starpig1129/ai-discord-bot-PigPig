@@ -38,10 +38,10 @@ import json
 
 from addons.settings import llm_config
 from cogs.eat.db.db import DB
-from cogs.eat.embeds import eatEmbed
-from cogs.eat.providers.googlemap_crawler import GoogleMapCrawler
-from cogs.eat.train.train import Train
-from cogs.eat.views import EatWhatView
+from cogs.eat.embeds import browseEmbed, loadingEmbed
+from cogs.eat.providers import get_restaurant_provider
+from cogs.eat.recommender import WeightedRecommender
+from cogs.eat.views import EatBrowseView
 import concurrent.futures
 import asyncio
 
@@ -58,14 +58,21 @@ class InternetSearchCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = DB()
-        self.train = Train(db=self.db)
-        self.map = GoogleMapCrawler()
+        self.recommender = WeightedRecommender(db=self.db)
+        self.provider = get_restaurant_provider()
         self.lang_manager: Optional[LanguageManager] = None
         self.logger = get_logger(server_id="Bot", source="internet_search")
 
     async def cog_load(self):
         """當 Cog 載入時初始化語言管理器"""
         self.lang_manager = LanguageManager.get_instance(self.bot)
+
+    async def cog_unload(self):
+        """當 Cog 卸載時關閉 provider 的 HTTP session"""
+        try:
+            await self.provider.close()
+        except Exception:
+            pass
 
     @app_commands.command(
         name="search",
@@ -149,18 +156,19 @@ class InternetSearchCog(commands.Cog):
             else:
                 # Cog handled messaging (embed/view). Send a minimal localized confirmation if available.
                 try:
-                    confirmation = self.lang_manager.translate(
-                        guild_id,
-                        "commands",
-                        "internet_search",
-                        "responses",
-                        "search_complete",
-                        query=query
-                    ) if self.lang_manager else f"Search for '{query}' completed."
-                    # Trim confirmation if unexpectedly long
-                    if len(confirmation) > 1900:
-                        confirmation = confirmation[:1897] + "..."
-                    await interaction.followup.send(content=confirmation)
+                    if selected_type != "eat":
+                        confirmation = self.lang_manager.translate(
+                            guild_id,
+                            "commands",
+                            "internet_search",
+                            "responses",
+                            "search_complete",
+                            query=query
+                        ) if self.lang_manager else f"Search for '{query}' completed."
+                        # Trim confirmation if unexpectedly long
+                        if len(confirmation) > 1900:
+                            confirmation = confirmation[:1897] + "..."
+                        await interaction.followup.send(content=confirmation)
                 except Exception as notify_err:
                     await func.report_error(notify_err, f"search_command confirmation send failed: {notify_err}")
                     # Silently ignore notification failures to avoid interrupting flow
@@ -478,64 +486,103 @@ class InternetSearchCog(commands.Cog):
 
     async def eat_search(self, ctx, keyword: str = "_", message_to_edit: discord.Message = None):
         guild_id = str(ctx.guild_id) if isinstance(ctx, discord.Interaction) else str(ctx.guild.id)
-        predict = None
+
+        # Step 1：確定搜尋關鍵字（使用 WeightedRecommender 取代 LSTM）
         if keyword == "_":
             keywords_list = self.db.getKeywords()
-            if len(keywords_list) == 0:
+            if not keywords_list:
                 return self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "internet_search",
-                    "errors",
-                    "eat_no_food"
+                    guild_id, "commands", "internet_search", "errors", "eat_no_food"
                 ) if self.lang_manager else "沒有這種食物喔"
-            else:
-                keyword = random.choice(keywords_list)[0]
-                predict = self.train.predict(discord_id=str(ctx.guild.id))
+            keyword = self.recommender.suggest_keyword(guild_id, [k[0] for k in keywords_list])
         else:
-            if len(self.db.checkKeyword(keyword=keyword)) == 0:
+            if not self.db.checkKeyword(keyword=keyword):
                 self.db.storeKeyword(keyword)
 
+        # Step 2：顯示 loading embed
+        loading = loadingEmbed(keyword)
         try:
-            if predict is not None:
-                result = self.map.search(predict)
-                (title_pred, rate_pred, tag_pred, address_pred, url, reviews, menu) = result
-                embed = eatEmbed(keyword=predict, title=title_pred, address=address_pred, rating=rate_pred)
-                if len(self.db.checkKeyword(keyword=tag_pred)) == 0:
-                    self.db.storeKeyword(tag_pred)
-                id = self.db.storeSearchRecord(str(ctx.guild.id), title=title_pred, keyword=predict, map_rate=rate_pred, tag=tag_pred, map_address=address_pred)
-            else:
-                result = self.map.search(keyword)
-                (title, rate, tag, address, url, reviews, menu) = result
-                embed = eatEmbed(keyword=keyword, title=title, address=address, rating=rate)
-                if len(self.db.checkKeyword(keyword=tag)) == 0:
-                    self.db.storeKeyword(tag)
-                id = self.db.storeSearchRecord(str(ctx.guild.id), title=title, keyword=keyword, map_rate=rate, tag=tag, map_address=address)
-
-            view = EatWhatView(result=result, predict=predict, keyword=keyword, db=self.db, record_id=id, discord_id=str(ctx.guild.id))
-            
             if isinstance(ctx, discord.Interaction):
-                await ctx.followup.send(embed=embed, view=view)
+                followup_msg = await ctx.followup.send(embed=loading)
             else:
-                try:
-                    await message_to_edit.edit(embed=embed, view=view)
-                except discord.errors.NotFound:
-                    self.logger.info("eat_search: 臨時訊息不存在，略過結果訊息編輯。")
+                if message_to_edit:
+                    try:
+                        await message_to_edit.edit(embed=loading, view=None, content=None)
+                        followup_msg = message_to_edit
+                    except discord.errors.NotFound:
+                        followup_msg = None
+                else:
+                    followup_msg = None
+        except Exception:
+            followup_msg = None
 
-            self.train.genModel(str(ctx.guild.id))
-            return None  
+        try:
+            # Step 3：非同步搜尋（先抓取候選清單，追求快速響應）
+            current_lang = self.lang_manager.get_server_lang(guild_id) if self.lang_manager else "zh_TW"
+            
+            # 如果 provider 是 GoogleMapCrawler，先抓取候選清單
+            if hasattr(self.provider, "async_search_list"):
+                results = await self.provider.async_search_list(keyword, lang=current_lang)
+            else:
+                # Foursquare 或其他 provider 可能直接返回完整結果
+                results = await self.provider.search(keyword, lang=current_lang)
+
+            if not results:
+                error_msg = self.lang_manager.translate(
+                    guild_id, "commands", "internet_search", "errors", "eat_system_error",
+                    keyword=keyword, error="找不到相關餐廳"
+                ) if self.lang_manager else f"找不到「{keyword}」相關餐廳"
+                return error_msg
+
+            # Step 4：即時抓取第一筆的詳細資訊（如果是 Crawler）
+            if not results[0].get("is_detailed", False) and hasattr(self.provider, "async_fetch_detail"):
+                first_detail = await self.provider.async_fetch_detail(results[0].get("maps_url", ""), lang=current_lang)
+                if first_detail:
+                    results[0].update(first_detail)
+                    results[0]["is_detailed"] = True
+
+            # Step 5：推薦器排序
+            # 由於目前只有第一筆有詳細資料，我們暫時先以原始順序呈現或僅對第一筆加權
+            ranked = self.recommender.rank_candidates(guild_id, results)
+            if not ranked:
+                ranked = results
+
+            # Step 6：儲存搜尋到的新標籤關鍵字
+            first_place = ranked[0]
+            tag = first_place.get("category", "")
+            if tag and not self.db.checkKeyword(keyword=tag):
+                self.db.storeKeyword(tag)
+
+            # Step 7：建立 Browse View 和 Embed
+            view = EatBrowseView(
+                results=ranked,
+                keyword=keyword,
+                db=self.db,
+                discord_id=guild_id,
+                provider=self.provider,
+            )
+            embed = browseEmbed(ranked, 0)
+
+            # Step 8：更新訊息
+            if isinstance(ctx, discord.Interaction):
+                try:
+                    await ctx.edit_original_response(embed=embed, view=view)
+                except Exception:
+                    await ctx.followup.send(embed=embed, view=view)
+            else:
+                if followup_msg:
+                    try:
+                        await followup_msg.edit(embed=embed, view=view, content=None)
+                    except discord.errors.NotFound:
+                        self.logger.info("eat_search: 臨時訊息不存在，略過結果訊息編輯。")
+            return None
+
         except Exception as e:
             await func.report_error(e, f"eat_search: {e}")
-            keyword_to_use = keyword if predict is None else predict
             return self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "internet_search",
-                "errors",
-                "eat_system_error",
-                keyword=keyword_to_use,
-                error=str(e)
-            ) if self.lang_manager else f"原本想推薦你吃 {keyword_to_use}，但很抱歉系統出錯了QQ: {str(e)}"
+                guild_id, "commands", "internet_search", "errors", "eat_system_error",
+                keyword=keyword, error=str(e)
+            ) if self.lang_manager else f"原本想推薦你吃 {keyword}，但很抱歉系統出錯了QQ: {str(e)}"
 
 async def setup(bot):
     await bot.add_cog(InternetSearchCog(bot))

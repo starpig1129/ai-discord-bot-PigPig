@@ -78,8 +78,11 @@ class ReminderTools:
             (or the message author if not specified) at the given time.
 
             Args:
-                time_str: Time specification string (e.g., "10m", "2h", "tomorrow 3pm").
-                    Supports various formats including relative times and absolute times.
+                time_str: Time specification string. MUST be one of the following formats:
+                    - Relative: "X minutes/hours/days" (e.g. "10 minutes", "2 hours", "1 day")
+                    - Absolute: "YYYY-MM-DD HH:MM:SS" (e.g. "2024-12-31 15:30:00")
+                    - Natural: "tomorrow at 3pm", "next monday at 9am"
+                    Do not use abstract times like "later" or "someday" or the system will fail to parse them.
                 message: The reminder message content to be sent.
                 user_id: Optional Discord user ID to remind. If not provided,
                     the reminder will be set for the message author.

@@ -4,6 +4,7 @@
         "thinking": "🧠 思考回复中...",
         "processing": "处理中...",
         "continuation": "继续输出中...",
+        "empty_fallback": "不知道该怎么回复你了...",
         "tools": {
             "internet_search": "🌍 正在网上寻找答案...",
             "search_episodic_memory": "🧠 正在回忆过去的对话...",
@@ -15,10 +16,16 @@
             "add_reaction": "😊 正在添加表情回应...",
             "send_sticker": "🎭 正在发送贴纸...",
             "list_tools": "🔧 正在查看可用工具...",
-            "get_user_activity": "👀 正在查看用户动态...",
             "get_channel_participants": "👥 正在查看频道成员...",
             "get_guild_emojis": "😀 正在读取服务器表情符号...",
             "get_guild_stickers": "🖼️ 正在读取服务器贴纸...",
+            "update_guild_knowledge": "📜 正在建立服务器文化档案...",
+            "update_channel_knowledge": "📍 正在记录频道专属梗...",
+            "get_server_context": "🏠 正在查询服务器信息...",
+            "get_channel_context": "📢 正在查询频道信息...",
+            "get_user_discord_info": "👤 正在查询用户 Discord 资料...",
+            "get_user_stats": "📊 正在生成统计名片...",
+            "get_bot_changelog": "📋 正在查询机器人更新日志...",
             "default": "🛠️ 正在使用 {tool_name}..."
         }
     }

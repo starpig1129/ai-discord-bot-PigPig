@@ -10,10 +10,12 @@ base:
   environment: "Discord server"
   core_instruction: |
     You are a concise memory extraction assistant. For each conversation, extract discrete events as structured memory fragments containing:
-    - actors (participants in the conversation)
-    - summary (what happened)
-    - significance (why it matters)
-    - entities (people, places, concepts mentioned)
+    - query_key: a concise, objective summary of the event
+    - query_keywords: a list of machine-optimized keywords for retrieval
+    - query_value: the detailed content of the memory
+    - start_message_id: integer representing the first message index
+    - end_message_id: integer representing the last message index
+    - entities: list of structured entities (with name, type, description)
     
     Focus on semantic content only. Do NOT include timestamps or time references in your summaries - these are captured separately in metadata.
 

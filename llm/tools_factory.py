@@ -20,6 +20,8 @@ import threading
 from addons.logging import get_logger
 logger = get_logger(server_id="Bot", source="llm.tools_factory")
 
+_VALID_AGENT_MODES: frozenset = frozenset({"info", "message", "all"})
+
 from langchain_core.tools import StructuredTool,BaseTool
 from function import func
 
@@ -238,10 +240,6 @@ def _get_user_permissions(user: discord.Member, guid: discord.Guild) -> dict:
 from llm.schema import OrchestratorRequest
 
 
-# Tools specific to the message agent (action-oriented interaction tools)
-# Currently empty - message agent uses text-only responses
-MESSAGE_AGENT_TOOLS = set()
-
 def get_tools(
     user: discord.Member, 
     guid: discord.Guild, 
@@ -256,14 +254,26 @@ def get_tools(
     - 若工具沒有宣告 `required_permission`，則預設對所有使用者開放。
     - 權限屬性可以設在 BaseTool 實例或原始 callable 上。
 
+    工具路由策略 (target_agent_mode):
+    - 每個工具可以宣告 `target_agent_mode` 來指定其所屬的 Agent。
+      支援的值：
+        - "info"    (預設) — 僅供 Info Agent 使用，Message Agent 不會收到此工具。
+        - "message"         — 僅供 Message Agent 使用，Info Agent 不會收到此工具。
+        - "all"             — 兩個 Agent 皆可使用。
+      未知值會被視為 "info" 並記錄 warning。
+    - 宣告方式（優先順序）：
+        1. tool.metadata["target_agent_mode"] — 適用於 LangChain StructuredTool
+        2. tool.target_agent_mode — 直接屬性
+        3. tool.func.target_agent_mode — 原始 callable 上的屬性
+
     Args:
         user: Discord 使用者
         guid: Discord Guild
         runtime: 執行時 context
         agent_mode: 工具過濾模式 ("all", "info", "message")
             - "all": 回傳所有可用工具
-            - "info": 回傳 Info Agent 專用工具 (排除 Message Agent 專用工具)
-            - "message": 僅回傳 Message Agent 專用工具
+            - "info": 回傳 Info Agent 專用工具 (排除 target_agent_mode=="message" 的工具)
+            - "message": 僅回傳 Message Agent 專用工具 (排除 target_agent_mode=="info" 的工具)
 
     Returns:
         List[BaseTool]: 可供 LangChain 使用的工具清單（靜態類型上會 cast 為 List[BaseTool]）。
@@ -334,20 +344,45 @@ def get_tools(
                 if not allowed:
                     continue
 
-            # Filter based on agent_mode
-            tool_name = getattr(t, "name", getattr(t, "__name__", repr(t)))
+            # Filter based on agent_mode using target_agent_mode attribute
+            target_agent_mode = "info"
             
-            if agent_mode == "info":
-                if tool_name in MESSAGE_AGENT_TOOLS:
-                    continue
-            elif agent_mode == "message":
-                if tool_name not in MESSAGE_AGENT_TOOLS:
-                    continue
+            # Check metadata or custom attributes on the original wrapped function if present
+            # Langchain's StructuredTool hides custom attributes, so we try multiple ways
+            raw_mode: object = None
+            try:
+                metadata = getattr(t, "metadata", None)
+                if isinstance(metadata, dict) and "target_agent_mode" in metadata:
+                    raw_mode = metadata["target_agent_mode"]
+                elif hasattr(t, "target_agent_mode"):
+                    raw_mode = getattr(t, "target_agent_mode")
+                elif hasattr(t, "func") and hasattr(t.func, "target_agent_mode"):
+                    raw_mode = getattr(t.func, "target_agent_mode")
+            except (AttributeError, KeyError, TypeError) as e:
+                logger.warning(
+                    "Failed to extract target_agent_mode for tool %s: %s",
+                    getattr(t, "name", repr(t)),
+                    e,
+                )
+
+            if raw_mode is not None:
+                normalized_mode = str(raw_mode).lower()
+                if normalized_mode in _VALID_AGENT_MODES:
+                    target_agent_mode = normalized_mode
+                else:
+                    logger.warning(
+                        "Tool %s has unknown target_agent_mode %r; falling back to 'info'.",
+                        getattr(t, "name", repr(t)),
+                        raw_mode,
+                    )
+
+            if agent_mode == "info" and target_agent_mode == "message":
+                continue
+            elif agent_mode == "message" and target_agent_mode == "info":
+                continue
             
             # Assign agent_mode to the tool for identification
-            # Note: This modifies the tool instance in place. Since tools are disjoint
-            # between info/message modes (based on MESSAGE_AGENT_TOOLS logic above),
-            # this is generally safe. For "all" mode, it will be "all".
+            # Note: This modifies the tool instance in place.
             try:
                 t.agent_mode = agent_mode
             except Exception:
@@ -355,12 +390,11 @@ def get_tools(
                 pass
 
             result.append(t)
-
         except Exception as e:
             _report_async(
                 e, f"llm.tools: filtering tool {getattr(t, 'name', repr(t))}"
             )
-
+    
     try:
         return cast(List[BaseTool], result)
     except Exception as e:

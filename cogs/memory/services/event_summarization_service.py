@@ -214,11 +214,13 @@ class EventSummarizationService:
                 exc_info=True
             )
             try:
-                asyncio.create_task(func.report_error(
-                    e,
-                    f"event_summarization.extract_structured_response_failed "
-                    f"context={context} model={expected_model.__name__}"
-                ))
+                from pydantic import ValidationError
+                if not isinstance(e, ValidationError):
+                    asyncio.create_task(func.report_error(
+                        e,
+                        f"event_summarization.extract_structured_response_failed "
+                        f"context={context} model={expected_model.__name__}"
+                    ))
             except Exception:
                 log.exception("func.report_error failed")
             return None
@@ -378,31 +380,35 @@ class EventSummarizationService:
                 try:
                     log.debug(f"Episodic memory: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
                     
-                    # Create the agent with structured output using a model instance with zero retries
+                    # Create the model instance with zero retries
                     model_instance = init_chat_model(current_model, max_retries=0)
                     
-                    agent = create_agent(
-                        model_instance,
-                        tools=[],
-                        system_prompt=system_prompt,
-                        response_format=MemoryFragmentList,  # Use structured output
-                        middleware=[]
-                    )
+                    from langchain_core.messages import SystemMessage
+                    full_messages = [SystemMessage(content=system_prompt)] + message_list
                     
                     # Make the API call to the LLM
                     try:
-                        response = await agent.ainvoke(cast(Any, {"messages": message_list}))
+                        # Since model supports tool calling natively, use with_structured_output
+                        structured_llm = model_instance.with_structured_output(MemoryFragmentList)
+                        response = await structured_llm.ainvoke(full_messages)
                     except Exception as invoke_error:
                         # Fallback for when tool parsing fails (e.g., LLM returns Python code)
                         log.warning(f"Structured invoke failed for {current_model}: {invoke_error}. Attempting raw fallback.")
                         
                         try:
                             # Instantiate model object from string
-                            model_instance = self._create_llm_instance(current_model)
+                            model_instance = self._create_llm_instance(current_model, force_json=True)
+                            
+                            schema_str = '{"fragments": [{"query_key": "string", "query_keywords": ["string"], "query_value": "string", "start_message_id": 1, "end_message_id": 2, "entities": [{"name": "string", "type": "string", "description": "string"}]}]}'
+                            fallback_messages = list(full_messages)
+                            fallback_messages.append(HumanMessage(content=(
+                                f"YOUR PREVIOUS ATTEMPT FAILED. "
+                                f"YOU MUST OUTPUT STRICTLY AND ONLY VALID JSON MATCHING THIS EXACT SCHEMA:\n{schema_str}\n"
+                                f"NO MARKDOWN (e.g., no ```json), NO HEADERS (e.g., no ---), NO THOUGHTS. ONLY A RAW JSON OBJECT."
+                            )))
                             
                             # Manually invoke the model to get raw output
-                            # Ensure we pass the properly formatted messages
-                            raw_response = await model_instance.ainvoke(message_list)
+                            raw_response = await model_instance.ainvoke(fallback_messages)
                             response = {"output": raw_response.content}
                             log.debug(f"Raw mode fallback successful for {current_model}")
                         except Exception as fallback_error:
@@ -459,12 +465,13 @@ class EventSummarizationService:
             await func.report_error(e, "EventSummarizationService/_get_llm_summary")
             return None
 
-    def _create_llm_instance(self, model_name: str) -> Any:
+    def _create_llm_instance(self, model_name: str, force_json: bool = False) -> Any:
         """
         Create a LangChain model instance from a model name string.
         
         Args:
             model_name: Model identifier (e.g. 'ollama:gpt-oss:20b')
+            force_json: Whether to force the model into JSON mode if supported
             
         Returns:
             LangChain chat model instance
@@ -475,7 +482,10 @@ class EventSummarizationService:
                 # Default to localhost if not specified in config
                 base_url = getattr(self.settings, "ollama_base_url", "http://localhost:11434")
                 # Use num_retries=0 for Ollama to ensure fast fallback
-                return ChatOllama(model=model_id, base_url=base_url, temperature=0.1, num_retries=0)
+                kwargs = {"model": model_id, "base_url": base_url, "temperature": 0.1, "num_retries": 0}
+                if force_json:
+                    kwargs["format"] = "json"
+                return ChatOllama(**kwargs)
             
             elif model_name.startswith("google_genai:"):
                 model_id = model_name.split(":", 1)[1]
