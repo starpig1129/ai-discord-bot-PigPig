@@ -48,3 +48,135 @@ def test_required_key_exists(lang, key_path):
     assert isinstance(value, str) and len(value) > 0, (
         f"Empty key {'.'.join(key_path)} in {lang}"
     )
+
+
+# ─── Unit tests for LocalizedView._t() ───────────────────────────────────────
+
+import sys, types
+from unittest.mock import MagicMock
+
+# Minimal discord stub so views.py can be imported without a real Discord client
+_discord = types.ModuleType("discord")
+_discord_ui = types.ModuleType("discord.ui")
+_discord_ext = types.ModuleType("discord.ext")
+_discord_ext_commands = types.ModuleType("discord.ext.commands")
+_discord_app_commands = types.ModuleType("discord.app_commands")
+
+class _FakeView:
+    def __init__(self, **kwargs): pass
+    def add_item(self, item): pass
+    def clear_items(self): pass
+
+_discord_ui.View = _FakeView
+_discord_ui.Button = object
+_discord_ui.Select = object
+_discord.ui = _discord_ui
+_discord.Color = MagicMock()
+_discord.ButtonStyle = MagicMock()
+_discord.SelectOption = MagicMock()
+_discord.Embed = MagicMock()
+_discord.utils = MagicMock()
+_discord.Interaction = MagicMock()
+_discord.Guild = MagicMock()
+_discord.TextChannel = MagicMock()
+for _mod, _name in [
+    (_discord, "discord"),
+    (_discord_ui, "discord.ui"),
+    (_discord_ext, "discord.ext"),
+    (_discord_ext_commands, "discord.ext.commands"),
+    (_discord_app_commands, "discord.app_commands"),
+]:
+    sys.modules.setdefault(_name, _mod)
+
+# Stub heavy project dependencies
+_addons = types.ModuleType("addons")
+_addons_logging = types.ModuleType("addons.logging")
+_addons_logging.get_logger = lambda **kw: MagicMock()
+_addons.logging = _addons_logging
+sys.modules.setdefault("addons", _addons)
+sys.modules.setdefault("addons.logging", _addons_logging)
+
+_function = types.ModuleType("function")
+_function.func = MagicMock()
+sys.modules.setdefault("function", _function)
+
+# Stub for cogs.system_prompt submodules
+_manager_mod = types.ModuleType("cogs.system_prompt.manager")
+class _FakeManager:
+    bot = None
+_manager_mod.SystemPromptManager = _FakeManager
+sys.modules.setdefault("cogs.system_prompt.manager", _manager_mod)
+
+_perm_mod = types.ModuleType("cogs.system_prompt.permissions")
+_perm_mod.PermissionValidator = object
+sys.modules.setdefault("cogs.system_prompt.permissions", _perm_mod)
+
+_ui_mod = types.ModuleType("cogs.system_prompt.ui")
+_ui_mod.SystemPromptModal = object
+_ui_mod.SystemPromptModuleModal = object
+_ui_mod.ConfirmationView = object
+_ui_mod.create_system_prompt_embed = lambda *a, **kw: MagicMock()
+sys.modules.setdefault("cogs.system_prompt.ui", _ui_mod)
+
+_exc_mod = types.ModuleType("cogs.system_prompt.exceptions")
+class _FakeError(Exception): pass
+_exc_mod.SystemPromptError = _FakeError
+_exc_mod.PermissionError = _FakeError
+sys.modules.setdefault("cogs.system_prompt.exceptions", _exc_mod)
+
+_cogs_mod = types.ModuleType("cogs")
+_cogs_mod.__path__ = [str(BASE / "cogs")]
+_cogs_mod.__package__ = "cogs"
+_cogs_sp_mod = types.ModuleType("cogs.system_prompt")
+_cogs_sp_mod.__path__ = [str(BASE / "cogs" / "system_prompt")]
+_cogs_sp_mod.__package__ = "cogs.system_prompt"
+sys.modules.setdefault("cogs", _cogs_mod)
+sys.modules.setdefault("cogs.system_prompt", _cogs_sp_mod)
+
+# Import after stubs are in place
+sys.path.insert(0, str(BASE))
+
+
+def _make_localized_view(bot=None, guild_id="12345"):
+    """Helper that builds a LocalizedView with minimal mocking."""
+    from cogs.system_prompt.views import LocalizedView  # noqa: PLC0415
+
+    mock_manager = MagicMock()
+    mock_manager.bot = bot
+    return LocalizedView(manager=mock_manager, guild_id=guild_id)
+
+
+def test_localized_view_t_calls_translate_with_correct_args():
+    mock_lm = MagicMock()
+    mock_lm.translate.return_value = "Translated"
+    mock_bot = MagicMock()
+    mock_bot.get_cog.return_value = mock_lm
+
+    view = _make_localized_view(bot=mock_bot, guild_id="99")
+    result = view._t("commands", "system_prompt", "ui", "buttons", "set_prompt")
+
+    mock_lm.translate.assert_called_once_with(
+        "99", "commands", "system_prompt", "ui", "buttons", "set_prompt"
+    )
+    assert result == "Translated"
+
+
+def test_localized_view_t_returns_fallback_when_no_bot():
+    view = _make_localized_view(bot=None)
+    result = view._t("commands", "system_prompt", "ui", "buttons", "set_prompt", fallback="Set Prompt")
+    assert result == "Set Prompt"
+
+
+def test_localized_view_t_returns_last_key_when_no_fallback_and_no_bot():
+    view = _make_localized_view(bot=None)
+    result = view._t("commands", "system_prompt", "ui", "buttons", "set_prompt")
+    assert result == "set_prompt"
+
+
+def test_localized_view_t_returns_fallback_on_exception():
+    mock_bot = MagicMock()
+    mock_bot.get_cog.side_effect = RuntimeError("cog error")
+
+    view = _make_localized_view(bot=mock_bot)
+    result = view._t("commands", "system_prompt", "ui", "buttons", "set_prompt", fallback="Fallback")
+    assert result == "Fallback"

@@ -21,6 +21,57 @@ from .ui import (
 from .exceptions import SystemPromptError, PermissionError
 
 
+# ─── Translation helpers ──────────────────────────────────────────────────────
+
+def _ti(interaction: discord.Interaction, *keys: str, fallback: str = "") -> str:
+    """Translate a key using the guild language from an interaction context.
+
+    Falls back to ``fallback`` (or the last key segment) when LanguageManager
+    is unavailable or the key is missing.
+    """
+    guild_id = str(interaction.guild.id) if interaction.guild else "system"
+    try:
+        lm = interaction.client.get_cog("LanguageManager") if interaction.client else None
+        if lm:
+            return lm.translate(guild_id, *keys)
+    except Exception:
+        pass
+    return fallback or (keys[-1] if keys else "")
+
+
+class LocalizedView(discord.ui.View):
+    """Base class for all system-prompt views.
+
+    Provides :meth:`_t` for translating strings at construction time using
+    the server's configured language.
+    """
+
+    def __init__(
+        self,
+        manager: "SystemPromptManager",
+        guild_id: str = "system",
+        timeout: float = 300.0,
+    ):
+        super().__init__(timeout=timeout)
+        self.manager = manager
+        self.guild_id = guild_id
+        self._bot = manager.bot
+
+    def _t(self, *keys: str, fallback: str = "") -> str:
+        """Translate *keys* using the guild's language.
+
+        Falls back to ``fallback`` (or the last key segment) when
+        LanguageManager is unavailable or the key is missing.
+        """
+        try:
+            lm = self._bot.get_cog("LanguageManager") if self._bot else None
+            if lm:
+                return lm.translate(self.guild_id, *keys)
+        except Exception:
+            pass
+        return fallback or (keys[-1] if keys else "")
+
+
 class SystemPromptMainView(discord.ui.View):
     """系統提示管理主選單"""
 
