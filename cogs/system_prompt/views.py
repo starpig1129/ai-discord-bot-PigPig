@@ -72,80 +72,46 @@ class LocalizedView(discord.ui.View):
         return fallback or (keys[-1] if keys else "")
 
 
-class SystemPromptMainView(discord.ui.View):
+class SystemPromptMainView(LocalizedView):
     """系統提示管理主選單"""
 
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 timeout: float = 300.0):
-        """
-        初始化主選單
-
-        Args:
-            manager: 系統提示管理器
-            permission_validator: 權限驗證器
-            timeout: 超時時間
-        """
-        super().__init__(timeout=timeout)
-        self.manager = manager
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild_id: str = "system",
+        timeout: float = 300.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.logger = get_logger(source=__name__, server_id="system")
-
-        # 建立主要功能按鈕
         self._setup_main_buttons()
 
     def _setup_main_buttons(self):
         """設定主要功能按鈕"""
-        
-        # Get language manager for button labels
-        lang_manager = self.manager.language_manager if hasattr(self.manager, 'language_manager') else None
-        guild_id = "system"  # Default fallback
-
-        # 第一列：基本功能
         self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "set_prompt") if lang_manager else "Set Prompt",
-            emoji="✏️",
-            style=discord.ButtonStyle.primary,
-            function="set",
-            row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "set_prompt", fallback="Set Prompt"),
+            emoji="✏️", style=discord.ButtonStyle.primary, function="set", row=0,
         ))
         self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "view_config") if lang_manager else "View Config",
-            emoji="👁️",
-            style=discord.ButtonStyle.secondary,
-            function="view",
-            row=0
-        ))
-
-        # 第二列：管理功能
-        self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "copy_prompt") if lang_manager else "Copy Prompt",
-            emoji="📋",
-            style=discord.ButtonStyle.secondary,
-            function="copy",
-            row=1
+            label=self._t("commands", "system_prompt", "ui", "buttons", "view_config", fallback="View Config"),
+            emoji="👁️", style=discord.ButtonStyle.secondary, function="view", row=0,
         ))
         self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "remove_prompt") if lang_manager else "Remove Prompt",
-            emoji="🗑️",
-            style=discord.ButtonStyle.danger,
-            function="remove",
-            row=1
+            label=self._t("commands", "system_prompt", "ui", "buttons", "copy_prompt", fallback="Copy Prompt"),
+            emoji="📋", style=discord.ButtonStyle.secondary, function="copy", row=1,
         ))
         self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "reset_config") if lang_manager else "Reset Config",
-            emoji="🔄",
-            style=discord.ButtonStyle.danger,
-            function="reset",
-            row=1
+            label=self._t("commands", "system_prompt", "ui", "buttons", "remove_prompt", fallback="Remove Prompt"),
+            emoji="🗑️", style=discord.ButtonStyle.danger, function="remove", row=1,
         ))
         self.add_item(SystemPromptFunctionButton(
-            label="Reload Config",  # Keep as fallback, not in translation
-            emoji="🔩",
-            style=discord.ButtonStyle.secondary,
-            function="reload",
-            row=2
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reset_config", fallback="Reset Config"),
+            emoji="🔄", style=discord.ButtonStyle.danger, function="reset", row=1,
+        ))
+        self.add_item(SystemPromptFunctionButton(
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reload_config", fallback="Reload Config"),
+            emoji="🔩", style=discord.ButtonStyle.secondary, function="reload", row=2,
         ))
 
 
@@ -180,138 +146,90 @@ class SystemPromptMainView(discord.ui.View):
 
 
     async def _handle_set_function(self, interaction: discord.Interaction):
-        """處理設定提示功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         view = SystemPromptSetView(
             manager=self.manager,
-            permission_validator=self.permission_validator
+            permission_validator=self.permission_validator,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "set_prompt_title") if lang_manager else "⚙️ System Prompt Setting"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "set_prompt_description") if lang_manager else "Please select the scope to configure"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.blue()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "set_prompt_title", fallback="⚙️ Set System Prompt")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "set_prompt_description", fallback="Please select the scope to configure")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_view_function(self, interaction: discord.Interaction):
-        """處理查看配置功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         view = SystemPromptViewOptionsView(
             manager=self.manager,
-            permission_validator=self.permission_validator
+            permission_validator=self.permission_validator,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "view_options_title") if lang_manager else "👁️ System Prompt Configuration View"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "view_options_description") if lang_manager else "Please select viewing options"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.green()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "view_options_title", fallback="👁️ View System Prompt Configuration")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "view_options_description", fallback="Please select view options")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.green())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_copy_function(self, interaction: discord.Interaction):
-        """處理複製提示功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
-        guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         if not interaction.guild:
-            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "server_only") if lang_manager else "This feature is only available in servers."
-            await interaction.response.send_message(f"❌ {error_msg}", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'server_only', fallback='Server only')}",
+                ephemeral=True,
+            )
             return
+        guild_id = str(interaction.guild.id)
         view = SystemPromptCopyView(
             manager=self.manager,
             permission_validator=self.permission_validator,
-            guild=interaction.guild
+            guild=interaction.guild,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "copy_prompt_title") if lang_manager else "📋 System Prompt Copy"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "copy_prompt_description") if lang_manager else "Please select source and target channels"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.blue()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "copy_prompt_title", fallback="📋 Copy System Prompt")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "copy_prompt_description", fallback="Please select source and target channels")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_remove_function(self, interaction: discord.Interaction):
-        """處理移除提示功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         view = SystemPromptRemoveView(
             manager=self.manager,
-            permission_validator=self.permission_validator
+            permission_validator=self.permission_validator,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "remove_prompt_title") if lang_manager else "🗑️ System Prompt Removal"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "remove_prompt_description") if lang_manager else "Please select the scope to remove"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.red()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "remove_prompt_title", fallback="🗑️ Remove System Prompt")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "remove_prompt_description", fallback="Please select scope to remove")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.red())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_reset_function(self, interaction: discord.Interaction):
-        """處理重置設定功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         view = SystemPromptResetView(
             manager=self.manager,
-            permission_validator=self.permission_validator
+            permission_validator=self.permission_validator,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "reset_config_title") if lang_manager else "🔄 System Prompt Reset"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "reset_config_description") if lang_manager else "Please select the scope to reset"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.orange()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "reset_config_title", fallback="🔄 Reset System Prompt")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "reset_config_description", fallback="Please select scope to reset")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.orange())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_reload_function(self, interaction: discord.Interaction):
-        """處理重載設定功能"""
         try:
-            # Example: Check for a generic admin-level permission
-            # self.permission_validator.validate_permission_or_raise(interaction.user, 'manage_bot_config', interaction.guild)
-            
             if hasattr(self.manager, "reload_all_configs") and callable(self.manager.reload_all_configs):
-                # If reload_all_configs is async
-                import asyncio
-                if asyncio.iscoroutinefunction(self.manager.reload_all_configs):
+                import asyncio as _asyncio
+                if _asyncio.iscoroutinefunction(self.manager.reload_all_configs):
                     await self.manager.reload_all_configs()
                 else:
-                    self.manager.reload_all_configs() # If synchronous
-                await interaction.response.send_message("🔄 設定已成功重載。", ephemeral=True)
-                self.logger.info(f"用戶 {interaction.user} 重載了配置。")
+                    self.manager.reload_all_configs()
+                msg = _ti(interaction, "commands", "system_prompt", "messages", "success", "reload",
+                          fallback="✅ Configuration reloaded successfully")
+                await interaction.response.send_message(msg, ephemeral=True)
+                self.logger.info(f"User {interaction.user} reloaded configuration.")
             else:
-                self.logger.warning("Manager has no 'reload_all_configs' method or it's not callable.")
-                await interaction.response.send_message("⚠️ 重載功能當前不可用或未完全實現。", ephemeral=True)
+                msg = _ti(interaction, "commands", "system_prompt", "messages", "info", "reload_unavailable",
+                          fallback="⚠️ Reload function is currently unavailable")
+                await interaction.response.send_message(msg, ephemeral=True)
         except PermissionError as e:
-            await interaction.response.send_message(f"❌ 權限不足：{str(e)}", ephemeral=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "permission_denied", fallback="Permission denied")
+            await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
         except Exception as e:
-            self.logger.error(f"重載設定時發生錯誤: {e}", exc_info=True)
-            await interaction.response.send_message(f"❌ 重載失敗：{str(e)}", ephemeral=True)
+            self.logger.error(f"Error reloading config: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
 
 
 class SystemPromptFunctionButton(discord.ui.Button):
