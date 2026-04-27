@@ -130,7 +130,7 @@ SystemPromptSetView.scope_callback(interaction, scope)
 | `ModuleEditView._setup_scope_selector` | `"頻道模組"` | `ui.buttons.channel_module` |
 | `ModuleEditView._setup_scope_selector` | `"伺服器模組"` | `ui.buttons.server_module` |
 | `ModuleEditView._setup_module_selector` | `"選擇要編輯的模組"` | `ui.selectors.module_placeholder` |
-| `ModuleEditView._setup_module_selector` | `"編輯 {name} 模組"` | `ui.selectors.module_description` |
+| `ModuleEditView._setup_module_selector` | `"編輯 {module_name} 模組"` | `ui.selectors.module_description`（需 `.format(module=module_name)`） |
 | `SystemPromptCopyView` | `"選擇來源頻道"` | `ui.selectors.from_channel_placeholder` |
 | `SystemPromptCopyView` | `"選擇目標頻道"` | `ui.selectors.to_channel_placeholder` |
 | `SystemPromptRemoveView` | `"移除當前頻道提示"` | `ui.buttons.remove_channel_prompt` |
@@ -148,7 +148,7 @@ Callback 中動態訊息改用 `interaction.client.get_cog("LanguageManager")` +
 - 所有 `messages.success.*` 成功訊息
 - 所有 `messages.confirm.*` 確認訊息
 - `_handle_reload_function` 的成功/不可用訊息
-- `scope_text` 字串（改用 `messages.info.scope_channel`、`messages.info.scope_server`）
+- `scope_text` 字串：`scope_channel` 需 `.format(channel=channel.name)`，`scope_server` 無格式變數
 - 所有 `"❌ 內部錯誤..."` 類型的後備訊息
 
 ### `commands.py`
