@@ -3,6 +3,7 @@
 *.pyc
 .roomodes
 .roo
+.vscode
 .claude
 __pycache__/
 graphify-out
