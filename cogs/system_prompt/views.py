@@ -1486,7 +1486,7 @@ class RemoveButton(discord.ui.Button):
                     await interaction.followup.send(f"❌ {err}", ephemeral=True)
             elif confirmation_prompt_view.result is False:  # User cancelled
                 await interaction.followup.send(
-                    _ti(interaction, "commands", "system_prompt", "messages", "info", "operation_cancelled",
+                    _ti(interaction, "commands", "system_prompt", "errors", "operation_cancelled",
                         fallback="Operation cancelled"),
                     ephemeral=True,
                 )
@@ -1630,7 +1630,7 @@ class ResetButton(discord.ui.Button):
                     await interaction.followup.send(f"❌ {err}", ephemeral=True)
             elif confirmation_prompt_view.result is False:
                 await interaction.followup.send(
-                    _ti(interaction, "commands", "system_prompt", "messages", "info", "operation_cancelled",
+                    _ti(interaction, "commands", "system_prompt", "errors", "operation_cancelled",
                         fallback="Operation cancelled"),
                     ephemeral=True,
                 )
