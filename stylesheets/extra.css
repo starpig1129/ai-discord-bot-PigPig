@@ -1,0 +1,29 @@
+/* 自定義視覺微調 */
+
+:root {
+    --md-primary-fg-color: #3f51b5; /* Indigo */
+    --md-accent-fg-color: #ff4081;  /* Pink */
+}
+
+/* 讓卡片看起來更有質感 */
+.md-typeset .grid.cards > :is(ul, ol) > li {
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.md-typeset .grid.cards > :is(ul, ol) > li:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+
+/* 調整程式碼區塊圓角 */
+.md-typeset pre > code {
+    border-radius: 0.4rem;
+}
+
+/* 首頁引言樣式 */
+.md-typeset em {
+    color: var(--md-default-fg-color--light);
+    font-size: 1.1rem;
+}
