@@ -2,6 +2,9 @@ site_name: PigPig Discord Bot
 site_description: An advanced Discord AI Agent bot with modular cognition, memory, and reasoning capabilities.
 site_author: starpig1129
 site_url: https://starpig1129.github.io/ai-discord-bot-PigPig/
+repo_name: starpig1129/ai-discord-bot-PigPig
+repo_url: https://github.com/starpig1129/ai-discord-bot-PigPig
+edit_uri: edit/main/docs/
 
 # Link Validation
 validation:
@@ -12,42 +15,76 @@ use_directory_urls: true
 theme:
   name: material
   language: zh-TW
+  logo: material/robot-confused
+  favicon: assets/favicon.png
+  font:
+    text: Roboto
+    code: Roboto Mono
   palette:
-    # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: teal
-      accent: purple
+      primary: indigo
+      accent: indigo
       toggle:
-        icon: material/brightness-7
+        icon: material/weather-sunny
         name: Switch to dark mode
-    # Palette toggle for dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: teal
-      accent: lime
+      primary: indigo
+      accent: indigo
       toggle:
-        icon: material/brightness-4
+        icon: material/weather-night
         name: Switch to light mode
   features:
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - navigation.tracking
+    - navigation.indexes
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.copy
+    - content.code.annotate
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/starpig1129
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/your-invite-link # Replace with real invite if available
+    - icon: fontawesome/solid/paper-plane
+      link: mailto:your-email@example.com
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - tables
+  - toc:
+      permalink: true
 
 nav:
   - 首頁: index.md
