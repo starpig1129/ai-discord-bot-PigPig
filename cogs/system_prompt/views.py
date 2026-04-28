@@ -3,6 +3,7 @@
 
 提供全新的統一介面，整合所有系統提示管理功能和模組化編輯。
 """
+from __future__ import annotations
 
 import discord
 from typing import Optional, Dict, Any, Callable, List

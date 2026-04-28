@@ -86,7 +86,7 @@ for _mod, _name in [
     (_discord_ext_commands, "discord.ext.commands"),
     (_discord_app_commands, "discord.app_commands"),
 ]:
-    sys.modules.setdefault(_name, _mod)
+    sys.modules[_name] = _mod  # force override any earlier incomplete stub (e.g. from test_context_manager)
 
 # Stub heavy project dependencies
 _addons = types.ModuleType("addons")
