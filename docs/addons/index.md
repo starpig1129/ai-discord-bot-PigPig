@@ -1,6 +1,6 @@
 # Addons System
 
-**Directory:** [`addons/`](addons/)
+**Directory:** `addons/`
 
 The Addons System is the core infrastructure module that provides essential services and functionality for the PigPig Discord Bot. It manages system configuration, security tokens, and the automatic update system.
 

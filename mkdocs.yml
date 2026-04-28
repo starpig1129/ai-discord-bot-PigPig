@@ -3,6 +3,12 @@ site_description: An advanced Discord AI Agent bot with modular cognition, memor
 site_author: starpig1129
 site_url: https://starpig1129.github.io/ai-discord-bot-PigPig/
 
+# Link Validation
+validation:
+  unrecognized_links: ignore
+
+use_directory_urls: true
+
 theme:
   name: material
   language: zh-TW

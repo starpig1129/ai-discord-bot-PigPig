@@ -5,13 +5,16 @@ on:
     branches:
       - main
       - master
-      - jules  # Added current branch for testing
+      - jules
     paths:
       - 'docs/**'
       - 'mkdocs.yml'
       - '.github/workflows/docs.yml'
       - 'requirements.txt'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   deploy:
