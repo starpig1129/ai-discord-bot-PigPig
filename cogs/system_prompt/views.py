@@ -211,7 +211,6 @@ class SystemPromptMainView(LocalizedView):
 
     async def _handle_reload_function(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        # TODO(Tasks 4-6): pass guild_id to sub-view
         try:
             if hasattr(self.manager, "reload_all_configs") and callable(self.manager.reload_all_configs):
                 import asyncio as _asyncio
