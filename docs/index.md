@@ -10,7 +10,7 @@
 
 這是一個基於先進 **AGI & 認知架構** 設計的 Discord AI 機器人。
 
-<div class="grid cards" markdown>
+<div class="grid cards" markdown="1">
 
 -   :material-brain:{ .lg .middle } __模組化認知__
 
@@ -42,7 +42,7 @@
 
 ## 📖 文檔導覽
 
-<div class="grid cards" markdown>
+<div class="grid cards" markdown="1">
 
 -   [__核心組件__](llm/index.md)
     {: .important }
