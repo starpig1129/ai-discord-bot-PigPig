@@ -114,14 +114,17 @@ class SystemPromptCommands(commands.Cog):
         # 導入統一 UI 元件
         from .views import SystemPromptMainView
         
+        # 取得 guild_id
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
+
         # 建立主選單 View
         main_view = SystemPromptMainView(
             manager=self.manager,
-            permission_validator=self.permission_validator
+            permission_validator=self.permission_validator,
+            guild_id=guild_id,
         )
 
         # 取得翻譯文字
-        guild_id = str(interaction.guild.id) if interaction.guild else "system"
         lang_manager = self.bot.get_cog("LanguageManager")
         
         if lang_manager:
