@@ -15,7 +15,7 @@ use_directory_urls: true
 theme:
   name: material
   language: zh-TW
-  logo: material/robot-confused
+  logo: assets/logo.png
   favicon: assets/favicon.png
   font:
     text: Roboto
