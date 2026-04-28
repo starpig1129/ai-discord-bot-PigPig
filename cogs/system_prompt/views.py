@@ -247,7 +247,6 @@ class SystemPromptFunctionButton(discord.ui.Button):
         if view:
             await view.function_callback(interaction, self.function)
         else:
-            self.logger.error("Button callback: View not found.")
             await interaction.response.send_message(
                 f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
                 ephemeral=True,
@@ -607,7 +606,6 @@ class EditModeButton(discord.ui.Button):
         if view:
             await view.edit_mode_callback(interaction, self.edit_mode)
         else:
-            self.logger.error("Button callback: View not found.")
             await interaction.response.send_message(
                 f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
                 ephemeral=True,
@@ -625,7 +623,6 @@ class SystemPromptScopeButton(discord.ui.Button):
         if view:
             await view.scope_callback(interaction, self.scope)
         else:
-            self.logger.error("Button callback: View not found.")
             await interaction.response.send_message(
                 f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
                 ephemeral=True,
@@ -698,9 +695,14 @@ class SystemPromptViewOptionsView(LocalizedView):
                         preview = (content[:47] + "...") if len(content) > 50 else content
                         module_info.append(f"**{name}**: `{preview}`")
                     if module_info:
-                        embed.add_field(name="🔧 該頻道直接配置的模組", value="\n".join(module_info), inline=False)
+                        modules_title = _ti(interaction, "commands", "system_prompt", "messages", "info", "modules_description",
+                                        fallback="Configured modules")
+                    modules_none = _ti(interaction, "commands", "system_prompt", "messages", "info", "modules_none",
+                                       fallback="None")
+                    if module_info:
+                        embed.add_field(name=modules_title, value="\n".join(module_info), inline=False)
                     else:
-                        embed.add_field(name="🔧 該頻道直接配置的模組", value="無", inline=False)
+                        embed.add_field(name=modules_title, value=modules_none, inline=False)
 
 
             if view_type == "inheritance":
@@ -765,7 +767,6 @@ class SystemPromptViewButton(discord.ui.Button):
         if view:
             await view.view_callback(interaction, self.view_type)
         else:
-            self.logger.error("Button callback: View not found.")
             await interaction.response.send_message(
                 f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
                 ephemeral=True,
@@ -919,7 +920,6 @@ class ModuleScopeButton(discord.ui.Button):
         if view:
             await view.scope_callback(interaction, self.scope)
         else:
-            self.logger.error("Button callback: View not found.")
             await interaction.response.send_message(
                 f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
                 ephemeral=True,
@@ -1090,7 +1090,6 @@ class ModuleSelect(discord.ui.Select):
                         interaction
                     )
                 # Verification (optional but good)
-                verification_msg = "已驗證保存並清除快取"
                 # ... (verification logic as in original) ...
 
                 embed = discord.Embed(
@@ -1109,15 +1108,19 @@ class ModuleSelect(discord.ui.Select):
 
                 await interaction.response.send_message(embed=embed, ephemeral=True) # From modal
             else:
-                self.logger.error("模組設定失敗，manager returned False.")
-                await interaction.response.send_message(f"❌ 設定模組失敗: 操作未成功。", ephemeral=True)
+                err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ {err}", ephemeral=True)
 
         except Exception as e:
-            self.logger.error(f"設定模組時發生嚴重錯誤: {e}", exc_info=True)
+            self.logger.error(f"Error in _handle_module_callback: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 設定模組失敗: {str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 設定模組失敗: {str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
 class SystemPromptCopyView(LocalizedView):
