@@ -37,7 +37,9 @@
             "confirm_copy": "Confirm Copy",
             "cancel": "Cancel",
             "edit": "Edit",
-            "preview": "Preview"
+            "preview": "Preview",
+            "reload_config": "Reload Config",
+            "direct_edit": "Direct Edit"
         },
         "menus": {
             "set_prompt_title": "⚙️ Set System Prompt",
@@ -53,7 +55,9 @@
             "remove_prompt_title": "🗑️ Remove System Prompt",
             "remove_prompt_description": "Please select scope to remove",
             "reset_config_title": "🔄 Reset System Prompt",
-            "reset_config_description": "Please select scope to reset"
+            "reset_config_description": "Please select scope to reset",
+            "edit_mode_title": "⚙️ Edit {scope} Prompt",
+            "edit_mode_description": "Please select edit mode"
         },
         "modals": {
             "system_prompt": {
@@ -94,7 +98,8 @@
             "reset": "✅ Reset successful",
             "reset_description": "Successfully reset {scope} system prompt settings",
             "operation_confirmed": "✅ Operation confirmed",
-            "operation_cancelled": "❌ Operation cancelled"
+            "operation_cancelled": "❌ Operation cancelled",
+            "reload": "✅ Configuration reloaded successfully"
         },
         "info": {
             "scope_channel": "Channel #{channel}",
@@ -120,7 +125,8 @@
             "modules_none": "No available modules",
             "preview_content": "Content",
             "preview_source": "Source",
-            "preview_length": "Length"
+            "preview_length": "Length",
+            "reload_unavailable": "⚠️ Reload function is currently unavailable"
         },
         "confirm": {
             "remove_channel": "Are you sure to remove system prompt for channel #{channel}?",

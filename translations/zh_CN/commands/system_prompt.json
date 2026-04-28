@@ -37,7 +37,9 @@
             "confirm_copy": "复制确认",
             "cancel": "取消",
             "edit": "编辑",
-            "preview": "预览"
+            "preview": "预览",
+            "reload_config": "重载配置",
+            "direct_edit": "直接编辑"
         },
         "menus": {
             "set_prompt_title": "⚙️ 系统提示词设置",
@@ -53,7 +55,9 @@
             "remove_prompt_title": "🗑️ 系统提示词删除",
             "remove_prompt_description": "请选择要删除的范围",
             "reset_config_title": "🔄 系统提示词重置",
-            "reset_config_description": "请选择要重置的范围"
+            "reset_config_description": "请选择要重置的范围",
+            "edit_mode_title": "⚙️ 编辑 {scope} 系统提示",
+            "edit_mode_description": "请选择编辑模式"
         },
         "modals": {
             "system_prompt": {
@@ -94,7 +98,8 @@
             "reset": "✅ 重置成功",
             "reset_description": "已成功重置{scope}系统提示词设置",
             "operation_confirmed": "✅ 操作已确认",
-            "operation_cancelled": "❌ 操作已取消"
+            "operation_cancelled": "❌ 操作已取消",
+            "reload": "✅ 配置重载成功"
         },
         "info": {
             "scope_channel": "频道 #{channel}",
@@ -120,7 +125,8 @@
             "modules_none": "没有可用的模块",
             "preview_content": "内容",
             "preview_source": "来源",
-            "preview_length": "长度"
+            "preview_length": "长度",
+            "reload_unavailable": "⚠️ 重载功能目前不可用"
         },
         "confirm": {
             "remove_channel": "是否要删除频道 #{channel} 的系统提示词？",

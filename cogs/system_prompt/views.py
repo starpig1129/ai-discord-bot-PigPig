@@ -3,6 +3,7 @@
 
 提供全新的統一介面，整合所有系統提示管理功能和模組化編輯。
 """
+from __future__ import annotations
 
 import discord
 from typing import Optional, Dict, Any, Callable, List
@@ -21,80 +22,97 @@ from .ui import (
 from .exceptions import SystemPromptError, PermissionError
 
 
-class SystemPromptMainView(discord.ui.View):
-    """系統提示管理主選單"""
+# ─── Translation helpers ──────────────────────────────────────────────────────
 
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 timeout: float = 300.0):
-        """
-        初始化主選單
+def _ti(interaction: discord.Interaction, *keys: str, fallback: str = "") -> str:
+    """Translate a key using the guild language from an interaction context.
 
-        Args:
-            manager: 系統提示管理器
-            permission_validator: 權限驗證器
-            timeout: 超時時間
-        """
+    Falls back to ``fallback`` (or the last key segment) when LanguageManager
+    is unavailable or the key is missing.
+    """
+    guild_id = str(interaction.guild.id) if interaction.guild else "system"
+    try:
+        lm = interaction.client.get_cog("LanguageManager") if interaction.client else None
+        if lm:
+            return lm.translate(guild_id, *keys)
+    except Exception:
+        pass
+    return fallback or (keys[-1] if keys else "")
+
+
+class LocalizedView(discord.ui.View):
+    """Base class for all system-prompt views.
+
+    Provides :meth:`_t` for translating strings at construction time using
+    the server's configured language.
+    """
+
+    def __init__(
+        self,
+        manager: "SystemPromptManager",
+        guild_id: str = "system",
+        timeout: float = 300.0,
+    ):
         super().__init__(timeout=timeout)
         self.manager = manager
+        self.guild_id = guild_id
+        self._bot = manager.bot
+
+    def _t(self, *keys: str, fallback: str = "") -> str:
+        """Translate *keys* using the guild's language.
+
+        Falls back to ``fallback`` (or the last key segment) when
+        LanguageManager is unavailable or the key is missing.
+        """
+        try:
+            lm = self._bot.get_cog("LanguageManager") if self._bot else None
+            if lm:
+                return lm.translate(self.guild_id, *keys)
+        except Exception:
+            pass
+        return fallback or (keys[-1] if keys else "")
+
+
+class SystemPromptMainView(LocalizedView):
+    """系統提示管理主選單"""
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild_id: str = "system",
+        timeout: float = 300.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.logger = get_logger(source=__name__, server_id="system")
-
-        # 建立主要功能按鈕
         self._setup_main_buttons()
 
     def _setup_main_buttons(self):
         """設定主要功能按鈕"""
-        
-        # Get language manager for button labels
-        lang_manager = self.manager.language_manager if hasattr(self.manager, 'language_manager') else None
-        guild_id = "system"  # Default fallback
-
-        # 第一列：基本功能
         self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "set_prompt") if lang_manager else "Set Prompt",
-            emoji="✏️",
-            style=discord.ButtonStyle.primary,
-            function="set",
-            row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "set_prompt", fallback="Set Prompt"),
+            emoji="✏️", style=discord.ButtonStyle.primary, function="set", row=0,
         ))
         self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "view_config") if lang_manager else "View Config",
-            emoji="👁️",
-            style=discord.ButtonStyle.secondary,
-            function="view",
-            row=0
-        ))
-
-        # 第二列：管理功能
-        self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "copy_prompt") if lang_manager else "Copy Prompt",
-            emoji="📋",
-            style=discord.ButtonStyle.secondary,
-            function="copy",
-            row=1
+            label=self._t("commands", "system_prompt", "ui", "buttons", "view_config", fallback="View Config"),
+            emoji="👁️", style=discord.ButtonStyle.secondary, function="view", row=0,
         ))
         self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "remove_prompt") if lang_manager else "Remove Prompt",
-            emoji="🗑️",
-            style=discord.ButtonStyle.danger,
-            function="remove",
-            row=1
+            label=self._t("commands", "system_prompt", "ui", "buttons", "copy_prompt", fallback="Copy Prompt"),
+            emoji="📋", style=discord.ButtonStyle.secondary, function="copy", row=1,
         ))
         self.add_item(SystemPromptFunctionButton(
-            label=lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "reset_config") if lang_manager else "Reset Config",
-            emoji="🔄",
-            style=discord.ButtonStyle.danger,
-            function="reset",
-            row=1
+            label=self._t("commands", "system_prompt", "ui", "buttons", "remove_prompt", fallback="Remove Prompt"),
+            emoji="🗑️", style=discord.ButtonStyle.danger, function="remove", row=1,
         ))
         self.add_item(SystemPromptFunctionButton(
-            label="Reload Config",  # Keep as fallback, not in translation
-            emoji="🔩",
-            style=discord.ButtonStyle.secondary,
-            function="reload",
-            row=2
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reset_config", fallback="Reset Config"),
+            emoji="🔄", style=discord.ButtonStyle.danger, function="reset", row=1,
+        ))
+        self.add_item(SystemPromptFunctionButton(
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reload_config", fallback="Reload Config"),
+            emoji="🔩", style=discord.ButtonStyle.secondary, function="reload", row=2,
         ))
 
 
@@ -116,12 +134,9 @@ class SystemPromptMainView(discord.ui.View):
 
         except Exception as e:
             self.logger.error(f"處理功能 {function} 時發生錯誤: {e}", exc_info=True)
-            lang_manager = interaction.client.get_cog("LanguageManager")
-            guild_id = str(interaction.guild.id) if interaction.guild else "system"
-            
-            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "operation_failed") if lang_manager else "Operation failed"
-            full_message = f"❌ {error_msg}: {str(e)}"
-            
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            full_message = f"❌ {err}: {str(e)}"
+
             if not interaction.response.is_done():
                 await interaction.response.send_message(full_message, ephemeral=True)
             else:
@@ -129,138 +144,96 @@ class SystemPromptMainView(discord.ui.View):
 
 
     async def _handle_set_function(self, interaction: discord.Interaction):
-        """處理設定提示功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         view = SystemPromptSetView(
             manager=self.manager,
-            permission_validator=self.permission_validator
+            permission_validator=self.permission_validator,
+            guild_id=guild_id,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "set_prompt_title") if lang_manager else "⚙️ System Prompt Setting"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "set_prompt_description") if lang_manager else "Please select the scope to configure"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.blue()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "set_prompt_title", fallback="⚙️ Set System Prompt")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "set_prompt_description", fallback="Please select the scope to configure")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_view_function(self, interaction: discord.Interaction):
-        """處理查看配置功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         view = SystemPromptViewOptionsView(
             manager=self.manager,
-            permission_validator=self.permission_validator
+            permission_validator=self.permission_validator,
+            guild_id=guild_id,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "view_options_title") if lang_manager else "👁️ System Prompt Configuration View"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "view_options_description") if lang_manager else "Please select viewing options"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.green()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "view_options_title", fallback="👁️ View System Prompt Configuration")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "view_options_description", fallback="Please select view options")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.green())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_copy_function(self, interaction: discord.Interaction):
-        """處理複製提示功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
-        guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         if not interaction.guild:
-            error_msg = lang_manager.translate(guild_id, "commands", "system_prompt", "errors", "server_only") if lang_manager else "This feature is only available in servers."
-            await interaction.response.send_message(f"❌ {error_msg}", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'server_only', fallback='Server only')}",
+                ephemeral=True,
+            )
             return
+        guild_id = str(interaction.guild.id)
         view = SystemPromptCopyView(
             manager=self.manager,
             permission_validator=self.permission_validator,
-            guild=interaction.guild
+            guild=interaction.guild,
+            guild_id=guild_id,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "copy_prompt_title") if lang_manager else "📋 System Prompt Copy"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "copy_prompt_description") if lang_manager else "Please select source and target channels"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.blue()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "copy_prompt_title", fallback="📋 Copy System Prompt")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "copy_prompt_description", fallback="Please select source and target channels")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_remove_function(self, interaction: discord.Interaction):
-        """處理移除提示功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         view = SystemPromptRemoveView(
             manager=self.manager,
-            permission_validator=self.permission_validator
+            permission_validator=self.permission_validator,
+            guild_id=guild_id,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "remove_prompt_title") if lang_manager else "🗑️ System Prompt Removal"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "remove_prompt_description") if lang_manager else "Please select the scope to remove"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.red()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "remove_prompt_title", fallback="🗑️ Remove System Prompt")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "remove_prompt_description", fallback="Please select scope to remove")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.red())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_reset_function(self, interaction: discord.Interaction):
-        """處理重置設定功能"""
-        lang_manager = interaction.client.get_cog("LanguageManager")
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        
         view = SystemPromptResetView(
             manager=self.manager,
-            permission_validator=self.permission_validator
+            permission_validator=self.permission_validator,
+            guild_id=guild_id,
         )
-        
-        # Get localized text
-        title = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "reset_config_title") if lang_manager else "🔄 System Prompt Reset"
-        description = lang_manager.translate(guild_id, "commands", "system_prompt", "ui", "menus", "reset_config_description") if lang_manager else "Please select the scope to reset"
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.orange()
-        )
+        title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "reset_config_title", fallback="🔄 Reset System Prompt")
+        description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "reset_config_description", fallback="Please select scope to reset")
+        embed = discord.Embed(title=title, description=description, color=discord.Color.orange())
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_reload_function(self, interaction: discord.Interaction):
-        """處理重載設定功能"""
+        guild_id = str(interaction.guild.id) if interaction.guild else "system"
         try:
-            # Example: Check for a generic admin-level permission
-            # self.permission_validator.validate_permission_or_raise(interaction.user, 'manage_bot_config', interaction.guild)
-            
             if hasattr(self.manager, "reload_all_configs") and callable(self.manager.reload_all_configs):
-                # If reload_all_configs is async
-                import asyncio
-                if asyncio.iscoroutinefunction(self.manager.reload_all_configs):
+                import asyncio as _asyncio
+                if _asyncio.iscoroutinefunction(self.manager.reload_all_configs):
                     await self.manager.reload_all_configs()
                 else:
-                    self.manager.reload_all_configs() # If synchronous
-                await interaction.response.send_message("🔄 設定已成功重載。", ephemeral=True)
-                self.logger.info(f"用戶 {interaction.user} 重載了配置。")
+                    self.manager.reload_all_configs()
+                msg = _ti(interaction, "commands", "system_prompt", "messages", "success", "reload",
+                          fallback="✅ Configuration reloaded successfully")
+                await interaction.response.send_message(msg, ephemeral=True)
+                self.logger.info(f"User {interaction.user} reloaded configuration.")
             else:
-                self.logger.warning("Manager has no 'reload_all_configs' method or it's not callable.")
-                await interaction.response.send_message("⚠️ 重載功能當前不可用或未完全實現。", ephemeral=True)
+                msg = _ti(interaction, "commands", "system_prompt", "messages", "info", "reload_unavailable",
+                          fallback="⚠️ Reload function is currently unavailable")
+                await interaction.response.send_message(msg, ephemeral=True)
         except PermissionError as e:
-            await interaction.response.send_message(f"❌ 權限不足：{str(e)}", ephemeral=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "permission_denied", fallback="Permission denied")
+            await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
         except Exception as e:
-            self.logger.error(f"重載設定時發生錯誤: {e}", exc_info=True)
-            await interaction.response.send_message(f"❌ 重載失敗：{str(e)}", ephemeral=True)
+            self.logger.error(f"Error reloading config: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
 
 
 class SystemPromptFunctionButton(discord.ui.Button):
@@ -275,53 +248,67 @@ class SystemPromptFunctionButton(discord.ui.Button):
         if view:
             await view.function_callback(interaction, self.function)
         else:
-            self.logger.error("Button callback: View not found.")
-            await interaction.response.send_message("❌ 內部錯誤，請稍後再試。",ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                ephemeral=True,
+            )
 
-class SystemPromptSetView(discord.ui.View):
+class SystemPromptSetView(LocalizedView):
     """設定系統提示的子選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 timeout: float = 180.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild_id: str = "system",
+        timeout: float = 180.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.logger = get_logger(source=__name__, server_id="system")
 
         self.add_item(SystemPromptScopeButton(
-            label="頻道特定", emoji="📢", style=discord.ButtonStyle.primary, scope="channel", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "channel_specific", fallback="Channel Specific"),
+            emoji="📢", style=discord.ButtonStyle.primary, scope="channel", row=0,
         ))
         self.add_item(SystemPromptScopeButton(
-            label="伺服器預設", emoji="🏠", style=discord.ButtonStyle.secondary, scope="server", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "server_default", fallback="Server Default"),
+            emoji="🏠", style=discord.ButtonStyle.secondary, scope="server", row=0,
         ))
-        self.add_item(BackButton(row=1))
+        self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=1))
 
     async def scope_callback(self, interaction: discord.Interaction, scope: str):
-        """處理範圍選擇"""
         try:
-            target_channel_obj: Optional[discord.TextChannel] = None
-            scope_text: str = ""
-
             if not interaction.guild:
-                await interaction.response.send_message("❌ 此功能僅限伺服器內使用。", ephemeral=True)
+                await interaction.response.send_message(
+                    f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'server_only', fallback='Server only')}",
+                    ephemeral=True,
+                )
                 return
-            if not interaction.channel or not isinstance(interaction.channel, discord.TextChannel): # Ensure it's a text channel for channel scope
-                await interaction.response.send_message("❌ 無法在目前頻道類型執行此操作。", ephemeral=True)
+            if not interaction.channel or not isinstance(interaction.channel, discord.TextChannel):
+                await interaction.response.send_message(
+                    f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'text_channel_only', fallback='Text channel only')}",
+                    ephemeral=True,
+                )
                 return
+
+            guild_id = str(interaction.guild.id)
+            target_channel_obj: Optional[discord.TextChannel] = None
 
             if scope == "channel":
                 self.permission_validator.validate_permission_or_raise(
-                    interaction.user, 'modify_channel', interaction.channel
+                    interaction.user, "modify_channel", interaction.channel
                 )
                 target_channel_obj = interaction.channel
-                scope_text = f"頻道 #{interaction.channel.name}"
-            else: # scope == "server"
+                raw = _ti(interaction, "commands", "system_prompt", "messages", "info", "scope_channel",
+                          fallback="Channel #{channel}")
+                scope_text = raw.format(channel=interaction.channel.name)
+            else:
                 self.permission_validator.validate_permission_or_raise(
-                    interaction.user, 'modify_server', interaction.guild
+                    interaction.user, "modify_server", interaction.guild
                 )
-                target_channel_obj = None
-                scope_text = "伺服器預設"
+                scope_text = _ti(interaction, "commands", "system_prompt", "messages", "info", "scope_server",
+                                 fallback="Server Default")
 
             view = EditModeSelectionView(
                 manager=self.manager,
@@ -329,64 +316,67 @@ class SystemPromptSetView(discord.ui.View):
                 scope=scope,
                 target_channel=target_channel_obj,
                 scope_text=scope_text,
-                guild=interaction.guild # Pass guild explicitly
+                guild=interaction.guild,
+                guild_id=guild_id,
             )
-            embed = discord.Embed(
-                title=f"⚙️ 編輯 {scope_text} 系統提示",
-                description="請選擇編輯模式",
-                color=discord.Color.blue()
-            )
-            # Use edit_message if already responded, otherwise send_message
+            title_tpl = _ti(interaction, "commands", "system_prompt", "ui", "menus", "edit_mode_title",
+                            fallback="⚙️ Edit {scope} Prompt")
+            title = title_tpl.format(scope=scope_text)
+            description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "edit_mode_description",
+                               fallback="Please select edit mode")
+            embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
+
             if interaction.response.is_done():
-                 await interaction.edit_original_response(embed=embed, view=view)
+                await interaction.edit_original_response(embed=embed, view=view)
             else:
                 await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         except PermissionError as e:
-            self.logger.warning(f"權限不足: {e} by {interaction.user} for scope {scope}")
-            await interaction.response.send_message(f"❌ 權限不足：{str(e)}", ephemeral=True)
+            self.logger.warning(f"Permission denied: {e} by {interaction.user} for scope {scope}")
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'permission_denied', fallback='Permission denied')}: {e}",
+                ephemeral=True,
+            )
         except Exception as e:
-            self.logger.error(f"處理範圍選擇時發生錯誤: {e}", exc_info=True)
+            self.logger.error(f"Error handling scope selection: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 操作失敗：{str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 操作失敗：{str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
-class EditModeSelectionView(discord.ui.View):
+class EditModeSelectionView(LocalizedView):
     """編輯模式選擇選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 scope: str,
-                 target_channel: Optional[discord.TextChannel],
-                 scope_text: str,
-                 guild: discord.Guild, # Added guild
-                 timeout: float = 180.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        scope: str,
+        target_channel: Optional[discord.TextChannel],
+        scope_text: str,
+        guild: discord.Guild,
+        guild_id: str = "system",
+        timeout: float = 180.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.scope = scope
         self.target_channel = target_channel
         self.scope_text = scope_text
-        self.guild = guild # Store guild
+        self.guild = guild
         self.logger = get_logger(source=__name__, server_id="system")
 
         self.add_item(EditModeButton(
-            label="直接編輯提示",
-            emoji="✏️",
-            style=discord.ButtonStyle.primary,
-            edit_mode="direct",
-            row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "direct_edit", fallback="Direct Edit"),
+            emoji="✏️", style=discord.ButtonStyle.primary, edit_mode="direct", row=0,
         ))
         self.add_item(EditModeButton(
-            label="模組化編輯",
-            emoji="📦",
-            style=discord.ButtonStyle.secondary,
-            edit_mode="module",
-            row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "module_edit", fallback="Module Edit"),
+            emoji="📦", style=discord.ButtonStyle.secondary, edit_mode="module", row=0,
         ))
-        self.add_item(BackButton(row=1))
+        self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=1))
 
     async def edit_mode_callback(self, interaction: discord.Interaction, edit_mode: str):
         """處理編輯模式選擇"""
@@ -396,11 +386,12 @@ class EditModeSelectionView(discord.ui.View):
             elif edit_mode == "module":
                 await self._handle_module_edit(interaction)
         except Exception as e:
-            self.logger.error(f"處理編輯模式選擇時發生錯誤: {e}", exc_info=True)
+            self.logger.error(f"EditModeButton callback error: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 操作失敗：{str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 操作失敗：{str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
     async def _handle_direct_edit(self, interaction: discord.Interaction):
@@ -436,8 +427,13 @@ class EditModeSelectionView(discord.ui.View):
             except Exception as e:
                 self.logger.warning(f"無法取得有效提示作為預設值: {e}")
 
+        modal_title = _ti(
+            interaction,
+            "commands", "system_prompt", "ui", "modals", "system_prompt", "title_edit",
+            fallback="Edit System Prompt",
+        )
         modal = SystemPromptModal(
-            title="編輯系統提示",
+            title=modal_title,
             initial_value=existing_content,
             callback_func=lambda i, prompt_content: self._handle_direct_set_callback(i, prompt_content),
             manager=self.manager, # Pass manager if modal needs it
@@ -487,7 +483,10 @@ class EditModeSelectionView(discord.ui.View):
         try:
             modules = self.manager.get_available_modules()
             if not modules:
-                await interaction.response.send_message("❌ 暫無可用的模組", ephemeral=True)
+                await interaction.response.send_message(
+                    f"❌ {_ti(interaction, 'commands', 'system_prompt', 'messages', 'info', 'modules_none', fallback='No modules available')}",
+                    ephemeral=True,
+                )
                 return
 
             view = ModuleEditView(
@@ -497,14 +496,22 @@ class EditModeSelectionView(discord.ui.View):
                 scope=self.scope,
                 target_channel=self.target_channel,
                 scope_text=self.scope_text,
-                guild=self.guild # Pass guild
+                guild=self.guild,
+                guild_id=self.guild_id,
             )
             # view._guild = self.guild # Already passed via constructor
 
+            guild_id = str(interaction.guild.id) if interaction.guild else "system"
+            title_tpl = _ti(
+                interaction,
+                "commands", "system_prompt", "ui", "menus", "module_scope_title",
+                fallback="📦 Edit {scope} Module",
+            )
             embed = discord.Embed(
-                title=f"📦 模組化編輯 {self.scope_text}",
-                description="請選擇要編輯的模組",
-                color=discord.Color.purple()
+                title=title_tpl.format(scope=self.scope_text),
+                description=_ti(interaction, "commands", "system_prompt", "ui", "menus", "module_scope_description",
+                                 fallback="Please select module to edit"),
+                color=discord.Color.purple(),
             )
             if interaction.response.is_done():
                 await interaction.edit_original_response(embed=embed, view=view)
@@ -512,7 +519,11 @@ class EditModeSelectionView(discord.ui.View):
                 await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
         except Exception as e:
             self.logger.error(f"載入模組時發生錯誤: {e}", exc_info=True)
-            await interaction.response.send_message(f"❌ 載入模組時發生錯誤：{str(e)}", ephemeral=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
     async def _handle_direct_set_callback(self, interaction: discord.Interaction, content: str):
         """處理直接設定回調"""
@@ -548,24 +559,41 @@ class EditModeSelectionView(discord.ui.View):
                         interaction # Pass interaction if needed by cache clear
                     )
                 embed = discord.Embed(
-                    title="✅ 系統提示設定成功",
-                    description=f"已成功設定 {self.scope_text} 的系統提示",
-                    color=discord.Color.green()
+                    title=_ti(interaction, "commands", "system_prompt", "messages", "success", "set",
+                              fallback="✅ System prompt set successfully"),
+                    description=_ti(interaction, "commands", "system_prompt", "messages", "success", "set_description",
+                                    fallback="Successfully set {scope} system prompt").format(scope=self.scope_text),
+                    color=discord.Color.green(),
                 )
-                embed.add_field(name="內容長度", value=f"{len(content)} 字元", inline=True)
-                embed.add_field(name="設定者", value=interaction.user.mention, inline=True)
+                embed.add_field(
+                    name=_ti(interaction, "commands", "system_prompt", "messages", "info", "content_length",
+                             fallback="Content length"),
+                    value=f"{len(content)} characters",
+                    inline=True,
+                )
+                embed.add_field(
+                    name=_ti(interaction, "commands", "system_prompt", "messages", "info", "created_by",
+                             fallback="Created by"),
+                    value=interaction.user.mention,
+                    inline=True,
+                )
                 
                 # Modal callbacks should use followup if initial response was to send the modal
                 await interaction.response.send_message(embed=embed, ephemeral=True) 
             else:
-                await interaction.response.send_message(f"❌ 設定失敗：操作未成功返回。", ephemeral=True)
+                err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ {err}", ephemeral=True)
 
         except Exception as e:
-            self.logger.error(f"設定系統提示時發生錯誤: {e}", exc_info=True)
+            self.logger.error(f"Error in _handle_direct_set_callback: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 設定失敗: {str(e)}", ephemeral=True)
-            else: # Should be from modal, so initial response is done
-                await interaction.followup.send(f"❌ 設定失敗: {str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
 class EditModeButton(discord.ui.Button):
@@ -579,8 +607,10 @@ class EditModeButton(discord.ui.Button):
         if view:
             await view.edit_mode_callback(interaction, self.edit_mode)
         else:
-            self.logger.error("Button callback: View not found.")
-            await interaction.response.send_message("❌ 內部錯誤，請稍後再試。",ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                ephemeral=True,
+            )
 
 
 class SystemPromptScopeButton(discord.ui.Button):
@@ -594,34 +624,44 @@ class SystemPromptScopeButton(discord.ui.Button):
         if view:
             await view.scope_callback(interaction, self.scope)
         else:
-            self.logger.error("Button callback: View not found.")
-            await interaction.response.send_message("❌ 內部錯誤，請稍後再試。",ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                ephemeral=True,
+            )
 
 
-class SystemPromptViewOptionsView(discord.ui.View):
+class SystemPromptViewOptionsView(LocalizedView):
     """查看配置選項選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 timeout: float = 180.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild_id: str = "system",
+        timeout: float = 180.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.logger = get_logger(source=__name__, server_id="system")
 
         self.add_item(SystemPromptViewButton(
-            label="當前頻道有效提示", emoji="📢", style=discord.ButtonStyle.primary, view_type="current", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "current_channel", fallback="Current Channel"),
+            emoji="📢", style=discord.ButtonStyle.primary, view_type="current", row=0,
         ))
         self.add_item(SystemPromptViewButton(
-            label="顯示繼承關係", emoji="🔗", style=discord.ButtonStyle.secondary, view_type="inheritance", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "show_inheritance", fallback="Show Inheritance"),
+            emoji="🔗", style=discord.ButtonStyle.secondary, view_type="inheritance", row=0,
         ))
-        self.add_item(BackButton(row=1))
+        self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=1))
 
     async def view_callback(self, interaction: discord.Interaction, view_type: str):
         """處理查看回調"""
         try:
             if not interaction.channel or not isinstance(interaction.channel, discord.TextChannel) or not interaction.guild:
-                await interaction.response.send_message("❌ 此功能僅限伺服器文字頻道內使用。", ephemeral=True)
+                await interaction.response.send_message(
+                    f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'text_channel_only', fallback='Text channel only')}",
+                    ephemeral=True,
+                )
                 return
 
             channel = interaction.channel
@@ -656,25 +696,45 @@ class SystemPromptViewOptionsView(discord.ui.View):
                         preview = (content[:47] + "...") if len(content) > 50 else content
                         module_info.append(f"**{name}**: `{preview}`")
                     if module_info:
-                        embed.add_field(name="🔧 該頻道直接配置的模組", value="\n".join(module_info), inline=False)
+                        modules_title = _ti(interaction, "commands", "system_prompt", "messages", "info", "modules_description",
+                                        fallback="Configured modules")
+                    modules_none = _ti(interaction, "commands", "system_prompt", "messages", "info", "modules_none",
+                                       fallback="None")
+                    if module_info:
+                        embed.add_field(name=modules_title, value="\n".join(module_info), inline=False)
                     else:
-                        embed.add_field(name="🔧 該頻道直接配置的模組", value="無", inline=False)
+                        embed.add_field(name=modules_title, value=modules_none, inline=False)
 
 
             if view_type == "inheritance":
-                inheritance_info = ["🔹 **YAML 基礎提示** (隱含最底層)"]
-                
+                yaml_lbl = _ti(interaction, "commands", "system_prompt", "messages", "info", "inheritance_yaml",
+                               fallback="🔹 YAML Base Prompt")
+                srv_lbl = _ti(interaction, "commands", "system_prompt", "messages", "info", "inheritance_server",
+                              fallback="🔸 Server Default Prompt")
+                ch_lbl = _ti(interaction, "commands", "system_prompt", "messages", "info", "inheritance_channel",
+                             fallback="🔸 Channel Specific Prompt")
+                title_lbl = _ti(interaction, "commands", "system_prompt", "messages", "info", "inheritance_title",
+                                fallback="Inheritance Hierarchy")
+
+                inheritance_info = [yaml_lbl]
+
                 server_level_config = system_prompts.get('server_level', {})
                 if server_level_config.get('prompt') or server_level_config.get('modules'):
-                    inheritance_info.append("🔸 **伺服器預設提示** (若有配置)")
-                
+                    inheritance_info.append(srv_lbl)
+
                 if channel_id_str in channels_config:
                     channel_specific_config = channels_config[channel_id_str]
                     if channel_specific_config.get('prompt') or channel_specific_config.get('modules'):
-                        inheritance_info.append("🟢 **頻道特定提示** (若有配置)")
-                
-                embed.add_field(name="繼承層級 (由下至上應用)", value="\n".join(inheritance_info), inline=False)
-                embed.set_footer(text=f"最終生效提示來源: {prompt_data.get('source', '未知')}")
+                        inheritance_info.append(ch_lbl)
+
+                embed.add_field(
+                    name=title_lbl,
+                    value="\n".join(inheritance_info),
+                    inline=False,
+                )
+                source_lbl = _ti(interaction, "commands", "system_prompt", "messages", "info", "source",
+                                 fallback="Source")
+                embed.set_footer(text=f"{source_lbl}: {prompt_data.get('source', '?')}")
 
 
             if interaction.response.is_done():
@@ -683,14 +743,18 @@ class SystemPromptViewOptionsView(discord.ui.View):
                 await interaction.response.send_message(embed=embed, ephemeral=True) # view=self if needed
 
         except PermissionError as e:
-            self.logger.warning(f"權限不足: {e} by {interaction.user} for view")
-            await interaction.response.send_message(f"❌ 權限不足：{str(e)}", ephemeral=True)
+            self.logger.warning(f"Permission denied: {e} by {interaction.user} for view")
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'permission_denied', fallback='Permission denied')}: {str(e)}",
+                ephemeral=True,
+            )
         except Exception as e:
-            self.logger.error(f"查看配置時發生錯誤: {e}", exc_info=True)
+            self.logger.error(f"Error in view_callback: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 查看失敗：{str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {str(e)}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 查看失敗：{str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {str(e)}", ephemeral=True)
 
 
 class SystemPromptViewButton(discord.ui.Button):
@@ -704,31 +768,34 @@ class SystemPromptViewButton(discord.ui.Button):
         if view:
             await view.view_callback(interaction, self.view_type)
         else:
-            self.logger.error("Button callback: View not found.")
-            await interaction.response.send_message("❌ 內部錯誤，請稍後再試。",ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                ephemeral=True,
+            )
 
 
-class ModuleEditView(discord.ui.View):
-    """模組編輯選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 modules: List[str],
-                 guild: discord.Guild, # Added guild
-                 scope: Optional[str] = None,
-                 target_channel: Optional[discord.TextChannel] = None,
-                 scope_text: Optional[str] = None,
-                 timeout: float = 300.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+class ModuleEditView(LocalizedView):
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        modules: List[str],
+        guild: discord.Guild,
+        scope: Optional[str] = None,
+        target_channel: Optional[discord.TextChannel] = None,
+        scope_text: Optional[str] = None,
+        guild_id: str = "system",
+        timeout: float = 300.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.modules = modules
-        self.guild = guild # Store guild
+        self.guild = guild
         self.scope = scope
         self.target_channel = target_channel
         self.scope_text = scope_text
         self.logger = get_logger(source=__name__, server_id="system")
-        self.selected_scope = scope # Initialize selected_scope
+        self.selected_scope = scope
 
         if scope and scope_text:
             self._setup_module_selector()
@@ -736,87 +803,111 @@ class ModuleEditView(discord.ui.View):
             self._setup_scope_selector()
 
     def _setup_scope_selector(self):
-        """設定範圍選擇器"""
         self.clear_items()
         self.add_item(ModuleScopeButton(
-            label="頻道模組", emoji="📢", style=discord.ButtonStyle.primary, scope="channel", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "channel_module", fallback="Channel Module"),
+            emoji="📢", style=discord.ButtonStyle.primary, scope="channel", row=0,
         ))
         self.add_item(ModuleScopeButton(
-            label="伺服器模組", emoji="🏠", style=discord.ButtonStyle.secondary, scope="server", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "server_module", fallback="Server Module"),
+            emoji="🏠", style=discord.ButtonStyle.secondary, scope="server", row=0,
         ))
-        self.add_item(BackButton(row=1))
+        self.add_item(BackButton(guild_id=self.guild_id, bot=self.manager.bot, row=1))
 
     def _setup_module_selector(self):
-        """設定模組選擇器"""
         self.clear_items()
-        options = []
-        for module_name in self.modules[:25]: # Discord limit
-            options.append(discord.SelectOption(
-                label=module_name, value=module_name, description=f"編輯 {module_name} 模組"
-            ))
+        placeholder = self._t("commands", "system_prompt", "ui", "selectors", "module_placeholder",
+                               fallback="Select module to edit")
+        desc_tpl = self._t("commands", "system_prompt", "ui", "selectors", "module_description",
+                            fallback="Edit {module} module")
+
+        options = [
+            discord.SelectOption(
+                label=mod,
+                value=mod,
+                description=desc_tpl.format(module=mod)[:100],
+            )
+            for mod in self.modules[:25]
+        ]
 
         if options:
-            # Guild should be available via self.guild
+            effective_scope = self.selected_scope or self.scope
             select = ModuleSelect(
-                placeholder="選擇要編輯的模組",
+                placeholder=placeholder,
                 options=options,
                 manager=self.manager,
-                scope=self.selected_scope or self.scope, # Use selected_scope if available
-                channel=self.target_channel if (self.selected_scope or self.scope) == "channel" else None,
+                scope=effective_scope,
+                channel=self.target_channel if effective_scope == "channel" else None,
                 guild=self.guild,
-                scope_text=self.scope_text or (f"頻道 #{self.target_channel.name}" if self.target_channel else "伺服器預設")
+                scope_text=self.scope_text or (
+                    f"#{self.target_channel.name}" if self.target_channel else "server"
+                ),
             )
             self.add_item(select)
+            self.add_item(BackButton(guild_id=self.guild_id, bot=self.manager.bot, row=1))
         else:
-            # Add a disabled button or label if no modules
-            self.add_item(discord.ui.Button(label="無可用模組", style=discord.ButtonStyle.secondary, disabled=True))
-
-        self.add_item(BackButton(row=1 if options else 0))
+            no_mod = self._t("commands", "system_prompt", "messages", "info", "modules_none",
+                             fallback="No modules available")
+            self.add_item(discord.ui.Button(label=no_mod, style=discord.ButtonStyle.secondary, disabled=True))
+            self.add_item(BackButton(guild_id=self.guild_id, bot=self.manager.bot, row=1))
 
 
     async def scope_callback(self, interaction: discord.Interaction, scope: str):
-        """處理範圍選擇"""
         try:
-            if not interaction.guild or not interaction.channel or not isinstance(interaction.channel, discord.TextChannel): # Ensure guild and text channel
-                await interaction.response.send_message("❌ 此功能僅限伺服器文字頻道內使用。", ephemeral=True)
+            if not interaction.guild:
+                await interaction.response.send_message(
+                    f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'server_only', fallback='Server only')}",
+                    ephemeral=True,
+                )
                 return
 
-            self.guild = interaction.guild # Update guild from interaction
+            guild_id = str(interaction.guild.id)
+            self.guild = interaction.guild
 
             if scope == "channel":
                 self.permission_validator.validate_permission_or_raise(
-                    interaction.user, 'modify_channel', interaction.channel
+                    interaction.user, "modify_channel", interaction.channel
                 )
                 self.target_channel = interaction.channel
-                self.scope_text = f"頻道 #{interaction.channel.name}"
-            else: # server
+                raw = _ti(interaction, "commands", "system_prompt", "messages", "info", "scope_channel",
+                          fallback="Channel #{channel}")
+                self.scope_text = raw.format(channel=interaction.channel.name)
+            else:
                 self.permission_validator.validate_permission_or_raise(
-                    interaction.user, 'modify_server', interaction.guild
+                    interaction.user, "modify_server", interaction.guild
                 )
                 self.target_channel = None
-                self.scope_text = "伺服器預設"
+                self.scope_text = _ti(interaction, "commands", "system_prompt", "messages", "info", "scope_server",
+                                      fallback="Server Default")
 
-            self.selected_scope = scope # Set selected scope
-            self.modules = self.manager.get_available_modules() # Refresh modules if needed
+            self.selected_scope = scope
+            self.guild_id = guild_id
+            self.modules = self.manager.get_available_modules()
+            self._setup_module_selector()
 
-            self._setup_module_selector() # Re-setup items with the new scope
-
+            title_tpl = _ti(interaction, "commands", "system_prompt", "ui", "menus", "module_scope_title",
+                            fallback="📦 Edit {scope} Module")
             embed = discord.Embed(
-                title=f"📦 編輯 {self.scope_text} 模組",
-                description="請選擇要編輯的模組",
-                color=discord.Color.purple()
+                title=title_tpl.format(scope=self.scope_text),
+                description=_ti(interaction, "commands", "system_prompt", "ui", "menus", "module_scope_description",
+                                 fallback="Please select module to edit"),
+                color=discord.Color.purple(),
             )
             await interaction.response.edit_message(embed=embed, view=self)
 
         except PermissionError as e:
-            self.logger.warning(f"權限不足: {e} by {interaction.user} for module scope {scope}")
-            await interaction.response.send_message(f"❌ 權限不足：{str(e)}", ephemeral=True)
+            self.logger.warning(f"Permission denied in ModuleEditView: {e}")
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'permission_denied', fallback='Permission denied')}: {e}",
+                ephemeral=True,
+            )
         except Exception as e:
-            self.logger.error(f"處理模組範圍選擇時發生錯誤: {e}", exc_info=True)
+            self.logger.error(f"Error in ModuleEditView.scope_callback: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 操作失敗：{str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 操作失敗：{str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
 class ModuleScopeButton(discord.ui.Button):
@@ -830,8 +921,10 @@ class ModuleScopeButton(discord.ui.Button):
         if view:
             await view.scope_callback(interaction, self.scope)
         else:
-            self.logger.error("Button callback: View not found.")
-            await interaction.response.send_message("❌ 內部錯誤，請稍後再試。",ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                ephemeral=True,
+            )
 
 
 class ModuleSelect(discord.ui.Select):
@@ -848,7 +941,7 @@ class ModuleSelect(discord.ui.Select):
         self.scope = scope
         self.channel = channel # This is the target channel for "channel" scope
         self.guild = guild
-        self.scope_text = scope_text or ("伺服器預設" if scope == "server" else (f"頻道 #{channel.name}" if channel else "未知頻道"))
+        self.scope_text = scope_text or ("Server Default" if scope == "server" else (f"#{channel.name}" if channel else "unknown"))
         self.logger = get_logger(server_id="system", source=__name__)
 
         if 'options' in kwargs and self.guild:
@@ -929,11 +1022,12 @@ class ModuleSelect(discord.ui.Select):
             await interaction.response.send_modal(modal)
 
         except Exception as e:
-            self.logger.error(f"開啟模組編輯器失敗: {e}", exc_info=True)
-            if not interaction.response.is_done(): # Should not happen for select callback
-                await interaction.response.send_message(f"❌ 開啟編輯器失敗：{str(e)}", ephemeral=True)
-            else: # For select, interaction response is already done implicitly by edit_message or send_message from parent
-                await interaction.followup.send(f"❌ 開啟編輯器失敗：{str(e)}", ephemeral=True)
+            self.logger.error(f"ModuleSelect callback error: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
     async def _handle_module_callback(self, interaction: discord.Interaction, module_name: str, content: str):
@@ -997,121 +1091,156 @@ class ModuleSelect(discord.ui.Select):
                         interaction
                     )
                 # Verification (optional but good)
-                verification_msg = "已驗證保存並清除快取"
                 # ... (verification logic as in original) ...
 
                 embed = discord.Embed(
-                    title="✅ 模組設定成功",
-                    description=f"已成功設定 {display_scope_text} 的 **{module_name}** 模組",
-                    color=discord.Color.green()
+                    title=_ti(interaction, "commands", "system_prompt", "messages", "success", "set",
+                              fallback="✅ Module set successfully"),
+                    description=_ti(interaction, "commands", "system_prompt", "messages", "success", "set_description",
+                                    fallback="Successfully set {scope} system prompt").format(scope=display_scope_text),
+                    color=discord.Color.green(),
                 )
-                embed.add_field(name="模組名稱", value=module_name, inline=True)
-                embed.add_field(name="內容長度", value=f"{len(content)} 字元", inline=True)
-                embed.add_field(name="驗證狀態", value=verification_msg, inline=True) # Add verification status
+                embed.add_field(
+                    name=_ti(interaction, "commands", "system_prompt", "messages", "info", "content_length",
+                             fallback="Content length"),
+                    value=f"{len(content)} characters",
+                    inline=True,
+                )
 
                 await interaction.response.send_message(embed=embed, ephemeral=True) # From modal
             else:
-                self.logger.error("模組設定失敗，manager returned False.")
-                await interaction.response.send_message(f"❌ 設定模組失敗: 操作未成功。", ephemeral=True)
+                err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ {err}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ {err}", ephemeral=True)
 
         except Exception as e:
-            self.logger.error(f"設定模組時發生嚴重錯誤: {e}", exc_info=True)
+            self.logger.error(f"Error in _handle_module_callback: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 設定模組失敗: {str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {e}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 設定模組失敗: {str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {e}", ephemeral=True)
 
 
-class SystemPromptCopyView(discord.ui.View):
+class SystemPromptCopyView(LocalizedView):
     """複製系統提示選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 guild: discord.Guild,
-                 timeout: float = 180.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild: discord.Guild,
+        guild_id: str = "system",
+        timeout: float = 180.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.guild = guild
         self.logger = get_logger(server_id="system", source=__name__)
 
-        # Get visible text channels bot has permissions for
         text_channels = [
-            ch for ch in guild.text_channels 
+            ch for ch in guild.text_channels
             if ch.permissions_for(guild.me).view_channel and ch.permissions_for(guild.me).send_messages
         ]
 
-        if len(text_channels) > 0:
-            from_options = [
+        if text_channels:
+            from_placeholder = self._t("commands", "system_prompt", "ui", "selectors", "from_channel_placeholder",
+                                        fallback="Select source channel")
+            to_placeholder = self._t("commands", "system_prompt", "ui", "selectors", "to_channel_placeholder",
+                                      fallback="Select target channel")
+            execute_label = self._t("commands", "system_prompt", "ui", "buttons", "execute_copy",
+                                     fallback="Execute Copy")
+
+            options = [
                 discord.SelectOption(label=f"#{ch.name}", value=str(ch.id), description=f"ID: {ch.id}")
-                for ch in text_channels[:25] # Limit to 25 for Discord
+                for ch in text_channels[:25]
             ]
-            to_options = list(from_options) # Can be the same list of channels
-
-            if from_options: # Should be true if len(text_channels) > 0
-                self.add_item(ChannelSelect(
-                    placeholder="選擇來源頻道", options=from_options, custom_id="from_channel", row=0
-                ))
-            if to_options:
-                self.add_item(ChannelSelect(
-                    placeholder="選擇目標頻道", options=to_options, custom_id="to_channel", row=1
-                ))
-            self.add_item(CopyExecuteButton(row=2))
-            self.add_item(BackButton(row=3))
+            self.add_item(ChannelSelect(placeholder=from_placeholder, options=options, custom_id="from_channel", row=0))
+            self.add_item(ChannelSelect(placeholder=to_placeholder, options=list(options), custom_id="to_channel", row=1))
+            self.add_item(CopyExecuteButton(label=execute_label, row=2))
+            self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=3))
         else:
-            self.add_item(discord.ui.Button(label="無可用頻道進行複製", style=discord.ButtonStyle.secondary, disabled=True, row=0))
-            self.add_item(BackButton(row=1))
+            no_ch = self._t("commands", "system_prompt", "errors", "no_channels_available",
+                             fallback="No channels available")
+            self.add_item(discord.ui.Button(label=no_ch, style=discord.ButtonStyle.secondary, disabled=True, row=0))
+            self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=1))
 
 
-class SystemPromptRemoveView(discord.ui.View):
+class SystemPromptRemoveView(LocalizedView):
     """移除系統提示的子選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 timeout: float = 180.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild_id: str = "system",
+        timeout: float = 180.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.logger = get_logger(server_id="system", source=__name__)
 
         self.add_item(RemoveButton(
-            label="移除當前頻道提示", emoji="📢", style=discord.ButtonStyle.danger, remove_type="channel", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "remove_channel_prompt",
+                          fallback="Remove Channel Prompt"),
+            emoji="📢", style=discord.ButtonStyle.danger, remove_type="channel", row=0,
         ))
         self.add_item(RemoveButton(
-            label="移除伺服器預設提示", emoji="🏠", style=discord.ButtonStyle.danger, remove_type="server", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "remove_server_prompt",
+                          fallback="Remove Server Prompt"),
+            emoji="🏠", style=discord.ButtonStyle.danger, remove_type="server", row=0,
         ))
-        self.add_item(BackButton(row=1))
+        self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=1))
 
 
-class SystemPromptResetView(discord.ui.View):
+class SystemPromptResetView(LocalizedView):
     """重置系統提示的子選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 timeout: float = 180.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild_id: str = "system",
+        timeout: float = 180.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.logger = get_logger(server_id="system", source=__name__)
 
         self.add_item(ResetButton(
-            label="重置當前頻道", emoji="📢", style=discord.ButtonStyle.danger, reset_type="channel", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reset_current_channel",
+                          fallback="Reset Current Channel"),
+            emoji="📢", style=discord.ButtonStyle.danger, reset_type="channel", row=0,
         ))
         self.add_item(ResetButton(
-            label="重置伺服器預設", emoji="🏠", style=discord.ButtonStyle.danger, reset_type="server", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reset_server_default",
+                          fallback="Reset Server Default"),
+            emoji="🏠", style=discord.ButtonStyle.danger, reset_type="server", row=0,
         ))
         self.add_item(ResetButton(
-            label="重置全部設定", emoji="⚠️", style=discord.ButtonStyle.danger, reset_type="all", row=1 # More prominent emoji
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reset_all_settings",
+                          fallback="Reset All Settings"),
+            emoji="⚠️", style=discord.ButtonStyle.danger, reset_type="all", row=1,
         ))
-        self.add_item(BackButton(row=2))
+        self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=2))
 
 
 # --- 輔助按鈕與選擇器類別 ---
 
 class BackButton(discord.ui.Button):
     """返回主選單按鈕"""
-    def __init__(self, row: int = 4): # Default row or specified
-        super().__init__(label="返回主選單", emoji="🔙", style=discord.ButtonStyle.secondary, row=row)
+    def __init__(self, row: int = 4, guild_id: str = "system", bot=None): # Default row or specified
+        label = "Back"
+        try:
+            if bot and (lm := bot.get_cog("LanguageManager")):
+                label = lm.translate(guild_id, "commands", "system_prompt", "ui", "buttons", "back_to_main")
+        except Exception:
+            pass
+        super().__init__(label=label, emoji="🔙", style=discord.ButtonStyle.secondary, row=row)
+        self.guild_id: str = guild_id
+        self._bot = bot
         self.logger = get_logger(server_id="system", source=__name__)
 
     async def callback(self, interaction: discord.Interaction):
@@ -1124,19 +1253,25 @@ class BackButton(discord.ui.Button):
                 manager = commands_cog.get_system_prompt_manager()
                 permission_validator = commands_cog.permission_validator
 
-                main_view = SystemPromptMainView(manager, permission_validator)
-                embed = discord.Embed(
-                    title="🤖 系統提示管理",
-                    description="請選擇要執行的功能",
-                    color=discord.Color.blue()
-                )
+                guild_id = str(interaction.guild.id) if interaction.guild else self.guild_id
+                main_view = SystemPromptMainView(manager, permission_validator, guild_id=guild_id)
+                title = _ti(interaction, "commands", "system_prompt", "ui", "main_menu", "title",
+                            fallback="🤖 System Prompt Management")
+                description = _ti(interaction, "commands", "system_prompt", "ui", "main_menu", "description",
+                                  fallback="Please select a function")
+                embed = discord.Embed(title=title, description=description, color=discord.Color.blue())
                 await interaction.response.edit_message(embed=embed, view=main_view)
             else:
                 self.logger.error("SystemPromptCommands cog or its methods not found for BackButton.")
-                await interaction.response.edit_message(content="❌ 返回主選單失敗：內部組件缺失。", embed=None, view=None)
+                await interaction.response.edit_message(
+                    content=f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                    embed=None,
+                    view=None,
+                )
         except Exception as e:
             self.logger.error(f"BackButton callback error: {e}", exc_info=True)
-            await interaction.response.edit_message(content=f"❌ 返回主選單時發生錯誤: {e}", embed=None, view=None)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            await interaction.response.edit_message(content=f"❌ {err}: {e}", embed=None, view=None)
 
 
 class ChannelSelect(discord.ui.Select):
@@ -1162,91 +1297,114 @@ class ChannelSelect(discord.ui.Select):
 
 class CopyExecuteButton(discord.ui.Button):
     """執行複製按鈕"""
-    def __init__(self, **kwargs):
-        super().__init__(label="執行複製", emoji="📋", style=discord.ButtonStyle.success, **kwargs)
+    def __init__(self, label: str = "Execute Copy", **kwargs):
+        super().__init__(label=label, emoji="📋", style=discord.ButtonStyle.success, **kwargs)
         self.logger = get_logger(server_id="system", source=__name__)
 
     async def callback(self, interaction: discord.Interaction):
         view: SystemPromptCopyView = self.view
         if not view or not view.guild:
             self.logger.error("CopyExecuteButton: View or guild not found.")
-            await interaction.response.send_message("❌ 內部錯誤，無法執行複製。", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                ephemeral=True,
+            )
             return
 
         from_channel_selector = discord.utils.get(view.children, custom_id="from_channel")
         to_channel_selector = discord.utils.get(view.children, custom_id="to_channel")
 
-        if not (isinstance(from_channel_selector, ChannelSelect) and 
+        if not (isinstance(from_channel_selector, ChannelSelect) and
                 isinstance(to_channel_selector, ChannelSelect)):
-            await interaction.response.send_message("❌ 頻道選擇器錯誤，無法複製。", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                ephemeral=True,
+            )
             return
 
         from_channel_id = from_channel_selector.selected_channel_id
         to_channel_id = to_channel_selector.selected_channel_id
 
         if not from_channel_id or not to_channel_id:
-            await interaction.response.send_message("❌ 請先選擇來源和目標頻道。", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'validation_failed', fallback='Please select source and target channels')}",
+                ephemeral=True,
+            )
             return
         if from_channel_id == to_channel_id:
-            await interaction.response.send_message("❌ 來源頻道和目標頻道不能相同。", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'messages', 'validation', 'same_channel', fallback='Source and target must differ')}",
+                ephemeral=True,
+            )
             return
 
         try:
             to_channel_obj = view.guild.get_channel(int(to_channel_id))
             if not to_channel_obj or not isinstance(to_channel_obj, discord.TextChannel):
-                await interaction.response.send_message("❌ 目標頻道無效。", ephemeral=True)
+                await interaction.response.send_message(
+                    f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                    ephemeral=True,
+                )
                 return
 
             view.permission_validator.validate_permission_or_raise(
-                interaction.user, 'modify_channel', to_channel_obj # Permission to modify target
+                interaction.user, 'modify_channel', to_channel_obj  # Permission to modify target
             )
             # Optionally, check view permission for source channel
             # from_channel_obj = view.guild.get_channel(int(from_channel_id))
             # view.permission_validator.validate_permission_or_raise(interaction.user, 'view', from_channel_obj)
 
-
             success = view.manager.copy_channel_prompt(
                 str(view.guild.id), from_channel_id,
-                str(view.guild.id), to_channel_id, # Assuming manager takes guild_id for both
+                str(view.guild.id), to_channel_id,  # Assuming manager takes guild_id for both
                 str(interaction.user.id)
             )
 
             if success:
                 from_channel_obj = view.guild.get_channel(int(from_channel_id))
-                from_name = from_channel_obj.name if from_channel_obj else "未知來源"
-                to_name = to_channel_obj.name # Already fetched
+                from_name = from_channel_obj.name if from_channel_obj else from_channel_id
 
                 embed = discord.Embed(
-                    title="✅ 複製成功",
-                    description=f"已成功將 #{from_name} 的系統提示複製到 #{to_name}",
-                    color=discord.Color.green()
+                    title=_ti(interaction, "commands", "system_prompt", "messages", "success", "copy",
+                              fallback="✅ Copy successful"),
+                    description=_ti(interaction, "commands", "system_prompt", "messages", "success", "copy_description",
+                                    fallback="Copied from #{from_channel} to #{to_channel}").format(
+                        from_channel=from_name, to_channel=to_channel_obj.name
+                    ),
+                    color=discord.Color.green(),
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
             else:
-                await interaction.response.send_message("❌ 複製失敗：操作未成功。", ephemeral=True)
+                err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+                await interaction.response.send_message(f"❌ {err}", ephemeral=True)
 
         except PermissionError as e:
-            self.logger.warning(f"權限不足: {e} by {interaction.user} for copy")
-            await interaction.response.send_message(f"❌ 權限不足：{str(e)}", ephemeral=True)
+            self.logger.warning(f"Permission denied: {e} by {interaction.user} for copy")
+            err = _ti(interaction, "commands", "system_prompt", "errors", "permission_denied", fallback="Permission denied")
+            await interaction.response.send_message(f"❌ {err}: {str(e)}", ephemeral=True)
         except Exception as e:
-            self.logger.error(f"複製操作失敗: {e}", exc_info=True)
-            await interaction.response.send_message(f"❌ 複製失敗：{str(e)}", ephemeral=True)
+            self.logger.error(f"Copy operation failed: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+            await interaction.response.send_message(f"❌ {err}: {str(e)}", ephemeral=True)
 
 
 class RemoveButton(discord.ui.Button):
     """移除按鈕"""
-    def __init__(self, remove_type: str, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, label: str, remove_type: str, **kwargs):
+        super().__init__(label=label, **kwargs)
         self.remove_type = remove_type
         self.logger = get_logger(server_id="system", source=__name__)
 
     async def callback(self, interaction: discord.Interaction):
         view: SystemPromptRemoveView = self.view
-        if not view or not interaction.guild: # Ensure guild context
+        if not view or not interaction.guild:  # Ensure guild context
             self.logger.error("RemoveButton: View or guild not found.")
-            await interaction.response.send_message("❌ 內部錯誤。", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                ephemeral=True,
+            )
             return
-        
+
         guild_id_str = str(interaction.guild.id)
         confirm_text = ""
         operation_text = ""
@@ -1254,7 +1412,10 @@ class RemoveButton(discord.ui.Button):
         try:
             if self.remove_type == "channel":
                 if not interaction.channel or not isinstance(interaction.channel, discord.TextChannel):
-                    await interaction.response.send_message("❌ 此操作僅限文字頻道。", ephemeral=True)
+                    await interaction.response.send_message(
+                        f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'text_channel_only', fallback='Text channel only')}",
+                        ephemeral=True,
+                    )
                     return
                 view.permission_validator.validate_permission_or_raise(
                     interaction.user, 'modify_channel', interaction.channel
@@ -1262,68 +1423,96 @@ class RemoveButton(discord.ui.Button):
                 channel_id_str = str(interaction.channel.id)
                 config = view.manager._load_guild_config(guild_id_str)
                 if channel_id_str not in config.get('system_prompts', {}).get('channels', {}):
-                    await interaction.response.send_message(f"❌ 頻道 #{interaction.channel.name} 沒有設定系統提示。", ephemeral=True)
+                    raw = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "remove_channel",
+                              fallback="Remove channel #{channel} prompt?")
+                    await interaction.response.send_message(
+                        f"❌ {raw.format(channel=interaction.channel.name)}",
+                        ephemeral=True,
+                    )
                     return
-                confirm_text = f"確定要移除頻道 #{interaction.channel.name} 的系統提示嗎？"
-                operation_text = f"頻道 #{interaction.channel.name}"
-            else: # server
+                raw = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "remove_channel",
+                          fallback="Remove channel #{channel} prompt?")
+                confirm_text = raw.format(channel=interaction.channel.name)
+                title_text = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "title_remove",
+                                 fallback="⚠️ Confirm Removal")
+                raw_scope = _ti(interaction, "commands", "system_prompt", "messages", "info", "scope_channel",
+                                fallback="Channel #{channel}")
+                operation_text = raw_scope.format(channel=interaction.channel.name)
+            else:  # server
                 view.permission_validator.validate_permission_or_raise(
                     interaction.user, 'modify_server', interaction.guild
                 )
                 config = view.manager._load_guild_config(guild_id_str)
                 if not config.get('system_prompts', {}).get('server_level', {}):
-                    await interaction.response.send_message("❌ 伺服器沒有設定預設系統提示。", ephemeral=True)
+                    await interaction.response.send_message(
+                        f"❌ {_ti(interaction, 'commands', 'system_prompt', 'messages', 'confirm', 'remove_server', fallback='Remove server default prompt?')}",
+                        ephemeral=True,
+                    )
                     return
-                confirm_text = "確定要移除伺服器預設系統提示嗎？"
-                operation_text = "伺服器預設"
+                confirm_text = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "remove_server",
+                                   fallback="Remove server default prompt?")
+                title_text = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "title_remove",
+                                 fallback="⚠️ Confirm Removal")
+                operation_text = _ti(interaction, "commands", "system_prompt", "messages", "info", "scope_server",
+                                     fallback="Server Default")
 
-            confirm_embed = discord.Embed(title="⚠️ 確認移除", description=confirm_text, color=discord.Color.orange())
-            confirmation_prompt_view = ConfirmationView(confirm_text="確認移除", cancel_text="取消")
+            confirm_embed = discord.Embed(title=title_text, description=confirm_text, color=discord.Color.orange())
+            confirmation_prompt_view = ConfirmationView(confirm_text="Confirm", cancel_text="Cancel")
             await interaction.response.send_message(embed=confirm_embed, view=confirmation_prompt_view, ephemeral=True)
-            
-            await confirmation_prompt_view.wait() # Wait for user confirmation
 
-            if confirmation_prompt_view.result is True: # User confirmed
-                self.logger.info(f"用戶 {interaction.user} 確認移除 {operation_text} (Guild: {guild_id_str})")
+            await confirmation_prompt_view.wait()  # Wait for user confirmation
+
+            if confirmation_prompt_view.result is True:  # User confirmed
+                self.logger.info(f"User {interaction.user} confirmed removal of {operation_text} (Guild: {guild_id_str})")
                 success = False
                 if self.remove_type == "channel":
-                    # Re-fetch channel_id_str if it wasn't set above (though it should be)
                     channel_id_str_op = str(interaction.channel.id) if interaction.channel else None
                     if channel_id_str_op:
                         success = view.manager.remove_channel_prompt(guild_id_str, channel_id_str_op)
-                else: # server
+                else:  # server
                     success = view.manager.remove_server_prompt(guild_id_str, str(interaction.user.id))
-                
+
                 if success:
-                    # Optional: Add verification logic here by reloading config
-                    result_embed = discord.Embed(title="✅ 移除成功", description=f"已成功移除 {operation_text} 的系統提示。", color=discord.Color.green())
+                    result_embed = discord.Embed(
+                        title=_ti(interaction, "commands", "system_prompt", "messages", "success", "remove",
+                                  fallback="✅ Removal successful"),
+                        description=_ti(interaction, "commands", "system_prompt", "messages", "success", "remove_description",
+                                        fallback="Removed {scope} system prompt").format(scope=operation_text),
+                        color=discord.Color.green(),
+                    )
                     await interaction.followup.send(embed=result_embed, ephemeral=True)
                 else:
-                    await interaction.followup.send(f"❌ 移除 {operation_text} 失敗：操作未成功。", ephemeral=True)
-            elif confirmation_prompt_view.result is False: # User cancelled
-                await interaction.followup.send("移除操作已取消。", ephemeral=True)
-            # else: timeout, do nothing or inform user (ConfirmationView might handle timeout message itself)
+                    err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+                    await interaction.followup.send(f"❌ {err}", ephemeral=True)
+            elif confirmation_prompt_view.result is False:  # User cancelled
+                await interaction.followup.send(
+                    _ti(interaction, "commands", "system_prompt", "errors", "operation_cancelled",
+                        fallback="Operation cancelled"),
+                    ephemeral=True,
+                )
+            # else: timeout
 
         except PermissionError as e:
-            self.logger.warning(f"權限不足: {e} by {interaction.user} for remove {self.remove_type}")
-            # Check if initial response was sent for confirmation
+            self.logger.warning(f"Permission denied: {e} by {interaction.user} for remove {self.remove_type}")
+            err = _ti(interaction, "commands", "system_prompt", "errors", "permission_denied", fallback="Permission denied")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 權限不足：{str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {str(e)}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 權限不足：{str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {str(e)}", ephemeral=True)
 
         except Exception as e:
-            self.logger.error(f"移除操作 ({self.remove_type}) 失敗: {e}", exc_info=True)
+            self.logger.error(f"Remove operation ({self.remove_type}) failed: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 移除失敗：{str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {str(e)}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 移除失敗：{str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {str(e)}", ephemeral=True)
 
 
 class ResetButton(discord.ui.Button):
     """重置按鈕"""
-    def __init__(self, reset_type: str, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, label: str, reset_type: str, **kwargs):
+        super().__init__(label=label, **kwargs)
         self.reset_type = reset_type
         self.logger = get_logger(server_id="system", source=__name__)
 
@@ -1331,13 +1520,16 @@ class ResetButton(discord.ui.Button):
         view: SystemPromptResetView = self.view
         if not view or not interaction.guild:
             self.logger.error("ResetButton: View or guild not found.")
-            await interaction.response.send_message("❌ 內部錯誤。", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'internal_error', fallback='Internal error')}",
+                ephemeral=True,
+            )
             return
 
         guild_id_str = str(interaction.guild.id)
         confirm_text = ""
         operation_text = ""
-        
+
         try:
             # Permission checks and content existence check
             config = view.manager._load_guild_config(guild_id_str)
@@ -1346,44 +1538,64 @@ class ResetButton(discord.ui.Button):
 
             if self.reset_type == "channel":
                 if not interaction.channel or not isinstance(interaction.channel, discord.TextChannel):
-                    await interaction.response.send_message("❌ 此操作僅限文字頻道。", ephemeral=True)
+                    await interaction.response.send_message(
+                        f"❌ {_ti(interaction, 'commands', 'system_prompt', 'errors', 'text_channel_only', fallback='Text channel only')}",
+                        ephemeral=True,
+                    )
                     return
                 view.permission_validator.validate_permission_or_raise(
                     interaction.user, 'modify_channel', interaction.channel
                 )
                 if str(interaction.channel.id) in system_prompts.get('channels', {}):
                     has_content_to_reset = True
-                confirm_text = f"確定要重置頻道 #{interaction.channel.name} 的系統提示嗎？\n這將移除該頻道的特定設定。"
-                operation_text = f"頻道 #{interaction.channel.name}"
+                raw = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "reset_channel",
+                          fallback="Reset channel #{channel} prompt?")
+                confirm_text = raw.format(channel=interaction.channel.name)
+                title_text = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "title_reset",
+                                 fallback="⚠️ Confirm Reset")
+                raw_scope = _ti(interaction, "commands", "system_prompt", "messages", "info", "scope_channel",
+                                fallback="Channel #{channel}")
+                operation_text = raw_scope.format(channel=interaction.channel.name)
             elif self.reset_type == "server":
                 view.permission_validator.validate_permission_or_raise(
                     interaction.user, 'modify_server', interaction.guild
                 )
                 if system_prompts.get('server_level', {}):
                     has_content_to_reset = True
-                confirm_text = "確定要重置伺服器預設系統提示嗎？\n這將移除伺服器的預設設定。"
-                operation_text = "伺服器預設"
+                confirm_text = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "reset_server",
+                                   fallback="Reset server default prompt?")
+                title_text = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "title_reset",
+                                 fallback="⚠️ Confirm Reset")
+                operation_text = _ti(interaction, "commands", "system_prompt", "messages", "info", "scope_server",
+                                     fallback="Server Default")
             else:  # "all"
                 view.permission_validator.validate_permission_or_raise(
-                    interaction.user, 'modify_server', interaction.guild # Highest permission
+                    interaction.user, 'modify_server', interaction.guild  # Highest permission
                 )
                 if system_prompts.get('channels', {}) or system_prompts.get('server_level', {}):
                     has_content_to_reset = True
-                confirm_text = "⚠️ **警告** ⚠️\n確定要重置此伺服器**所有**系統提示設定嗎？\n包括所有頻道特定設定和伺服器預設。\n**此操作無法復原！**"
-                operation_text = "所有系統提示"
-            
+                confirm_text = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "reset_all",
+                                   fallback="Reset ALL system prompt settings? This cannot be undone!")
+                title_text = _ti(interaction, "commands", "system_prompt", "messages", "confirm", "title_reset",
+                                 fallback="⚠️ Confirm Reset")
+                operation_text = _ti(interaction, "commands", "system_prompt", "messages", "info", "scope_all",
+                                     fallback="All")
+
             if not has_content_to_reset:
-                await interaction.response.send_message(f"ℹ️ {operation_text} 沒有設定需要重置。", ephemeral=True)
+                await interaction.response.send_message(
+                    f"ℹ️ {operation_text}",
+                    ephemeral=True,
+                )
                 return
 
-            confirm_embed = discord.Embed(title="⚠️ 確認重置", description=confirm_text, color=discord.Color.red())
-            confirmation_prompt_view = ConfirmationView(confirm_text="確認重置", cancel_text="取消")
+            confirm_embed = discord.Embed(title=title_text, description=confirm_text, color=discord.Color.red())
+            confirmation_prompt_view = ConfirmationView(confirm_text="Confirm", cancel_text="Cancel")
             await interaction.response.send_message(embed=confirm_embed, view=confirmation_prompt_view, ephemeral=True)
 
             await confirmation_prompt_view.wait()
 
             if confirmation_prompt_view.result is True:
-                self.logger.info(f"用戶 {interaction.user} 確認重置 {operation_text} (Guild: {guild_id_str}, Type: {self.reset_type})")
+                self.logger.info(f"User {interaction.user} confirmed reset of {operation_text} (Guild: {guild_id_str}, Type: {self.reset_type})")
                 success = False
                 user_id_str = str(interaction.user.id)
 
@@ -1395,33 +1607,45 @@ class ResetButton(discord.ui.Button):
                     # This assumes manager has a method to reset all for a guild
                     if hasattr(view.manager, "reset_all_guild_prompts"):
                         success = view.manager.reset_all_guild_prompts(guild_id_str, user_id_str)
-                    else: # Fallback: remove server and all channel prompts individually
-                        view.manager.remove_server_prompt(guild_id_str) # Remove server default
+                    else:  # Fallback: remove server and all channel prompts individually
+                        view.manager.remove_server_prompt(guild_id_str)  # Remove server default
                         current_config = view.manager._load_guild_config(guild_id_str)
                         channels_to_reset = list(current_config.get('system_prompts', {}).get('channels', {}).keys())
                         for chan_id in channels_to_reset:
                             view.manager.remove_channel_prompt(guild_id_str, chan_id)
-                        success = True # Assume success if operations don't throw
-                        self.logger.info(f"重置所有設定：移除了伺服器預設和 {len(channels_to_reset)} 個頻道的設定。")
-
+                        success = True  # Assume success if operations don't throw
+                        self.logger.info(f"Reset all: removed server default and {len(channels_to_reset)} channel settings.")
 
                 if success:
-                    result_embed = discord.Embed(title="✅ 重置成功", description=f"已成功重置 {operation_text} 的系統提示設定。", color=discord.Color.green())
+                    result_embed = discord.Embed(
+                        title=_ti(interaction, "commands", "system_prompt", "messages", "success", "reset",
+                                  fallback="✅ Reset successful"),
+                        description=_ti(interaction, "commands", "system_prompt", "messages", "success", "reset_description",
+                                        fallback="Reset {scope} settings").format(scope=operation_text),
+                        color=discord.Color.green(),
+                    )
                     await interaction.followup.send(embed=result_embed, ephemeral=True)
                 else:
-                    await interaction.followup.send(f"❌ 重置 {operation_text} 失敗：操作未完全成功或無此功能。", ephemeral=True)
+                    err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
+                    await interaction.followup.send(f"❌ {err}", ephemeral=True)
             elif confirmation_prompt_view.result is False:
-                await interaction.followup.send("重置操作已取消。", ephemeral=True)
+                await interaction.followup.send(
+                    _ti(interaction, "commands", "system_prompt", "errors", "operation_cancelled",
+                        fallback="Operation cancelled"),
+                    ephemeral=True,
+                )
 
         except PermissionError as e:
-            self.logger.warning(f"權限不足: {e} by {interaction.user} for reset {self.reset_type}")
+            self.logger.warning(f"Permission denied: {e} by {interaction.user} for reset {self.reset_type}")
+            err = _ti(interaction, "commands", "system_prompt", "errors", "permission_denied", fallback="Permission denied")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 權限不足：{str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {str(e)}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 權限不足：{str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {str(e)}", ephemeral=True)
         except Exception as e:
-            self.logger.error(f"重置操作 ({self.reset_type}) 失敗: {e}", exc_info=True)
+            self.logger.error(f"Reset operation ({self.reset_type}) failed: {e}", exc_info=True)
+            err = _ti(interaction, "commands", "system_prompt", "errors", "operation_failed", fallback="Operation failed")
             if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ 重置失敗：{str(e)}", ephemeral=True)
+                await interaction.response.send_message(f"❌ {err}: {str(e)}", ephemeral=True)
             else:
-                await interaction.followup.send(f"❌ 重置失敗：{str(e)}", ephemeral=True)
+                await interaction.followup.send(f"❌ {err}: {str(e)}", ephemeral=True)

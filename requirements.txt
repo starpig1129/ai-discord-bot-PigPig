@@ -47,3 +47,7 @@ qdrant-client==1.15.1
 torch==2.9.0
 torchaudio==2.9.0
 torchvision==0.24.0
+
+# Documentation
+mkdocs>=1.6.0
+mkdocs-material>=9.5.0

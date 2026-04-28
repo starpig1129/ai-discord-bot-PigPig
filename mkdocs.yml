@@ -1,0 +1,89 @@
+site_name: PigPig Discord Bot
+site_description: An advanced Discord AI Agent bot with modular cognition, memory, and reasoning capabilities.
+site_author: starpig1129
+site_url: https://starpig1129.github.io/ai-discord-bot-PigPig/
+
+theme:
+  name: material
+  language: zh-TW
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: lime
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+
+nav:
+  - 首頁: index.md
+  - 核心組件:
+    - 概覽: llm/index.md
+    - 模型管理: llm/model_manager.md
+    - 調度器 (Orchestrator): llm/orchestrator.md
+    - 工具工廠 (Tools Factory): llm/tools_factory.md
+    - 上下文管理: llm/context_manager.md
+    - 提示詞保護機制: llm/protected_prompt_system.md
+    - 資料架構 (Schema): llm/schema.md
+  - 功能模組 (Cogs):
+    - 概覽: cogs/index.md
+    - 記憶系統:
+      - 情節記憶: cogs/episodic_memory.md
+      - 記憶指令: cogs/memory_commands.md
+    - 語言與系統提示:
+      - 語言管理: cogs/language_manager.md
+      - 系統提示管理: cogs/system_prompt_manager.md
+    - 工具類:
+      - 網際網路搜尋: cogs/internet_search.md
+      - 圖像生成: cogs/gen_img.md
+      - GIF 工具: cogs/gif_tools.md
+      - 音樂功能: cogs/music.md
+      - 數學運算: cogs/math.md
+    - 管理與維護:
+      - 更新管理: cogs/update_manager.md
+      - 頻道管理: cogs/channel_manager.md
+      - 用戶資料: cogs/userdata.md
+      - 效能監控: cogs/performance.md
+    - 其他功能:
+      - 提醒功能: cogs/remind.md
+      - 總結器: cogs/summarizer.md
+      - 故事管理: cogs/story_manager.md
+      - 排程: cogs/schedule.md
+      - 機器人資訊: cogs/botinfo.md
+      - 幫助選單: cogs/help.md
+  - 附加組件 (Addons):
+    - 概覽: addons/index.md
+    - 設定: addons/settings.md
+    - 代幣 (Tokens): addons/tokens.md
+    - 日誌記錄: addons/logging.md
+  - 法律與政策:
+    - 隱私政策: PRIVACY_POLICY.md
+    - 服務條款: TERMS_OF_SERVICE.md

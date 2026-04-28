@@ -37,7 +37,9 @@
             "confirm_copy": "複製確認",
             "cancel": "取消",
             "edit": "編輯",
-            "preview": "預覽"
+            "preview": "預覽",
+            "reload_config": "重載設定",
+            "direct_edit": "直接編輯"
         },
         "menus": {
             "set_prompt_title": "⚙️ 系統提示詞設定",
@@ -53,7 +55,9 @@
             "remove_prompt_title": "🗑️ 系統提示詞刪除",
             "remove_prompt_description": "請選擇要刪除的範圍",
             "reset_config_title": "🔄 系統提示詞重設",
-            "reset_config_description": "請選擇要重設的範圍"
+            "reset_config_description": "請選擇要重設的範圍",
+            "edit_mode_title": "⚙️ 編輯 {scope} 系統提示",
+            "edit_mode_description": "請選擇編輯模式"
         },
         "modals": {
             "system_prompt": {
@@ -94,7 +98,8 @@
             "reset": "✅ 重設成功",
             "reset_description": "已成功重設{scope}系統提示詞設定",
             "operation_confirmed": "✅ 操作已確認",
-            "operation_cancelled": "❌ 操作已取消"
+            "operation_cancelled": "❌ 操作已取消",
+            "reload": "✅ 設定已成功重載"
         },
         "info": {
             "scope_channel": "頻道 #{channel}",
@@ -120,7 +125,8 @@
             "modules_none": "沒有可用的模組",
             "preview_content": "內容",
             "preview_source": "來源",
-            "preview_length": "長度"
+            "preview_length": "長度",
+            "reload_unavailable": "⚠️ 重載功能目前無法使用"
         },
         "confirm": {
             "remove_channel": "是否要刪除頻道 #{channel} 的系統提示詞？",
