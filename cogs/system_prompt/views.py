@@ -178,6 +178,7 @@ class SystemPromptMainView(LocalizedView):
             manager=self.manager,
             permission_validator=self.permission_validator,
             guild=interaction.guild,
+            guild_id=guild_id,
         )
         title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "copy_prompt_title", fallback="📋 Copy System Prompt")
         description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "copy_prompt_description", fallback="Please select source and target channels")
@@ -186,10 +187,10 @@ class SystemPromptMainView(LocalizedView):
 
     async def _handle_remove_function(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        # TODO(Tasks 4-6): pass guild_id to sub-view
         view = SystemPromptRemoveView(
             manager=self.manager,
             permission_validator=self.permission_validator,
+            guild_id=guild_id,
         )
         title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "remove_prompt_title", fallback="🗑️ Remove System Prompt")
         description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "remove_prompt_description", fallback="Please select scope to remove")
@@ -198,10 +199,10 @@ class SystemPromptMainView(LocalizedView):
 
     async def _handle_reset_function(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild.id) if interaction.guild else "system"
-        # TODO(Tasks 4-6): pass guild_id to sub-view
         view = SystemPromptResetView(
             manager=self.manager,
             permission_validator=self.permission_validator,
+            guild_id=guild_id,
         )
         title = _ti(interaction, "commands", "system_prompt", "ui", "menus", "reset_config_title", fallback="🔄 Reset System Prompt")
         description = _ti(interaction, "commands", "system_prompt", "ui", "menus", "reset_config_description", fallback="Please select scope to reset")
@@ -1105,88 +1106,107 @@ class ModuleSelect(discord.ui.Select):
                 await interaction.followup.send(f"❌ 設定模組失敗: {str(e)}", ephemeral=True)
 
 
-class SystemPromptCopyView(discord.ui.View):
+class SystemPromptCopyView(LocalizedView):
     """複製系統提示選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 guild: discord.Guild,
-                 timeout: float = 180.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild: discord.Guild,
+        guild_id: str = "system",
+        timeout: float = 180.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.guild = guild
         self.logger = get_logger(server_id="system", source=__name__)
 
-        # Get visible text channels bot has permissions for
         text_channels = [
-            ch for ch in guild.text_channels 
+            ch for ch in guild.text_channels
             if ch.permissions_for(guild.me).view_channel and ch.permissions_for(guild.me).send_messages
         ]
 
-        if len(text_channels) > 0:
-            from_options = [
+        if text_channels:
+            from_placeholder = self._t("commands", "system_prompt", "ui", "selectors", "from_channel_placeholder",
+                                        fallback="Select source channel")
+            to_placeholder = self._t("commands", "system_prompt", "ui", "selectors", "to_channel_placeholder",
+                                      fallback="Select target channel")
+            execute_label = self._t("commands", "system_prompt", "ui", "buttons", "execute_copy",
+                                     fallback="Execute Copy")
+
+            options = [
                 discord.SelectOption(label=f"#{ch.name}", value=str(ch.id), description=f"ID: {ch.id}")
-                for ch in text_channels[:25] # Limit to 25 for Discord
+                for ch in text_channels[:25]
             ]
-            to_options = list(from_options) # Can be the same list of channels
-
-            if from_options: # Should be true if len(text_channels) > 0
-                self.add_item(ChannelSelect(
-                    placeholder="選擇來源頻道", options=from_options, custom_id="from_channel", row=0
-                ))
-            if to_options:
-                self.add_item(ChannelSelect(
-                    placeholder="選擇目標頻道", options=to_options, custom_id="to_channel", row=1
-                ))
-            self.add_item(CopyExecuteButton(row=2))
-            self.add_item(BackButton(row=3))
+            self.add_item(ChannelSelect(placeholder=from_placeholder, options=options, custom_id="from_channel", row=0))
+            self.add_item(ChannelSelect(placeholder=to_placeholder, options=list(options), custom_id="to_channel", row=1))
+            self.add_item(CopyExecuteButton(label=execute_label, row=2))
+            self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=3))
         else:
-            self.add_item(discord.ui.Button(label="無可用頻道進行複製", style=discord.ButtonStyle.secondary, disabled=True, row=0))
-            self.add_item(BackButton(row=1))
+            no_ch = self._t("commands", "system_prompt", "errors", "no_channels_available",
+                             fallback="No channels available")
+            self.add_item(discord.ui.Button(label=no_ch, style=discord.ButtonStyle.secondary, disabled=True, row=0))
+            self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=1))
 
 
-class SystemPromptRemoveView(discord.ui.View):
+class SystemPromptRemoveView(LocalizedView):
     """移除系統提示的子選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 timeout: float = 180.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild_id: str = "system",
+        timeout: float = 180.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.logger = get_logger(server_id="system", source=__name__)
 
         self.add_item(RemoveButton(
-            label="移除當前頻道提示", emoji="📢", style=discord.ButtonStyle.danger, remove_type="channel", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "remove_channel_prompt",
+                          fallback="Remove Channel Prompt"),
+            emoji="📢", style=discord.ButtonStyle.danger, remove_type="channel", row=0,
         ))
         self.add_item(RemoveButton(
-            label="移除伺服器預設提示", emoji="🏠", style=discord.ButtonStyle.danger, remove_type="server", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "remove_server_prompt",
+                          fallback="Remove Server Prompt"),
+            emoji="🏠", style=discord.ButtonStyle.danger, remove_type="server", row=0,
         ))
-        self.add_item(BackButton(row=1))
+        self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=1))
 
 
-class SystemPromptResetView(discord.ui.View):
+class SystemPromptResetView(LocalizedView):
     """重置系統提示的子選單"""
-    def __init__(self,
-                 manager: SystemPromptManager,
-                 permission_validator: PermissionValidator,
-                 timeout: float = 180.0):
-        super().__init__(timeout=timeout)
-        self.manager = manager
+
+    def __init__(
+        self,
+        manager: SystemPromptManager,
+        permission_validator: PermissionValidator,
+        guild_id: str = "system",
+        timeout: float = 180.0,
+    ):
+        super().__init__(manager, guild_id, timeout)
         self.permission_validator = permission_validator
         self.logger = get_logger(server_id="system", source=__name__)
 
         self.add_item(ResetButton(
-            label="重置當前頻道", emoji="📢", style=discord.ButtonStyle.danger, reset_type="channel", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reset_current_channel",
+                          fallback="Reset Current Channel"),
+            emoji="📢", style=discord.ButtonStyle.danger, reset_type="channel", row=0,
         ))
         self.add_item(ResetButton(
-            label="重置伺服器預設", emoji="🏠", style=discord.ButtonStyle.danger, reset_type="server", row=0
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reset_server_default",
+                          fallback="Reset Server Default"),
+            emoji="🏠", style=discord.ButtonStyle.danger, reset_type="server", row=0,
         ))
         self.add_item(ResetButton(
-            label="重置全部設定", emoji="⚠️", style=discord.ButtonStyle.danger, reset_type="all", row=1 # More prominent emoji
+            label=self._t("commands", "system_prompt", "ui", "buttons", "reset_all_settings",
+                          fallback="Reset All Settings"),
+            emoji="⚠️", style=discord.ButtonStyle.danger, reset_type="all", row=1,
         ))
-        self.add_item(BackButton(row=2))
+        self.add_item(BackButton(guild_id=guild_id, bot=manager.bot, row=2))
 
 
 # --- 輔助按鈕與選擇器類別 ---
@@ -1248,8 +1268,8 @@ class ChannelSelect(discord.ui.Select):
 
 class CopyExecuteButton(discord.ui.Button):
     """執行複製按鈕"""
-    def __init__(self, **kwargs):
-        super().__init__(label="執行複製", emoji="📋", style=discord.ButtonStyle.success, **kwargs)
+    def __init__(self, label: str = "Execute Copy", **kwargs):
+        super().__init__(label=label, emoji="📋", style=discord.ButtonStyle.success, **kwargs)
         self.logger = get_logger(server_id="system", source=__name__)
 
     async def callback(self, interaction: discord.Interaction):
@@ -1321,8 +1341,8 @@ class CopyExecuteButton(discord.ui.Button):
 
 class RemoveButton(discord.ui.Button):
     """移除按鈕"""
-    def __init__(self, remove_type: str, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, label: str, remove_type: str, **kwargs):
+        super().__init__(label=label, **kwargs)
         self.remove_type = remove_type
         self.logger = get_logger(server_id="system", source=__name__)
 
@@ -1408,8 +1428,8 @@ class RemoveButton(discord.ui.Button):
 
 class ResetButton(discord.ui.Button):
     """重置按鈕"""
-    def __init__(self, reset_type: str, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, label: str, reset_type: str, **kwargs):
+        super().__init__(label=label, **kwargs)
         self.reset_type = reset_type
         self.logger = get_logger(server_id="system", source=__name__)
 
