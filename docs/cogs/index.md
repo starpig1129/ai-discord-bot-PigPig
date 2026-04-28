@@ -37,17 +37,17 @@ The bot consists of 17 main cog modules plus several subdirectories containing s
 
 ## Specialized Subdirectories
 
-### [eat/](../cogs/eat/) - Food Recommendation System
+### [eat/](eat/index.md) - Food Recommendation System
 - **Purpose**: Restaurant and food recommendation with AI-powered suggestions
 - **Features**: Location-based search, personal preferences learning, review analysis
 - **Key Components**: Google Maps integration, ML-based recommendation engine
 
-### [memory/](../cogs/memory/) - Memory Management System  
+### [memory/](memory/index.md) - Memory Management System  
 - **Purpose**: Advanced memory management for episodic and procedural memories
 - **Features**: Vector storage, message tracking, event summarization
 - **Architecture**: Modular storage interfaces, embedding providers, vector stores
 
-### [music_lib/](../cogs/music_lib/) - Music System Library
+### [music_lib/](music_lib/index.md) - Music System Library
 - **Purpose**: Core music playback and queue management system
 - **Components**:
   - `audio_manager.py` - Audio processing and playback
@@ -57,7 +57,7 @@ The bot consists of 17 main cog modules plus several subdirectories containing s
   - `youtube.py` - YouTube integration and audio downloading
   - `ui/` - User interface components (buttons, progress bars, song selection)
 
-### [story/](../cogs/story/) - Story System Core
+### [story/](story/index.md) - Story System Core
 - **Purpose**: Interactive storytelling system with AI-powered narrative generation
 - **Features**: Multi-character stories, world building, relationship tracking
 - **Architecture**:
@@ -68,7 +68,7 @@ The bot consists of 17 main cog modules plus several subdirectories containing s
   - `state_manager.py` - Story state management
   - `ui/` - User interface components (modals, views, UI manager)
 
-### [system_prompt/](../cogs/system_prompt/) - System Prompt Management
+### [system_prompt/](system_prompt/index.md) - System Prompt Management
 - **Purpose**: Dynamic system prompt management for AI conversations
 - **Features**: Per-channel/guild prompts, permission-based editing, template system
 - **Components**: Manager, commands, permissions, caching, validation
