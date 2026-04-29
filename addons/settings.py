@@ -295,6 +295,11 @@ class MemoryConfig:
         # Toggle to enable/disable memory subsystem
         self.enabled: bool = bool(data.get("enabled", True))
 
+        # Context providers settings
+        self.short_term_limit: int = int(data.get("short_term_limit", 15))
+        self.episodic_top_k: int = int(data.get("episodic_top_k", 3))
+        self.episodic_max_chars: int = int(data.get("episodic_max_chars", 1500))
+
         # Procedural memory cache TTL in seconds
         self.procedural_cache_ttl: float = float(data.get("procedural_cache_ttl", 300.0))
 
