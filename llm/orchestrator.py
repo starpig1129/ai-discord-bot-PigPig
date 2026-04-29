@@ -66,6 +66,9 @@ class Orchestrator:
 
         from addons.settings import memory_config
         memory_enabled = getattr(memory_config, "enabled", True)
+        short_term_limit = getattr(memory_config, "short_term_limit", 15)
+        episodic_top_k = getattr(memory_config, "episodic_top_k", 3)
+        episodic_max_chars = getattr(memory_config, "episodic_max_chars", 1500)
 
         if user_manager is None and memory_enabled:
             asyncio.create_task(
@@ -75,7 +78,7 @@ class Orchestrator:
                 )
             )
 
-        short_term_provider = ShortTermMemoryProvider(bot=bot, limit=15)
+        short_term_provider = ShortTermMemoryProvider(bot=bot, limit=short_term_limit)
         procedural_provider = ProceduralMemoryProvider(user_manager=user_manager)
 
         # Episodic provider: only when memory is enabled and vector store is available
@@ -92,9 +95,8 @@ class Orchestrator:
                 knowledge_storage = KnowledgeStorage(conn)
                 knowledge_provider = KnowledgeMemoryProvider(knowledge_storage)
 
-        from addons.settings import memory_config
         if memory_enabled and getattr(bot, "vector_manager", None) is not None:
-            episodic_provider = EpisodicMemoryProvider(bot=bot, top_k=3, max_chars=1500)
+            episodic_provider = EpisodicMemoryProvider(bot=bot, top_k=episodic_top_k, max_chars=episodic_max_chars)
 
         self.context_manager = ContextManager(
             short_term_provider=short_term_provider,
