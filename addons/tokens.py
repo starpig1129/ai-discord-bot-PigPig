@@ -32,15 +32,15 @@ class TOKENS:
         except (ValueError, TypeError):
             self.bot_owner_id = 0
 
-        # 驗證環境變數
+        # Validate environment variables
         self._validate_environment_variables()
 
     def _validate_environment_variables(self) -> None:
-        """驗證所有必要的環境變數是否存在且有效，若失敗則使用 func.report_error 回報並終止程式"""
+        """Verify all required environment variables exist and are valid; terminate if validation fails."""
         missing_vars = []
         invalid_vars = []
 
-        # 必要環境變數（直接檢查實際使用的值）
+        # Required environment variables (direct check of actual values)
         required_vars = {
             "TOKEN": self.token,
             "CLIENT_ID": self.client_id,
@@ -57,9 +57,9 @@ class TOKENS:
                 try:
                     int(var_value)
                 except (ValueError, TypeError):
-                    invalid_vars.append(f"{var_name} (必須為有效的整數)")
+                    invalid_vars.append(f"{var_name} (must be a valid integer)")
 
-        # 可選但建議的 API 金鑰
+        # Optional but recommended API keys
         optional_api_keys = {
             "ANTHROPIC_API_KEY": self.anthropic_api_key,
             "OPENAI_API_KEY": self.openai_api_key,
@@ -68,27 +68,27 @@ class TOKENS:
 
         for api_name, api_value in optional_api_keys.items():
             if not api_value:
-                # 僅回報警告，不終止程式
+                # Report warning only, do not terminate
                 try:
                     from function import func
                     asyncio.create_task(
                         func.report_error(
-                            Exception(f"警告：{api_name} 未設定，可能影響相關功能"),
+                            Exception(f"Warning: {api_name} is not set, some features may be affected"),
                             "addons/tokens.py/_validate_environment_variables",
                         )
                     )
                 except Exception:
                     # fallback log when func is unavailable
-                    logger.warning(f"警告：{api_name} 未設定，可能影響相關功能")
+                    logger.warning(f"Warning: {api_name} is not set, some features may be affected")
 
-        # 若有缺失或無效的環境變數，使用 func.report_error 回報後終止
+        # Terminate if any required variables are missing or invalid
         if missing_vars or invalid_vars:
-            error_msg = "環境變數驗證失敗：\n"
+            error_msg = "Environment variable validation failed:\n"
             if missing_vars:
-                error_msg += f"缺失的環境變數：{', '.join(missing_vars)}\n"
+                error_msg += f"Missing variables: {', '.join(missing_vars)}\n"
             if invalid_vars:
-                error_msg += f"無效的環境變數：{', '.join(invalid_vars)}\n"
-            error_msg += "\n請檢查 .env 檔案並設定所有必要的環境變數。"
+                error_msg += f"Invalid variables: {', '.join(invalid_vars)}\n"
+            error_msg += "\nPlease check your .env file and set all required environment variables."
 
             try:
                 from function import func
@@ -96,21 +96,21 @@ class TOKENS:
             except Exception:
                 logger.error(error_msg)
 
-            # 明確終止程式，避免繼續在缺少必要設定的情況下執行
+            # Explicitly terminate to avoid running with missing configuration
             raise SystemExit(1)
 
 
 try:
     tokens = TOKENS()
 except SystemExit:
-    # 若驗證失敗會拋出 SystemExit，允許其傳遞以終止程序
+    # Allow SystemExit to propagate to terminate the program
     raise
 except Exception as e:
     try:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/tokens.py/module_init"))
     except Exception:
-        logger.error(f"初始化 TOKENS 時發生錯誤: {e}")
+        logger.error(f"Error initializing TOKENS: {e}")
     tokens = None
 
 __all__ = ["TOKENS", "tokens"]

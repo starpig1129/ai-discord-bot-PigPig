@@ -66,8 +66,8 @@ class ShortTermMemoryProvider:
                         if len(ref_msg.content) > 50:
                             ref_content += "..."
                         if not ref_content and ref_msg.attachments:
-                            ref_content = "[圖片/附件]"
-                        ref_text = f"回覆給 @{ref_author}: '{ref_content}' (MessageID:{msg.reference.message_id})"
+                            ref_content = "[Image/Attachment]"
+                        ref_text = f"Replying to @{ref_author}: '{ref_content}' (MessageID:{msg.reference.message_id})"
                         
                     content_suffix.append(ref_text)
 
@@ -94,20 +94,20 @@ class ShortTermMemoryProvider:
                             elif attachment.content_type.startswith('video/'):
                                 content_parts.append({
                                     "type": "text",
-                                    "text": f"[影片附件: {attachment.filename}]"
+                                    "text": f"[Video Attachment: {attachment.filename}]"
                                 })
                             elif attachment.content_type == 'application/pdf':
                                 content_parts.append({
                                     "type": "text",
-                                    "text": f"[PDF 附件: {attachment.filename}]"
+                                    "text": f"[PDF Attachment: {attachment.filename}]"
                                 })
                             elif attachment.content_type.startswith('audio/'):
                                 content_parts.append({
                                     "type": "text",
-                                    "text": f"[音訊附件: {attachment.filename}]"
+                                    "text": f"[Audio Attachment: {attachment.filename}]"
                                 })
 
-                # 創建消息（使用列表格式的 content）
+                # Create message (using list format for content)
                 # Add explicit speaker identification to help LLM distinguish between users
                 if msg.author.bot:
                     result.append(AIMessage(content=content_parts))

@@ -37,13 +37,13 @@ graph TD
 | **[Tools Factory](tools_factory.md)** | Dynamic tool discovery and permission filtering | [tools_factory.md](tools_factory.md) |
 | **[Callbacks](callbacks.md)** | Real-time tool feedback for users | [callbacks.md](callbacks.md) |
 
-### Submodules
+### Technical Subsystems
 
-| Submodule | Purpose | Documentation |
+| Subsystem | Purpose | Documentation |
 |-----------|---------|---------------|
-| **[Memory System](memory/index.md)** | Procedural and short-term memory management | [memory/index.md](memory/index.md) |
+| **[Memory System](memory/index.md)** | Dual-memory architecture (Episodic/Procedural) | [memory/index.md](memory/index.md) |
 | **[Prompting System](prompting/index.md)** | Dynamic system prompt generation and caching | [prompting/index.md](prompting/index.md) |
-| **[Tools Collection](tools/index.md)** | LangChain tools for agent interactions | [tools/index.md](tools/index.md) |
+| **[Tool System](tools/index.md)** | Architecture for LangChain tool integration | [tools/index.md](tools/index.md) |
 | **[Utilities](utils/index.md)** | File watching, media processing, message handling | [utils/index.md](utils/index.md) |
 
 ## Key Features

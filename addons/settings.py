@@ -11,7 +11,7 @@ log = get_logger(server_id="Bot", source=__name__)
 logger = log
 
 def _load_yaml_file(path: str) -> dict:
-    """安全讀取 YAML 檔案，失敗時使用 func.report_error 回報並回傳空 dict"""
+    """Safely load a YAML file; report errors via func.report_error and return an empty dict on failure."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
@@ -21,7 +21,7 @@ def _load_yaml_file(path: str) -> dict:
             from function import func
             asyncio.create_task(func.report_error(e, "addons/settings.py/_load_yaml_file"))
         except Exception:
-            logger.error(f"載入 YAML 檔案失敗 ({path}): {e}")
+            logger.error(f"Failed to load YAML file ({path}): {e}")
         return {}
 
 def _get_config_root() -> str:
@@ -148,7 +148,7 @@ class BaseConfig:
 
 
 class LLMConfig:
-    """對應 config/llm.yaml 的設定物件"""
+    """Configuration object mapped from config/llm.yaml"""
 
     def __init__(self, path: str = "config/llm.yaml") -> None:
         self.path = path
@@ -165,7 +165,7 @@ class LLMConfig:
 
 
 class UpdateConfig:
-    """對應 config/update.yaml 的設定物件"""
+    """Configuration object mapped from config/update.yaml"""
 
     def __init__(self, path: str = "config/update.yaml") -> None:
         self.path = path
@@ -177,7 +177,7 @@ class UpdateConfig:
         self.github: dict = data.get("github", {})
 
 class MusicConfig:
-    """對應 config/music.yaml 的設定物件"""
+    """Configuration object mapped from config/music.yaml"""
 
     def __init__(self, path: str = "config/music.yaml") -> None:
         self.path = path
@@ -187,22 +187,21 @@ class MusicConfig:
         self.youtube_cookies_path: str = data.get("youtube_cookies_path", "./data/youtube_cookies.txt")
 
 class PromptConfig:
-    """對應 config/prompt/*.yaml 的設定物件"""
+    """Configuration object mapped from config/prompt/*.yaml"""
 
     def __init__(self, path: str = "config/prompt") -> None:
         self.path = path
     
     def get_system_prompt(self, agent_name: str, bot_id: int | None = None, message=None) -> str:
-        """
-        從指定的 agent 設定中取得 system_prompt，並嘗試套用已知變數替換
+        """Retrieve system_prompt from agent config and apply dynamic variable replacement.
         
         Args:
-            agent_name: agent 名稱
-            bot_id: 可選的機器人 ID（用於替換 {bot_id}）
-            message: 可選的 Discord 訊息物件（未使用，但保留以備將來擴充）
+            agent_name: Name of the agent.
+            bot_id: Optional bot ID for {bot_id} replacement.
+            message: Optional Discord message object (reserved for future use).
         
         Returns:
-            system_prompt 字串，若找不到則返回空字串
+            Formatted system_prompt string, or empty string if not found.
         """
         try:
             from llm.prompting.manager import get_prompt_manager
@@ -337,7 +336,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        logger.error(f"初始化 BaseConfig 時發生錯誤: {e}")
+        logger.error(f"Error initializing BaseConfig: {e}")
     base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")
 
 # After BaseConfig is created from CONFIG_ROOT, inform the logging module
@@ -367,7 +366,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        logger.error(f"初始化 LLMConfig 時發生錯誤: {e}")
+        logger.error(f"Error initializing LLMConfig: {e}")
     llm_config = LLMConfig(f"{CONFIG_ROOT}/llm.yaml")
 
 try:
@@ -377,7 +376,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        logger.error(f"初始化 UpdateConfig 時發生錯誤: {e}")
+        logger.error(f"Error initializing UpdateConfig: {e}")
     update_config = UpdateConfig(f"{CONFIG_ROOT}/update.yaml")
 try:
     music_config = MusicConfig(f"{CONFIG_ROOT}/music.yaml")
@@ -386,7 +385,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        logger.error(f"初始化 MusicConfig 時發生錯誤: {e}")
+        logger.error(f"Error initializing MusicConfig: {e}")
     music_config = MusicConfig(f"{CONFIG_ROOT}/music.yaml")
 try:
     prompt_config = PromptConfig(f"{CONFIG_ROOT}/prompt")
@@ -395,7 +394,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        logger.error(f"初始化 PromptConfig 時發生錯誤: {e}")
+        logger.error(f"Error initializing PromptConfig: {e}")
     prompt_config = PromptConfig(f"{CONFIG_ROOT}/prompt")
 try:
     memory_config = MemoryConfig(f"{CONFIG_ROOT}/memory.yaml")
@@ -404,7 +403,7 @@ except Exception as e:
         from function import func
         asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
     except Exception:
-        logger.error(f"初始化 MemoryConfig 時發生錯誤: {e}")
+        logger.error(f"Error initializing MemoryConfig: {e}")
     memory_config = MemoryConfig(f"{CONFIG_ROOT}/memory.yaml")
 __all__ = [
     "BaseConfig",

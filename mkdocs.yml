@@ -93,16 +93,26 @@ nav:
     - Core Bot: bot.md
     - Utilities: function.md
     - Update System: update.md
-  - Core Components:
+  - LLM Intelligence:
     - Overview: llm/index.md
-    - Model Management: llm/model_manager.md
-    - Model Circuit Breaker: llm/model_circuit_breaker.md
-    - Orchestrator: llm/orchestrator.md
-    - Tools Factory: llm/tools_factory.md
-    - Context Management: llm/context_manager.md
-    - Prompt Protection: llm/protected_prompt_system.md
-    - Data Schema: llm/schema.md
-    - Callbacks: llm/callbacks.md
+    - Memory Systems:
+      - Overview: llm/memory/index.md
+      - Short-Term: llm/memory/short_term.md
+      - Episodic: llm/memory/episodic.md
+      - Procedural: llm/memory/procedural.md
+      - Knowledge: llm/memory/knowledge.md
+    - Tool System:
+      - Architecture: llm/tools/index.md
+      - Tool List: llm/tools/list.md
+    - Core Components:
+      - Orchestrator: llm/orchestrator.md
+      - Context Manager: llm/context_manager.md
+      - Tools Factory: llm/tools_factory.md
+      - Model Manager: llm/model_manager.md
+      - Circuit Breaker: llm/model_circuit_breaker.md
+      - Callbacks: llm/callbacks.md
+      - Prompt Protection: llm/protected_prompt_system.md
+      - Data Schema: llm/schema.md
   - Features (Cogs):
     - Overview: cogs/index.md
     - Memory System:
@@ -130,7 +140,7 @@ nav:
       - Scheduling: cogs/schedule.md
       - Bot Info: cogs/botinfo.md
       - Help Menu: cogs/help.md
-  - Addons:
+  - System Addons:
     - Overview: addons/index.md
     - Settings: addons/settings.md
     - Tokens: addons/tokens.md

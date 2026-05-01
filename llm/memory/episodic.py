@@ -107,11 +107,11 @@ class EpisodicMemoryProvider:
                 if jump_url and ts:
                     try:
                         unix_ts = int(float(ts))
-                        source_str = f" [[來源 <t:{unix_ts}:R>]({jump_url})]"
+                        source_str = f" [[Source <t:{unix_ts}:R>]({jump_url})]"
                     except Exception:
-                        source_str = f" [[來源]({jump_url})]"
+                        source_str = f" [[Source]({jump_url})]"
                 elif jump_url:
-                    source_str = f" [[來源]({jump_url})]"
+                    source_str = f" [[Source]({jump_url})]"
                 elif ts:
                     try:
                         unix_ts = int(float(ts))
