@@ -1,6 +1,6 @@
-"""LangChain 相容的資料綱要 (schema)
+"""LangChain compatible data schemas.
 
-此檔案定義接收 Discord 請求與回傳回覆的 Pydantic 模型。
+This file defines the Pydantic models for receiving Discord requests and returning responses.
 """
 
 from __future__ import annotations

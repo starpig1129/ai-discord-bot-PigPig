@@ -27,7 +27,7 @@ This is the main method of the class. It performs a search on Google Maps and re
 
 ### Crawling Process
 
-1.  **Initial Search:** Navigates to `https://www.google.com/maps/search/{keyword}餐廳`.
+1.  **Initial Search:** Navigates to `https://www.google.com/maps/search/{keyword} restaurant`.
 2.  **Result Selection:** It finds all the search result links on the page and randomly clicks one to navigate to the restaurant's specific page.
 3.  **Data Extraction:** It uses `BeautifulSoup` to parse the HTML of the restaurant's page and extracts key information like the title, rating, address, and category.
 4.  **Review Scraping:** It scrolls down the page to load user reviews and then extracts the text from them.

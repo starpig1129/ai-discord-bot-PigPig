@@ -274,8 +274,8 @@ class TextAnalysisEngine:
         
         languages = {
             'en': ['the', 'and', 'is', 'are', 'was', 'were', 'this', 'that'],
-            'zh': ['的', '了', '在', '是', '我', '你', '他', '她'],
-            'ja': ['の', 'は', 'が', 'を', 'に', 'で', 'と', 'も'],
+            'zh': ['de', 'le', 'zai', 'shi', 'wo', 'ni', 'ta', 't_a'], # Romanized example
+            'ja': ['no', 'ha', 'ga', 'wo', 'ni', 'de', 'to', 'mo'], # Romanized example
             'es': ['el', 'la', 'de', 'que', 'y', 'en', 'un', 'es'],
             'fr': ['le', 'la', 'de', 'et', 'un', 'une', 'des', 'du']
         }

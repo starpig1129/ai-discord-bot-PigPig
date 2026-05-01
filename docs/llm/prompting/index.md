@@ -68,7 +68,7 @@ def get_available_modules(self) -> List[str]
 
 ```python
 class PromptBuilder:
-    """提示建構器"""
+    """Prompt Builder"""
     
     def build_system_prompt(self, config: dict, modules: List[str]) -> str
     def apply_language_replacements(self, prompt: str, lang: str, lang_manager, mappings: Optional[dict] = None) -> str
@@ -95,7 +95,7 @@ class PromptBuilder:
 
 ```python
 class PromptLoader:
-    """YAML 提示配置載入器"""
+    """YAML Prompt Configuration Loader"""
     
     def load_yaml_config(self) -> Dict[str, Any]
     def reload_if_changed(self) -> bool
@@ -115,7 +115,7 @@ class PromptLoader:
 
 ```python
 class PromptCache:
-    """智慧快取系統"""
+    """Smart Cache System"""
     
     def get(self, key: str) -> Optional[Any]
     def set(self, key: str, value: Any, ttl: int = 3600) -> None
@@ -157,7 +157,7 @@ metadata:
 base:
   core_instruction: "You are an AI assistant..."
   bot_name: "🐖🐖"
-  creator: "星豬"
+  creator: "StarPig"
 
 composition:
   default_modules:
@@ -263,9 +263,9 @@ def apply_language_replacements(self, prompt: str, lang: str, lang_manager, mapp
 ```python
 # Resolves paths like:
 # system.chat_bot.language.answer_in
-# -> "用繁體中文回答"
+# -> "Answer in Traditional Chinese"
 # system.chat_bot.language.concise  
-# -> "保持回答簡潔"
+# -> "Keep responses concise"
 ```
 
 ## Caching Strategy
@@ -381,7 +381,7 @@ def _on_config_changed(self, path: str):
 
 ```python
 def _get_fallback_prompt(self, bot_id: str) -> str:
-    return '''You are an AI chatbot named 🐖🐖 <@{bot_id}>, created by 星豬<@{bot_owner_id}>.
+    return '''You are an AI chatbot named 🐖🐖 <@{bot_id}>, created by StarPig<@{bot_owner_id}>.
     
     1. Personality: Keep responses friendly and helpful.
     2. Language: Answer in Traditional Chinese.
@@ -420,7 +420,7 @@ def test_cache_functionality():
 def test_language_replacement():
     prompt = "Always {lang.system.chat_bot.language.answer_in}"
     result = builder.apply_language_replacements(prompt, "zh_TW", lang_manager)
-    assert "用繁體中文回答" in result
+    assert "Answer in Traditional Chinese" in result
 ```
 
 ## Dependencies

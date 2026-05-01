@@ -200,13 +200,13 @@ class Function:
         # Use different colors and titles based on error type
         if is_quota_error:
             embed = discord.Embed(
-                title="⚠️ 配額警告",
-                description=str(details) if details else "API 配額已達上限，正在使用備用模型。",
+                title="⚠️ Quota Warning",
+                description=str(details) if details else "API quota reached. Switching to fallback model.",
                 color=discord.Color.yellow())
         else:
             embed = discord.Embed(
-                title="錯誤報告",
-                description=str(details) if details else "發生了一個未處理的錯誤。",
+                title="Error Report",
+                description=str(details) if details else "An unhandled error occurred.",
                 color=discord.Color.red()
             )
 
@@ -215,7 +215,7 @@ class Function:
         safe_error_str = str(error)
         
         # Ensure name and value are strings
-        error_field_name = "錯誤"
+        error_field_name = "Error"
         error_field_value = f"```{safe_error_name}: {safe_error_str}```"
         if len(error_field_value) > 1024:
             error_field_value = error_field_value[:1010] + "...```"
@@ -229,8 +229,8 @@ class Function:
             max_content_len = 1024 - len("```python\n\n```")
             traceback_str = traceback_str[:max_content_len - 3] + "..." if max_content_len > 3 else "..."
             traceback_field_value = f"```python\n{traceback_str}\n```"
-        embed.add_field(name="追蹤記錄", value=traceback_field_value, inline=False)
-        embed.set_footer(text=f"時間: {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        embed.add_field(name="Traceback", value=traceback_field_value, inline=False)
+        embed.set_footer(text=f"Time: {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
         try:
             await self.bot.send_error_report(embed)

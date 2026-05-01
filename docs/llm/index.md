@@ -31,9 +31,11 @@ graph TD
 |-----------|---------|---------------|
 | **[Context Manager](context_manager.md)** | Manages procedural context and short-term memory | [context_manager.md](context_manager.md) |
 | **[Model Manager](model_manager.md)** | Handles model selection and fallback logic | [model_manager.md](model_manager.md) |
+| **[Model Circuit Breaker](model_circuit_breaker.md)** | Fault tolerance and failure tracking | [model_circuit_breaker.md](model_circuit_breaker.md) |
 | **[Orchestrator](orchestrator.md)** | Coordinates two-agent conversation flow | [orchestrator.md](orchestrator.md) |
 | **[Schema](schema.md)** | Defines data structures for requests/responses | [schema.md](schema.md) |
 | **[Tools Factory](tools_factory.md)** | Dynamic tool discovery and permission filtering | [tools_factory.md](tools_factory.md) |
+| **[Callbacks](callbacks.md)** | Real-time tool feedback for users | [callbacks.md](callbacks.md) |
 
 ### Submodules
 

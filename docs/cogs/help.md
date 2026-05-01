@@ -94,9 +94,9 @@ Fields:
 ```
 
 ### Localization Examples
-- **Title**: "Command Help" / "指令幫助"
-- **Description**: "Display all available commands" / "顯示所有可用指令的詳細資訊"
-- **No Description**: "No description available" / "無描述"
+- **Title**: "Command Help"
+- **Description**: "Display all available commands"
+- **No Description**: "No description available"
 
 ## Error Handling
 

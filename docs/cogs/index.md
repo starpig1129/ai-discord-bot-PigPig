@@ -34,6 +34,7 @@ The bot consists of 17 main cog modules plus several subdirectories containing s
 - **[story_manager.md](story_manager.md)** - Interactive story creation and management system
 - **[system_prompt_manager.md](system_prompt_manager.md)** - Dynamic system prompt management per channel/guild
 - **[update_manager.md](update_manager.md)** - Automatic bot update system
+- **[stats_cog.md](stats_cog.md)** - User interaction statistics and historical log migration
 
 ## Specialized Subdirectories
 

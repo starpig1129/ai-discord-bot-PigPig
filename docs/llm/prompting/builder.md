@@ -20,7 +20,7 @@ The builder maintains predefined titles for different module types:
 - `base`: Core instruction (no title)
 - `identity`: "Identity and Role"
 - `response_principles`: "Response Principles" 
-- `language`: "Language Requirements (語言要求)"
+- `language`: "Language Requirements"
 - `output_format`: "Output Format Rules"
 - `input_parsing`: "Input Parsing"
 - `memory_system`: "Memory System"
@@ -69,8 +69,8 @@ Handles comprehensive variable substitution including:
 **Language Replacement Strategy:**
 ```python
 # Supports both double and single brace patterns
-{{lang.system.chat_bot.language.answer_in}} -> "繁體中文"
-{lang.system.chat_bot.language.answer_in} -> "繁體中文"
+{{lang.system.chat_bot.language.answer_in}} -> "Traditional Chinese"
+{lang.system.chat_bot.language.answer_in} -> "Traditional Chinese"
 
 # Deterministic YAML mappings
 mappings = {

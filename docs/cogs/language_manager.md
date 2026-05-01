@@ -26,7 +26,7 @@ The LanguageManager is a sophisticated multi-language translation system that pr
 Sets the server's preferred language for all bot interactions.
 
 **Parameters**:
-- `language`: Language choice (繁體中文/简体中文/English/日本語)
+- `language`: Language choice (Traditional Chinese/Simplified Chinese/English/Japanese)
 
 **Permissions**: Administrator only
 
@@ -122,10 +122,10 @@ _schedule_lazy_loading()
 
 ### Supported Languages
 ```yaml
-zh_TW: "繁體中文"
-zh_CN: "简体中文" 
+zh_TW: "Traditional Chinese"
+zh_CN: "Simplified Chinese" 
 en_US: "English"
-ja_JP: "日本語"
+ja_JP: "Japanese"
 ```
 
 ### Server Configuration

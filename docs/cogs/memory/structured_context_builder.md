@@ -42,12 +42,12 @@ The builder uses several helper methods to format the data in a way that is both
 The final output is a markdown-formatted string that might look like this:
 
 ```markdown
-📋 **對話參與者資訊**
-• <@123456789> (JohnDoe) | 最後活躍: 5小時前
-  └─ 資料: Prefers formal communication...
-• <@987654321> (JaneDoe) | 最後活躍: 10分鐘前
-  └─ 資料: Is the project lead for 'Project X'...
+📋 **Conversation Participant Information**
+• <@123456789> (JohnDoe) | Last Active: 5 hours ago
+  └─ Data: Prefers formal communication...
+• <@987654321> (JaneDoe) | Last Active: 10 minutes ago
+  └─ Data: Is the project lead for 'Project X'...
 
-💬 **相關歷史對話**
+💬 **Relevant History**
 🔥👤🕐 `[07-24 12:30]` <@987654321>: The deadline for Project X is confirmed for this Friday.
 📝🕐 `[07-24 10:15]` <@123456789>: Can we get a status update on the server migration?

@@ -35,7 +35,7 @@ load_dotenv()
 class CommandCheck(discord.app_commands.CommandTree):
     async def interaction_check(self, interaction: discord.Interaction, /) -> bool:
         if not interaction.guild:
-            await interaction.response.send_message("該命令只能在群組中使用!")
+            await interaction.response.send_message("This command can only be used in servers!")
             return False
 
         return await super().interaction_check(interaction)
@@ -53,7 +53,7 @@ bot = PigPig(
     tree_cls=CommandCheck,
     chunk_guilds_at_startup=True,
     member_cache_flags=member_cache,
-    activity=discord.Activity(type=discord.ActivityType.playing, name="啟動中"),
+    activity=discord.Activity(type=discord.ActivityType.playing, name="Starting..."),
     case_insensitive=True,
     intents=intents
 )
@@ -122,13 +122,13 @@ if __name__ == "__main__":
     try:
         bot.run(str(tokens.token), log_handler=None)
     except KeyboardInterrupt:
-        print("收到 KeyboardInterrupt，使用者手動中斷，開始優雅關閉...")
+        print("KeyboardInterrupt received. Manual interruption. Initiating graceful shutdown...")
     finally:
         try:
             asyncio.run(bot.close())
         except Exception as e:
             log = get_logger(server_id="Bot", source=__name__)
-            log.error(f"最終清理階段發生錯誤: {e}")
+            log.error(f"Error during final cleanup: {e}")
             try:
                 asyncio.create_task(func.report_error(e, "main.py/finally"))
             except Exception:

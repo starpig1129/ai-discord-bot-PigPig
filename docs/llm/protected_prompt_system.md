@@ -1,73 +1,73 @@
 # Protected Prompt Management System
 
-## 概述
+## Overview
 
-此系統實現了**雙層提示詞管理架構**，確保系統層級的關鍵提示詞不會被使用者意外修改，同時允許使用者自訂個性化的機器人行為。
+This system implements a **dual-layer prompt management architecture**, ensuring that critical system-level prompts are not accidentally modified by users while allowing users to customize personalized bot behaviors.
 
-## 架構設計
+## Architecture Design
 
-### 兩層提示詞分類
+### Two-Layer Prompt Classification
 
-#### 1. **受保護模組（Protected Modules）** ❌ 不可修改
+#### 1. **Protected Modules** ❌ Read-Only
 
-這些模組包含系統運作的關鍵指示，**絕對不允許使用者修改**：
+These modules contain critical instructions for system operation and **must never be modified by users**:
 
-- **`output_format`**: Discord 格式規則（`<som>` `<eom>` 標籤、時間戳格式、mention 格式等）
-- **`input_parsing`**: 訊息格式理解、發言者識別、代名詞使用規則
-- **`memory_system`**: Procedural Memory 和 Short-term Memory 的使用方式
-- **`information_handling`**: 資訊來源的優先順序
-- **`error_handling`**: 錯誤處理指南
-- **`reminders`**: 最後的關鍵提醒
+- **`output_format`**: Discord formatting rules (`<som>` `<eom>` tags, timestamp formats, mention formats, etc.)
+- **`input_parsing`**: Message format understanding, speaker identification, pronoun rules
+- **`memory_system`**: Guidelines for using Procedural Memory and Short-term Memory
+- **`information_handling`**: Priority of information sources
+- **`error_handling`**: Error handling guidelines
+- **`reminders`**: Final critical reminders
 
-**為什麼這些必須保護？**
-- 如果使用者修改了 Output Format，bot 的回應可能無法正確被解析
-- 如果修改了 Input Parsing，bot 可能無法正確理解多使用者對話
-- 如果修改了 Memory System，bot 可能無法正確使用上下文記憶
+**Why must these be protected?**
+- Modifying Output Format could break the bot's response parsing
+- Modifying Input Parsing could lead to misunderstanding multi-user conversations
+- Modifying Memory System could disrupt the bot's ability to use context memory correctly
 
-#### 2. **可自訂模組（Customizable Modules）** ✅ 可修改
+#### 2. **Customizable Modules** ✅ User-Editable
 
-這些模組允許使用者自訂機器人的個性和行為：
+These modules allow users to customize the bot's personality and behavior:
 
-- **`identity`**: 機器人名稱、創建者、角色定義
-- **`response_principles`**: 語氣、風格、語言偏好、回應長度
-- **`interaction`**: 互動方式、參與度
-- **`professional_personality`**: 專業模式的個性設定
+- **`identity`**: Bot name, creator, role definition
+- **`response_principles`**: Tone, style, language preferences, response length
+- **`interaction`**: Interaction style, engagement levels
+- **`professional_personality`**: Personality settings for professional mode
 
-**使用者可以自訂什麼？**
-- 機器人的名字和角色
-- 對話的語氣（幽默/正式/友善等）
-- 回應的風格和長度偏好
-- 語言和措辭習慣
+**What can users customize?**
+- Bot's name and role
+- Conversational tone (humorous/formal/friendly, etc.)
+- Response style and length preferences
+- Language and wording habits
 
-## 使用方法
+## Usage
 
-### 在 Orchestrator 中的實現
+### Implementation in Orchestrator
 
 ```python
 from llm.prompting.protected_prompt_manager import get_protected_prompt_manager
 
-# 獲取 Protected Prompt Manager
+# Get Protected Prompt Manager
 protected_manager = get_protected_prompt_manager()
 
-# 組合系統提示詞
-# 受保護的模組永遠從 base_configs 載入
-# 可自訂的模組可以透過 custom_module_contents 覆蓋
+# Compose system prompt
+# Protected modules are always loaded from base_configs
+# Customizable modules can be overridden via custom_module_contents
 system_prompt = protected_manager.compose_system_prompt(
     custom_module_contents={
-        'identity': '自訂的身份描述',  # ✅ 允許
-        'output_format': '自訂的格式'   # ❌ 會被忽略，使用 base_configs 版本
+        'identity': 'Custom identity description',  # ✅ Allowed
+        'output_format': 'Custom format'           # ❌ Ignored, uses base_configs version
     }
 )
 ```
 
-### 檢查模組是否受保護
+### Checking Module Status
 
 ```python
-# 檢查模組是否受保護
+# Check if a module is protected
 protected_manager.is_module_protected('output_format')  # True
 protected_manager.is_module_customizable('identity')    # True
 
-# 獲取模組資訊
+# Get module information
 info = protected_manager.get_module_info()
 # {
 #     'protected_modules': ['output_format', 'input_parsing', ...],
@@ -76,26 +76,26 @@ info = protected_manager.get_module_info()
 # }
 ```
 
-### 設定自訂模組
+### Setting Custom Modules
 
 ```python
-# 只有可自訂的模組才能設定
-success = protected_manager.set_custom_module('identity', '我是一個友善的助手')
+# Only customizable modules can be set
+success = protected_manager.set_custom_module('identity', 'I am a friendly assistant')
 # Returns True
 
-# 嘗試設定受保護的模組會失敗
-success = protected_manager.set_custom_module('output_format', '自訂格式')
-# Returns False, 並記錄警告日誌
+# Attempting to set a protected module will fail
+success = protected_manager.set_custom_module('output_format', 'Custom Format')
+# Returns False and logs a warning
 ```
 
-## 資料流程
+## Data Flow
 
 ```
 User Request → Orchestrator
                     ↓
-         _build_message_agent_prompt()
+          _build_message_agent_prompt()
                     ↓
-         ProtectedPromptManager
+          ProtectedPromptManager
                     ↓
     ┌───────────────┴────────────────┐
     │                                │
@@ -104,115 +104,115 @@ Protected Modules          Customizable Modules
     │                                │
     └───────────────┬────────────────┘
                     ↓
-         compose_system_prompt()
+          compose_system_prompt()
                     ↓
-         Complete System Prompt
-         (with variable replacements)
+          Complete System Prompt
+          (with variable replacements)
                     ↓
             Message Agent
 ```
 
-## 安全性保證
+## Security Guarantees
 
-1. **受保護模組永遠從 base_configs 載入**
-   - 即使資料庫或設定中有覆蓋，也會被忽略
-   - 確保系統關鍵指示不會被破壞
+1. **Protected Modules always load from base_configs**
+   - Overrides in database or settings are ignored
+   - Ensures critical system instructions remain intact
 
-2. **明確的模組分類**
-   - `PROTECTED_MODULES` 和 `CUSTOMIZABLE_MODULES` 在程式碼中明確定義
-   - 任何新增的模組都需要明確分類
+2. **Explicit Module Classification**
+   - `PROTECTED_MODULES` and `CUSTOMIZABLE_MODULES` are explicitly defined in code
+   - Any new modules must be explicitly categorized
 
-3. **日誌記錄和錯誤報告**
-   - 所有嘗試修改受保護模組的行為都會被記錄
-   - 提供清楚的錯誤訊息指導正確使用
+3. **Logging and Error Reporting**
+   - All attempts to modify protected modules are logged
+   - Clear error messages guide proper usage
 
-## 未來擴展
+## Future Roadmap
 
-### 階段 1（當前）✅
-- 實現基礎的受保護/可自訂模組分離
-- 在 Orchestrator 中使用 ProtectedPromptManager
-- 為 message_agent 提供保護
+### Phase 1 (Current) ✅
+- Implemented basic protected/customizable module separation
+- Integrated ProtectedPromptManager in Orchestrator
+- Provided protection for message_agent
 
-### 階段 2（計劃中）
-- 同樣為 info_agent 實現保護機制
-- 在資料庫層面實現自訂模組儲存
-- 提供 Discord 指令讓使用者管理自訂模組
+### Phase 2 (Planned)
+- Implement protection mechanism for info_agent
+- Implement custom module storage at the database level
+- Provide Discord commands for users to manage custom modules
 
-### 階段 3（計劃中）
-- 實現模組版本控制
-- 提供模組範本和預設套裝
-- 更精細的權限控制（server-level, channel-level）
+### Phase 3 (Planned)
+- Implement module version control
+- Provide module templates and default presets
+- Finer-grained permission control (server-level, channel-level)
 
-## 範例場景
+## Example Scenarios
 
-### 場景 1：使用者想要更改機器人名稱
+### Scenario 1: User wants to change the bot's name
 
 ```python
-# ✅ 允許：identity 是可自訂模組
+# ✅ Allowed: identity is a customizable module
 protected_manager.set_custom_module('identity', """
 ## Bot Identity
-- Name: 超級助手 <@{bot_id}>
+- Name: Super Assistant <@{bot_id}>
 - Creator: {creator} <@{bot_owner_id}>
 - Platform: {environment}
-- Role: 專業的技術支援助手
+- Role: Professional technical support assistant
 """)
 ```
 
-### 場景 2：使用者嘗試修改輸出格式
+### Scenario 2: User tries to modify the output format
 
 ```python
-# ❌ 拒絕：output_format 是受保護模組
+# ❌ Denied: output_format is a protected module
 result = protected_manager.set_custom_module('output_format', """
 ## Custom Output Format
 - Use [bot]: prefix instead of <som><eom> tags
 """)
 # result = False
-# 日誌：Cannot customize protected module 'output_format'
+# Log: Cannot customize protected module 'output_format'
 ```
 
-### 場景 3：組合帶有自訂模組的提示詞
+### Scenario 3: Composing a prompt with custom modules
 
 ```python
 custom_modules = {
-    'identity': '自訂身份',
-    'response_principles': '自訂回應原則'
+    'identity': 'Custom Identity',
+    'response_principles': 'Custom Response Principles'
 }
 
 prompt = protected_manager.compose_system_prompt(
     custom_module_contents=custom_modules
 )
 
-# 結果：
-# - identity, response_principles 使用自訂內容
-# - output_format, input_parsing 等受保護模組使用 base_configs
+# Result:
+# - identity, response_principles use custom content
+# - output_format, input_parsing, and other protected modules use base_configs
 ```
 
-## 疑難排解
+## Troubleshooting
 
-### Q: 為什麼我的自訂提示詞沒有生效？
+### Q: Why isn't my custom prompt taking effect?
 
-A: 檢查你嘗試自訂的是否是受保護模組。使用 `is_module_protected()` 確認。
+A: Check if the module you are trying to customize is protected. Use `is_module_protected()` to verify.
 
-### Q: 如何知道哪些模組可以自訂？
+### Q: How do I know which modules are customizable?
 
-A: 使用 `get_module_info()` 方法查看所有模組分類。
+A: Use the `get_module_info()` method to view all module classifications.
 
-### Q: 受保護模組是否會隨版本更新？
+### Q: Will protected modules update with new versions?
 
-A: 是的，受保護模組會隨著 base_configs 的更新而更新，確保系統功能始終正常。
+A: Yes, protected modules will update alongside base_configs updates, ensuring system functionality remains optimal.
 
-## 相關檔案
+## Related Files
 
-- `llm/prompting/protected_prompt_manager.py` - 保護系統實現
-- `llm/orchestrator.py` - 在 Orchestrator 中的使用
-- `base_configs/prompt/message_agent.yaml` - 基礎配置（包含所有模組）
-- `base_configs/prompt/info_agent.yaml` - Info Agent 配置
+- `llm/prompting/protected_prompt_manager.py` - Protection system implementation
+- `llm/orchestrator.py` - Usage in Orchestrator
+- `base_configs/prompt/message_agent.yaml` - Base configuration (contains all modules)
+- `base_configs/prompt/info_agent.yaml` - Info Agent configuration
 
-## 總結
+## Conclusion
 
-Protected Prompt Management System 提供了一個平衡的方案：
+The Protected Prompt Management System provides a balanced solution:
 
-✅ **保護系統完整性**：關鍵的 Discord 格式和上下文處理指示不會被破壞
-✅ **允許個性化**：使用者仍然可以自訂機器人的性格和行為
-✅ **清楚的界限**：明確區分哪些可以改，哪些不能改
-✅ **向後兼容**：現有的 get_system_prompt 仍然可以作為 fallback
+✅ **Protects System Integrity**: Critical Discord formatting and context handling instructions are safeguarded
+✅ **Allows Personalization**: Users can still customize the bot's personality and behavior
+✅ **Clear Boundaries**: Explicit distinction between what can and cannot be changed
+✅ **Backward Compatibility**: Existing get_system_prompt remains available as a fallback

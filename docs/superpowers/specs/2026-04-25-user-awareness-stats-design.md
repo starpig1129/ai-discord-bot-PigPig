@@ -1,260 +1,260 @@
-# 使用者感知與統計互動功能設計
+# Design: User Awareness & Interaction Statistics
 
-**日期：** 2026-04-25  
-**狀態：** 已確認，待實作
+**Date:** 2026-04-25  
+**Status:** Confirmed, pending implementation
 
 ## Context
 
-目前 PigPig bot 的 LLM agent 缺乏對以下資訊的感知能力：
-1. Discord 伺服器結構（身份組、頻道清單、boost 等級等）
-2. 使用者在伺服器中的具體資訊（加入時間、身份組、暱稱）
-3. 累積性的使用者行為統計（發言次數、活躍時段、常用詞語）
+Currently, PigPig bot's LLM agent lacks awareness of the following information:
+1. Discord server structure (roles, channel lists, boost level, etc.)
+2. Specific user information within the server (join date, roles, nickname)
+3. Cumulative user behavior statistics (message count, active hours, common words)
 
-目標是讓機器人能**自主判斷**何時需要這些資訊並取用，讓對話更個人化、更有情境感，並能以文字或圖片名片方式呈現使用者統計。
+The goal is to allow the bot to **autonomously judge** when this information is needed and retrieve it, making conversations more personalized and context-aware. It should also be able to present user statistics in text or image card formats.
 
-現有資產可利用：
-- 大量已存在的 NDJSON log 檔（`logs/{guild_id}/{YYYYMMDD}/info.jsonl`），每筆記錄含 `user_id`、`channel_or_file`、`timestamp`、`action`、`message`
-- 現有 SQLite DB（`cogs/memory/db/`）可直接新增表格
-- 工具自動發現機制（`llm/tools_factory.py`）支援新增工具模組
-
----
-
-## 架構概覽
-
-```
-新增 DB 表
-  user_stats           ← on_message 即時更新（新訊息）
-  log_migration_state  ← 背景 log 解析進度追蹤（歷史遷移）
-
-新增 Cog
-  cogs/stats_cog.py    ← on_message 監聽 + 背景 log 遷移排程
-
-新增 Tools (llm/tools/)
-  server_context.py    ← 3 個工具：查伺服器/頻道/使用者 Discord 資訊
-  user_stats.py        ← 2 個工具：文字統計卡（給 AI）/ 圖片統計卡（給使用者）
-
-新增依賴
-  jieba                ← 中文斷詞（分析 top_words）
-  wordcloud            ← 生成文字雲圖片
-```
+Available assets:
+- Large number of existing NDJSON log files (`logs/{guild_id}/{YYYYMMDD}/info.jsonl`), each record containing `user_id`, `channel_or_file`, `timestamp`, `action`, `message`
+- Existing SQLite DB (`cogs/memory/db/`) where new tables can be added
+- Tool discovery mechanism (`llm/tools_factory.py`) supporting new tool modules
 
 ---
 
-## 一、DB Schema
+## Architecture Overview
 
-修改檔案：`cogs/memory/db/schema.py`
+```
+New DB Tables
+  user_stats           ← Updated in real-time via on_message (new messages)
+  log_migration_state  ← Background log parsing progress tracking (historical migration)
 
-新增兩個 SQLite 表：
+New Cog
+  cogs/stats_cog.py    ← on_message listener + background log migration schedule
+
+New Tools (llm/tools/)
+  server_context.py    ← 3 tools: Query server/channel/user Discord info
+  user_stats.py        ← 2 tools: Text stats card (for AI) / Image stats card (for users)
+
+New Dependencies
+  jieba                ← Chinese word segmentation (for top_words analysis)
+  wordcloud            ← Generate word cloud images
+```
+
+---
+
+## 1. DB Schema
+
+Modified file: `cogs/memory/db/schema.py`
+
+Add two SQLite tables:
 
 ```sql
--- 使用者累積統計（跨伺服器獨立計算）
+-- Cumulative user statistics (calculated independently across servers)
 CREATE TABLE IF NOT EXISTS user_stats (
     user_id TEXT NOT NULL,
     guild_id TEXT NOT NULL,
     total_messages INTEGER NOT NULL DEFAULT 0,
     active_hours TEXT NOT NULL DEFAULT '{}',
-        -- JSON 物件，key 為小時數 (0-23)，value 為訊息數
-        -- 例：{"14": 45, "22": 30, "0": 12}
+        -- JSON object, key is hour (0-23), value is message count
+        -- Example: {"14": 45, "22": 30, "0": 12}
     top_channels TEXT NOT NULL DEFAULT '{}',
-        -- JSON 物件，key 為頻道名稱，value 為訊息數
+        -- JSON object, key is channel name, value is message count
     top_emojis TEXT NOT NULL DEFAULT '{}',
-        -- JSON 物件，key 為 emoji 字元，value 為出現次數
+        -- JSON object, key is emoji character, value is count
     top_words TEXT NOT NULL DEFAULT '{}',
-        -- JSON 物件，key 為詞語，value 為出現次數（jieba 斷詞）
+        -- JSON object, key is word, value is count (jieba segmentation)
     streak_days INTEGER NOT NULL DEFAULT 0,
-        -- 當前連續活躍天數
+        -- Current consecutive active days
     streak_last_date TEXT,
-        -- "YYYY-MM-DD" 格式，用於計算連續天數
+        -- "YYYY-MM-DD" format, used to calculate streaks
     last_active_at DATETIME,
     first_message_at DATETIME,
     PRIMARY KEY (user_id, guild_id)
 );
 
--- Log 遷移進度追蹤（防止重複處理）
+-- Log migration progress tracking (to prevent duplicate processing)
 CREATE TABLE IF NOT EXISTS log_migration_state (
     guild_id TEXT PRIMARY KEY,
     last_processed_date TEXT NOT NULL
-        -- "YYYYMMDD" 格式，例 "20260424"
+        -- "YYYYMMDD" format, e.g., "20260424"
 );
 ```
 
 ---
 
-## 二、新增 Cog：`cogs/stats_cog.py`
+## 2. New Cog: `cogs/stats_cog.py`
 
-**職責：**
-1. `on_message` 事件監聽：每收到新訊息即時更新 `user_stats`
-2. 啟動時排程背景 log 遷移任務（處理歷史資料）
+**Responsibilities:**
+1. `on_message` event listener: Update `user_stats` in real-time for every new message.
+2. Background log migration task on startup (process historical data).
 
-**StatsStorage 類別**（內嵌在 cog 或獨立於 `cogs/memory/db/stats_storage.py`）：
+**StatsStorage Class** (embedded in cog or standalone in `cogs/memory/db/stats_storage.py`):
 - `get_user_stats(user_id, guild_id)` → dict
 - `update_user_stats(user_id, guild_id, message_content, channel_name, timestamp)` → None
-  - 更新 `total_messages + 1`
-  - 更新 `active_hours[hour] + 1`
-  - 更新 `top_channels[channel_name] + 1`
-  - 解析 emoji 並更新 `top_emojis`
-  - 使用 jieba 斷詞後更新 `top_words`（過濾停用詞，最多保留前 200 個詞）
-  - 計算並更新 `streak_days`
-  - 更新 `last_active_at`，若為空則同時設定 `first_message_at`
-- `get_migration_state(guild_id)` → Optional[str]（last_processed_date）
+  - Increment `total_messages + 1`
+  - Increment `active_hours[hour] + 1`
+  - Increment `top_channels[channel_name] + 1`
+  - Parse emojis and update `top_emojis`
+  - Update `top_words` after jieba segmentation (filter stop words, keep top 200 words)
+  - Calculate and update `streak_days`
+  - Update `last_active_at`, set `first_message_at` if empty
+- `get_migration_state(guild_id)` → Optional[str] (last_processed_date)
 - `set_migration_state(guild_id, date_str)` → None
 
-**背景 Log 遷移任務：**
+**Background Log Migration Task:**
 ```
-非同步背景 task（low-priority，每次處理一天）
-1. 讀取 logs/ 目錄，找出所有 guild_id 子目錄
-2. 對每個 guild：
-   a. 讀取 log_migration_state 的 last_processed_date
-   b. 找出未處理的日期目錄（按日期升序排列）
-   c. 對每個日期：
-      - 開啟 info.jsonl
-      - 逐行讀取，篩選 action == "receive_message"
-      - 每 500 筆呼叫一次 update_user_stats（批次 commit）
-      - await asyncio.sleep(0)（讓出 event loop，避免阻塞）
-      - 完成後更新 log_migration_state
-   d. 每天處理完 sleep(30)，等待後再處理下一天
-3. 全部完成後記錄 log，任務結束
+Asynchronous background task (low-priority, processes one day at a time)
+1. Read logs/ directory, find all guild_id subdirectories
+2. For each guild:
+   a. Read last_processed_date from log_migration_state
+   b. Find unprocessed date directories (sorted ascending by date)
+   c. For each date:
+      - Open info.jsonl
+      - Read line by line, filter action == "receive_message"
+      - Call update_user_stats every 500 records (batch commit)
+      - await asyncio.sleep(0) (yield event loop to avoid blocking)
+      - Update log_migration_state after completion
+   d. sleep(30) after processing each day before continuing to the next
+3. Log completion and end task
 ```
 
-**效能保護：**
-- 讀取 NDJSON 時逐行處理，不一次性載入整個檔案
-- 每 500 筆批次 commit，降低寫入次數
-- 每天之間 sleep(30)，避免 I/O 競爭
-- jieba 斷詞僅處理中文和英文詞，過濾長度 < 2 的詞和純數字
+**Performance Considerations:**
+- Process line by line when reading NDJSON, do not load the whole file.
+- Batch commit every 500 records to reduce write frequency.
+- sleep(30) between days to avoid I/O contention.
+- jieba segmentation only processes Chinese and English words, filters words with length < 2 and pure numbers.
 
 ---
 
-## 三、新增 Tools：`llm/tools/server_context.py`
+## 3. New Tools: `llm/tools/server_context.py`
 
-**agent_mode：** `"info"`（給 info_agent 使用，讓 AI 在分析階段取得情境）
+**agent_mode:** `"info"` (used by info_agent to get context during analysis)
 
-**工具清單：**
+**Tool List:**
 
 ### 3.1 `get_server_context`
-查詢目前 Discord 伺服器的基本資訊。  
-- 無參數（從 runtime 取得當前 guild）
-- 回傳格式（文字）：
+Queries basic information about the current Discord server.
+- No parameters (guild retrieved from runtime)
+- Return format (text):
   ```
-  伺服器：xxx（ID: 123）
-  成員數：245 人
-  Boost 等級：Level 2（15 次 boost）
-  身份組（10 個）：管理員、VIP、一般成員...
-  文字頻道（8 個）：公告、聊天室、音樂...
+  Server: xxx (ID: 123)
+  Members: 245
+  Boost Level: Level 2 (15 boosts)
+  Roles (10): Admin, VIP, Member...
+  Text Channels (8): announcement, chat, music...
   ```
 
 ### 3.2 `get_channel_context`
-查詢指定頻道的詳細資訊。  
-- 參數：`channel_name: Optional[str]`（預設為當前頻道）
-- 回傳：頻道 topic、分類、目前在線人數（語音頻道則為連接人數）
+Queries detailed information about a specific channel.
+- Parameters: `channel_name: Optional[str]` (defaults to current channel)
+- Returns: Channel topic, category, current online users (or connected users for voice channels)
 
 ### 3.3 `get_user_discord_info`
-查詢指定成員在伺服器中的 Discord 資料。  
-- 參數：`user_id: Optional[str]`（預設為訊息發送者）
-- 回傳：加入伺服器時間、擁有的身份組、伺服器暱稱、當前活動狀態
+Queries Discord data for a specific member in the server.
+- Parameters: `user_id: Optional[str]` (defaults to message sender)
+- Returns: Join date, owned roles, server nickname, current activity status
 
 ---
 
-## 四、新增 Tools：`llm/tools/user_stats.py`
+## 4. New Tools: `llm/tools/user_stats.py`
 
-**agent_mode：** `"info"`（給 info_agent 使用）
+**agent_mode:** `"info"` (used by info_agent)
 
 ### 4.1 `get_user_stats_card`
-給 AI 使用的文字格式統計卡，AI 可自然嵌入對話回覆中。  
-- 參數：`user_id: Optional[str]`（預設為訊息發送者）
-- 回傳格式（文字）：
+Text-formatted statistics card for AI to naturally embed in conversation responses.
+- Parameters: `user_id: Optional[str]` (defaults to message sender)
+- Return format (text):
   ```
-  📊 xxx 的統計
+  📊 Statistics for xxx
   ────────────
-  總發言數：1,247 則
-  最活躍時段：晚上 10-11 點（342 則）
-  連續活躍：7 天
-  最常待的頻道：聊天室（55%）
-  高頻詞：哈哈哈、好無語、要死了、OK
-  最愛 emoji：😂 × 142、👍 × 98
-  第一次發言：2025-12-01（145 天前）
+  Total Messages: 1,247
+  Peak Activity: 10-11 PM (342 messages)
+  Activity Streak: 7 days
+  Most Active Channel: chat (55%)
+  Top Words: hahaha, speechless, dying, OK
+  Favorite Emojis: 😂 × 142, 👍 × 98
+  First Message: 2025-12-01 (145 days ago)
   ```
 
 ### 4.2 `get_user_stats_image`
-生成含文字雲的 PNG 統計圖片，直接傳送到 Discord 頻道作為附件。  
-- 參數：`user_id: Optional[str]`（預設為訊息發送者）
-- 使用 `wordcloud` 庫生成文字雲，`Pillow` 組合成完整統計圖片
-- 需要中文字型（優先使用系統 NotoSansCJK 或自帶字型備援）
-- 圖片內容：
-  - 頂部：使用者名稱、頭像縮圖、基本數字（總發言、連續天數）
-  - 中間：文字雲（top_words 加權）
-  - 底部：最愛 emoji 條、最活躍時段橫條圖
-- 回傳：發送成功的確認文字（圖片已作為 `discord.File` 附件傳送）
+Generates a PNG statistics image with a word cloud and sends it to the Discord channel as an attachment.
+- Parameters: `user_id: Optional[str]` (defaults to message sender)
+- Uses `wordcloud` library for word cloud, `Pillow` to compose the full stats image.
+- Requires Chinese font (prefer system NotoSansCJK or included fallback font).
+- Image content:
+  - Top: Username, avatar thumbnail, basic stats (total messages, streak days)
+  - Middle: Word cloud (weighted by top_words)
+  - Bottom: Favorite emojis bar, activity hours histogram
+- Returns: Confirmation text (image sent as `discord.File` attachment)
 
 ---
 
-## 五、依賴新增
+## 5. Dependencies
 
-`requirements.txt` 新增：
+Added to `requirements.txt`:
 ```
 jieba>=0.42.1
 wordcloud>=1.9.3
 ```
 
-（`Pillow` 已存在，不需重複新增）
+(`Pillow` is already present, no need to add)
 
 ---
 
-## 六、修改的現有檔案
+## 6. Modified Existing Files
 
-| 檔案 | 修改內容 |
+| File | Modification |
 |------|---------|
-| `cogs/memory/db/schema.py` | 新增 `user_stats` 和 `log_migration_state` 表的建立 SQL |
-| `bot.py` | 在 `setup_hook()` 中載入 `stats_cog`（與其他 cog 自動載入相同機制） |
-| `requirements.txt` | 新增 jieba、wordcloud |
+| `cogs/memory/db/schema.py` | Add SQL for creating `user_stats` and `log_migration_state` tables |
+| `bot.py` | Load `stats_cog` in `setup_hook()` (same mechanism as other cogs) |
+| `requirements.txt` | Add jieba, wordcloud |
 
 ---
 
-## 七、新增的檔案
+## 7. New Files
 
-| 檔案 | 說明 |
+| File | Description |
 |------|------|
-| `cogs/stats_cog.py` | StatsCog：on_message 監聽 + 背景 log 遷移 |
-| `cogs/memory/db/stats_storage.py` | StatsStorage：user_stats 和 log_migration_state 的 DB 操作 |
-| `llm/tools/server_context.py` | 3 個伺服器/頻道/使用者資訊查詢工具 |
-| `llm/tools/user_stats.py` | 2 個統計工具（文字卡 + 圖片卡） |
+| `cogs/stats_cog.py` | StatsCog: on_message listener + background log migration |
+| `cogs/memory/db/stats_storage.py` | StatsStorage: DB operations for user_stats and log_migration_state |
+| `llm/tools/server_context.py` | 3 tools for server/channel/user info queries |
+| `llm/tools/user_stats.py` | 2 statistics tools (text card + image card) |
 
 ---
 
-## 八、資料流
+## 8. Data Flow
 
 ```
-Discord 訊息 → bot.on_message()
+Discord Message → bot.on_message()
   → StatsCog.on_message()
-      → StatsStorage.update_user_stats()  [即時更新]
+      → StatsStorage.update_user_stats()  [Real-time update]
 
-用戶詢問相關問題 → info_agent
-  → get_user_discord_info()               [Discord API 查詢]
-  → get_user_stats_card()                 [讀取 user_stats 表]
-  → get_server_context()                  [Discord API 查詢]
-  結果傳給 message_agent → 生成個人化回覆
+User Question → info_agent
+  → get_user_discord_info()               [Discord API query]
+  → get_user_stats_card()                 [Read user_stats table]
+  → get_server_context()                  [Discord API query]
+  Results passed to message_agent → Generate personalized response
 
-用戶要求看統計名片 → info_agent
+User requests stats card → info_agent
   → get_user_stats_image()
-      → 讀 user_stats
-      → jieba 斷詞（已存在 top_words，不需即時斷詞）
-      → wordcloud 生成文字雲
-      → Pillow 組合圖片
+      → Read user_stats
+      → jieba segmentation (uses existing top_words, no real-time segmentation needed)
+      → wordcloud generation
+      → Pillow image composition
       → message.channel.send(file=discord.File(image))
-  → message_agent 回覆「統計圖已傳送」
+  → message_agent replies "Stats image sent"
 
-Bot 啟動 → StatsCog background task
-  → 逐天讀取 logs/{guild_id}/{YYYYMMDD}/info.jsonl
-  → 篩選 receive_message，批次更新 user_stats
-  → 每天間隔 sleep(30)，記錄進度到 log_migration_state
+Bot Startup → StatsCog background task
+  → Read logs/{guild_id}/{YYYYMMDD}/info.jsonl day by day
+  → Filter receive_message, batch update user_stats
+  → sleep(30) between days, record progress in log_migration_state
 ```
 
 ---
 
-## 九、驗證方式
+## 9. Verification Plan
 
-1. **單元：** 確認 `StatsStorage.update_user_stats()` 正確更新 JSON 欄位（active_hours、top_channels 等）
-2. **整合：** 啟動 bot，發幾條訊息，查 SQLite 確認 `user_stats` 有資料
-3. **工具呼叫：** 跟機器人說「看一下我在這個伺服器的發言統計」，確認 AI 自動呼叫 `get_user_stats_card`
-4. **圖片生成：** 跟機器人說「幫我生成統計名片」，確認 Discord 頻道收到圖片附件
-5. **Log 遷移：** 啟動後確認背景任務在 log 中輸出進度，查 `log_migration_state` 表確認日期更新
-6. **伺服器查詢：** 跟機器人說「這個伺服器有幾個人？」，確認 AI 呼叫 `get_server_context`
+1. **Unit:** Verify `StatsStorage.update_user_stats()` correctly updates JSON fields (active_hours, top_channels, etc.).
+2. **Integration:** Start bot, send messages, check SQLite for `user_stats` data.
+3. **Tool Call:** Ask the bot "show my stats in this server", verify AI calls `get_user_stats_card`.
+4. **Image Generation:** Ask the bot "generate my stats card", verify Discord channel receives image attachment.
+5. **Log Migration:** Verify background task logs progress and updates `log_migration_state` table.
+6. **Server Query:** Ask the bot "how many people are in this server?", verify AI calls `get_server_context`.

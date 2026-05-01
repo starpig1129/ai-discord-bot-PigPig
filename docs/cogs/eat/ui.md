@@ -32,9 +32,9 @@ Initializes the view with all the necessary context from the search result and t
 
 ### Buttons
 
-*   **地圖 (Map):** Sends the Google Maps URL for the restaurant.
-*   **菜單 (Menu):** Displays the restaurant's menu in an embed.
+*   **Map:** Sends the Google Maps URL for the restaurant.
+*   **Menu:** Displays the restaurant's menu in an embed.
 *   **👍 (Like):** Sets the user's rating for this recommendation to `1`. This feedback is saved to the database and triggers a retraining of the server's recommendation model.
 *   **👎 (Dislike):** Sets the user's rating to `-1` and triggers a model retraining.
 *   **🔄 (Regenerate):** Sets the rating for the current recommendation to `-0.5` (a slight dislike), triggers a model retraining, and then generates a completely new recommendation.
-*   **查看評論 (View Reviews):** Uses the Gemini API to generate a witty, AI-powered food review based on the review snippets scraped from Google Maps.
+*   **View Reviews:** Uses the Gemini API to generate a witty, AI-powered food review based on the review snippets scraped from Google Maps.
