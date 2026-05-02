@@ -33,8 +33,12 @@
             "invalid_query": "Invalid search query",
             "image_download_failed": "Image download failed",
             "image_element_not_found": "Image element or redirect URL not found",
-            "eat_no_food": "No such food",
-            "eat_system_error": "Originally wanted to recommend {keyword}, but sorry system error QQ: {error}"
+            "eat_no_food": "No food available",
+            "eat_system_error": "I wanted to recommend {keyword}, but sorry, a system error occurred: {error}"
+        },
+        "ai": {
+            "system_prompt": "You are a web research agent. Perform a grounding-enabled web search for the user's query and synthesize a concise, accurate answer. Prefer official and recent sources. Return the final output directly in Discord markdown format with these sections:\n\n**Answer:** One short paragraph.\n\n**Highlights:** Bullet list of up to 5 concise points.\n\nAlways respond in English.",
+            "user_query_prefix": "User query: "
         }
     }
 }

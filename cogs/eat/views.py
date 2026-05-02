@@ -21,6 +21,7 @@ logger = get_logger(server_id="Bot", source="eat.views")
 # ──────────────────────────────────────────────
 
 class DislikeModal(discord.ui.Modal):
+    """Modal for users to provide feedback on disliked restaurants."""
     reason = discord.ui.TextInput(
         max_length=200,
         required=False
@@ -48,6 +49,7 @@ class DislikeModal(discord.ui.Modal):
         self.reason.placeholder = placeholder
 
     async def on_submit(self, interaction: discord.Interaction):
+        """Handle modal submission."""
         self.db.updateRecordRate(id=self.record_id, new_rate=-1)
         self.detail_view._rated = True
         self.detail_view.like_button.disabled = True
@@ -86,6 +88,7 @@ class EatDetailView(discord.ui.View):
         self._update_labels()
 
     def _update_labels(self):
+        """Update button labels based on localization."""
         if self.lang_manager:
             self.map_button.label = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "detail", "buttons", "map")
             self.menu_button.label = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "detail", "buttons", "menu")
@@ -94,6 +97,7 @@ class EatDetailView(discord.ui.View):
 
     @discord.ui.button(label="Map", emoji="🗺️", style=discord.ButtonStyle.secondary, row=0)
     async def map_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Provide a link to Google Maps for the selected restaurant."""
         maps_url = self.result.get("maps_url", "")
         name = self.result.get("name", "Restaurant")
         if maps_url:
@@ -106,6 +110,7 @@ class EatDetailView(discord.ui.View):
 
     @discord.ui.button(label="Menu", emoji="📋", style=discord.ButtonStyle.secondary, row=0)
     async def menu_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Display a menu image if available."""
         photo_url = self.result.get("photo_url", "")
         if photo_url:
             title = self.lang_manager.translate(self.guild_id, "commands", "eat", "embeds", "menu", "title") if self.lang_manager else "Menu"
@@ -131,9 +136,9 @@ class EatDetailView(discord.ui.View):
                     "interesting reviews based on restaurant information. "
                     "Interact with users in a humorous yet professional tone, providing valuable dining recommendations. "
                     "Your reviews should include comprehensive analysis of food quality, atmosphere, and service standards. "
-                    "Always respond in Traditional Chinese and use emojis appropriately to add fun and engagement."
+                    "Always respond in English and use emojis appropriately to add fun and engagement."
                 )
-                user_prompt_template = "Below is the restaurant information:\n{info}\n\nPlease write a professional and witty food review in Traditional Chinese based on the above information, adding appropriate emojis."
+                user_prompt_template = "Below is the restaurant information:\n{info}\n\nPlease write a professional and witty food review in English based on the above information, adding appropriate emojis."
                 preparing_msg = "📝 Preparing professional review..."
                 config_error_msg = "❌ Review model not correctly configured"
 
@@ -212,6 +217,7 @@ class EatDetailView(discord.ui.View):
 
     @discord.ui.button(emoji="👍", style=discord.ButtonStyle.success, row=1)
     async def like_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Record positive feedback for the restaurant."""
         if self._rated:
             msg = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "detail", "responses", "already_rated") if self.lang_manager else "Already rated!"
             await interaction.response.send_message(msg, ephemeral=True)
@@ -221,11 +227,12 @@ class EatDetailView(discord.ui.View):
         button.disabled = True
         self.dislike_button.disabled = True
         await interaction.response.edit_message(view=self)
-        msg = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "detail", "responses", "rate_success") if self.lang_manager else "Thanks for your feedback! We will recommend similar places in the future 😊"
+        msg = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "detail", "responses", "rate_success") if self.lang_manager else "Thanks for your feedback! 😊"
         await interaction.followup.send(msg, ephemeral=True)
 
     @discord.ui.button(emoji="👎", style=discord.ButtonStyle.danger, row=1)
     async def dislike_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Record negative feedback and open a reason modal."""
         if self._rated:
             msg = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "detail", "responses", "already_rated") if self.lang_manager else "Already rated!"
             await interaction.response.send_message(msg, ephemeral=True)
@@ -235,7 +242,7 @@ class EatDetailView(discord.ui.View):
 
     @discord.ui.button(label="Back to List", emoji="↩️", style=discord.ButtonStyle.secondary, row=1)
     async def back_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """返回 EatBrowseView。"""
+        """Return to the multi-result browsing View."""
         view = EatBrowseView(
             results=self.browse_results,
             keyword=self.keyword,
@@ -250,6 +257,7 @@ class EatDetailView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=view)
 
     async def on_timeout(self):
+        """Disable all buttons when the View times out."""
         for child in self.children:
             child.disabled = True
 
@@ -273,28 +281,28 @@ class EatBrowseView(discord.ui.View):
         self.current_index = initial_index
         self.lang_manager = lang_manager
         self.guild_id = guild_id
-        self._max_viewed_index = initial_index  # Only allow users to see "explored" items in the menu
-        self._is_fetching = False  # Track fetching state after button click
+        self._max_viewed_index = initial_index
+        self._is_fetching = False
 
         self._update_labels()
         self._rebuild_select()
         self._update_nav_buttons()
 
     def _update_labels(self):
+        """Update button labels based on localization."""
         if self.lang_manager:
             self.prev_button.label = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "browse", "buttons", "prev")
             self.next_button.label = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "browse", "buttons", "next")
             self.confirm_button.label = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "browse", "buttons", "confirm")
             self.regenerate_button.label = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "browse", "buttons", "regenerate")
 
-        # Start background prefetch task (only for items not yet detailed)
+        # Start background prefetch task
         self._prefetch_task = None
         if any(not r.get("is_detailed", True) for r in self.results):
             self._prefetch_task = asyncio.create_task(self._background_prefetch())
 
     async def _background_prefetch(self):
-        """Complete detailed restaurant info in the background one by one."""
-        # For performance, we only prefetch the first 10-15 candidates
+        """Complete detailed restaurant info in the background."""
         limit = min(15, len(self.results))
         for i in range(limit):
             if self.results[i].get("is_detailed", False):
@@ -303,29 +311,21 @@ class EatBrowseView(discord.ui.View):
             url = self.results[i].get("maps_url", "")
             if url:
                 try:
-                    # Time-consuming operation (Selenium navigation)
                     detail = await self.provider.async_fetch_detail(url)
                     if detail:
-                        # Update data in cache, preserving original order
                         self.results[i].update(detail)
                         self.results[i]["is_detailed"] = True
                         logger.info(f"Background prefetch completed: {self.results[i].get('name')}")
                 except Exception as e:
                     logger.warning(f"Background prefetch failed ({url}): {e}")
-            
-            # Small delay to avoid excessive competition for WebDriver lock
             await asyncio.sleep(1)
 
     def _rebuild_select(self):
-        """Rebuild dropdown menu (dynamic options must be rebuilt each time)."""
-        # Remove old Select (if exists)
+        """Rebuild the dropdown selection menu."""
         for child in list(self.children):
             if isinstance(child, discord.ui.Select):
                 self.remove_item(child)
 
-        # Decide display range (only show explored items or current item)
-        # Based on user request: "Search results should only be added to list when re-searching"
-        # So we only loop up to _max_viewed_index
         viewable_results = self.results[:self._max_viewed_index + 1]
         
         start_idx = 0
@@ -359,7 +359,7 @@ class EatBrowseView(discord.ui.View):
             ))
 
         if options:
-            placeholder = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "browse", "placeholder") if self.lang_manager else "Select a restaurant from the dropdown menu..."
+            placeholder = self.lang_manager.translate(self.guild_id, "commands", "eat", "views", "browse", "placeholder") if self.lang_manager else "Select a restaurant..."
             select = discord.ui.Select(
                 placeholder=placeholder,
                 options=options,
@@ -369,6 +369,7 @@ class EatBrowseView(discord.ui.View):
             self.add_item(select)
 
     async def _select_callback(self, interaction: discord.Interaction):
+        """Handle restaurant selection from dropdown."""
         select = next(c for c in self.children if isinstance(c, discord.ui.Select))
         self.current_index = int(select.values[0])
         self._rebuild_select()
@@ -377,11 +378,13 @@ class EatBrowseView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     def _update_nav_buttons(self):
+        """Enable or disable navigation buttons based on current index."""
         self.prev_button.disabled = (self.current_index == 0)
         self.next_button.disabled = (self.current_index >= len(self.results) - 1)
 
     @discord.ui.button(label="Previous", emoji="◀️", style=discord.ButtonStyle.secondary, row=1)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to the previous restaurant result."""
         self.current_index -= 1
         self._rebuild_select()
         self._update_nav_buttons()
@@ -390,6 +393,7 @@ class EatBrowseView(discord.ui.View):
 
     @discord.ui.button(label="Next", emoji="▶️", style=discord.ButtonStyle.secondary, row=1)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to the next restaurant result."""
         self.current_index += 1
         self._rebuild_select()
         self._update_nav_buttons()
@@ -398,7 +402,7 @@ class EatBrowseView(discord.ui.View):
 
     @discord.ui.button(label="Choose this!", emoji="✅", style=discord.ButtonStyle.success, row=2)
     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Confirm selection of current restaurant, switch to EatDetailView."""
+        """Confirm the current restaurant selection."""
         result = self.results[self.current_index]
         record_id = self.db.storeSearchRecord(
             discord_id=self.discord_id,
@@ -435,22 +439,20 @@ class EatBrowseView(discord.ui.View):
 
     @discord.ui.button(label="Next Recommendation", emoji="🔄", style=discord.ButtonStyle.primary, row=2)
     async def regenerate_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Switch to next result. If data is not ready, perform real-time fetch."""
+        """Cycle to the next recommended restaurant, performing real-time fetch if needed."""
         if not self.results:
             return
 
         next_index = (self.current_index + 1) % len(self.results)
         
-        # Unlock next entry only when user clicks "Re-search"
         if next_index > self._max_viewed_index:
             self._max_viewed_index = next_index
 
         self.current_index = next_index
         target_res = self.results[self.current_index]
 
-        # Check if real-time fetch is needed (if background task hasn't finished)
         if not target_res.get("is_detailed", False):
-            await interaction.response.edit_message(embed=loadingEmbed(target_res.get("name", "餐廳"), lang_manager=self.lang_manager, guild_id=self.guild_id), view=None)
+            await interaction.response.edit_message(embed=loadingEmbed(target_res.get("name", "Restaurant"), lang_manager=self.lang_manager, guild_id=self.guild_id), view=None)
             self._is_fetching = True
             try:
                 url = target_res.get("maps_url", "")
@@ -461,19 +463,18 @@ class EatBrowseView(discord.ui.View):
             except Exception as e:
                 logger.error(f"Real-time detail fetch failed: {e}")
             self._is_fetching = False
-            # Update after fetching
             self._rebuild_select()
             self._update_nav_buttons()
             embed = browseEmbed(self.results, self.current_index, lang_manager=self.lang_manager, guild_id=self.guild_id)
             await interaction.edit_original_response(embed=embed, view=self)
         else:
-            # Data ready, update directly
             self._rebuild_select()
             self._update_nav_buttons()
             embed = browseEmbed(self.results, self.current_index, lang_manager=self.lang_manager, guild_id=self.guild_id)
             await interaction.response.edit_message(embed=embed, view=self)
 
     async def on_timeout(self):
+        """Disable all buttons when the View times out."""
         for child in self.children:
             child.disabled = True
 

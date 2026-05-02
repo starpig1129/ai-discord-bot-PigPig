@@ -1,272 +1,75 @@
-# LanguageManager Cog Documentation
+# Language Manager Cog Documentation
 
 ## Overview
 
-The LanguageManager is a sophisticated multi-language translation system that provides modular, cached translation services for the entire Discord bot. It supports lazy loading, multi-layer caching, and fallback mechanisms for optimal performance.
+The Language Manager cog is the backbone of the bot's multi-language localization system. It manages server-specific language preferences, loads translation data from a structured file system, and provides a centralized API for translating UI elements, command responses, and system messages.
 
 ## Features
 
-### Core Functionality
-- **Multi-language Support**: Traditional Chinese, Simplified Chinese, English, Japanese
-- **Modular Translation Structure**: Organized by translation keys and file paths
-- **Lazy Loading**: On-demand loading of translation files
-- **Multi-layer Caching**: Translation result caching with LRU eviction
-- **Fallback System**: Graceful degradation when translations unavailable
-
-### Key Components
-- `LanguageManager` class - Main cog implementation
-- `TranslationCache` class - LRU cache for translation results
-- Server language configuration
-- File indexing and path resolution
-- Async background loading
+- **Multi-language Support**: Supports English (en_US), Traditional Chinese (zh_TW), Simplified Chinese (zh_CN), and Japanese (ja_JP).
+- **Server-specific Settings**: Each Discord server can independently set its preferred language.
+- **Hierarchical Translation System**: Organizes translations into a nested directory structure (e.g., `translations/en_US/commands/botinfo.json`) for better maintainability.
+- **LRU Caching**: Uses a multi-layer Least Recently Used (LRU) cache to speed up translation lookups and reduce disk I/O.
+- **Dynamic Formatting**: Supports runtime variable injection into translation strings (e.g., `Hello {user}`).
+- **Robust Error Handling**: Automatically reports missing translation keys through the centralized logging system while providing graceful fallbacks.
 
 ## Commands
 
 ### `/set_language`
-Sets the server's preferred language for all bot interactions.
+Sets the display language for the current server.
 
 **Parameters**:
-- `language`: Language choice (Traditional Chinese/Simplified Chinese/English/Japanese)
+- `language` (Choice): Select from the supported languages (繁體中文, 简体中文, English, 日本語).
 
-**Permissions**: Administrator only
+**Requirements**: User must have Administrator permissions.
 
-**Response**: Confirmation message with new language setting
+**Behavior**:
+1. Saves the preference to `data/serverconfig/[GUILD_ID].json`.
+2. Invalidates the system prompt cache to ensure the bot's persona adapts to the new language immediately.
 
 ### `/current_language`
-Displays the current server language setting.
-
-**Parameters**: None
-
-**Response**: Current language name and confirmation
+Displays the language currently configured for the server.
 
 ## Technical Implementation
 
-### Class Structure
+### Data Structure
+Translations are stored in `Dict[str, Dict[str, Any]]`:
+`lang_code -> category -> module -> sub_keys -> translation_string`
+
+### Key Components
+
+#### 1. `TranslationCache`
+A custom class that manages up to 1000 translation entries. It tracks access times and frequency to perform LRU eviction when full.
+
+#### 2. `_load_translations`
+Recursively traverses the `translations/` directory at startup. It maps the directory structure to the internal dictionary, using file names as top-level keys within the language code.
+
+#### 3. `translate()`
+The main API for other cogs:
 ```python
-class LanguageManager(commands.Cog):
-    def __init__(self, bot: commands.Bot)
-    async def cog_load(self)
-    def translate(self, guild_id: str, *args, **kwargs) -> str
-    def get_server_lang(self, guild_id: str) -> str
-    def save_server_lang(self, guild_id: str, lang: str) -> bool
-    
-class TranslationCache:
-    def __init__(self, max_size: int = 1000)
-    def get(self, key: str) -> Optional[str]
-    def put(self, key: str, value: str)
-    def clear(self)
+translate(guild_id, "commands", "botinfo", "fields", "rating", user="PigPig")
 ```
+- Retrieves server language.
+- Generates a unique cache key based on the key path and formatting arguments.
+- Traverses the internal dictionary.
+- Formats the result string with provided `kwargs`.
 
-### Translation System Architecture
+### Cache Invalidation
+When `/set_language` is called, the cog attempts to find the `PromptManager` and clear its `system_prompt` cache. This ensures that the AI's internal reasoning and personality switch to the new language instantly.
 
-#### Multi-layer Data Structure
-```
-lang -> file_key -> path -> value
-```
-
-#### File Organization
+## Directory Structure
 ```
 translations/
-├── zh_TW/
-│   ├── common.json
-│   ├── commands/
-│   │   ├── botinfo.json
-│   │   ├── help.json
-│   │   └── ...
-│   └── system/
-├── zh_CN/
 ├── en_US/
-└── ja_JP/
+│   ├── commands/
+│   │   └── botinfo.json
+│   └── system/
+│       └── common.json
+├── zh_TW/
+└── ...
 ```
-
-#### Path Resolution Strategy
-1. **Exact Match**: Direct path lookup
-2. **Partial Match**: Hierarchical path traversal
-3. **Common Fallback**: Default to common.json
-4. **Final Fallback**: Return key or error message
-
-### Caching System
-
-#### TranslationCache Features
-- **LRU Eviction**: Least Recently Used cache management
-- **Access Tracking**: Usage frequency and timing
-- **Size Management**: Configurable cache limits
-- **Thread Safety**: Concurrent access protection
-
-#### Cache Performance
-- **Multi-layer Caching**: Memory + disk caching
-- **Key Generation**: `lang:path:format_hash` strategy
-- **Automatic Invalidation**: Language changes trigger cache clear
-
-### Lazy Loading System
-
-#### Background Loading Process
-1. **File Indexing**: Build path-to-file mappings
-2. **Demand Loading**: Load files when first requested
-3. **Worker Thread**: Async background file loading
-4. **Cache Management**: Store loaded file contents
-
-#### Loading Strategy
-```python
-# Phase 1: Load common files (fast startup)
-_load_common_files(lang_codes)
-
-# Phase 2: Build file index
-_build_file_index(lang_code)
-
-# Phase 3: Schedule lazy loading
-_schedule_lazy_loading()
-```
-
-## Configuration
-
-### Supported Languages
-```yaml
-zh_TW: "Traditional Chinese"
-zh_CN: "Simplified Chinese" 
-en_US: "English"
-ja_JP: "Japanese"
-```
-
-### Server Configuration
-- **Data Location**: `data/serverconfig/`
-- **File Format**: JSON per server
-- **Key**: Server ID
-- **Value**: Language preference
-
-### Cache Settings
-- **Max Size**: 1000 entries (configurable)
-- **Eviction Policy**: LRU (Least Recently Used)
-- **TTL**: No expiration (manual clearing)
-
-## Error Handling
-
-### Robust Fallback System
-1. **Translation Not Found**: Return key or default
-2. **File Not Available**: Use cached or default values
-3. **Cache Miss**: Load and cache result
-4. **Initialization Issues**: Use hardcoded fallbacks
-
-### Error Recovery
-- Safe attribute access with `hasattr()`
-- Try-catch blocks for all operations
-- Asynchronous error reporting
-- Graceful degradation to default language
-
-## Performance Considerations
-
-### Efficient Translation Lookup
-- **Cached Results**: Avoid repeated file I/O
-- **LRU Management**: Keep frequently used translations
-- **Background Loading**: Non-blocking file operations
-- **Memory Optimization**: Configurable cache limits
-
-### Startup Optimization
-- **Minimal Loading**: Load only essential files first
-- **Async Operations**: Non-blocking initialization
-- **Progressive Enhancement**: Features available as files load
-
-## Security & Permissions
-
-### Access Control
-- **Language Setting**: Administrator permission required
-- **Language Reading**: Public access (no restrictions)
-- **Configuration Files**: Server-restricted access
-
-### Data Protection
-- **Server Isolation**: Configs separated by server ID
-- **Safe File Operations**: Error handling for all I/O
-- **Input Validation**: Sanitize all translation paths
-
-## Integration Points
-
-### With Other Cogs
-```python
-# Typical usage in other cogs
-lang_manager = LanguageManager.get_instance(bot)
-text = lang_manager.translate(
-    guild_id, 
-    "commands", 
-    "command_name", 
-    "description",
-    parameter="value"
-)
-```
-
-### Command Localization
-- Automatic command name/description localization
-- Option description translation
-- Choice name localization
-- Dynamic update when language changes
-
-## Usage Examples
-
-### Basic Translation
-```python
-# Server-specific translation
-guild_id = str(interaction.guild_id)
-text = self.lang_manager.translate(
-    guild_id,
-    "commands",
-    "botinfo", 
-    "title"
-)
-```
-
-### With Parameters
-```python
-# Translation with formatting
-text = self.lang_manager.translate(
-    guild_id,
-    "commands",
-    "remind", 
-    "confirm_setup",
-    duration="5 minutes",
-    user="<@123456789>"
-)
-```
-
-### Fallback Handling
-```python
-# Manual fallback
-translated = self.lang_manager.translate(guild_id, "key", "path")
-if not translated or translated == "key":
-    translated = "Default fallback text"
-```
-
-## Performance Metrics
-
-### Cache Statistics
-```python
-cache_stats = lang_manager.get_cache_stats()
-# Returns: {
-#     "cache_size": 150,
-#     "max_cache_size": 1000,
-#     "loaded_files": 25,
-#     "pending_loads": 3,
-#     "supported_languages": 4
-# }
-```
-
-### Monitoring
-- Cache hit/miss ratios
-- Loading times per language
-- Memory usage tracking
-- Error rates by language
 
 ## Related Files
-
-- `cogs/language_manager.py` - Main implementation
-- `translations/` - Translation file directories
-- `data/serverconfig/` - Server language settings
-- All other cogs - Translation consumers
-
-## Future Enhancements
-
-Potential improvements:
-- Database-backed translations
-- Translation editing interface
-- Community translation contributions
-- Advanced caching strategies
-- Performance analytics dashboard
-- Translation validation tools
+- `cogs/language_manager.py`: Core logic.
+- `translations/`: Root directory for all localized content.
+- `data/serverconfig/`: Storage for server-specific language settings.

@@ -32,5 +32,11 @@
     },
     "footer": {
         "status_prefix": "Status: "
+    },
+    "uptime_units": {
+        "days": "d",
+        "hours": "h",
+        "minutes": "m",
+        "seconds": "s"
     }
 }

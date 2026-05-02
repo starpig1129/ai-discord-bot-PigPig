@@ -16,6 +16,8 @@ import asyncio
 log = get_logger(server_id="Bot", source=__name__)
 
 class ChannelManager(commands.Cog):
+    """Cog for managing server-wide and channel-specific response modes and permissions."""
+
     def __init__(self, bot):
         self.bot = bot
         self.data_dir = "data/channel_configs"
@@ -24,14 +26,15 @@ class ChannelManager(commands.Cog):
         os.makedirs(self.data_dir, exist_ok=True)
 
     async def cog_load(self):
-        """Initialize language manager when cog loads."""
+        """Initialize LanguageManager when the cog is loaded."""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    def get_config_path(self, guild_id):
+    def get_config_path(self, guild_id: str) -> str:
+        """Get the file path for a guild's configuration."""
         return os.path.join(self.data_dir, f"{guild_id}.json")
 
-    def load_config(self, guild_id):
-        """Load server configuration."""
+    def load_config(self, guild_id: str) -> Dict[str, Any]:
+        """Load configuration for a specific guild."""
         config_path = self.get_config_path(guild_id)
         if os.path.exists(config_path):
             try:
@@ -40,20 +43,18 @@ class ChannelManager(commands.Cog):
                 # Ensure necessary keys exist
                 if "auto_response" not in config:
                     config["auto_response"] = {}
-                # --- Migration/Validation Step ---
                 if "channel_modes" not in config:
                     config["channel_modes"] = {}
                 if "mode" not in config:
                     config["mode"] = "unrestricted"
-                # --- End Migration ---
                 return config
             except (json.JSONDecodeError, UnicodeDecodeError):
                 return self._get_default_config()
         else:
             return self._get_default_config()
 
-    def _get_default_config(self):
-        """Get default configuration."""
+    def _get_default_config(self) -> Dict[str, Any]:
+        """Provide a default configuration template."""
         return {
             "mode": "unrestricted", # Server-wide mode
             "whitelist": [],
@@ -62,8 +63,8 @@ class ChannelManager(commands.Cog):
             "channel_modes": {} # Per-channel mode overrides
         }
 
-    def save_config(self, guild_id, config):
-        """Save server configuration."""
+    def save_config(self, guild_id: str, config: Dict[str, Any]):
+        """Save configuration for a specific guild."""
         config_path = self.get_config_path(guild_id)
         try:
             with open(config_path, "w", encoding="utf-8") as f:
@@ -72,15 +73,14 @@ class ChannelManager(commands.Cog):
             asyncio.create_task(func.report_error(e, f"saving config for guild {guild_id}"))
 
     async def check_admin_permissions(self, interaction: discord.Interaction, *, defer: bool = False) -> bool:
-        """Check if user has administrator permissions."""
+        """Check if the user has administrator permissions or is the bot owner."""
         if defer and not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True, thinking=True)
-        # Use BOT_OWNER_ID from config, or default if not present
+        
         bot_owner_id = getattr(self.tokens, 'bot_owner_id', 0)
         if interaction.user.guild_permissions.administrator or interaction.user.id == bot_owner_id:
             return True
         
-        # Use translation system
         if self.lang_manager:
             error_message = self.lang_manager.translate(
                 str(interaction.guild_id),
@@ -88,8 +88,7 @@ class ChannelManager(commands.Cog):
                 "permission_denied"
             )
         else:
-            # Fallback message when language manager is not yet initialized
-            error_message = "You do not have permission to perform this action. This command is restricted to administrators."
+            error_message = "You do not have permission to perform this action. Restricted to administrators."
         
         if interaction.response.is_done():
             await interaction.followup.send(error_message, ephemeral=True)
@@ -104,7 +103,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="Blacklist", value="blacklist")
     ])
     async def set_server_mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
-        """Sets the server-wide response mode."""
+        """Set the global response mode for the entire server."""
         if not await self.check_admin_permissions(interaction, defer=True):
             return
             
@@ -115,19 +114,10 @@ class ChannelManager(commands.Cog):
         
         if self.lang_manager:
             mode_name = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "set_server_mode",
-                "choices",
-                mode.value
+                guild_id, "commands", "channel_manager", "set_server_mode", "choices", mode.value
             )
             response = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "set_server_mode",
-                "responses",
-                "success",
-                mode=mode_name
+                guild_id, "commands", "channel_manager", "set_server_mode", "responses", "success", mode=mode_name
             )
         else:
             response = f"Set **Server-wide** response mode to: {mode.name}"
@@ -141,7 +131,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="Story Mode", value="story")
     ])
     async def set_channel_mode(self, interaction: discord.Interaction, channel: discord.TextChannel, mode: app_commands.Choice[str]):
-        """Sets a special mode for a specific channel."""
+        """Configure a specific mode override for a single channel."""
         if not await self.check_admin_permissions(interaction, defer=True):
             return
 
@@ -154,52 +144,28 @@ class ChannelManager(commands.Cog):
                 del config["channel_modes"][channel_id]
                 if self.lang_manager:
                     message = self.lang_manager.translate(
-                        guild_id,
-                        "commands",
-                        "channel_manager",
-                        "set_channel_mode",
-                        "responses",
-                        "reset",
-                        channel=channel.mention
+                        guild_id, "commands", "channel_manager", "set_channel_mode", "responses", "reset", channel=channel.mention
                     )
                 else:
-                    message = f"Reset mode for channel {channel.mention} to default (follows server settings)."
+                    message = f"Reset mode for {channel.mention} to default."
             else:
                 if self.lang_manager:
                     message = self.lang_manager.translate(
-                        guild_id,
-                        "commands",
-                        "channel_manager",
-                        "set_channel_mode",
-                        "responses",
-                        "already_default",
-                        channel=channel.mention
+                        guild_id, "commands", "channel_manager", "set_channel_mode", "responses", "already_default", channel=channel.mention
                     )
                 else:
-                    message = f"Channel {channel.mention} is already using the default mode."
+                    message = f"{channel.mention} is already using default mode."
         else:
             config["channel_modes"][channel_id] = mode.value
             if self.lang_manager:
                 mode_name = self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "channel_manager",
-                    "set_channel_mode",
-                    "choices",
-                    mode.value
+                    guild_id, "commands", "channel_manager", "set_channel_mode", "choices", mode.value
                 )
                 message = self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "channel_manager",
-                    "set_channel_mode",
-                    "responses",
-                    "success",
-                    channel=channel.mention,
-                    mode=mode_name
+                    guild_id, "commands", "channel_manager", "set_channel_mode", "responses", "success", channel=channel.mention, mode=mode_name
                 )
             else:
-                message = f"Set mode for channel {channel.mention} to: **{mode.name}**."
+                message = f"Set mode for {channel.mention} to: **{mode.name}**."
 
         self.save_config(guild_id, config)
         await interaction.followup.send(message, ephemeral=True)
@@ -210,7 +176,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="Blacklist", value="blacklist")
     ])
     async def add_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
-        # Check permissions
+        """Add a channel to the server's whitelist or blacklist."""
         if not await self.check_admin_permissions(interaction, defer=True):
             return
             
@@ -218,14 +184,9 @@ class ChannelManager(commands.Cog):
         config = self.load_config(guild_id)
         channel_id = str(channel.id)
         
-        # Use translation system
         if self.lang_manager:
             list_type_name = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "add_channel",
-                "choices",
-                list_type.value
+                guild_id, "commands", "channel_manager", "add_channel", "choices", list_type.value
             )
         else:
             list_type_name = list_type.name
@@ -236,31 +197,19 @@ class ChannelManager(commands.Cog):
             
             if self.lang_manager:
                 success_message = self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "add_channel",
-                    "responses",
-                    "success",
-                    channel=f"<#{channel_id}>",
-                    list_type=list_type_name
+                    guild_id, "commands", "channel_manager", "add_channel", "responses", "success", channel=f"<#{channel_id}>", list_type=list_type_name
                 )
             else:
-                success_message = f"Added channel <#{channel_id}> to {list_type_name}"
+                success_message = f"Added <#{channel_id}> to {list_type_name}"
             
             await interaction.followup.send(success_message, ephemeral=True)
         else:
             if self.lang_manager:
                 exists_message = self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "add_channel",
-                    "responses",
-                    "already_exists",
-                    channel=f"<#{channel_id}>",
-                    list_type=list_type_name
+                    guild_id, "commands", "channel_manager", "add_channel", "responses", "already_exists", channel=f"<#{channel_id}>", list_type=list_type_name
                 )
             else:
-                exists_message = f"Channel <#{channel_id}> already exists in {list_type_name}"
+                exists_message = f"<#{channel_id}> already exists in {list_type_name}"
             
             await interaction.followup.send(exists_message, ephemeral=True)
 
@@ -270,7 +219,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="Blacklist", value="blacklist")
     ])
     async def remove_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
-        # Check permissions
+        """Remove a channel from the server's whitelist or blacklist."""
         if not await self.check_admin_permissions(interaction, defer=True):
             return
             
@@ -278,14 +227,9 @@ class ChannelManager(commands.Cog):
         config = self.load_config(guild_id)
         channel_id = str(channel.id)
         
-        # Use translation system
         if self.lang_manager:
             list_type_name = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "remove_channel",
-                "choices",
-                list_type.value
+                guild_id, "commands", "channel_manager", "remove_channel", "choices", list_type.value
             )
         else:
             list_type_name = list_type.name
@@ -296,37 +240,25 @@ class ChannelManager(commands.Cog):
             
             if self.lang_manager:
                 success_message = self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "remove_channel",
-                    "responses",
-                    "success",
-                    channel=f"<#{channel_id}>",
-                    list_type=list_type_name
+                    guild_id, "commands", "channel_manager", "remove_channel", "responses", "success", channel=f"<#{channel_id}>", list_type=list_type_name
                 )
             else:
-                success_message = f"Removed channel <#{channel_id}> from {list_type_name}"
+                success_message = f"Removed <#{channel_id}> from {list_type_name}"
             
             await interaction.followup.send(success_message, ephemeral=True)
         else:
             if self.lang_manager:
                 not_found_message = self.lang_manager.translate(
-                    guild_id,
-                    "commands",
-                    "remove_channel",
-                    "responses",
-                    "not_found",
-                    channel=f"<#{channel_id}>",
-                    list_type=list_type_name
+                    guild_id, "commands", "channel_manager", "remove_channel", "responses", "not_found", channel=f"<#{channel_id}>", list_type=list_type_name
                 )
             else:
-                not_found_message = f"Channel <#{channel_id}> does not exist in {list_type_name}"
+                not_found_message = f"<#{channel_id}> does not exist in {list_type_name}"
             
             await interaction.followup.send(not_found_message, ephemeral=True)
 
     @app_commands.command(name="auto_response", description="Set channel auto-response")
     async def auto_response_command(self, interaction: discord.Interaction, channel: discord.TextChannel, enabled: bool):
-        # Check permissions
+        """Enable or disable automatic bot responses in a specific channel."""
         if not await self.check_admin_permissions(interaction, defer=True):
             return
             
@@ -336,32 +268,21 @@ class ChannelManager(commands.Cog):
         config["auto_response"][channel_id] = enabled
         self.save_config(guild_id, config)
         
-        # Use translation system
         if self.lang_manager:
             success_message = self.lang_manager.translate(
-                guild_id,
-                "commands",
-                "auto_response",
-                "responses",
-                "success",
-                channel=f"<#{channel_id}>",
-                enabled=str(enabled)
+                guild_id, "commands", "channel_manager", "auto_response", "responses", "success", channel=f"<#{channel_id}>", enabled=str(enabled)
             )
         else:
-            # Fallback message
-            success_message = f"Set auto-response for channel <#{channel_id}> to: {enabled}"
+            success_message = f"Set auto-response for <#{channel_id}> to: {enabled}"
         
         await interaction.followup.send(success_message, ephemeral=True)
 
     def is_allowed_channel(self, channel: discord.TextChannel, guild_id: str) -> Tuple[bool, bool, Optional[str]]:
         """
-        Checks if the bot is allowed to respond in a channel and gets the channel mode.
+        Determine if the bot is allowed to respond in a channel and get its effective mode.
 
         Returns:
-            A tuple containing:
-            - bool: Whether the bot is allowed to respond.
-            - bool: Whether auto-response is enabled.
-            - Optional[str]: The effective mode of the channel.
+            A tuple of (is_allowed, auto_response_enabled, effective_mode).
         """
         config = self.load_config(guild_id)
         channel_id = str(channel.id)
@@ -387,4 +308,5 @@ class ChannelManager(commands.Cog):
 
 
 async def setup(bot):
+    """Set up the ChannelManager cog."""
     await bot.add_cog(ChannelManager(bot))

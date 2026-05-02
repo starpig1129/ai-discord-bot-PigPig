@@ -1,0 +1,24 @@
+{
+    "description": "Summarize channel conversation using AI with source tagging.",
+    "params": {
+        "limit": "Maximum number of messages to search (default 100)",
+        "persona": "Set AI's persona for the summary (e.g., A professional clerk)",
+        "only_me": "Whether only you can see this summary (default False)"
+    },
+    "responses": {
+        "no_messages": "No human conversation messages found within the specified range to summarize.",
+        "preparing": "📝 Preparing summary...",
+        "error": "❌ Oops, an unexpected error occurred. Please contact the administrator.\n`{error}`"
+    },
+    "embed": {
+        "title": "📄 Conversation Summary",
+        "footer": "Analyzed latest {count} messages (within {limit} search range).\nTotal input characters: {current}/{max}",
+        "continuation_footer": "Summary continuation... (Page {current}/{total})",
+        "source": "Source"
+    },
+    "ai": {
+        "system_prompt": "You are a professional conversation summary assistant. Your task is to analyze the Discord records I provide in the conversation history and generate a concise summary. `[Bot ... message]` in the conversation history represents messages sent by bots, which should only be used as context and should not be the focus of the summary.\n\nYour responsibilities:\n1. Identify core themes, important questions, consensus, or decisions in human conversations.\n2. Extract action items that need follow-up.\n3. Ignore small talk, greetings, or content unrelated to the theme.\n4. Summaries must be presented in a clear bulleted list (using -).\n5. [EXTREMELY IMPORTANT] For each point in the summary, you must attach the message ID of its source information (human messages only) at the end. The format is `[MSG-ID]`.\n6. [OUTPUT LENGTH] Please try to keep the total length of the summary within 5000 characters to comply with display limits.\n{persona_instruction}",
+        "user_instruction": "Please start summarizing based on the conversation history I provided.",
+        "persona_prefix": "Please note: This summary should be written using the tone and perspective of \"{persona}\"."
+    }
+}

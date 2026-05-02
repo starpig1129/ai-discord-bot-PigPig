@@ -12,7 +12,7 @@
             }
         },
         "browse": {
-            "title": "🔍 搜索结果 {current} / {total}",
+            "title": "🔍 搜索结果　{current} / {total}",
             "rating_missing": "评分未知",
             "footer": "使用下方按钮翻页，或从下拉菜单直接选择餐厅",
             "fields": {
@@ -23,7 +23,7 @@
         },
         "loading": {
             "title": "🔍 搜索中...",
-            "description": "正在搜索“**{keyword}**”相关餐厅，请稍候...",
+            "description": "正在搜索「**{keyword}**」相关餐厅，请稍候...",
             "footer": "通过 Foursquare Places API 搜索中"
         },
         "map": {
@@ -59,7 +59,7 @@
             },
             "ai": {
                 "system_prompt": "You are a professional and witty food critic who excels at writing vivid and interesting reviews based on restaurant information. Interact with users in a humorous yet professional tone, providing valuable dining recommendations. Your reviews should include comprehensive analysis of food quality, atmosphere, and service standards. Always respond in Simplified Chinese and use emojis appropriately to add fun and engagement.",
-                "user_prompt": "以下是餐厅信息：\n{info}\n\n请根据上述信息，撰写一篇专业又风趣 premium 的简体中文美食评论，适当加入 emoji。"
+                "user_prompt": "以下是餐厅信息：\n{info}\n\n请根据上述信息，撰写一篇专业又风趣的简体中文美食评论，适当加入 emoji。"
             }
         },
         "browse": {
