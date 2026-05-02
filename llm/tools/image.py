@@ -157,7 +157,7 @@ class ImageTools:
             channel = getattr(message_obj, "channel", None)
             if channel:
                 try:
-                    transient_msg = await channel.send(f"🎨 正在繪製您的圖片，請稍候...\n> `{prompt}`")
+                    transient_msg = await channel.send(f"🎨 Generating your image, please wait...\n> `{prompt}`")
                 except Exception:
                     pass
 

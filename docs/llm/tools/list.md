@@ -6,19 +6,22 @@ This list contains all the tools available to the PigPig Bot's LLM agents. Each 
 
 | Tool Name | Module | Description |
 |-----------|--------|-------------|
-| `google_search` | `internet_search.py` | Performs a Google search to find up-to-date information. |
-| `youtube_search` | `internet_search.py` | Searches for videos and retrieves metadata. |
-| `wikipedia_search` | `internet_search.py` | Fetches summaries from Wikipedia. |
+| `internet_search` | `internet_search.py` | Performs web, YouTube, or food searches with Gemini grounding support. |
+| `get_user_info` | `user_data.py` | Retrieves biological info and saved instructions for a user. |
+| `save_user_info` | `user_data.py` | Updates the bot's permanent memory about a user. |
+| `search_episodic_memory` | `episodic_memory.py` | Manually triggers a semantic search on past conversations. |
+| `get_user_stats` | `user_stats.py` | Retrieves activity statistics and sends a word cloud image. |
+| `get_server_context` | `server_context.py` | Retrieves name, members, roles, and channels of the server. |
+| `get_channel_context` | `server_context.py` | Retrieves detailed information about a specific channel. |
+| `get_user_discord_info`| `server_context.py` | Retrieves a member's Discord profile, roles, and current activity. |
+| `get_channel_participants` | `user_activity.py` | Lists active users in the current channel (voice or text). |
 
-## Internal Context & Memory
+## Knowledge Management
 
 | Tool Name | Module | Description |
 |-----------|--------|-------------|
-| `get_user_info` | `user_data.py` | Retrieves biological info and saved instructions for a user. |
-| `save_user_info` | `user_data.py` | Updates the bot's permanent memory about a user. |
-| `search_memories` | `episodic_memory.py` | Manually triggers a semantic search on past conversations. |
-| `get_user_stats` | `user_stats.py` | Retrieves activity statistics and sends a word cloud image. |
-| `get_server_context` | `server_context.py` | Retrieves rules and knowledge specific to the current guild. |
+| `update_guild_knowledge` | `knowledge.py` | Records or updates facts, memes, or culture for the entire server. |
+| `update_channel_knowledge`| `knowledge.py` | Records or updates facts or culture for the current channel only. |
 
 ## Discord Interaction
 
@@ -30,16 +33,16 @@ This list contains all the tools available to the PigPig Bot's LLM agents. Each 
 | `send_sticker` | `interaction_tools.py` | Sends a specific sticker to the channel. |
 | `change_own_nickname` | `interaction_tools.py` | Changes the bot's local nickname for roleplay. |
 | `dramatic_pause` | `interaction_tools.py` | Pauses briefly while showing the "typing..." indicator. |
-| `delete_own_last_msg` | `interaction_tools.py` | Deletes the bot's most recent message in the channel. |
+| `delete_own_last_message` | `interaction_tools.py` | Deletes the bot's most recent message in the channel. |
 
 ## Utilities & Actions
 
 | Tool Name | Module | Description |
 |-----------|--------|-------------|
-| `create_reminder` | `reminder.py` | Sets a timer or reminder for a specific user. |
-| `calculate` | `math.py` | Performs mathematical calculations and expression evaluation. |
+| `set_reminder` | `reminder.py` | Sets a timer or reminder for a specific user. |
+| `calculate_math` | `math.py` | Performs mathematical calculations and expression evaluation. |
 | `generate_image` | `image.py` | Generates images based on text prompts using AI providers. |
-| `bot_info` | `bot_info.py` | Returns technical specs, version info, and bot status. |
+| `get_bot_changelog` | `bot_info.py` | Returns technical specs, version info, and bot status. |
 
 ## Discovery
 
