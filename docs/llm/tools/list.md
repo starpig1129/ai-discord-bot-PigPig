@@ -17,8 +17,20 @@ This list contains all the tools available to the PigPig Bot's LLM agents. Each 
 | `get_user_info` | `user_data.py` | Retrieves biological info and saved instructions for a user. |
 | `save_user_info` | `user_data.py` | Updates the bot's permanent memory about a user. |
 | `search_memories` | `episodic_memory.py` | Manually triggers a semantic search on past conversations. |
-| `get_user_activity` | `user_activity.py` | Retrieves interaction statistics (message counts, etc.). |
+| `get_user_stats` | `user_stats.py` | Retrieves activity statistics and sends a word cloud image. |
 | `get_server_context` | `server_context.py` | Retrieves rules and knowledge specific to the current guild. |
+
+## Discord Interaction
+
+| Tool Name | Module | Description |
+|-----------|--------|-------------|
+| `get_guild_emojis` | `interaction_tools.py` | Lists custom emojis available in the current server. |
+| `add_reaction` | `interaction_tools.py` | Adds an emoji reaction to a specific message. |
+| `get_guild_stickers` | `interaction_tools.py` | Lists stickers available in the current server. |
+| `send_sticker` | `interaction_tools.py` | Sends a specific sticker to the channel. |
+| `change_own_nickname` | `interaction_tools.py` | Changes the bot's local nickname for roleplay. |
+| `dramatic_pause` | `interaction_tools.py` | Pauses briefly while showing the "typing..." indicator. |
+| `delete_own_last_msg` | `interaction_tools.py` | Deletes the bot's most recent message in the channel. |
 
 ## Utilities & Actions
 
@@ -39,6 +51,9 @@ This list contains all the tools available to the PigPig Bot's LLM agents. Each 
 
 - **Character Limits**: Tool outputs are typically truncated to 1000-2000 characters to prevent prompt overflow.
 - **Permission Awareness**: Certain tools (like admin-only actions) are filtered out by the `ToolsFactory` if the user lacks the required Discord permissions.
+- **Agent Mode**: 
+  - **Info Mode**: Tools focused on gathering data (Search, Memory).
+  - **Message Mode**: Tools focused on taking actions (Reminders, Reactions).
 - **Safe Execution**: All tools are executed within an async environment with centralized error reporting via `func.report_error`.
 
 ---

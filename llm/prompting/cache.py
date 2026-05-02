@@ -4,11 +4,12 @@ from typing import Dict, Any, Optional, Set
 from datetime import datetime, timedelta
 from function import func
 import asyncio
+
 class PromptCache:
-    """智慧快取系統"""
+    """Intelligent caching system for prompt components and combinations."""
     
     def __init__(self):
-        """初始化快取系統"""
+        """Initialize the cache storage and monitoring structures."""
         self.cache_storage: Dict[str, Any] = {}
         self.ttl_storage: Dict[str, datetime] = {}
         self.precompiled_cache: Dict[str, str] = {}
@@ -18,13 +19,13 @@ class PromptCache:
         
     def get(self, key: str) -> Optional[Any]:
         """
-        取得快取項目
+        Retrieve a cached item if it exists and has not expired.
         
         Args:
-            key: 快取鍵值
+            key: The unique identifier for the cached item.
             
         Returns:
-            快取的值，如果不存在或已過期則返回 None
+            The cached value if available and valid, otherwise None.
         """
         with self._lock:
             if key not in self.cache_storage:
@@ -34,19 +35,19 @@ class PromptCache:
                 self.invalidate(key)
                 return None
             
-            # 記錄存取次數
+            # Record access frequency
             self.access_count[key] = self.access_count.get(key, 0) + 1
             
             return self.cache_storage[key]
     
     def set(self, key: str, value: Any, ttl: int = 3600) -> None:
         """
-        設定快取項目
+        Set a value in the cache with a specific time-to-live.
         
         Args:
-            key: 快取鍵值
-            value: 要快取的值
-            ttl: 生存時間（秒）
+            key: The unique identifier for the cached item.
+            value: The data to be cached.
+            ttl: Time-to-live in seconds (default is 3600).
         """
         with self._lock:
             self.cache_storage[key] = value
@@ -57,10 +58,10 @@ class PromptCache:
     
     def invalidate(self, key: str) -> None:
         """
-        清除指定快取項目
+        Explicitly remove an item from the cache.
         
         Args:
-            key: 要清除的快取鍵值
+            key: The unique identifier of the item to invalidate.
         """
         with self._lock:
             self.cache_storage.pop(key, None)
@@ -71,7 +72,7 @@ class PromptCache:
             self.logger.debug(f"Invalidated cache item: {key}")
     
     def clear_all(self) -> None:
-        """清除所有快取"""
+        """Clear all cached items and metadata."""
         with self._lock:
             cleared_count = len(self.cache_storage)
             self.cache_storage.clear()
@@ -83,13 +84,13 @@ class PromptCache:
     
     def is_expired(self, key: str) -> bool:
         """
-        檢查快取是否過期
+        Check if a cached item has passed its expiration time.
         
         Args:
-            key: 快取鍵值
+            key: The cache key to check.
             
         Returns:
-            bool: 是否已過期
+            True if the item is expired or does not exist, False otherwise.
         """
         if key not in self.ttl_storage:
             return True
@@ -97,28 +98,28 @@ class PromptCache:
     
     def precompile_templates(self, config: dict) -> None:
         """
-        預編譯提示模板
+        Precompile common prompt module combinations to reduce runtime overhead.
         
         Args:
-            config: 配置字典
+            config: The prompting configuration dictionary.
         """
         with self._lock:
             self.precompiled_cache.clear()
             
             try:
-                # 預編譯常用組合
+                # Precompile standard combinations
                 default_modules = config.get('composition', {}).get('default_modules', [])
                 module_order = config.get('composition', {}).get('module_order', default_modules)
                 
-                # 預編譯不同長度的模組組合
+                # Precompile combinations of different lengths
                 for i in range(1, len(default_modules) + 1):
                     module_combo = [mod for mod in module_order if mod in default_modules[:i]]
                     combo_key = '_'.join(module_combo)
                     
-                    # 建構組合的部分提示（由 PromptBuilder 實際處理）
+                    # Store the combination key (actual construction handled by PromptBuilder)
                     self.precompiled_cache[f"combo_{combo_key}"] = combo_key
                 
-                # 預編譯單個模組
+                # Precompile individual modules
                 for module in default_modules:
                     if module in config:
                         self.precompiled_cache[f"module_{module}"] = module
@@ -130,22 +131,22 @@ class PromptCache:
     
     def get_precompiled(self, key: str) -> Optional[str]:
         """
-        取得預編譯的模板
+        Retrieve a precompiled template combination.
         
         Args:
-            key: 預編譯模板的鍵值
+            key: The key of the precompiled template.
             
         Returns:
-            預編譯的模板，如果不存在則返回 None
+            The combination key if found, otherwise None.
         """
         return self.precompiled_cache.get(key)
     
     def cleanup_expired(self) -> int:
         """
-        清理過期的快取項目
+        Iterate through the cache and remove all expired items.
         
         Returns:
-            清理的項目數量
+            The number of items successfully removed.
         """
         with self._lock:
             expired_keys = []
@@ -164,20 +165,20 @@ class PromptCache:
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """
-        獲取快取統計資訊
+        Retrieve usage and performance statistics for the cache.
         
         Returns:
-            包含快取統計資訊的字典
+            A dictionary containing cache performance metrics.
         """
         with self._lock:
             total_items = len(self.cache_storage)
             expired_items = sum(1 for key in self.cache_storage.keys() if self.is_expired(key))
             precompiled_items = len(self.precompiled_cache)
             
-            # 計算總存取次數
+            # Calculate total access count
             total_access = sum(self.access_count.values())
             
-            # 找出最常存取的項目
+            # Identify the most frequently accessed item
             most_accessed = None
             if self.access_count:
                 most_accessed = max(self.access_count.items(), key=lambda x: x[1])
@@ -193,13 +194,13 @@ class PromptCache:
     
     def get_cache_keys(self, prefix: str = '') -> Set[str]:
         """
-        獲取快取鍵值列表
+        Retrieve all keys currently in the cache.
         
         Args:
-            prefix: 可選的前綴過濾
+            prefix: Optional filter to only return keys starting with this string.
             
         Returns:
-            快取鍵值集合
+            A set of matching cache keys.
         """
         with self._lock:
             if prefix:
@@ -208,14 +209,14 @@ class PromptCache:
     
     def extend_ttl(self, key: str, additional_seconds: int) -> bool:
         """
-        延長快取項目的生存時間
+        Extend the life of a cached item by adding more time to its expiration.
         
         Args:
-            key: 快取鍵值
-            additional_seconds: 要延長的秒數
+            key: The unique identifier for the cached item.
+            additional_seconds: Seconds to add to the existing TTL.
             
         Returns:
-            bool: 是否成功延長（項目存在且未過期）
+            True if the TTL was successfully extended, False otherwise.
         """
         with self._lock:
             if key in self.ttl_storage and not self.is_expired(key):
