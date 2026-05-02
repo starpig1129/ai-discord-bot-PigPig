@@ -1,0 +1,78 @@
+{
+    "embeds": {
+        "eat": {
+            "title": "今日は何食べる？",
+            "description": "**{keyword}** を食べる",
+            "fields": {
+                "restaurant": "店名",
+                "address": "住所",
+                "address_missing": "住所未提供",
+                "rating": "評価",
+                "hours": "営業時間"
+            }
+        },
+        "browse": {
+            "title": "🔍 検索結果 {current} / {total}",
+            "rating_missing": "評価不明",
+            "footer": "下のボタンでページをめくるか、ドロップダウンメニューから直接お店を選択してください",
+            "fields": {
+                "rating": "評価",
+                "address": "住所",
+                "hours": "営業時間"
+            }
+        },
+        "loading": {
+            "title": "🔍 検索中...",
+            "description": "「**{keyword}**」に関連するお店を検索しています。少々お待ちください...",
+            "footer": "Foursquare Places API で検索中"
+        },
+        "map": {
+            "title": "地図",
+            "description": "こちらのお店の地図です"
+        },
+        "menu": {
+            "title": "メニュー"
+        }
+    },
+    "views": {
+        "dislike_modal": {
+            "title": "気に入らない理由（任意）",
+            "label": "理由",
+            "placeholder": "例：高すぎる、好みに合わない、遠すぎる...",
+            "success": "記録しました！次回はこのタイプのお店を避けます 🙏"
+        },
+        "detail": {
+            "buttons": {
+                "map": "地図リンク",
+                "menu": "メニュー",
+                "review": "AI グルメレビュー",
+                "back": "リストに戻る"
+            },
+            "responses": {
+                "map_not_found": "地図リンクが見つかりません",
+                "menu_not_found": "メニュー画像が見つかりません",
+                "already_rated": "すでに評価済みです！",
+                "rate_success": "フィードバックありがとうございます！今後は似たようなお店をおすすめします 😊",
+                "review_preparing": "📝 専門的なレビューを準備しています...",
+                "review_config_error": "❌ レビューモデルが正しく設定されていません",
+                "review_failed": "❌ レビュー生成に失敗しました: {error}"
+            },
+            "ai": {
+                "system_prompt": "You are a professional and witty food critic who excels at writing vivid and interesting reviews based on restaurant information. Interact with users in a humorous yet professional tone, providing valuable dining recommendations. Your reviews should include comprehensive analysis of food quality, atmosphere, and service standards. Always respond in Japanese and use emojis appropriately to add fun and engagement.",
+                "user_prompt": "以下はお店の情報です：\n{info}\n\n上記の情報に基づいて、専門的でユーモアのある日本語のグルメレビューを書いてください。適宜絵文字も使用してください。"
+            }
+        },
+        "browse": {
+            "placeholder": "ドロップダウンからお店を選択...",
+            "buttons": {
+                "prev": "前へ",
+                "next": "次へ",
+                "confirm": "ここに決めた！",
+                "regenerate": "次のおすすめ"
+            }
+        }
+    },
+    "errors": {
+        "not_found": "お店が見つかりませんでした"
+    }
+}

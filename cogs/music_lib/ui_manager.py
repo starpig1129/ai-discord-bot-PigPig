@@ -21,25 +21,25 @@ class UIManager:
         return self.lang_manager
         
     def _translate_music(self, guild_id: str, *path, **kwargs) -> str:
-        """音樂模組專用翻譯方法"""
+        """Music module specific translation method."""
         lang_manager = self._get_lang_manager()
         if not lang_manager:
-            # 備用機制
+            # Fallback mechanism
             return self._get_fallback_text(path[-1], **kwargs)
         
         return lang_manager.translate(guild_id, "system", "music", *path, **kwargs)
         
     def _get_fallback_text(self, key: str, **kwargs) -> str:
-        """翻譯失敗時的備用文字"""
+        """Fallback text for when translation fails."""
         fallback_texts = {
-            "now_playing": "🎵 正在播放",
-            "uploader": "👤 上傳頻道",
-            "duration": "⏱️ 播放時長",
-            "views": "👀 觀看次數",
-            "progress": "🎵 播放進度",
-            "queue": "📜 播放清單",
-            "queue_empty": "清單為空",
-            "added_by": "由 {user} 添加"
+            "now_playing": "🎵 Now Playing",
+            "uploader": "👤 Uploader",
+            "duration": "⏱️ Duration",
+            "views": "👀 Views",
+            "progress": "🎵 Progress",
+            "queue": "📜 Queue",
+            "queue_empty": "Queue is empty",
+            "added_by": "Added by {user}"
         }
         
         text = fallback_texts.get(key, key)
@@ -74,7 +74,7 @@ class UIManager:
                 "get_lang_manager": music_cog.get_lang_manager,
             }
 
-            # 在創建新 View 之前，先停止舊 View 的背景任務
+            # Before creating a new view, stop the previous view's background tasks
             if guild_id in self.views:
                 old_view = self.views[guild_id]
                 old_view.stop_progress_updater()
@@ -107,19 +107,19 @@ class UIManager:
             
             await view.update_button_state()
             
-            # 只有在非直播時才啟動進度條
+            # Only start progress updater if not live
             if not item.get('is_live', False):
                 view.start_progress_updater(item['duration'])
             
             return message
             
         except Exception as e:
-            log.error(f"更新播放器UI失敗: {e}")
+            log.error(f"Failed to update player UI: {e}")
             raise
 
     def _create_player_embed(self, item: Dict[str, Any], youtube_manager, guild_id: str = None) -> discord.Embed:
         """Create the player embed with song information"""
-        # 使用翻譯系統獲取文字
+        # Get text using the translation system
         if guild_id:
             title_text = self._translate_music(guild_id, "player", "now_playing")
             uploader_text = self._translate_music(guild_id, "player", "uploader")
@@ -130,7 +130,7 @@ class UIManager:
             queue_empty_text = self._translate_music(guild_id, "player", "queue_empty")
             added_by_text = self._translate_music(guild_id, "player", "added_by", user=item['requester'].name)
         else:
-            # 備用機制
+            # Fallback mechanism
             title_text = self._get_fallback_text("now_playing")
             uploader_text = self._get_fallback_text("uploader")
             duration_text = self._get_fallback_text("duration")

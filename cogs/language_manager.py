@@ -71,27 +71,27 @@ class LanguageManager(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.config_dir = "data/serverconfig"
-        # 確保配置目錄存在
+        # Ensure config directory exists
         os.makedirs(self.config_dir, exist_ok=True)
         
         self.logger = log
-        self.default_lang = "zh_TW"  # 預設使用繁體中文
+        self.default_lang = "zh_TW"  # Default to Traditional Chinese
         
-        # 翻譯資料結構：lang -> nested dict
+        # Translation data structure: lang -> nested dict
         self.translations: Dict[str, Dict[str, Any]] = {}
         
-        # 快取系統
+        # Cache system
         self._translation_cache = TranslationCache(max_size=1000)
         
-        # 語言選項
+        # Language options
         self.supported_languages = {}
         
-        # 載入翻譯並初始化
+        # Load translations and initialize
         self._load_translations()
         self.supported_languages = self._get_supported_languages()
 
     def _load_translations(self):
-        """載入所有語言翻譯，支援多檔案結構"""
+        """Load all language translations, supporting multi-file structure."""
         lang_codes = ["zh_TW", "zh_CN", "en_US", "ja_JP"]
         
         for lang_code in lang_codes:
@@ -102,33 +102,33 @@ class LanguageManager(commands.Cog):
                 self.logger.warning(f"Translation directory not found: {lang_dir}")
                 continue
             
-            # 遞迴載入所有 JSON 檔案
+            # Recursively load all JSON files
             self._load_directory(lang_code, lang_dir, self.translations[lang_code])
             
             self.logger.info(f"Loaded translations for {lang_code}")
 
     def _load_directory(self, lang_code: str, directory: str, target_dict: Dict[str, Any]):
-        """遞迴載入目錄中的所有 JSON 檔案
+        """Recursively load all JSON files in a directory.
         
         Args:
-            lang_code: 語言代碼
-            directory: 要載入的目錄路徑
-            target_dict: 目標字典（用於存儲載入的資料）
+            lang_code: Language code.
+            directory: Directory path to load.
+            target_dict: Target dictionary to store loaded data.
         """
         try:
             for item in os.listdir(directory):
                 item_path = os.path.join(directory, item)
                 
-                # 如果是目錄，遞迴處理
+                # If directory, process recursively
                 if os.path.isdir(item_path):
-                    # 創建對應的嵌套字典
+                    # Create corresponding nested dictionary
                     if item not in target_dict:
                         target_dict[item] = {}
                     self._load_directory(lang_code, item_path, target_dict[item])
                 
-                # 如果是 JSON 檔案，載入內容
+                # If JSON file, load content
                 elif item.endswith('.json'):
-                    file_key = item[:-5]  # 移除 .json 副檔名
+                    file_key = item[:-5]  # Remove .json extension
                     try:
                         with open(item_path, 'r', encoding='utf-8') as f:
                             content = json.load(f)
@@ -146,7 +146,7 @@ class LanguageManager(commands.Cog):
             asyncio.create_task(func.report_error(e, f"reading translation directory {directory}"))
 
     def _get_supported_languages(self) -> Dict[str, str]:
-        """獲取支援的語言列表"""
+        """Get the list of supported languages."""
         try:
             return {
                 "zh_TW": self.translate("0", "system", "language_manager", "supported_languages", "zh_TW"),
@@ -155,7 +155,7 @@ class LanguageManager(commands.Cog):
                 "ja_JP": self.translate("0", "system", "language_manager", "supported_languages", "ja_JP")
             }
         except:
-            # 備用硬編碼選項
+            # Fallback hardcoded options
             return {
                 "zh_TW": "繁體中文",
                 "zh_CN": "简体中文",
@@ -164,7 +164,7 @@ class LanguageManager(commands.Cog):
             }
 
     def get_server_lang(self, guild_id: str) -> str:
-        """獲取伺服器的語言設定"""
+        """Get the server's language setting."""
         config_path = os.path.join(self.config_dir, f"{guild_id}.json")
         try:
             if os.path.exists(config_path):
@@ -177,7 +177,7 @@ class LanguageManager(commands.Cog):
             return self.default_lang
 
     def save_server_lang(self, guild_id: str, lang: str) -> bool:
-        """保存伺服器的語言設定"""
+        """Save the server's language setting."""
         config_path = os.path.join(self.config_dir, f"{guild_id}.json")
         try:
             config = {}
@@ -212,14 +212,14 @@ class LanguageManager(commands.Cog):
             return False
 
     def _traverse_nested_dict(self, data: Dict[str, Any], keys: List[str]) -> Optional[Any]:
-        """遍歷嵌套字典
+        """Traverse a nested dictionary.
         
         Args:
-            data: 要遍歷的字典
-            keys: 鍵的列表
+            data: The dictionary to traverse.
+            keys: List of keys.
             
         Returns:
-            找到的值，如果找不到則返回 None
+            The value found, or None if not found.
         """
         current = data
         for key in keys:
@@ -230,14 +230,14 @@ class LanguageManager(commands.Cog):
         return current
 
     def translate(self, guild_id: str, *keys, **kwargs) -> str:
-        """翻譯指定的文字
+        """Translate specified text.
         
-        標準調用方式:
+        Standard calling convention:
         translate(guild_id, "commands", "botinfo", "fields", "basic_stats", "name")
         translate(guild_id, "system", "language_manager", "supported_languages", "zh_TW")
         translate(guild_id, "errors", "permission_denied")
         
-        檔案結構映射:
+        File structure mapping:
         - translate(guild_id, "commands", "botinfo", "fields", "basic_stats", "name")
           → translations/zh_TW/commands/botinfo.json → ["fields"]["basic_stats"]["name"]
         
@@ -245,43 +245,43 @@ class LanguageManager(commands.Cog):
           → translations/zh_TW/system/language_manager.json → ["supported_languages"]["zh_TW"]
         
         Args:
-            guild_id: 伺服器 ID
-            *keys: 翻譯鍵的路徑（多個參數）
-            **kwargs: 格式化參數
+            guild_id: Server ID.
+            *keys: Path of translation keys (multiple arguments).
+            **kwargs: Formatting arguments.
             
         Returns:
-            str: 翻譯後的文字
+            str: Translated text.
         """
         try:
-            # 處理初始化期間的特殊情況
+            # Handle special cases during initialization
             if not hasattr(self, 'translations') or not self.translations:
                 return keys[-1] if keys else "LOADING..."
             
-            # 獲取語言
+            # Get language
             lang = self.get_server_lang(str(guild_id))
             
-            # 驗證參數
+            # Validate parameters
             if not keys:
                 self.logger.warning("translate() called with no keys")
                 return "TRANSLATION_ERROR"
             
-            # 生成快取鍵
+            # Generate cache key
             cache_key = f"{lang}:{':'.join(keys)}:{hash(str(sorted(kwargs.items())))}"
             
-            # 檢查快取
+            # Check cache
             cached_result = self._translation_cache.get(cache_key)
             if cached_result:
                 return self._format_result(cached_result, kwargs)
             
-            # 獲取語言的翻譯資料
+            # Get translation data for the language
             if lang not in self.translations:
                 self._log_missing_translation(guild_id, lang, list(keys))
                 return f"[Translation not found: {'.'.join(keys)}]"
             
-            # 遍歷嵌套字典
+            # Traverse nested dictionary
             result = self._traverse_nested_dict(self.translations[lang], list(keys))
             
-            # 檢查結果
+            # Check results
             if result is None:
                 self._log_missing_translation(guild_id, lang, list(keys))
                 return f"[Translation not found: {'.'.join(keys)}]"
@@ -290,10 +290,10 @@ class LanguageManager(commands.Cog):
                 self.logger.warning(f"Translation result is not a string: {'.'.join(keys)}")
                 return str(result)
             
-            # 快取結果
+            # Cache result
             self._translation_cache.put(cache_key, result)
             
-            # 格式化並返回
+            # Format and return
             return self._format_result(result, kwargs)
             
         except Exception as e:
@@ -302,14 +302,14 @@ class LanguageManager(commands.Cog):
             return keys[-1] if keys else "TRANSLATION_ERROR"
     
     def _format_result(self, result: str, kwargs: Dict[str, Any]) -> str:
-        """格式化翻譯結果
+        """Format translation result.
         
         Args:
-            result: 翻譯結果
-            kwargs: 格式化參數
+            result: Translation result.
+            kwargs: Formatting parameters.
             
         Returns:
-            格式化後的字串
+            Formatted string.
         """
         if not isinstance(result, str):
             return str(result) if result is not None else "TRANSLATION_ERROR"
@@ -327,19 +327,19 @@ class LanguageManager(commands.Cog):
             return result
     
     def _log_missing_translation(self, guild_id: str, lang: str, keys: List[str]):
-        """記錄缺失的翻譯
+        """Log missing translations.
         
         Args:
-            guild_id: 伺服器 ID
-            lang: 語言代碼
-            keys: 翻譯鍵路徑
+            guild_id: Server ID.
+            lang: Language code.
+            keys: Translation key path.
         """
         translation_key = ".".join(keys)
         
-        # 提取 cog 名稱
+        # Extract cog name
         cog_name = keys[0] if keys else "unknown"
         
-        # 記錄警告
+        # Log warning
         self.logger.warning(
             f"Translation key not found: "
             f"guild_id={guild_id}, "
@@ -348,7 +348,7 @@ class LanguageManager(commands.Cog):
             f"cog_name='{cog_name}'"
         )
         
-        # 報告錯誤
+        # Report error
         error_msg = (
             f"Missing translation: guild_id={guild_id}, "
             f"key='{translation_key}', language='{lang}', cog_name='{cog_name}'"
@@ -358,12 +358,12 @@ class LanguageManager(commands.Cog):
         asyncio.create_task(func.report_error(translation_error, "missing translation key"))
     
     def clear_cache(self):
-        """清除翻譯快取"""
+        """Clear translation cache."""
         self._translation_cache.clear()
         self.logger.info("Translation cache cleared")
     
     def get_cache_stats(self) -> Dict[str, Any]:
-        """獲取快取統計資訊"""
+        """Get cache statistics."""
         return {
             "cache_size": self._translation_cache.size(),
             "max_cache_size": self._translation_cache._max_size,
@@ -371,11 +371,10 @@ class LanguageManager(commands.Cog):
         }
 
     @app_commands.command(
-        name="set_language",
-        description="設定伺服器使用的語言"
+        description="Set the language used by the server"
     )
     @app_commands.describe(
-        language="選擇要使用的語言"
+        language="Select the language to use"
     )
     @app_commands.choices(language=[
         app_commands.Choice(name="繁體中文", value="zh_TW"),
@@ -384,8 +383,8 @@ class LanguageManager(commands.Cog):
         app_commands.Choice(name="日本語", value="ja_JP")
     ])
     async def set_language(self, interaction: discord.Interaction, language: str):
-        """設定伺服器的顯示語言"""
-        # 檢查使用者是否有管理員權限
+        """Set the display language of the server."""
+        # Check if user has administrator permissions
         if not interaction.user.guild_permissions.administrator:
             error_message = self.translate(
                 str(interaction.guild_id),
@@ -417,11 +416,10 @@ class LanguageManager(commands.Cog):
             )
 
     @app_commands.command(
-        name="current_language",
-        description="顯示目前伺服器使用的語言"
+        description="Display the current language used by the server"
     )
     async def current_language(self, interaction: discord.Interaction):
-        """顯示目前伺服器使用的語言"""
+        """Display the current language used by the server."""
         guild_id = str(interaction.guild_id)
         current_lang = self.get_server_lang(guild_id)
         lang_name = self.supported_languages.get(current_lang, current_lang)
@@ -440,7 +438,7 @@ class LanguageManager(commands.Cog):
 
     @staticmethod
     def get_instance(bot: commands.Bot) -> Optional['LanguageManager']:
-        """獲取 LanguageManager 實例"""
+        """Get LanguageManager instance."""
         return bot.get_cog('LanguageManager')
 
 async def setup(bot: commands.Bot):

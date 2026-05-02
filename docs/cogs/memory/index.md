@@ -11,11 +11,12 @@ The system is built upon several key, interconnected components:
 *   **[Memory Manager](./memory_manager.md):** The central orchestrator of the entire system.
 *   **[Database](./database.md):** The SQLite-based persistence layer for all textual data.
 *   **[Embedding Service](./embedding_service.md):** Converts text into numerical vector representations.
-*   **[Vector Manager](./vector_manager.md):** Manages the storage and retrieval of vector embeddings.
 *   **[Search Engine](./search_engine.md):** Provides hybrid search capabilities (semantic, keyword, etc.).
 *   **[Segmentation Service](./segmentation_service.md):** Groups messages into coherent conversational segments.
+*   **[Conversation Segment Enhancer](./conversation_segment_enhancer.md):** Enhances conversation segments with additional metadata or context.
+*   **[Reranker Service](./reranker_service.md):** Re-ranks retrieved memories based on relevance to the current query.
 *   **[Structured Context Builder](./structured_context_builder.md):** Formats retrieved memories into a human-readable context for the LLM.
-*   **[User Manager](./user_manager.md):** Manages data associated with individual users.
+*   **[Configuration](./config.md):** Configuration settings for the memory system.
 
 ## Data Flow: Storing a Message
 

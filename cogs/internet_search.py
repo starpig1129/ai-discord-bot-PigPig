@@ -500,7 +500,7 @@ class InternetSearchCog(commands.Cog):
                 self.db.storeKeyword(keyword)
 
         # Step 2：顯示 loading embed
-        loading = loadingEmbed(keyword)
+        loading = loadingEmbed(keyword, lang_manager=self.lang_manager, guild_id=guild_id)
         try:
             if isinstance(ctx, discord.Interaction):
                 followup_msg = await ctx.followup.send(embed=loading)
@@ -560,8 +560,10 @@ class InternetSearchCog(commands.Cog):
                 db=self.db,
                 discord_id=guild_id,
                 provider=self.provider,
+                lang_manager=self.lang_manager,
+                guild_id=guild_id
             )
-            embed = browseEmbed(ranked, 0)
+            embed = browseEmbed(ranked, 0, lang_manager=self.lang_manager, guild_id=guild_id)
 
             # Step 8：更新訊息
             if isinstance(ctx, discord.Interaction):

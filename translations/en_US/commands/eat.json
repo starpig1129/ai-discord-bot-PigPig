@@ -1,0 +1,78 @@
+{
+    "embeds": {
+        "eat": {
+            "title": "What to Eat Today",
+            "description": "Eating **{keyword}**",
+            "fields": {
+                "restaurant": "Restaurant",
+                "address": "Address",
+                "address_missing": "Address not provided",
+                "rating": "Rating",
+                "hours": "Hours"
+            }
+        },
+        "browse": {
+            "title": "🔍 Search Results　{current} / {total}",
+            "rating_missing": "Rating unknown",
+            "footer": "Use the buttons below to flip pages, or select a restaurant directly from the dropdown",
+            "fields": {
+                "rating": "Rating",
+                "address": "Address",
+                "hours": "Hours"
+            }
+        },
+        "loading": {
+            "title": "🔍 Searching...",
+            "description": "Searching for restaurants related to \"**{keyword}**\", please wait...",
+            "footer": "Searching via Foursquare Places API"
+        },
+        "map": {
+            "title": "Map",
+            "description": "Here is the map for this restaurant"
+        },
+        "menu": {
+            "title": "Menu"
+        }
+    },
+    "views": {
+        "dislike_modal": {
+            "title": "Reason for Dislike (Optional)",
+            "label": "Reason",
+            "placeholder": "e.g., Too expensive, not to my taste, too far...",
+            "success": "Recorded! We won't recommend this type of restaurant next time 🙏"
+        },
+        "detail": {
+            "buttons": {
+                "map": "Map Link",
+                "menu": "Menu",
+                "review": "AI Review",
+                "back": "Back to List"
+            },
+            "responses": {
+                "map_not_found": "Map link not found",
+                "menu_not_found": "Menu image not found",
+                "already_rated": "Already rated!",
+                "rate_success": "Thanks for your feedback! We'll recommend similar restaurants in the future 😊",
+                "review_preparing": "📝 Preparing professional review...",
+                "review_config_error": "❌ Review model not correctly configured",
+                "review_failed": "❌ Review generation failed: {error}"
+            },
+            "ai": {
+                "system_prompt": "You are a professional and witty food critic who excels at writing vivid and interesting reviews based on restaurant information. Interact with users in a humorous yet professional tone, providing valuable dining recommendations. Your reviews should include comprehensive analysis of food quality, atmosphere, and service standards. Always respond in English and use emojis appropriately to add fun and engagement.",
+                "user_prompt": "Here is the restaurant information:\n{info}\n\nPlease write a professional and witty English food review based on the above information, adding appropriate emojis."
+            }
+        },
+        "browse": {
+            "placeholder": "Select a restaurant from the dropdown...",
+            "buttons": {
+                "prev": "Previous",
+                "next": "Next",
+                "confirm": "This one!",
+                "regenerate": "Next Recommendation"
+            }
+        }
+    },
+    "errors": {
+        "not_found": "Restaurant not found"
+    }
+}

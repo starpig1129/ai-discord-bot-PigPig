@@ -225,7 +225,7 @@ class Function:
             traceback_str = traceback_str[:1010] + "..."
         traceback_field_value = f"```python\n{traceback_str}\n```"
         if len(traceback_field_value) > 1024:
-            # 重新計算截斷長度
+            # Re-calculate truncation length
             max_content_len = 1024 - len("```python\n\n```")
             traceback_str = traceback_str[:max_content_len - 3] + "..." if max_content_len > 3 else "..."
             traceback_field_value = f"```python\n{traceback_str}\n```"

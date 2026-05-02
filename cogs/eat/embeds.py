@@ -2,7 +2,7 @@ import discord
 
 
 def _rating_colour(rating: float) -> discord.Colour:
-    """依評分返回對應顏色。"""
+    """Return corresponding colour based on rating."""
     if rating >= 4.2:
         return discord.Colour.gold()
     if rating >= 3.5:
@@ -11,7 +11,7 @@ def _rating_colour(rating: float) -> discord.Colour:
 
 
 def _price_label(price_level: int) -> str:
-    """將 Foursquare 價格等級（1-4）轉換為 $ 符號。"""
+    """Convert Foursquare price level (1-4) to $ symbols."""
     if price_level and 1 <= price_level <= 4:
         return "$" * price_level
     return ""
@@ -19,10 +19,11 @@ def _price_label(price_level: int) -> str:
 
 def eatEmbed(keyword: str, title: str, address: str, rating,
              photo_url: str = "", price_level: int = 0,
-             opening_hours: list = None) -> discord.Embed:
-    """選定餐廳後的詳細 Embed。
+             opening_hours: list = None,
+             lang_manager=None, guild_id: str = "0") -> discord.Embed:
+    """Detailed Embed after selecting a restaurant.
 
-    支援舊版（rating 為字串）和新版（rating 為 float）兩種格式。
+    Supports both old (rating as string) and new (rating as float) formats.
     """
     try:
         rating_float = float(rating)
@@ -33,19 +34,35 @@ def eatEmbed(keyword: str, title: str, address: str, rating,
     rating_display = f"⭐ {rating_float}" if rating_float else str(rating)
 
     price_display = _price_label(price_level)
-    title_display = f"今天吃什麼"
-    description = f"吃 **{keyword}**"
+    
+    if lang_manager:
+        title_display = lang_manager.translate(guild_id, "commands", "eat", "embeds", "eat", "title")
+        description = lang_manager.translate(guild_id, "commands", "eat", "embeds", "eat", "description", keyword=keyword)
+        field_restaurant = lang_manager.translate(guild_id, "commands", "eat", "embeds", "eat", "fields", "restaurant")
+        field_address = lang_manager.translate(guild_id, "commands", "eat", "embeds", "eat", "fields", "address")
+        address_missing = lang_manager.translate(guild_id, "commands", "eat", "embeds", "eat", "fields", "address_missing")
+        field_rating = lang_manager.translate(guild_id, "commands", "eat", "embeds", "eat", "fields", "rating")
+        field_hours = lang_manager.translate(guild_id, "commands", "eat", "embeds", "eat", "fields", "hours")
+    else:
+        title_display = f"今天吃什麼"
+        description = f"吃 **{keyword}**"
+        field_restaurant = "商家"
+        field_address = "地址"
+        address_missing = "地址未提供"
+        field_rating = "評價"
+        field_hours = "營業時間"
+
     if price_display:
         description += f"　{price_display}"
 
     embed = discord.Embed(title=title_display, description=description, colour=colour)
-    embed.add_field(name="商家", value=f"**{title}**")
-    embed.add_field(name="地址", value=address or "地址未提供", inline=False)
-    embed.add_field(name="評價", value=rating_display, inline=False)
+    embed.add_field(name=field_restaurant, value=f"**{title}**")
+    embed.add_field(name=field_address, value=address or address_missing, inline=False)
+    embed.add_field(name=field_rating, value=rating_display, inline=False)
 
     if opening_hours:
         hours_text = opening_hours[0] if isinstance(opening_hours, list) else str(opening_hours)
-        embed.add_field(name="營業時間", value=hours_text[:100], inline=False)
+        embed.add_field(name=field_hours, value=hours_text[:100], inline=False)
 
     if photo_url:
         embed.set_image(url=photo_url)
@@ -53,10 +70,12 @@ def eatEmbed(keyword: str, title: str, address: str, rating,
     return embed
 
 
-def browseEmbed(results: list, current_index: int) -> discord.Embed:
-    """多結果瀏覽 Embed，顯示當前餐廳資訊和翻頁進度。"""
+def browseEmbed(results: list, current_index: int,
+                lang_manager=None, guild_id: str = "0") -> discord.Embed:
+    """Multi-result browsing Embed, showing current restaurant info and pagination progress."""
     if not results:
-        return discord.Embed(title="找不到餐廳", colour=discord.Colour.red())
+        title = lang_manager.translate(guild_id, "commands", "eat", "errors", "not_found") if lang_manager else "找不到餐廳"
+        return discord.Embed(title=title, colour=discord.Colour.red())
 
     place = results[current_index]
     name = place.get("name", "未知餐廳")
@@ -68,7 +87,23 @@ def browseEmbed(results: list, current_index: int) -> discord.Embed:
     opening_hours = place.get("opening_hours", [])
 
     colour = _rating_colour(rating)
-    rating_display = f"⭐ {rating}" if rating else "評分未知"
+    
+    if lang_manager:
+        rating_missing = lang_manager.translate(guild_id, "commands", "eat", "embeds", "browse", "rating_missing")
+        title_text = lang_manager.translate(guild_id, "commands", "eat", "embeds", "browse", "title", current=current_index + 1, total=len(results))
+        field_rating = lang_manager.translate(guild_id, "commands", "eat", "embeds", "browse", "fields", "rating")
+        field_address = lang_manager.translate(guild_id, "commands", "eat", "embeds", "browse", "fields", "address")
+        field_hours = lang_manager.translate(guild_id, "commands", "eat", "embeds", "browse", "fields", "hours")
+        footer_text = lang_manager.translate(guild_id, "commands", "eat", "embeds", "browse", "footer")
+    else:
+        rating_missing = "評分未知"
+        title_text = f"🔍 搜尋結果　{current_index + 1} / {len(results)}"
+        field_rating = "評價"
+        field_address = "地址"
+        field_hours = "營業時間"
+        footer_text = "使用下方按鈕翻頁，或從下拉選單直接選擇餐廳"
+
+    rating_display = f"⭐ {rating}" if rating else rating_missing
     price_display = _price_label(price_level)
 
     description_parts = [f"**{name}**"]
@@ -78,48 +113,69 @@ def browseEmbed(results: list, current_index: int) -> discord.Embed:
         description_parts.append(price_display)
 
     embed = discord.Embed(
-        title=f"🔍 搜尋結果　{current_index + 1} / {len(results)}",
+        title=title_text,
         description="\n".join(description_parts),
         colour=colour,
     )
-    embed.add_field(name="評價", value=rating_display, inline=True)
+    embed.add_field(name=field_rating, value=rating_display, inline=True)
     if address:
-        embed.add_field(name="地址", value=address[:100], inline=False)
+        embed.add_field(name=field_address, value=address[:100], inline=False)
     if opening_hours:
         hours_text = opening_hours[0] if isinstance(opening_hours, list) and opening_hours else str(opening_hours)
-        embed.add_field(name="營業時間", value=hours_text[:100], inline=False)
+        embed.add_field(name=field_hours, value=hours_text[:100], inline=False)
 
     if photo_url:
         embed.set_image(url=photo_url)
 
-    embed.set_footer(text="使用下方按鈕翻頁，或從下拉選單直接選擇餐廳")
+    embed.set_footer(text=footer_text)
     return embed
 
 
-def loadingEmbed(keyword: str) -> discord.Embed:
-    """搜尋進行中的 loading Embed。"""
+def loadingEmbed(keyword: str, lang_manager=None, guild_id: str = "0") -> discord.Embed:
+    """Loading Embed for search in progress."""
+    if lang_manager:
+        title = lang_manager.translate(guild_id, "commands", "eat", "embeds", "loading", "title")
+        description = lang_manager.translate(guild_id, "commands", "eat", "embeds", "loading", "description", keyword=keyword)
+        footer = lang_manager.translate(guild_id, "commands", "eat", "embeds", "loading", "footer")
+    else:
+        title = "🔍 搜尋中..."
+        description = f"正在搜尋「**{keyword}**」相關餐廳，請稍候..."
+        footer = "透過 Foursquare Places API 搜尋中"
+
     embed = discord.Embed(
-        title="🔍 搜尋中...",
-        description=f"正在搜尋「**{keyword}**」相關餐廳，請稍候...",
+        title=title,
+        description=description,
         colour=discord.Colour.greyple(),
     )
-    embed.set_footer(text="透過 Foursquare Places API 搜尋中")
+    embed.set_footer(text=footer)
     return embed
 
 
-def mapEmbed(map_url: str) -> discord.Embed:
+def mapEmbed(map_url: str, lang_manager=None, guild_id: str = "0") -> discord.Embed:
+    if lang_manager:
+        title = lang_manager.translate(guild_id, "commands", "eat", "embeds", "map", "title")
+        description = lang_manager.translate(guild_id, "commands", "eat", "embeds", "map", "description")
+    else:
+        title = "地圖"
+        description = "以下為此商家的地圖"
+
     embed = discord.Embed(
-        title="地圖",
-        description="以下為此商家的地圖",
+        title=title,
+        description=description,
         colour=discord.Colour.green(),
     )
     embed.set_image(url=map_url)
     return embed
 
 
-def menuEmbed(menu_url: str) -> discord.Embed:
+def menuEmbed(menu_url: str, lang_manager=None, guild_id: str = "0") -> discord.Embed:
+    if lang_manager:
+        title = lang_manager.translate(guild_id, "commands", "eat", "embeds", "menu", "title")
+    else:
+        title = "菜單"
+
     embed = discord.Embed(
-        title="菜單",
+        title=title,
         colour=discord.Colour.green(),
     )
     embed.set_image(url=menu_url)
