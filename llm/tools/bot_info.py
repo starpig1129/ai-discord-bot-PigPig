@@ -53,7 +53,7 @@ class BotInfoTools:
                 info = await checker.check_for_updates()
 
                 if "error" in info:
-                    return f"無法取得更新資訊：{info['error']}"
+                    return f"Failed to retrieve update info: {info['error']}"
 
                 current = info.get("current_version", "unknown")
                 latest = info.get("latest_version", "unknown")
@@ -62,23 +62,23 @@ class BotInfoTools:
                 published = str(info.get("published_at") or "")[:10]  # YYYY-MM-DD
 
                 lines = [
-                    f"## 機器人版本資訊",
-                    f"- 目前版本：{current}",
-                    f"- 最新版本：{latest}",
-                    f"- 有新版本可用：{'是' if update_available else '否'}",
+                    f"## Bot Version Information",
+                    f"- Current Version: {current}",
+                    f"- Latest Version: {latest}",
+                    f"- Update Available: {'Yes' if update_available else 'No'}",
                 ]
                 if published:
-                    lines.append(f"- 發布日期：{published}")
+                    lines.append(f"- Published Date: {published}")
                 if notes:
-                    lines.append(f"\n### 更新內容\n{notes}")
+                    lines.append(f"\n### Release Notes\n{notes}")
                 else:
-                    lines.append("\n（無更新說明）")
+                    lines.append("\n(No release notes available)")
 
                 return "\n".join(lines)
 
             except Exception as e:
                 logger.warning(f"get_bot_changelog failed: {e}")
-                return f"取得版本資訊時發生錯誤：{e}"
+                return f"Error retrieving version info: {e}"
 
         _info_meta = {"target_agent_mode": "info"}
         return [

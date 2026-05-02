@@ -125,7 +125,7 @@ async def check_admin_permissions(self, interaction: discord.Interaction, *, def
         return True
     
     # Send localized permission denied message
-    error_message = self.lang_manager.translate(...) or "您沒有權限執行此操作，僅限管理員使用此命令。"
+    error_message = self.lang_manager.translate(...) or "You do not have permission to perform this action. This command is restricted to administrators."
     if interaction.response.is_done():
         await interaction.followup.send(error_message, ephemeral=True)
     else:

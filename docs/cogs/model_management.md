@@ -18,8 +18,8 @@ The sole command for managing the AI model.
 
 *   **Parameters:**
     *   `action` (Choice): The action to perform.
-        *   `卸載模型 (Unload Model)`: Removes the model and tokenizer from memory, clears the CUDA cache, and runs the garbage collector.
-        *   `載入模型 (Load Model)`: Loads the model specified by the `MODEL_NAME` environment variable into memory.
+        *   `Unload Model`: Removes the model and tokenizer from memory, clears the CUDA cache, and runs the garbage collector.
+        *   `Load Model`: Loads the model specified by the `MODEL_NAME` environment variable into memory.
 *   **Permissions:** Bot Owner Only
 
 ## Core Logic

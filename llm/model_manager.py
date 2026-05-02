@@ -1,4 +1,4 @@
-"""ModelManager: 讀取 config/llm.yaml 並依據 agent_type 回傳 ModelFallbackMiddleware。"""
+"""ModelManager: Loads config/llm.yaml and returns ModelFallbackMiddleware or priority lists based on agent_type."""
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +14,7 @@ from function import func
 
 
 class ModelManager:
-    """管理 LLM 模型優先順序，從設定檔取得並建立 ModelFallbackMiddleware"""
+    """Manages LLM model priority by loading configuration and creating ModelFallbackMiddleware."""
 
     def __init__(self) -> None:
         self._load_config()

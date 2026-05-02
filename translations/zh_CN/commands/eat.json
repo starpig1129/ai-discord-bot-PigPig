@@ -1,0 +1,78 @@
+{
+    "embeds": {
+        "eat": {
+            "title": "今天吃什么",
+            "description": "吃 **{keyword}**",
+            "fields": {
+                "restaurant": "商家",
+                "address": "地址",
+                "address_missing": "地址未提供",
+                "rating": "评价",
+                "hours": "营业时间"
+            }
+        },
+        "browse": {
+            "title": "🔍 搜索结果　{current} / {total}",
+            "rating_missing": "评分未知",
+            "footer": "使用下方按钮翻页，或从下拉菜单直接选择餐厅",
+            "fields": {
+                "rating": "评价",
+                "address": "地址",
+                "hours": "营业时间"
+            }
+        },
+        "loading": {
+            "title": "🔍 搜索中...",
+            "description": "正在搜索「**{keyword}**」相关餐厅，请稍候...",
+            "footer": "通过 Foursquare Places API 搜索中"
+        },
+        "map": {
+            "title": "地图",
+            "description": "以下为此商家的地图"
+        },
+        "menu": {
+            "title": "菜单"
+        }
+    },
+    "views": {
+        "dislike_modal": {
+            "title": "不喜欢的原因（选填）",
+            "label": "原因",
+            "placeholder": "例如：太贵、不合口味、距离太远...",
+            "success": "已记录！下次将不推荐此类餐厅 🙏"
+        },
+        "detail": {
+            "buttons": {
+                "map": "地图链接",
+                "menu": "菜单",
+                "review": "AI 美食评论",
+                "back": "返回列表"
+            },
+            "responses": {
+                "map_not_found": "找不到地图链接",
+                "menu_not_found": "找不到菜单图片",
+                "already_rated": "已经评分过了！",
+                "rate_success": "感谢反馈！往后将推荐类似商家 😊",
+                "review_preparing": "📝 准备撰写专业评论...",
+                "review_config_error": "❌ 评论模型未正确设定",
+                "review_failed": "❌ 评论生成失败: {error}"
+            },
+            "ai": {
+                "system_prompt": "You are a professional and witty food critic who excels at writing vivid and interesting reviews based on restaurant information. Interact with users in a humorous yet professional tone, providing valuable dining recommendations. Your reviews should include comprehensive analysis of food quality, atmosphere, and service standards. Always respond in Simplified Chinese and use emojis appropriately to add fun and engagement.",
+                "user_prompt": "以下是餐厅信息：\n{info}\n\n请根据上述信息，撰写一篇专业又风趣的简体中文美食评论，适当加入 emoji。"
+            }
+        },
+        "browse": {
+            "placeholder": "从下拉菜单选择餐厅...",
+            "buttons": {
+                "prev": "上一个",
+                "next": "下一个",
+                "confirm": "就这家！",
+                "regenerate": "下一个推荐"
+            }
+        }
+    },
+    "errors": {
+        "not_found": "找不到餐厅"
+    }
+}

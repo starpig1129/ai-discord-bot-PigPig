@@ -2,54 +2,44 @@
 
 ## Overview
 
-The `ProceduralMemoryProvider` is responsible for providing procedural memory for multiple users in the LLM system. It fetches user information from a SQLite database and returns structured procedural memory data.
+The `ProceduralMemoryProvider` manages user-specific behavioral data. Unlike Episodic memory (which is about *what happened*), Procedural memory is about *who the user is* and *how the bot should interact with them*.
 
-## Class: ProceduralMemoryProvider
+## Functionality
 
-### Constructor
+The provider fetches `UserInfo` from the `SQLiteUserManager`. This data typically includes:
+- **User Bio**: A short description of the user.
+- **Interests**: Topics the user cares about.
+- **Custom Instructions**: Specific rules the user has set for the bot's behavior towards them.
+- **Interaction History**: High-level summaries of past interactions.
 
-```python
-def __init__(self, user_manager: SQLiteUserManager):
-```
+## Technical Implementation
 
-**Parameters:**
-- `user_manager`: An instance of `SQLiteUserManager` for database operations
+### TTL Cache
+To avoid hitting the SQLite database for every single message, the provider uses a per-user cache:
+- **Logic**: Each `user_id` is cached with its own expiration timer.
+- **Invalidation**: The `invalidate(user_id)` method is called by the `/memory save` command to ensure that updates are reflected immediately.
 
-**Description:**
-Initializes the provider with a user manager instance for database access.
+### Batch Fetching
+The provider supports `get_multiple_users()`, allowing it to fetch context for everyone involved in a multi-user conversation in a single pass.
 
-### Methods
+## Schema: `UserInfo`
 
-#### `async def get(self, user_ids: List[str]) -> ProceduralMemory`
-
-**Parameters:**
-- `user_ids`: List of user ID strings to fetch information for
-
-**Returns:**
-- `ProceduralMemory`: A data structure containing user information mapping
-
-**Description:**
-Fetches procedural memory for a list of user IDs. The method uses the user manager's batch method to efficiently retrieve multiple users' information. Any errors during retrieval are reported and handled gracefully by returning an empty mapping.
-
-**Error Handling:**
-- Any exceptions during user retrieval are reported using `func.report_error()`
-- Returns empty user_info dict on failure to maintain system resilience
-
-**Implementation Details:**
-```python
-# Uses batch method for efficient database operations
-users: Dict[str, UserInfo] = await self.user_manager.get_multiple_users(
-    [str(uid) for uid in user_ids]
-)
-```
+The data is structured using Pydantic models (defined in `llm.memory.schema`):
+- `user_id`: Discord ID.
+- `nickname`: User's display name.
+- `bio`: Extracted or user-provided biography.
+- `instructions`: Custom behavioral overrides.
 
 ## Integration
 
-This provider is used by the `ContextManager` to build procedural memory context for LLM prompts. It connects the user data from the SQLite database to the LLM system's memory architecture.
+The result is injected into the prompt as a dedicated section:
+```text
+--- User Profiles ---
+User: Alice
+Bio: Loves coding and cats.
+Instructions: Always be polite.
+---
+```
 
-## Dependencies
-
-- `llm.memory.schema.ProceduralMemory`
-- `llm.memory.schema.UserInfo`
-- `cogs.memory.users.manager.SQLiteUserManager`
-- `function.func` (for error reporting)
+---
+*Procedural memory is the foundation of the bot's personalized interaction model, allowing it to adapt its tone and knowledge to each individual user.*

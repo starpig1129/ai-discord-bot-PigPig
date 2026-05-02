@@ -152,15 +152,15 @@ Processes all attachments in a Discord message and extracts valid images/frames.
 return all_image_data
 
 # Error case  
-return "沒有找到可處理的圖像、影片或PDF附件，或處理過程中出現錯誤。"
+return "No processable image, video, or PDF attachments were found, or an error occurred during processing."
 ```
 
 **Processed File Tracking:**
 ```python
 processed_files = []  # Records processing summary
-processed_files.append(f"圖片: {attachment.filename}")
-processed_files.append(f"PDF: {attachment.filename} (處理了 {len(valid_pdf_images)} 頁)")
-processed_files.append(f"影片: {attachment.filename} (處理了 {len(valid_video_frames)} 幀)")
+processed_files.append(f"Image: {attachment.filename}")
+processed_files.append(f"PDF: {attachment.filename} (Processed {len(valid_pdf_images)} pages)")
+processed_files.append(f"Video: {attachment.filename} (Processed {len(valid_video_frames)} frames)")
 ```
 
 ## Logging Configuration

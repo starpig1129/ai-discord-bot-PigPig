@@ -1,7 +1,8 @@
 """
-頻道系統提示管理器
+Channel system prompt manager.
 
-提供核心的系統提示管理功能，包含三層繼承機制、快取系統和配置管理。
+Provides core system prompt management functionality, including three-level inheritance,
+caching system, and configuration management.
 """
 
 import json
@@ -27,30 +28,30 @@ from .permissions import PermissionValidator
 
 from function import func
 import asyncio
-# 生產環境快取修復器已整合到核心模組中，不再需要外部依賴
+# Production cache fixer integrated into core module
 PRODUCTION_CACHE_FIXER_AVAILABLE = False
 ProductionCacheFixer = None
 
 
 class SystemPromptCache:
-    """系統提示快取管理器"""
+    """System prompt cache manager."""
     
     def __init__(self, ttl: int = 3600):
         """
-        初始化快取管理器
+        Initialize cache manager.
         
         Args:
-            ttl: 快取生存時間（秒）
+            ttl: Cache time-to-live (seconds).
         """
         self.cache: Dict[str, Tuple[float, str]] = {}
         self.ttl = ttl
     
     def get_cache_key(self, guild_id: str, channel_id: str, lang: str = "zh_TW") -> str:
-        """生成快取鍵值"""
+        """Generate cache key."""
         return f"system_prompt:{guild_id}:{channel_id}:{lang}"
     
     def get(self, guild_id: str, channel_id: str, lang: str = "zh_TW") -> Optional[str]:
-        """從快取取得系統提示"""
+        """Get system prompt from cache."""
         key = self.get_cache_key(guild_id, channel_id, lang)
         if key in self.cache:
             timestamp, prompt = self.cache[key]
@@ -61,12 +62,12 @@ class SystemPromptCache:
         return None
     
     def set(self, guild_id: str, channel_id: str, prompt: str, lang: str = "zh_TW") -> None:
-        """設定快取"""
+        """Set cache."""
         key = self.get_cache_key(guild_id, channel_id, lang)
         self.cache[key] = (time.time(), prompt)
     
     def invalidate(self, guild_id: str, channel_id: Optional[str] = None) -> None:
-        """清除快取"""
+        """Invalidate cache."""
         pattern = f"system_prompt:{guild_id}"
         if channel_id:
             pattern += f":{channel_id}"
@@ -76,25 +77,25 @@ class SystemPromptCache:
             del self.cache[key]
     
     def clear_all(self) -> None:
-        """清除所有快取"""
+        """Clear all cache."""
         self.cache.clear()
 
 
 class PromptValidator:
-    """系統提示驗證器"""
+    """System prompt validator."""
     def __init__(self, bot: discord.Client):
         """
-        初始化系統提示驗證器
+        Initialize system prompt validator.
         
         Args:
-            bot: Discord 機器人實例
+            bot: Discord bot instance.
         """
         self.bot = bot
         
     MAX_PROMPT_LENGTH = 4000
     MAX_MODULE_COUNT = 10
     
-    # 危險模式列表
+    # Dangerous pattern list
     DANGEROUS_PATTERNS = [
         r'<script[^>]*>',
         r'javascript:',
@@ -109,25 +110,25 @@ class PromptValidator:
     
     def validate_prompt_content(self, content: str) -> Tuple[bool, str]:
         """
-        驗證提示內容
+        Validate prompt content.
         
         Args:
-            content: 提示內容
+            content: Prompt content.
             
         Returns:
-            (是否有效, 錯誤訊息)
+            (is_valid, error_message)
         """
-        # 長度檢查
+        # Length check
         if len(content) > self.MAX_PROMPT_LENGTH:
             raise ContentTooLongError(self.MAX_PROMPT_LENGTH, len(content))
         
-        # 基本格式檢查
+        # Basic format check
         if not content.strip():
             lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
             guild_id = getattr(self.bot, 'current_guild_id', None)
-            raise ValidationError("系統提示不能為空", "content", lang_manager, guild_id)
+            raise ValidationError(None, "content", lang_manager, guild_id)
         
-        # 檢查潛在的注入攻擊
+        # Check for potential injection attacks
         for pattern in self.DANGEROUS_PATTERNS:
             if re.search(pattern, content, re.IGNORECASE):
                 lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
@@ -138,19 +139,19 @@ class PromptValidator:
     
     def validate_modules(self, modules: Dict[str, str], guild_id: Optional[str] = None) -> Tuple[bool, str]:
         """
-        驗證模組設定
+        Validate module configuration.
         
         Args:
-            modules: 模組字典
-            guild_id: 伺服器 ID（可選）
+            modules: Module dictionary.
+            guild_id: Server ID (optional).
             
         Returns:
-            (是否有效, 錯誤訊息)
+            (is_valid, error_message)
         """
         if len(modules) > self.MAX_MODULE_COUNT:
             lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
             raise ValidationError(
-                f"模組數量過多，最多 {self.MAX_MODULE_COUNT} 個",
+                None,
                 "modules",
                 lang_manager,
                 guild_id
@@ -160,7 +161,7 @@ class PromptValidator:
             if not isinstance(module_content, str):
                 lang_manager = self.bot.get_cog("LanguageManager") if hasattr(self.bot, 'get_cog') else None
                 raise ValidationError(
-                    f"模組 '{module_name}' 的內容必須是字串",
+                    None,
                     f"module_{module_name}",
                     lang_manager,
                     guild_id
@@ -172,14 +173,14 @@ class PromptValidator:
 
 
 class SystemPromptManager:
-    """系統提示管理器 - 核心協調器"""
+    """System prompt manager - Core coordinator."""
     
     def __init__(self, bot: discord.Client):
         """
-        初始化系統提示管理器
+        Initialize system prompt manager.
         
         Args:
-            bot: Discord 機器人實例
+            bot: Discord bot instance.
         """
         self.bot = bot
         self.logger = get_logger(server_id="system", source=__name__)
@@ -187,19 +188,19 @@ class SystemPromptManager:
         self.validator = PromptValidator(bot)
         self.permission_validator = PermissionValidator(bot)
         
-        # 資料目錄路徑
+        # Data directory path
         self.data_dir = Path("data/channel_configs")
         self.data_dir.mkdir(parents=True, exist_ok=True)
         
-        # 初始化 YAML 提示管理器
+        # Initialize YAML prompt manager
         self._prompt_manager = None
         self._init_prompt_manager()
         
-        # 快取清除策略已整合到核心方法中
-        self.logger.info("✅ 使用整合快取清除策略")
+        # Cache invalidation strategy integrated into core methods
+        self.logger.info("✅ Using integrated cache invalidation strategy")
     
     def _init_prompt_manager(self) -> None:
-        """初始化 YAML 提示管理器"""
+        """Initialize YAML prompt manager."""
         try:
             from llm.prompting.manager import get_prompt_manager
             self._prompt_manager = get_prompt_manager()
@@ -212,18 +213,18 @@ class SystemPromptManager:
     def get_effective_prompt(self, channel_id: str, guild_id: str, 
                            message: Optional[discord.Message] = None) -> Dict[str, Any]:
         """
-        取得有效的系統提示（整合三層繼承）
+        Get effective system prompt (integrated three-level inheritance).
         
         Args:
-            channel_id: 頻道 ID
-            guild_id: 伺服器 ID
-            message: Discord 訊息物件（用於語言檢測）
+            channel_id: Channel ID.
+            guild_id: Server ID.
+            message: Discord message object (for language detection).
             
         Returns:
-            包含提示內容和來源的字典
+            Dictionary containing prompt content and source.
         """
         try:
-            # 嘗試從快取取得
+            # Try to get from cache
             lang = self._get_language(guild_id, message)
             cached_prompt = self.cache.get(guild_id, channel_id, lang)
             if cached_prompt:
@@ -233,19 +234,19 @@ class SystemPromptManager:
                     'timestamp': time.time()
                 }
             
-            # 載入配置
+            # Load configuration
             config = self._load_guild_config(guild_id)
             system_prompts = config.get('system_prompts', {})
             
             if not system_prompts.get('enabled', False):
-                # 系統提示功能未啟用，使用 YAML 預設
+                # System prompt functionality disabled, use YAML default
                 return self._get_yaml_prompt(guild_id, message)
             
-            # 第一層：載入 YAML 基礎提示
+            # Level 1: Load YAML base prompt
             base_prompt_data = self._get_yaml_prompt(guild_id, message)
             base_prompt = base_prompt_data.get('prompt', '')
             
-            # 第二層：應用伺服器級別提示
+            # Level 2: Apply server-level prompt
             server_level = system_prompts.get('server_level', {})
             if server_level:
                 prompt = self._apply_server_overrides(base_prompt, server_level, guild_id)
@@ -254,7 +255,7 @@ class SystemPromptManager:
                 prompt = base_prompt
                 source = 'yaml'
             
-            # 第三層：應用頻道級別提示
+            # Level 3: Apply channel-level prompt
             channels = system_prompts.get('channels', {})
             channel_config = channels.get(channel_id)
             
@@ -262,16 +263,16 @@ class SystemPromptManager:
                 prompt = self._apply_channel_overrides(prompt, channel_config, guild_id)
                 source = 'channel'
             
-            # 應用語言本地化
+            # Apply language localization
             prompt = self._apply_language_localization(prompt, lang, guild_id)
             
-            # 🔧 修復：確保最終提示都經過變數替換處理
-            # 只有在非 YAML 來源時才需要額外的變數替換（因為 YAML 提示已經在 PromptManager 中替換過）
+            # 🔧 Fix: Ensure final prompt goes through variable replacement
+            # Variable replacement only needed for non-YAML sources (YAML already replaced in PromptManager)
             if source != 'yaml':
                 prompt = self._apply_variable_replacements(prompt, guild_id)
-                self.logger.debug(f"✅ 對 {source} 級別提示應用了最終變數替換")
+                self.logger.debug(f"✅ Applied final variable replacement for {source} level prompt")
             
-            # 快取結果
+            # Set cache
             self.cache.set(guild_id, channel_id, prompt, lang)
             
             return {
@@ -283,8 +284,8 @@ class SystemPromptManager:
             
         except Exception as e:
             asyncio.create_task(func.report_error(e, "Error getting effective system prompt"))
-            self.logger.error(f"取得有效系統提示時發生錯誤: {e}")
-            # 降級到 YAML 提示
+            self.logger.error(f"Error getting effective system prompt: {e}")
+            # Fallback to YAML prompt
             return self._get_yaml_prompt(guild_id, message)
     
     def get_channel_prompt_config(self, guild_id: str, channel_id: str) -> Optional[Dict[str, Any]]:

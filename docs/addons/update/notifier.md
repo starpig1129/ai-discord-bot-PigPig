@@ -66,6 +66,6 @@ This `discord.ui.View` provides buttons for the user to interact with an update 
 
 ### Buttons
 
-*   **立即更新 (Update Now):** Starts the update process. Can only be used by the bot owner.
-*   **稍後提醒 (Remind Later):** Dismisses the current notification, which will reappear at the next update check.
-*   **忽略 (Ignore):** Ignores the current update notification.
+*   **Update Now:** Starts the update process. Can only be used by the bot owner.
+*   **Remind Later:** Dismisses the current notification, which will reappear at the next update check.
+*   **Ignore:** Ignores the current update notification.

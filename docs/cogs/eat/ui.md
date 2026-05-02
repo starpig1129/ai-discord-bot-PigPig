@@ -1,40 +1,54 @@
-# Eat System - User Interface
+# Eat Module UI Documentation
 
-**Files:**
-*   [`cogs/eat/embeds.py`](cogs/eat/embeds.py)
-*   [`cogs/eat/views.py`](cogs/eat/views.py)
+## Overview
 
-The user interface for the "Eat What" system is composed of two main parts: embeds, which display information, and views, which contain interactive components like buttons.
+The Eat module features a rich, interactive user interface designed to guide users from initial food recommendations to detailed restaurant reviews. The UI is built using Discord's `View` and `Embed` systems, supporting multi-language localization and real-time AI content generation.
 
-## Embeds
+## Key UI Components
 
-The `embeds.py` file contains helper functions to create standardized `discord.Embed` objects for the system.
+### Embeds (`embeds.py`)
 
-*   **`eatEmbed(...)`:** Creates the main embed that displays the restaurant recommendation, including the keyword, restaurant name, address, and rating.
-*   **`mapEmbed(...)`:** Creates an embed to display the restaurant's location on a map (currently sends a URL directly).
-*   **`menuEmbed(...)`:** Creates an embed to display the restaurant's menu, typically by setting an image URL.
+The module uses specialized embeds for different stages of the user journey:
 
-## `EatWhatView` Class
+- **`browseEmbed`**: Displays a list of search results. Features pagination progress (e.g., "1 / 10"), restaurant name, rating, category, and address.
+- **`eatEmbed`**: The detailed view for a selected restaurant. Includes large photos, price levels, and opening hours.
+- **`loadingEmbed`**: A transient embed shown during search or while fetching detailed restaurant data.
+- **`mapEmbed` & `menuEmbed`**: Simple embeds used to display specific restaurant assets.
 
-Defined in `views.py`, this `discord.ui.View` is the core of the interactive experience. It is attached to the main `eatEmbed` and provides several buttons for the user to interact with the recommendation.
+### Views (`views.py`)
 
-### `__init__(self, result, predict, keyword, db, record_id, discord_id)`
+Interactive elements that handle user input and transitions.
 
-Initializes the view with all the necessary context from the search result and the database.
+#### 1. `EatBrowseView` (Main Search View)
+The primary interface after a `/search type:eat` command.
+- **Pagination**: "Previous" and "Next" buttons to navigate the result list.
+- **Dropdown Selection**: A `discord.ui.Select` menu allowing direct navigation to any previously explored restaurant.
+- **"Choose this!" Button**: Confirms the selection and transitions to `EatDetailView`.
+- **"Next Recommendation" Button**: Triggers the next recommendation and performs real-time data fetching if background prefetching hasn't finished.
 
-*   **Parameters:**
-    *   `result`: The tuple of restaurant data returned by the `GoogleMapCrawler`.
-    *   `predict` (str): The keyword that was predicted by the model (if any).
-    *   `keyword` (str): The keyword that was used for the search.
-    *   `db` (DB): An instance of the database manager.
-    *   `record_id` (int): The ID of the search record in the database, used for updating the rating.
-    *   `discord_id` (str): The ID of the server.
+#### 2. `EatDetailView` (Operation View)
+The control panel for a specific restaurant.
+- **"Map" Button**: Sends an ephemeral link to Google Maps.
+- **"Menu" Button**: Displays a menu image if available.
+- **"AI Review" Button**: **Core Feature**. Generates a professional, witty review using a LangChain agent. This process is streamed to the user in real-time.
+- **Feedback Buttons (👍/👎)**: Allows users to rate the recommendation. Likes increase the restaurant's weight in future searches.
+- **"Back to List" Button**: Returns the user to the `EatBrowseView`.
 
-### Buttons
+#### 3. `DislikeModal`
+Triggered by the 👎 button. Collects a textual reason for the dislike (e.g., "Too expensive") to improve future recommendations.
 
-*   **地圖 (Map):** Sends the Google Maps URL for the restaurant.
-*   **菜單 (Menu):** Displays the restaurant's menu in an embed.
-*   **👍 (Like):** Sets the user's rating for this recommendation to `1`. This feedback is saved to the database and triggers a retraining of the server's recommendation model.
-*   **👎 (Dislike):** Sets the user's rating to `-1` and triggers a model retraining.
-*   **🔄 (Regenerate):** Sets the rating for the current recommendation to `-0.5` (a slight dislike), triggers a model retraining, and then generates a completely new recommendation.
-*   **查看評論 (View Reviews):** Uses the Gemini API to generate a witty, AI-powered food review based on the review snippets scraped from Google Maps.
+## Technical Flow
+
+### Real-time Prefetching
+When `EatBrowseView` is initialized, it starts an asynchronous background task (`_background_prefetch`) to fetch detailed information (via Selenium) for the first 15 candidates. If a user navigates to a restaurant before its data is ready, the view performs an on-demand "real-time fetch" while showing the `loadingEmbed`.
+
+### AI Review Generation
+The "AI Review" button utilizes the `ModelManager` and `init_chat_model` from LangChain. It uses a specialized system prompt to maintain the bot's "witty food critic" persona. The review is generated using `astream` for a responsive user experience.
+
+## Multi-language Support
+Every text element in the UI, including button labels, embed titles, and modal placeholders, is passed through `LanguageManager.translate`. This ensures a native experience for all supported locales (English, Traditional Chinese, Simplified Chinese, Japanese).
+
+## Related Files
+- `cogs/eat/views.py`: Logic for interactive components.
+- `cogs/eat/embeds.py`: Visual structure for restaurant data.
+- `translations/[LOCALE]/commands/eat.json`: Source text for all UI elements.

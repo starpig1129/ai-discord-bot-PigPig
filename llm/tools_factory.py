@@ -1,11 +1,11 @@
 """Factory for LangChain tools that auto-loads only @tool-decorated functions.
 
-設計要點:
-- 自動載入 `llm/tools/` 資料夾下的模組（若存在）。
-- 只收集已由 LangChain 的 `@tool` 裝飾過的 callable 或 BaseTool 實例。
-- 不做額外的標準化或權限過濾（使用者 ID 參數保留以便未來擴充）。
-- 例外使用 `func.report_error` 非同步回報，失敗時 fallback 為 print。
-- 使用快取避免每次呼叫重複掃描模組，以提升效能。
+Design Points:
+- Automatically loads modules under the `llm/tools/` folder (if it exists).
+- Only collects callables or BaseTool instances decorated with LangChain's `@tool`.
+- Implements permission-based filtering (admin/moderator) and agent mode routing.
+- Exceptions are reported asynchronously via `func.report_error`, with logger fallback.
+- Uses a caching mechanism to avoid repeated disk scans, improving performance.
 """
 
 from typing import Any, Iterable, List, Optional, cast
@@ -16,22 +16,22 @@ import pkgutil
 import importlib
 import asyncio
 import threading
-import threading
 from addons.logging import get_logger
+
 logger = get_logger(server_id="Bot", source="llm.tools_factory")
 
 _VALID_AGENT_MODES: frozenset = frozenset({"info", "message", "all"})
 
-from langchain_core.tools import StructuredTool,BaseTool
+from langchain_core.tools import StructuredTool, BaseTool
 from function import func
 
-# 快取變數：儲存已解析出的模組列表以及對應的檔案最大 mtime
+# Cache variables: Stores the parsed module list and the maximum mtime of the files
 _cached_modules: Optional[List[Any]] = None
 _cached_collected_mtime: float = 0.0
 _cache_lock = threading.Lock()
 
 def _report_async(exc: Exception, ctx: str) -> None:
-    """非同步回報錯誤；失敗時以 print 作為後備輸出。"""
+    """Report an error asynchronously; falls back to logger on failure."""
     try:
         asyncio.create_task(func.report_error(exc, ctx))
     except Exception:
@@ -39,7 +39,7 @@ def _report_async(exc: Exception, ctx: str) -> None:
 
 
 def _compute_pkg_dir_mtime(pkg_dir: str) -> float:
-    """計算 package 目錄下所有 .py 檔案的最大 mtime，若無檔案回傳 0."""
+    """Calculate the maximum mtime of all .py files in the package directory."""
     try:
         max_mtime = 0.0
         for root, _, files in os.walk(pkg_dir):
@@ -52,7 +52,7 @@ def _compute_pkg_dir_mtime(pkg_dir: str) -> float:
                     if m > max_mtime:
                         max_mtime = m
                 except Exception:
-                    # 忽略單一檔案錯誤
+                    # Ignore individual file errors
                     continue
         return max_mtime
     except Exception as e:
@@ -61,19 +61,18 @@ def _compute_pkg_dir_mtime(pkg_dir: str) -> float:
 
 
 def _discover_tools_package() -> Iterable[Any]:
-    """匯入並回傳 llm/tools 下所有模組（若資料夾存在）。"""
+    """Import and return all modules under llm/tools (if the directory exists)."""
 
     pkg_dir = os.path.join(os.path.dirname(__file__), "tools")
     tools_py = os.path.join(os.path.dirname(__file__), "tools.py")
 
-    # 非破壞性 debug 日誌：紀錄是否存在 llm/tools.py 與 llm/tools/ 資料夾
+    # Debug logs for troubleshooting directory existence
     try:
         logger.debug(
             f"llm.tools debug: tools_py exists={os.path.isfile(tools_py)}, "
             f"tools_dir exists={os.path.isdir(pkg_dir)}, pkg_dir={pkg_dir}"
         )
     except Exception:
-        # 若 logger 尚未正確建立,回退到 print(不改變程式行為)
         pass
 
     if not os.path.isdir(pkg_dir):
@@ -94,26 +93,26 @@ def _discover_tools_package() -> Iterable[Any]:
 
 
 def _is_decorated_tool(obj: Any) -> bool:
-    """檢查物件是否為 LangChain 工具（BaseTool 或被 @tool 裝飾的 callable）。"""
+    """Check if an object is a LangChain tool (BaseTool or @tool-decorated callable)."""
     try:
         if isinstance(obj, BaseTool):
             return True
         if not callable(obj):
             return False
 
-        # 常見標記屬性（若 langchain 有放置標記）
+        # Common marker attributes used by LangChain
         for attr in ("_is_tool", "is_tool", "__langchain_tool__"):
             if getattr(obj, attr, False):
                 return True
 
-        # 檢查是否為 decorator 的 wrapper
+        # Check if it's a decorator wrapper
         wrapped = getattr(obj, "__wrapped__", None)
         if wrapped is not None:
             mod = getattr(wrapped, "__module__", "")
             if mod and not mod.startswith("builtins"):
                 return True
 
-        # 有些 wrapper 的 module 來自 langchain
+        # Some wrappers have modules from LangChain
         module_name = getattr(obj, "__module__", "") or ""
         if "langchain" in module_name.lower():
             return True
@@ -123,23 +122,24 @@ def _is_decorated_tool(obj: Any) -> bool:
 
 
 def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List[Any]:
-    """從模組中以「get_tools()」收集工具。
+    """Collect tools from a module using get_tools() discovery.
     
-    策略：
-    - 若模組提供 module-level get_tools()，則呼叫它並使用回傳的同步 list。
-    - 否則尋找以 *Tools 命名的類別，建立 instance(runtime) 並呼叫 instance.get_tools()（必須回傳同步 list）。
-    - 不再掃描 instance 的成員或模組層級的任意成員。
-    - 若 get_tools() 回傳 coroutine，會非同步回報錯誤並跳過該項。
+    Strategies:
+    - If the module provides a module-level `get_tools(runtime)`, use its returned list.
+    - Otherwise, find classes ending in `Tools`, instantiate them with `runtime`, 
+      and call `instance.get_tools()`.
+    - Does not scan individual members or arbitrary classes.
+    - Reports errors if `get_tools()` returns a coroutine instead of a list.
     """
     tools: List[Any] = []
     mod_name = getattr(mod, "__name__", repr(mod))
     try:
         logger.debug(f"llm.tools: collecting tools from module {mod_name}")
-        # 1) module-level get_tools 優先
+        # 1) Module-level get_tools priority
         module_get_fn = getattr(mod, "get_tools", None)
         if callable(module_get_fn):
             try:
-                # 儘量嘗試以 runtime 當參數呼叫；若不接受參數則改用無參呼叫
+                # Try calling with runtime first; fallback to no-arg call if it fails
                 try:
                     returned = module_get_fn(runtime)
                 except TypeError:
@@ -147,13 +147,14 @@ def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List
             except Exception as e:
                 _report_async(e, f"llm.tools: calling module.get_tools in {mod_name}")
                 returned = []
+            
             if asyncio.iscoroutine(returned):
                 _report_async(
                     Exception("module.get_tools returned coroutine"),
                     f"llm.tools: {mod_name}.get_tools returned coroutine",
                 )
             else:
-                # 確認回傳值為可疊代（同步）容器，再進行迭代
+                # Ensure the return value is a synchronous iterable
                 if not isinstance(returned, (list, tuple, set)):
                     _report_async(
                         Exception("module.get_tools did not return iterable"),
@@ -171,7 +172,7 @@ def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List
                             pass
                 return tools
 
-        # 2) 尋找以 Tools 結尾的類別並呼叫其 get_tools()
+        # 2) Find classes ending with 'Tools' and call their get_tools()
         for name in dir(mod):
             if name.startswith("_"):
                 continue
@@ -195,7 +196,7 @@ def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List
                                 f"llm.tools: {mod_name}.{name}.get_tools returned coroutine",
                             )
                             continue
-                        # 確認 instance.get_tools() 回傳可疊代結果
+                        # Ensure instance.get_tools() returns a synchronous iterable
                         if not isinstance(returned, (list, tuple, set)):
                             _report_async(
                                 Exception("instance.get_tools did not return iterable"),
@@ -219,10 +220,10 @@ def _extract_tools_from_module(mod: Any, runtime: "OrchestratorRequest") -> List
 
 
 def _get_user_permissions(user: discord.Member, guid: discord.Guild) -> dict:
-    """嘗試從專案內部取得該 Discord 使用者的權限資訊。
-
-    此函式嘗試匯入 `cogs.system_prompt.permissions` 模組並呼叫 `get_user_permissions(user_id)`。
-    若找不到或呼叫失敗，回傳一個保守的預設權限集 (非 admin / moderator)。
+    """Retrieve Discord user permission info from the project's PermissionValidator.
+    
+    Tries to import `cogs.system_prompt.permissions` and validate the user.
+    Falls back to a conservative default (non-admin, non-moderator) if it fails.
     """
     try:
         from main import bot
@@ -246,43 +247,41 @@ def get_tools(
     runtime: OrchestratorRequest,
     agent_mode: str = "all"
 ) -> List[BaseTool]:
-    """根據 Discord 使用者權限回傳可用的 LangChain 工具清單。
+    """Returns a list of LangChain tools available to the Discord user based on permissions.
 
-    簡易權限策略:
-    - tools 可以宣告屬性 `required_permission`（字串, e.g. "admin", "moderator"）。
-      若宣告，則只有擁有該權限的使用者才會取得該工具。
-    - 若工具沒有宣告 `required_permission`，則預設對所有使用者開放。
-    - 權限屬性可以設在 BaseTool 實例或原始 callable 上。
+    Permission Strategy:
+    - Tools can declare a `required_permission` attribute (string, e.g., "admin", "moderator").
+    - If declared, only users with that permission will receive the tool.
+    - If undeclared, the tool is open to all users.
 
-    工具路由策略 (target_agent_mode):
-    - 每個工具可以宣告 `target_agent_mode` 來指定其所屬的 Agent。
-      支援的值：
-        - "info"    (預設) — 僅供 Info Agent 使用，Message Agent 不會收到此工具。
-        - "message"         — 僅供 Message Agent 使用，Info Agent 不會收到此工具。
-        - "all"             — 兩個 Agent 皆可使用。
-      未知值會被視為 "info" 並記錄 warning。
-    - 宣告方式（優先順序）：
-        1. tool.metadata["target_agent_mode"] — 適用於 LangChain StructuredTool
-        2. tool.target_agent_mode — 直接屬性
-        3. tool.func.target_agent_mode — 原始 callable 上的屬性
+    Routing Strategy (target_agent_mode):
+    - Tools can specify which Agent they belong to via `target_agent_mode`.
+    - Supported values:
+        - "info" (Default) - Only for the Info Agent.
+        - "message" - Only for the Message Agent.
+        - "all" - Available to both Agents.
+    - Discovery order for the attribute: 
+        1. metadata["target_agent_mode"]
+        2. direct attribute on tool instance
+        3. attribute on original callable
 
     Args:
-        user: Discord 使用者
-        guid: Discord Guild
-        runtime: 執行時 context
-        agent_mode: 工具過濾模式 ("all", "info", "message")
-            - "all": 回傳所有可用工具
-            - "info": 回傳 Info Agent 專用工具 (排除 target_agent_mode=="message" 的工具)
-            - "message": 僅回傳 Message Agent 專用工具 (排除 target_agent_mode=="info" 的工具)
+        user: The Discord user.
+        guid: The Discord Guild.
+        runtime: Execution runtime context.
+        agent_mode: Filtering mode ("all", "info", "message").
+            - "all": Return all available tools.
+            - "info": Return tools for Info Agent (excludes message-only tools).
+            - "message": Return tools for Message Agent (excludes info-only tools).
 
     Returns:
-        List[BaseTool]: 可供 LangChain 使用的工具清單（靜態類型上會 cast 為 List[BaseTool]）。
+        List[BaseTool]: List of filtered tools compatible with LangChain.
     """
     global _cached_modules, _cached_collected_mtime
 
     collected: List[Any] = []
 
-    # 檢查是否需要重新掃描工具目錄
+    # Check if we need to re-scan the tools directory
     pkg_dir = os.path.join(os.path.dirname(__file__), "tools")
     try:
         current_mtime = (
@@ -297,7 +296,7 @@ def get_tools(
             or current_mtime != _cached_collected_mtime
         ):
             try:
-                # 僅快取模組對象，不快取工具實例，以避免 runtime context 殘留問題
+                # Only cache module objects to avoid leaking runtime context between calls
                 _cached_modules = list(_discover_tools_package())
                 _cached_collected_mtime = current_mtime
             except Exception as e:
@@ -306,25 +305,22 @@ def get_tools(
 
         cached_modules = list(_cached_modules or [])
 
-    # 每次呼叫皆重新實例化工具，傳入當前的 runtime
+    # Re-instantiate tools on every call with the current runtime
     for mod in cached_modules:
         collected.extend(_extract_tools_from_module(mod, runtime))
 
-    # 根據使用者權限過濾
+    # Filter based on user permissions
     perms = _get_user_permissions(user, guid)
     result: List[Any] = []
 
     for t in collected:
         try:
-            # 僅接受由 @tool 裝飾或 BaseTool 的物件
+            # Only accept objects decorated with @tool or instances of BaseTool
             if not (_is_decorated_tool(t) or isinstance(t, BaseTool)):
                 continue
 
             required = getattr(t, "required_permission", None)
-            if required is None:
-                # Permission check passed, now check agent_mode
-                pass
-            else:
+            if required is not None:
                 if isinstance(required, str):
                     required_set = {
                         p.strip().lower() for p in required.split(",") if p.strip()
@@ -347,8 +343,7 @@ def get_tools(
             # Filter based on agent_mode using target_agent_mode attribute
             target_agent_mode = "info"
             
-            # Check metadata or custom attributes on the original wrapped function if present
-            # Langchain's StructuredTool hides custom attributes, so we try multiple ways
+            # Extract target_agent_mode from metadata or attributes
             raw_mode: object = None
             try:
                 metadata = getattr(t, "metadata", None)
@@ -381,12 +376,10 @@ def get_tools(
             elif agent_mode == "message" and target_agent_mode == "info":
                 continue
             
-            # Assign agent_mode to the tool for identification
-            # Note: This modifies the tool instance in place.
+            # Assign agent_mode to the tool instance for identification
             try:
                 t.agent_mode = agent_mode
             except Exception:
-                # Some tool objects might not allow attribute assignment
                 pass
 
             result.append(t)
@@ -399,5 +392,7 @@ def get_tools(
         return cast(List[BaseTool], result)
     except Exception as e:
         _report_async(e, "llm.tools: casting result to List[BaseTool]")
-        # 若 cast 失敗，仍回傳結果（type checker 層面的保護）
         return result  # type: ignore
+
+
+__all__ = ["get_tools"]

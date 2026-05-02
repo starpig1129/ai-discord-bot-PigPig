@@ -41,30 +41,30 @@ from addons.logging import get_logger
 log = get_logger(server_id="Bot", source=__name__)
 
 class MathCalculatorCog(commands.Cog):
+    """Cog for advanced mathematical calculations using SymPy."""
+
     def __init__(self, bot):
         self.bot = bot
         self.lang_manager: Optional[LanguageManager] = None
 
     async def cog_load(self):
-        """當 Cog 載入時初始化語言管理器"""
+        """Initialize LanguageManager when the cog is loaded."""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
     async def calculate_math(self, expression: str, message_to_edit=None, guild_id: Optional[str] = None) -> str:
+        """Parse and evaluate a mathematical expression, returning a localized result string."""
         if not self.lang_manager:
             self.lang_manager = LanguageManager.get_instance(self.bot)
         
         if message_to_edit is not None:
             processing_message = self.lang_manager.translate(
                 guild_id, "commands", "math", "responses", "processing"
-            ) if self.lang_manager else "計算中..."
+            ) if self.lang_manager else "Calculating..."
             await safe_edit_message(message_to_edit, processing_message)
         try:
-            # 限制表達式長度，防止過長的輸入
-            # 長度檢查移至抽取後的表達式
-
-            # 定義允許的數學函數和常數
+            # Define allowed mathematical functions and constants
             allowed_functions = {
-                # 基本和高等數學函數
+                # Basic and advanced math functions
                 'sin': sympy.sin,
                 'cos': sympy.cos,
                 'tan': sympy.tan,
@@ -93,33 +93,33 @@ class MathCalculatorCog(commands.Cog):
                 'gamma': sympy.gamma,
                 'zeta': sympy.zeta,
                 'erf': sympy.erf,
-                # 常數
+                # Constants
                 'pi': sympy.pi,
                 'E': sympy.E,
                 'e': sympy.E,
-                'I': sympy.I,  # 虛數單位
+                'I': sympy.I,  # Imaginary unit
             }
 
-            # 添加必要的基礎類型到 local_dict
+            # Add necessary basic types to local_dict
             basic_types = {
                 'Integer': sympy.Integer,
                 'Float': sympy.Float,
                 'Rational': sympy.Rational,
             }
 
-            # 合併允許的函數和基礎類型
+            # Merge allowed functions and basic types
             local_dict = {**allowed_functions, **basic_types}
 
-            # 定義解析轉換規則，支持隱式乘法等
+            # Define parsing transformations, supporting implicit multiplication etc.
             transformations = (
                 standard_transformations +
                 (implicit_multiplication_application,)
             )
 
-            # 抽取與正規化數學表達式
+            # Normalize expression
             expr_norm = unicodedata.normalize('NFKC', expression)
 
-            # 標準化常見符號變體
+            # Standardize common symbol variants
             for _src, _dst in {
                 '×': '*',
                 '∙': '*',
@@ -132,7 +132,7 @@ class MathCalculatorCog(commands.Cog):
             }.items():
                 expr_norm = expr_norm.replace(_src, _dst)
 
-            # 建立允許的名稱清單（函數與常數）
+            # Build allowed names list
             allowed_names = list(allowed_functions.keys()) + list(basic_types.keys())
             for _name in ['pi', 'E', 'e', 'I']:
                 if _name not in allowed_names:
@@ -140,11 +140,11 @@ class MathCalculatorCog(commands.Cog):
             allowed_names_sorted = sorted(set(allowed_names), key=len, reverse=True)
             tokens_pattern = r'(?:' + '|'.join(re.escape(n) for n in allowed_names_sorted) + r')'
 
-            # 從混合文字中擷取可能的數學表達式
+            # Extract potential math expressions from mixed text
             pattern = re.compile(rf'(({tokens_pattern}|[0-9]+(?:\.[0-9]+)?|[()+\-*/,\s])+)', re.IGNORECASE)
             candidates = [m.group(1) for m in pattern.finditer(expr_norm)]
 
-            # 過濾有效候選（需包含數字或允許名稱）
+            # Filter valid candidates
             def _is_valid_candidate(s):
                 s_strip = re.sub(r'^[=\s]+|[=\s]+$', '', s)
                 if not s_strip:
@@ -157,77 +157,72 @@ class MathCalculatorCog(commands.Cog):
             extracted = max(valid_candidates, key=len) if valid_candidates else ''
 
             if not extracted:
-                # 清楚錯誤：未找到可計算的表達式
                 if self.lang_manager:
                     return self.lang_manager.translate(
-                        guild_id, "commands", "math", "responses", "error_general", error="未找到可計算的表達式"
+                        guild_id, "commands", "math", "responses", "error_general", error="No calculable expression found"
                     )
                 else:
-                    return "錯誤：未找到可計算的表達式。"
+                    return "Error: No calculable expression found."
 
-            # 長度限制（以抽取後的表達式為準）
+            # Length limit
             if len(extracted) > 200:
                 error_message = self.lang_manager.translate(
                     guild_id, "commands", "math", "responses", "error_too_long"
-                ) if self.lang_manager else "錯誤：表達式過長，請縮短後再試。"
+                ) if self.lang_manager else "Error: Expression too long."
                 return error_message
 
-            # 使用抽取後的表達式
+            # Use extracted expression
             expression = extracted
 
-            # 安全地解析表達式
+            # Safely parse expression
             sympy_expr = parse_expr(
                 expression,
                 transformations=transformations,
                 evaluate=True,
                 local_dict=local_dict,
-                global_dict={},  # 禁用 global_dict
+                global_dict={},  # Disable global_dict for safety
             )
 
-            # 檢查解析結果是否包含未定義的函數
+            # Check for undefined functions
             from sympy.core.function import UndefinedFunction
             if sympy_expr.has(UndefinedFunction):
                 error_message = self.lang_manager.translate(
                     guild_id, "commands", "math", "responses", "error_undefined_function"
-                ) if self.lang_manager else "錯誤：表達式包含未定義的函數。"
+                ) if self.lang_manager else "Error: Expression contains undefined functions."
                 return error_message
 
-            # 檢查解析結果是否包含不安全的類型
+            # Check for unsupported elements
             unsafe_types = (sympy.Symbol, sympy.Function)
             if sympy_expr.has(*unsafe_types):
                 error_message = self.lang_manager.translate(
                     guild_id, "commands", "math", "responses", "error_unsupported_elements"
-                ) if self.lang_manager else "錯誤：表達式包含不支持的元素。"
+                ) if self.lang_manager else "Error: Expression contains unsupported elements."
                 return error_message
 
-            # 計算結果，設定精度為 15 位小數
+            # Calculate result with 15 digits of precision
             result = sympy.N(sympy_expr, 15)
 
-            # 格式化結果，去除多餘的小數點和零
+            # Format result string
             result_str = str(result)
             if '.' in result_str:
                 result_str = result_str.rstrip('0').rstrip('.')
 
-            log.info(f'計算結果: {expression} = {result_str}')
+            log.info(f'Calculation completed: {expression} = {result_str}')
             
-            # 使用翻譯系統格式化結果訊息
             result_message = self.lang_manager.translate(
                 guild_id, "commands", "math", "responses", "result",
                 expression=expression, result=result_str
-            ) if self.lang_manager else f'計算結果: {expression} = {result_str}'
+            ) if self.lang_manager else f'Result: {expression} = {result_str}'
             
             return result_message
         except Exception as e:
-            await func.report_error(e, f"An error occurred during calculation in cogs/math.py")
+            await func.report_error(e, "Calculation error in MathCalculatorCog")
             log.error("Calculation error", exception=e)
             error_message = self.lang_manager.translate(
                 guild_id, "commands", "math", "responses", "error_general"
-            ) if self.lang_manager else "計算錯誤：無法解析或計算該表達式。"
+            ) if self.lang_manager else "Calculation error: Unable to parse or evaluate the expression."
             return error_message
 
 async def setup(bot):
+    """Set up the MathCalculatorCog."""
     await bot.add_cog(MathCalculatorCog(bot))
-
-
-
-

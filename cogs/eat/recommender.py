@@ -1,7 +1,7 @@
-"""輕量加權推薦器
+"""Lightweight Weighted Recommender.
 
-取代 PyTorch LSTM 模型，使用基於用戶評分歷史的即時加權算法。
-無需訓練，直接從 DB 計算偏好向量並對候選餐廳排名。
+Replaces the PyTorch LSTM model with a real-time weighted algorithm based on user rating history.
+Calculates preference vectors directly from the DB and ranks candidate restaurants without training.
 """
 import datetime
 import random
@@ -12,29 +12,29 @@ from addons.logging import get_logger
 
 logger = get_logger(server_id="Bot", source="eat.recommender")
 
-RECENTLY_VISITED_DAYS = 7   # 幾天內訪問過算「最近」
-RECENTLY_VISITED_PENALTY = -1.5  # 最近訪問過的懲罰分
-TAG_BOOST_MAX = 2.0          # 喜歡標籤的最大加分
-TAG_BOOST_PER_LIKE = 0.5     # 每次喜歡增加的分數
+RECENTLY_VISITED_DAYS = 7   # "Recent" if visited within this many days
+RECENTLY_VISITED_PENALTY = -1.5  # Penalty for recently visited restaurants
+TAG_BOOST_MAX = 2.0          # Maximum bonus for liked tags
+TAG_BOOST_PER_LIKE = 0.5     # Bonus increment per like
 
 
 class WeightedRecommender:
-    """基於用戶評分歷史的加權推薦器。"""
+    """Weighted recommender based on user rating history."""
 
     def __init__(self, db: DB):
         self.db = db
 
     def suggest_keyword(self, discord_id: str, available_keywords: list[str]) -> str:
-        """根據用戶偏好建議下一個搜尋關鍵字。
+        """Suggest the next search keyword based on user preferences.
 
-        優先選擇用戶喜歡過的標籤/關鍵字；若無歷史，隨機選擇。
+        Prioritizes tags/keywords the user has liked; chooses randomly if no history exists.
 
         Args:
-            discord_id: 伺服器或用戶 ID
-            available_keywords: 資料庫中現有的關鍵字列表
+            discord_id: Server or user ID.
+            available_keywords: List of existing keywords in the database.
 
         Returns:
-            建議的搜尋關鍵字字串
+            Suggested search keyword string.
         """
         if not available_keywords:
             return "餐廳"
@@ -44,7 +44,7 @@ class WeightedRecommender:
             if not liked:
                 return random.choice(available_keywords)
 
-            # 統計喜歡記錄中的 keyword 出現次數
+            # Count occurrences of keywords in liked records
             liked_keywords = Counter()
             for row in liked:
                 record = row[0]
@@ -53,29 +53,29 @@ class WeightedRecommender:
                 if record.tag:
                     liked_keywords[record.tag] += 1
 
-            # 找出在 available_keywords 中且偏好分最高的
+            # Find the keyword with the highest preference score among available_keywords
             best = max(
                 available_keywords,
                 key=lambda kw: liked_keywords.get(kw, 0),
             )
-            # 若最佳關鍵字偏好分為 0，表示沒有交集，隨機選擇
+            # If the best keyword has a preference score of 0, choose randomly
             if liked_keywords.get(best, 0) == 0:
                 return random.choice(available_keywords)
             return best
 
         except Exception as e:
-            logger.warning(f"suggest_keyword 失敗，隨機選擇：{e}")
+            logger.warning(f"suggest_keyword failed, choosing randomly: {e}")
             return random.choice(available_keywords)
 
     def rank_candidates(self, discord_id: str, candidates: list[dict]) -> list[dict]:
-        """對候選餐廳排名，排除不喜歡的餐廳並加權喜歡的類別。
+        """Rank candidate restaurants, excluding disliked ones and weighting liked categories.
 
         Args:
-            discord_id: 伺服器或用戶 ID
-            candidates: PlaceResult 字典列表（來自 Provider）
+            discord_id: Server or user ID.
+            candidates: List of PlaceResult dictionaries (from Provider).
 
         Returns:
-            排序後的 PlaceResult 列表（分數高優先）
+            Sorted list of PlaceResult dictionaries (higher score first).
         """
         if not candidates:
             return []
@@ -85,43 +85,43 @@ class WeightedRecommender:
             disliked_records = self.db.getDislikedRecords(discord_id)
             recent_records = self.db.getRecentRecords(discord_id, days=RECENTLY_VISITED_DAYS)
 
-            # 建立喜歡標籤計數器
+            # Create liked tags counter
             liked_tags: Counter = Counter()
             for row in liked_records:
                 record = row[0]
                 if record.tag:
                     liked_tags[record.tag] += record.self_rate
 
-            # 建立不喜歡餐廳名稱集合（排除用）
+            # Create set of disliked restaurant names (for exclusion)
             disliked_titles = {row[0].title.lower() for row in disliked_records if row[0].title}
 
-            # 建立最近訪問餐廳名稱集合（懲罰用）
+            # Create set of recently visited restaurant names (for penalty)
             recently_visited = {row[0].title.lower() for row in recent_records if row[0].title}
 
             def score(place: dict) -> float:
                 name_lower = place.get("name", "").lower()
-                # 完全排除不喜歡的餐廳
+                # Completely exclude disliked restaurants
                 if name_lower in disliked_titles:
                     return float("-inf")
 
-                base = place.get("rating", 3.0) or 3.0  # 0 評分視為 3.0
+                base = place.get("rating", 3.0) or 3.0  # Treat 0 rating as 3.0
 
-                # 標籤喜好加成
+                # Tag preference boost
                 category = place.get("category", "")
                 tag_boost = min(liked_tags.get(category, 0) * TAG_BOOST_PER_LIKE, TAG_BOOST_MAX)
 
-                # 最近訪問懲罰
+                # Recently visited penalty
                 visit_penalty = RECENTLY_VISITED_PENALTY if name_lower in recently_visited else 0.0
 
                 return base + tag_boost + visit_penalty
 
             scored = [(place, score(place)) for place in candidates]
-            # 排除分數為 -inf（不喜歡的），然後按分數降序
+            # Exclude -inf scores (disliked), then sort by score descending
             filtered = [(p, s) for p, s in scored if s != float("-inf")]
             filtered.sort(key=lambda x: x[1], reverse=True)
 
             return [p for p, _ in filtered]
 
         except Exception as e:
-            logger.warning(f"rank_candidates 失敗，返回原始順序：{e}")
+            logger.warning(f"rank_candidates failed, returning original order: {e}")
             return candidates

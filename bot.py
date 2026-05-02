@@ -134,7 +134,7 @@ class PigPig(commands.Bot):
         
         self.status_cycle = cycle([
             (discord.ActivityType.listening, "大家的聲音"),
-            (discord.ActivityType.playing, "泥巴 在 {n} 個伺服器裡")
+            (discord.ActivityType.playing, "泥巴在{n}個伺服器裡")
         ])
 
     @tasks.loop(seconds=15)
@@ -314,7 +314,7 @@ class PigPig(commands.Bot):
             logger = self.get_logger_for_guild(str(before.guild.id))
             bound_log = logger.bind(server_id=str(before.guild.id), user_id=str(before.author.id))
             bound_log.info(
-                message=f"原訊息={before.content} 新訊息={after.content}",
+                message=f"Original={before.content} New={after.content}",
                 channel_or_file=str(before.channel.name),
                 action="edit_message",
             )
@@ -543,7 +543,7 @@ class PigPig(commands.Bot):
         logger = self.get_logger_for_guild("Bot")
 
         # Log error
-        logger.error(f"事件 '{event_method}' 發生錯誤")
+        logger.error(f"Error in event '{event_method}'")
         logger.error(traceback.format_exc())
 
         await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
@@ -585,7 +585,7 @@ class PigPig(commands.Bot):
 
         # Log error
         if logger:
-            logger.error(f"指令 '{ctx.command}' 發生錯誤: {error}")
+            logger.error(f"Error in command '{ctx.command}': {error}")
             logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
 
         await func.report_error(error, f"on_command_error: {ctx.command}")
@@ -637,11 +637,11 @@ class PigPig(commands.Bot):
                 except Exception as send_exc:
                     logger.error(f"Failed to send embed to channel {bug_report_channel_id}: {send_exc}")
             else:
-                logger.error(f"找不到指定的錯誤報告頻道: {bug_report_channel_id}")
+                logger.error(f"Could not find bug report channel: {bug_report_channel_id}")
 
         except Exception as e:
             # Catch any remaining unexpected errors to prevent loop (error reporting failing during error reporting)
-            logger.error(f"發送錯誤報告至頻道 {bug_report_channel_id} 發生未預期錯誤: {e}")
+            logger.error(f"Unexpected error while sending report to channel {bug_report_channel_id}: {e}")
 
                 
     async def close(self):

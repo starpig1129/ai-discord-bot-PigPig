@@ -33,8 +33,12 @@
             "invalid_query": "无效的搜索查询",
             "image_download_failed": "图片下载失败",
             "image_element_not_found": "无法找到图片元素或跳转URL元素",
-            "eat_no_food": "没有这种食物哦",
+            "eat_no_food": "没有这种食物喔",
             "eat_system_error": "原本想推荐你吃 {keyword}，但很抱歉系统出错了QQ: {error}"
+        },
+        "ai": {
+            "system_prompt": "你是一位网络研究员。请针对用户的查询进行启用了 Grounding 的网络搜索，并汇总出精简且准确的答案。优先使用官方且最新的来源。直接以 Discord Markdown 格式回传最终输出，并包含以下区块：\n\n**回答：** 一个簡短的段落。\n\n**重点：** 最多 5 个精简要点的枚举列表。\n\n请务必以简体中文回答。",
+            "user_query_prefix": "用户查询："
         }
     }
 }

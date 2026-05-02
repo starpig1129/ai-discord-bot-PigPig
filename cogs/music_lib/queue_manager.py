@@ -22,7 +22,7 @@ class QueueManager:
         self.guild_playlists: Dict[int, List[Dict[str, Any]]] = {}
 
     def get_guild_settings(self, guild_id: int) -> Dict[str, Any]:
-        """獲取伺服器的播放設置"""
+        """Get server playback settings."""
         if guild_id not in self.guild_settings:
             self.guild_settings[guild_id] = {
                 "play_mode": PlayMode.NO_LOOP.value,
@@ -31,7 +31,7 @@ class QueueManager:
         return self.guild_settings[guild_id]
 
     def get_guild_queue_and_folder(self, guild_id: int) -> Tuple[asyncio.Queue, str]:
-        """確保伺服器有獨立的資料夾和播放清單"""
+        """Ensure the server has a unique folder and playlist."""
         if guild_id not in self.guild_queues:
             self.guild_queues[guild_id] = asyncio.Queue()
 
@@ -41,12 +41,12 @@ class QueueManager:
         return self.guild_queues[guild_id], guild_folder
 
     def get_queue(self, guild_id: int) -> asyncio.Queue:
-        """為 guild 取得佇列"""
+        """Get the queue for the guild."""
         q, _ = self.get_guild_queue_and_folder(guild_id)
         return q
 
     def clear_guild_data(self, guild_id: int):
-        """清空指定伺服器的播放清單"""
+        """Clear the playlist for the specified server."""
         if guild_id in self.guild_queues:
             self.guild_queues[guild_id] = asyncio.Queue()
         if guild_id in self.guild_settings:
@@ -56,11 +56,11 @@ class QueueManager:
             self.guild_playlists[guild_id] = []
 
     def set_playlist(self, guild_id: int, video_infos: List[Dict[str, Any]]):
-        """設置伺服器的播放清單"""
+        """Set the server's playlist."""
         self.guild_playlists[guild_id] = video_infos
 
     async def get_next_playlist_songs(self, guild_id: int, count: int = 1, youtube_manager=None, folder: Optional[str] = None, interaction=None) -> List[Dict[str, Any]]:
-        """獲取播放清單中的下一首歌曲"""
+        """Get the next song from the playlist."""
         if guild_id not in self.guild_playlists:
             return []
         
@@ -81,32 +81,32 @@ class QueueManager:
         return songs
 
     def has_playlist_songs(self, guild_id: int) -> bool:
-        """檢查是否還有播放清單歌曲"""
+        """Check if there are more songs in the playlist."""
         return guild_id in self.guild_playlists and len(self.guild_playlists[guild_id]) > 0
 
     def toggle_shuffle(self, guild_id: int) -> bool:
-        """切換隨機播放狀態"""
+        """Toggle shuffle playback state."""
         settings = self.get_guild_settings(guild_id)
         settings["shuffle"] = not settings["shuffle"]
         return settings["shuffle"]
 
     def set_play_mode(self, guild_id: int, mode: PlayMode):
-        """設置播放模式"""
+        """Set the playback mode."""
         settings = self.get_guild_settings(guild_id)
         settings["play_mode"] = mode.value
 
     def get_play_mode(self, guild_id: int) -> PlayMode:
-        """獲取播放模式"""
+        """Get the playback mode."""
         settings = self.get_guild_settings(guild_id)
         return PlayMode(settings["play_mode"])
 
     def is_shuffle_enabled(self, guild_id: int) -> bool:
-        """檢查是否啟用隨機播放"""
+        """Check if shuffle playback is enabled."""
         settings = self.get_guild_settings(guild_id)
         return settings["shuffle"]
 
     async def copy_queue(self, guild_id: int, shuffle: bool = False) -> Tuple[List[Dict[str, Any]], asyncio.Queue]:
-        """複製隊列內容而不消耗原隊列"""
+        """Copy queue contents without consuming the original queue."""
         queue = self.guild_queues.get(guild_id)
         if not queue:
             return [], asyncio.Queue()
@@ -133,67 +133,67 @@ class QueueManager:
         return queue_copy, temp_queue
 
     def get_queue_snapshot(self, guild_id: int) -> List[Dict[str, Any]]:
-        """獲取當前播放隊列的快照"""
+        """Get a snapshot of the current playback queue."""
         queue = self.guild_queues.get(guild_id)
         if not queue or queue.empty():
             return []
         return list(queue._queue).copy()
 
     def is_queue_empty(self, guild_id: int) -> bool:
-        """檢查佇列是否為空"""
+        """Check if the queue is empty."""
         q = self.guild_queues.get(guild_id)
         return not q or q.empty()
 
     def clear_queue(self, guild_id: int):
-        """清空指定伺服器的播放隊列"""
+        """Clear the playback queue for the specified server."""
         if guild_id in self.guild_queues:
             self.guild_queues[guild_id] = asyncio.Queue()
 
     def set_queue(self, guild_id: int, q: asyncio.Queue):
-        """為特定 guild 設置佇列"""
+        """Set the queue for a specific guild."""
         self.guild_queues[guild_id] = q
 
     async def add_to_queue(self, guild_id: int, item: Dict[str, Any], force: bool = False) -> bool:
         """
-        將項目添加到佇列，並根據添加者（使用者或機器人）應用不同的優先級邏輯。
-        成功返回 True，失敗返回 False。
+        Add an item to the queue and apply different priority logic based on the adder (user or bot).
+        Returns True on success, False on failure.
         """
         q = self.get_queue(guild_id)
-        # 直接操作 q._queue (deque) 以確保原子性
+        # Directly manipulate q._queue (deque) to ensure atomicity
 
-        # 1. 檢查歌曲是否已存在，如果存在且非強制新增，則直接返回 True
+        # 1. Check if the song already exists; if so and not a forced add, return True directly
         if not force:
             video_id = item.get('video_id')
             if any(song.get('video_id') == video_id for song in q._queue):
-                logger.info(f"歌曲 '{item.get('title')}' 已在佇列中，視為成功。")
+                logger.info(f"Song '{item.get('title')}' is already in the queue, treating as success.")
                 return True
 
-        # 2. 判斷新增者是使用者還是機器人
+        # 2. Determine if the adder is a user or a bot
         added_by_user = 'added_by' in item and item['added_by'] != self.bot.user.id
 
-        # 3. 處理佇列已滿的情況
+        # 3. Handle queue full scenarios
         if q.qsize() >= self.MAX_QUEUE_SIZE:
             if added_by_user:
-                # 使用者新增：從末尾反向尋找並刪除第一首機器人歌曲
+                # User add: Search backwards from the end and delete the first bot-added song
                 bot_song_removed = False
                 for i in range(len(q._queue) - 1, -1, -1):
                     if q._queue[i].get('added_by') == self.bot.user.id:
                         del q._queue[i]
                         bot_song_removed = True
-                        logger.info("佇列已滿，已為使用者移除一首機器人歌曲。")
+                        logger.info("Queue is full; removed one bot-added song for the user.")
                         break
                 
                 if not bot_song_removed:
-                    logger.warning(f"佇列已滿，且沒有機器人歌曲可移除 (guild_id: {guild_id})。無法新增歌曲。")
+                    logger.warning(f"Queue is full and no bot songs to remove (guild_id: {guild_id}). Cannot add song.")
                     return False
             else:
-                # 機器人新增：佇列已滿，直接失敗
-                logger.warning(f"佇列已滿 (guild_id: {guild_id})，機器人無法新增歌曲。")
+                # Bot add: Queue is full, fail immediately
+                logger.warning(f"Queue is full (guild_id: {guild_id}); bot cannot add song.")
                 return False
 
-        # 4. 決定插入點
+        # 4. Determine insertion point
         if added_by_user:
-            # 使用者新增：尋找第一首機器人歌曲的索引，並插入在其前面
+            # User add: Find the index of the first bot song and insert before it
             insert_index = -1
             for i, song in enumerate(q._queue):
                 if song.get('added_by') == self.bot.user.id:
@@ -203,74 +203,74 @@ class QueueManager:
             if insert_index != -1:
                 q._queue.insert(insert_index, item)
             else:
-                # 如果沒有機器人歌曲，則添加到末尾
+                # If no bot songs, add to the end
                 q._queue.append(item)
         else:
-            # 機器人新增：直接添加到末尾
+            # Bot add: Add directly to the end
             q._queue.append(item)
 
-        # 5. 不再需要重建佇列
+        # 5. Rebuilding queue is no longer necessary
         return True
 
     async def add_to_front_of_queue(self, guild_id: int, item: Dict[str, Any]) -> bool:
-        """將項目添加到佇列的前面，並處理佇列溢出。成功返回 True，失敗返回 False。"""
+        """Add item to the front of the queue and handle overflow. Returns True on success, False on failure."""
         q = self.get_queue(guild_id)
-        # 直接操作 q._queue (deque) 以確保原子性
+        # Directly manipulate q._queue (deque) to ensure atomicity
 
-        # 1. 檢查歌曲是否已存在
+        # 1. Check if the song already exists
         video_id = item.get('video_id')
         if any(song.get('video_id') == video_id for song in q._queue):
-            logger.info(f"歌曲 '{item.get('title')}' 已存在於佇列中，跳過新增。")
+            logger.info(f"Song '{item.get('title')}' already exists in the queue, skipping add.")
             return True
 
-        # 2. 處理佇列已滿的情況
+        # 2. Handle queue full scenarios
         if q.qsize() >= self.MAX_QUEUE_SIZE:
-            # 從末尾反向尋找並刪除第一首機器人歌曲
+            # Search backwards from the end and delete the first bot-added song
             bot_song_removed = False
             for i in range(len(q._queue) - 1, -1, -1):
                 if q._queue[i].get('added_by') == self.bot.user.id:
                     del q._queue[i]
                     bot_song_removed = True
-                    logger.info("佇列已滿，已為優先歌曲移除一首機器人歌曲。")
+                    logger.info("Queue is full; removed one bot-added song for priority song.")
                     break
             
             if not bot_song_removed:
-                logger.warning(f"佇列已滿，且沒有機器人歌曲可移除 (guild_id: {guild_id})。無法新增歌曲。")
+                logger.warning(f"Queue is full and no bot songs to remove (guild_id: {guild_id}). Cannot add song.")
                 return False
 
-        # 3. 將歌曲新增到佇列前面 (使用 appendleft 以提高效率)
+        # 3. Add song to the front of the queue (use appendleft for efficiency)
         q._queue.appendleft(item)
 
-        # 4. 不再需要重建佇列
+        # 4. Rebuilding queue is no longer necessary
         return True
 
     async def get_next_item(self, guild_id: int) -> Optional[Dict[str, Any]]:
-        """從佇列中獲取下一個項目"""
+        """Get the next item from the queue."""
         q = self.get_queue(guild_id)
         if q.empty():
             return None
         return await q.get()
 
     async def enforce_autoplay_limit(self, guild_id: int, limit: int = 5):
-        """確保佇列中由自動播放新增的歌曲不超過指定數量"""
+        """Ensure the number of autoplayed songs in the queue does not exceed the specified limit."""
         q = self.get_queue(guild_id)
         queue_list = list(q._queue)
         
         autoplay_songs_indices = [i for i, song in enumerate(queue_list) if song.get('added_by') == self.bot.user.id]
         
         if len(autoplay_songs_indices) > limit:
-            # 計算需要移除的歌曲數量
+            # Calculate number of songs to remove
             to_remove_count = len(autoplay_songs_indices) - limit
             
-            # 獲取需要移除的歌曲的索引（從頭開始）
+            # Get indices of songs to remove (starting from the head)
             indices_to_remove = set(autoplay_songs_indices[:to_remove_count])
             
-            # 過濾掉需要移除的歌曲
+            # Filter out songs that need to be removed
             new_queue_list = [song for i, song in enumerate(queue_list) if i not in indices_to_remove]
 
-            # 重建佇列
+            # Rebuild queue
             new_queue = asyncio.Queue()
             for song in new_queue_list:
                 await new_queue.put(song)
             self.guild_queues[guild_id] = new_queue
-            logger.info(f"已從佇列 (guild_id: {guild_id}) 移除 {to_remove_count} 首多餘的自動播放歌曲。")
+            logger.info(f"Removed {to_remove_count} redundant autoplay songs from queue (guild_id: {guild_id}).")

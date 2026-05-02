@@ -31,6 +31,12 @@
         "unknown": "❓ 不明"
     },
     "footer": {
-        "status_prefix": "状態："
+        "status_prefix": "ステータス："
+    },
+    "uptime_units": {
+        "days": "日",
+        "hours": "時間",
+        "minutes": "分",
+        "seconds": "秒"
     }
 }

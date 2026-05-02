@@ -6,74 +6,73 @@
 
 ---
 
-## 🚀 專案特性
+## 🚀 Project Features
 
-這是一個基於先進 **AGI & 認知架構** 設計的 Discord AI 機器人。
+This is a Discord AI bot designed based on advanced **AGI & Cognitive Architecture**.
 
 <div class="grid cards" markdown="1">
 
-
--   :material-brain:{ .lg .middle } __模組化認知__
-
-    ---
-
-    分離 Perception (感知)、Memory (記憶)、Reasoning (推理) 與 Action (行動)，避免黑箱設計。
-
--   :material-memory:{ .lg .middle } __雙重記憶系統__
+-   :material-brain:{ .lg .middle } __Modular Cognition__
 
     ---
 
-    整合 Working Memory (工作記憶) 與 Episodic Memory (情節記憶)，讓機器人擁有「過去」與「當下」。
+    Separates Perception, Memory, Reasoning, and Action to avoid "black box" designs.
 
--   :material-robot:{ .lg .middle } __多模型整合__
-
-    ---
-
-    支援 Gemini 1.5 Pro/Flash, GPT-4o, Claude 3.5 Sonnet 等頂尖大型語言模型。
-
--   :material-tools:{ .lg .middle } __功能工廠__
+-   :material-memory:{ .lg .middle } __Dual Memory System__
 
     ---
 
-    具備自動化搜尋、多媒體處理、音樂播放、數學運算與系統管理等強大工具。
+    Integrates Working Memory and Episodic Memory, giving the bot a sense of "past" and "present."
+
+-   :material-robot:{ .lg .middle } __Multi-model Integration__
+
+    ---
+
+    Supports top-tier LLMs including Gemini 1.5 Pro/Flash, GPT-4o, and Claude 3.5 Sonnet.
+
+-   :material-tools:{ .lg .middle } __Feature Factory__
+
+    ---
+
+    Equipped with powerful tools for automated search, multimedia processing, music playback, math operations, and system management.
 
 </div>
 
 ---
 
-## 📖 文檔導覽
+## 📖 Documentation Navigation
 
 <div class="grid cards" markdown="1">
 
--   [__核心組件__](llm/index.md)
+-   [__Core Components__](llm/index.md)
     {: .important }
 
-    深入了解 LLM 調度、提示詞保護與資料架構。
+    Deep dive into LLM orchestration, prompt protection, and data architecture.
 
--   [__功能模組 (Cogs)__](cogs/index.md)
+-   [__Features (Cogs)__](cogs/index.md)
     {: .tip }
 
-    探索從記憶指令到音樂播放的所有模組細節。
+    Explore module details from memory commands to music playback.
 
--   [__管理與日誌__](addons/index.md)
+-   [__Admin & Logging__](addons/index.md)
     {: .note }
 
-    配置系統設定、安全 Token 與自動更新機制。
+    Configure system settings, secure tokens, and auto-update mechanisms.
 
--   [__法律與政策__](PRIVACY_POLICY.md)
+-   [__Legal & Policies__](PRIVACY_POLICY.md)
 
-    隱私權政策與服務條款說明。
+    Privacy Policy and Terms of Service details.
 
 </div>
 
 ---
 
-## 🛠️ 快速開始
+## 🛠️ Quick Start
 
-若要開始部署您的 PigPig Bot，請參考 GitHub 上的詳細指南。
+To begin deploying your PigPig Bot, please refer to the detailed guide on GitHub.
 
-[:octicons-arrow-right-24: 前往 GitHub 儲存庫](https://github.com/starpig1129/ai-discord-bot-PigPig){ .md-button .md-button--primary }
+[:octicons-arrow-right-24: Go to GitHub Repository](https://github.com/starpig1129/ai-discord-bot-PigPig){ .md-button .md-button--primary }
 
 ---
-*本計畫致力於實現機器人技術與 AI 的深度融合 (Sim2Real)。*
+*This project is dedicated to achieving deep integration of robotics and AI (Sim2Real).*
 {: .center }

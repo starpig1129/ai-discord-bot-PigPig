@@ -32,5 +32,11 @@
     },
     "footer": {
         "status_prefix": "狀態："
+    },
+    "uptime_units": {
+        "days": "天",
+        "hours": "小時",
+        "minutes": "分鐘",
+        "seconds": "秒"
     }
 }

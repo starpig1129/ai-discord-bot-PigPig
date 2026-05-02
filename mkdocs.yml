@@ -14,7 +14,7 @@ use_directory_urls: true
 
 theme:
   name: material
-  language: zh-TW
+  language: en
   logo: assets/logo.png
   favicon: assets/favicon.png
   font:
@@ -87,46 +87,64 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - 首頁: index.md
-  - 核心組件:
-    - 概覽: llm/index.md
-    - 模型管理: llm/model_manager.md
-    - 調度器 (Orchestrator): llm/orchestrator.md
-    - 工具工廠 (Tools Factory): llm/tools_factory.md
-    - 上下文管理: llm/context_manager.md
-    - 提示詞保護機制: llm/protected_prompt_system.md
-    - 資料架構 (Schema): llm/schema.md
-  - 功能模組 (Cogs):
-    - 概覽: cogs/index.md
-    - 記憶系統:
-      - 情節記憶: cogs/episodic_memory.md
-      - 記憶指令: cogs/memory_commands.md
-    - 語言與系統提示:
-      - 語言管理: cogs/language_manager.md
-      - 系統提示管理: cogs/system_prompt_manager.md
-    - 工具類:
-      - 網際網路搜尋: cogs/internet_search.md
-      - 圖像生成: cogs/gen_img.md
-      - GIF 工具: cogs/gif_tools.md
-      - 音樂功能: cogs/music.md
-      - 數學運算: cogs/math.md
-    - 管理與維護:
-      - 更新管理: cogs/update_manager.md
-      - 頻道管理: cogs/channel_manager.md
-      - 用戶資料: cogs/userdata.md
-      - 效能監控: cogs/performance.md
-    - 其他功能:
-      - 提醒功能: cogs/remind.md
-      - 總結器: cogs/summarizer.md
-      - 故事管理: cogs/story_manager.md
-      - 排程: cogs/schedule.md
-      - 機器人資訊: cogs/botinfo.md
-      - 幫助選單: cogs/help.md
-  - 附加組件 (Addons):
-    - 概覽: addons/index.md
-    - 設定: addons/settings.md
-    - 代幣 (Tokens): addons/tokens.md
-    - 日誌記錄: addons/logging.md
-  - 法律與政策:
-    - 隱私政策: PRIVACY_POLICY.md
-    - 服務條款: TERMS_OF_SERVICE.md
+  - Home: index.md
+  - System Architecture:
+    - Main Entry: main.md
+    - Core Bot: bot.md
+    - Utilities: function.md
+    - Update System: update.md
+  - LLM Intelligence:
+    - Overview: llm/index.md
+    - Memory Systems:
+      - Overview: llm/memory/index.md
+      - Short-Term: llm/memory/short_term.md
+      - Episodic: llm/memory/episodic.md
+      - Procedural: llm/memory/procedural.md
+      - Knowledge: llm/memory/knowledge.md
+    - Tool System:
+      - Architecture: llm/tools/index.md
+      - Tool List: llm/tools/list.md
+    - Core Components:
+      - Orchestrator: llm/orchestrator.md
+      - Context Manager: llm/context_manager.md
+      - Tools Factory: llm/tools_factory.md
+      - Model Manager: llm/model_manager.md
+      - Circuit Breaker: llm/model_circuit_breaker.md
+      - Callbacks: llm/callbacks.md
+      - Prompt Protection: llm/protected_prompt_system.md
+      - Data Schema: llm/schema.md
+  - Features (Cogs):
+    - Overview: cogs/index.md
+    - Memory System:
+      - Episodic Memory: cogs/episodic_memory.md
+      - Memory Commands: cogs/memory_commands.md
+    - Language & System Prompt:
+      - Language Management: cogs/language_manager.md
+      - System Prompt Management: cogs/system_prompt_manager.md
+    - Tools:
+      - Internet Search: cogs/internet_search.md
+      - Image Generation: cogs/gen_img.md
+      - GIF Tools: cogs/gif_tools.md
+      - Music Feature: cogs/music.md
+      - Math Operations: cogs/math.md
+    - Admin & Maintenance:
+      - User Statistics: cogs/stats_cog.md
+      - Update Management: cogs/update_manager.md
+      - Channel Management: cogs/channel_manager.md
+      - User Data: cogs/userdata.md
+      - Performance Monitoring: cogs/performance.md
+    - Other Features:
+      - Reminders: cogs/remind.md
+      - Summarizer: cogs/summarizer.md
+      - Story Management: cogs/story_manager.md
+      - Scheduling: cogs/schedule.md
+      - Bot Info: cogs/botinfo.md
+      - Help Menu: cogs/help.md
+  - System Addons:
+    - Overview: addons/index.md
+    - Settings: addons/settings.md
+    - Tokens: addons/tokens.md
+    - Logging: addons/logging.md
+  - Legal & Policies:
+    - Privacy Policy: PRIVACY_POLICY.md
+    - Terms of Service: TERMS_OF_SERVICE.md

@@ -11,15 +11,15 @@ class AudioManager:
         self.current_audio = None
         
     def create_audio_source(self, song: Dict[str, Any]) -> FFmpegPCMAudio:
-        """根據歌曲資訊建立 FFmpeg 音訊來源"""
+        """Create an FFmpeg audio source based on song information."""
         is_live = song.get('is_live', False)
         
         if is_live:
             stream_url = song.get('stream_url')
             if not stream_url:
-                raise ValueError("直播歌曲缺少 stream_url")
+                raise ValueError("Live song is missing stream_url")
             
-            # 針對直播優化的 FFmpeg 參數
+            # FFmpeg parameters optimized for live streams
             ffmpeg_options = {
                 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
                 'options': '-vn'
@@ -28,9 +28,9 @@ class AudioManager:
         else:
             file_path = song.get('file_path')
             if not file_path or not os.path.exists(file_path):
-                raise ValueError(f"音訊檔案不存在或路徑錯誤: {file_path}")
+                raise ValueError(f"Audio file does not exist or invalid path: {file_path}")
             
-            # 針對本地檔案的標準參數
+            # Standard parameters for local files
             return FFmpegPCMAudio(file_path)
         
     async def delete_file(self, guild_id: int, file_path: str):
@@ -39,9 +39,9 @@ class AudioManager:
             if os.path.exists(file_path):
                 await asyncio.to_thread(os.remove, file_path)
                 if logger.isEnabledFor(logger.DEBUG):
-                    logger.debug(f"[音樂] Guild ID: {guild_id}, file deletion successful!")
+                    logger.debug(f"[Music] Guild ID: {guild_id}, file deletion successful!")
         except Exception as e:
-            logger.warning(f"[音樂] Guild ID: {guild_id}, file deletion failed: {e}")
+            logger.warning(f"[Music] Guild ID: {guild_id}, file deletion failed: {e}")
             
     async def cleanup_guild_files(self, guild_id: int, folder: str):
         """Clean up all audio files for a guild"""

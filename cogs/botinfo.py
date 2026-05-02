@@ -14,7 +14,7 @@ from function import func
 
 
 class BotInfo(commands.Cog):
-    """機器人資訊顯示 Cog"""
+    """Cog for displaying bot information and system statistics."""
 
     def __init__(self, bot):
         self.bot = bot
@@ -22,51 +22,60 @@ class BotInfo(commands.Cog):
         self.lang_manager: Optional[LanguageManager] = None
 
     async def cog_load(self):
-        """當 Cog 載入時初始化語言管理器"""
+        """Initialize LanguageManager when the cog is loaded."""
         self.lang_manager = LanguageManager.get_instance(self.bot)
 
-    def _format_uptime(self, uptime):
-        """格式化運行時間"""
+    def _format_uptime(self, uptime, guild_id: str = "0"):
+        """Format uptime duration into a localized human-readable string."""
         days, remainder = divmod(int(uptime.total_seconds()), 86400)
         hours, remainder = divmod(remainder, 3600)
         minutes, seconds = divmod(remainder, 60)
 
+        # Localized units
+        if self.lang_manager:
+            d_unit = self.lang_manager.translate(guild_id, "commands", "botinfo", "uptime_units", "days")
+            h_unit = self.lang_manager.translate(guild_id, "commands", "botinfo", "uptime_units", "hours")
+            m_unit = self.lang_manager.translate(guild_id, "commands", "botinfo", "uptime_units", "minutes")
+            s_unit = self.lang_manager.translate(guild_id, "commands", "botinfo", "uptime_units", "seconds")
+        else:
+            d_unit, h_unit, m_unit, s_unit = "d", "h", "m", "s"
+
         parts = []
         if days:
-            parts.append(f"{days}天")
+            parts.append(f"{days}{d_unit}")
         if hours:
-            parts.append(f"{hours}小時")
+            parts.append(f"{hours}{h_unit}")
         if minutes:
-            parts.append(f"{minutes}分鐘")
+            parts.append(f"{minutes}{m_unit}")
         if seconds or not parts:
-            parts.append(f"{seconds}秒")
+            parts.append(f"{seconds}{s_unit}")
 
         return " ".join(parts)
 
-    @app_commands.command(name="botinfo", description="顯示機器人詳細資訊")
+    @app_commands.command(name="botinfo", description="Show detailed bot information")
     async def botinfo(self, interaction: discord.Interaction):
-        # 本地化命令描述
+        """Display comprehensive bot information and performance metrics."""
+        # Localize command description
         if self.lang_manager:
             guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
             localized_desc = self.lang_manager.translate(guild_id, "commands", "botinfo", "description")
-            if localized_desc != "botinfo":
+            if localized_desc and localized_desc != "botinfo":
                 self.botinfo.description = localized_desc
 
         try:
-            """顯示機器人詳細資訊"""
             await interaction.response.defer()
 
             bot = interaction.client
             guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
 
-            # 計算運行時間
+            # Calculate uptime
             uptime = datetime.utcnow() - self.start_time
-            uptime_str = self._format_uptime(uptime)
+            uptime_str = self._format_uptime(uptime, guild_id)
 
-            # 網路延遲
+            # Network latency
             latency = round(bot.latency * 1000, 2)
 
-            # 系統資訊
+            # System information
             try:
                 import resource
                 memory_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # KB to MB on Linux
@@ -75,28 +84,28 @@ class BotInfo(commands.Cog):
             except:
                 memory_usage = "N/A"
 
-            # 檢查語言管理器是否可用
+            # Check if LanguageManager is available
             if not self.lang_manager:
-                # 如果語言管理器不可用，使用預設值
-                title = "機器人資訊總覽"
-                basic_stats_name = "基本統計"
-                servers_label = "伺服器數量"
-                users_label = "用戶數量"
-                text_channels_label = "文字頻道"
-                voice_channels_label = "語音頻道"
-                loaded_cogs_label = "已載入 Cogs"
-                performance_name = "效能監控"
-                latency_label = "網路延遲"
-                memory_usage_label = "記憶體使用"
-                uptime_label = "運行時間"
-                cogs_name = "功能模組"
-                commands_label = "個命令"
-                no_cogs_label = "無載入的模組"
-                status_online = "線上"
-                status_idle = "閒置"
-                status_dnd = "請勿打擾"
-                status_offline = "離線"
-                status_unknown = "未知"
+                # Fallback values if LanguageManager is unavailable
+                title = "Bot Information Overview"
+                basic_stats_name = "Basic Statistics"
+                servers_label = "Servers"
+                users_label = "Users"
+                text_channels_label = "Text Channels"
+                voice_channels_label = "Voice Channels"
+                loaded_cogs_label = "Loaded Cogs"
+                performance_name = "Performance Monitoring"
+                latency_label = "Latency"
+                memory_usage_label = "Memory Usage"
+                uptime_label = "Uptime"
+                cogs_name = "Feature Modules"
+                commands_label = "commands"
+                no_cogs_label = "No loaded modules"
+                status_online = "Online"
+                status_idle = "Idle"
+                status_dnd = "Do Not Disturb"
+                status_offline = "Offline"
+                status_unknown = "Unknown"
             else:
                 title = self.lang_manager.translate(guild_id, "commands", "botinfo", "title")
                 basic_stats_name = self.lang_manager.translate(guild_id, "commands", "botinfo", "fields", "basic_stats", "name")
@@ -118,14 +127,14 @@ class BotInfo(commands.Cog):
                 status_offline = self.lang_manager.translate(guild_id, "commands", "botinfo", "status", "offline")
                 status_unknown = self.lang_manager.translate(guild_id, 'commands', 'botinfo', 'status', 'unknown')
 
-            # 主要 Embed
+            # Main Embed
             main_embed = discord.Embed(
                 title=title,
                 color=discord.Color.from_rgb(114, 137, 218),
                 timestamp=datetime.utcnow()
             )
 
-            # 安全地取得用戶資訊
+            # Securely get user info
             user_name = getattr(bot.user, 'name', 'Unknown')
             discriminator = getattr(bot.user, 'discriminator', '0000')
             avatar_url = getattr(bot.user, 'display_avatar', getattr(bot.user, 'avatar', None))
@@ -135,7 +144,7 @@ class BotInfo(commands.Cog):
             main_embed.set_thumbnail(url=avatar_url)
             main_embed.set_author(name=f"{user_name}#{discriminator}", icon_url=avatar_url)
 
-            # 基本統計資訊
+            # Basic Statistics
             main_embed.add_field(
                 name=basic_stats_name,
                 value="```yml\n"
@@ -148,7 +157,7 @@ class BotInfo(commands.Cog):
                 inline=False
             )
 
-            # 效能監控
+            # Performance Monitoring
             memory_str = f"{memory_usage:.1f}MB" if isinstance(memory_usage, (int, float)) else str(memory_usage)
             main_embed.add_field(
                 name=performance_name,
@@ -160,7 +169,7 @@ class BotInfo(commands.Cog):
                 inline=False
             )
 
-            # 功能模組
+            # Feature Modules
             cog_list = []
             for cog_name, cog in getattr(bot, 'cogs', {}).items():
                 command_count = len([c for c in cog.get_commands()] + [c for c in cog.get_app_commands()])
@@ -173,7 +182,7 @@ class BotInfo(commands.Cog):
                 inline=False
             )
 
-            # 狀態指示器
+            # Status Indicators
             status_indicators = {
                 discord.Status.online: status_online,
                 discord.Status.idle: status_idle,
@@ -194,5 +203,5 @@ class BotInfo(commands.Cog):
             await func.report_error(e, "getting bot info")
 
 async def setup(bot):
-    """設定 Cog"""
+    """Set up the BotInfo cog."""
     await bot.add_cog(BotInfo(bot))

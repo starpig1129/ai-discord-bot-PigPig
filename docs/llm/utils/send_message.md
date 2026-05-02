@@ -109,8 +109,8 @@ Safely sends Discord message with comprehensive error handling.
 Gets localized "processing" or "continuation" messages based on server language settings.
 
 **Message Types:**
-- `'processing'`: "處理中..." (Processing...)
-- `'continuation'`: "繼續輸出中..." (Continuing output...)
+- `'processing'`: "Processing..."
+- `'continuation'`: "Continuing output..."
 
 ## Stream Processing System
 
@@ -200,7 +200,7 @@ if message and message.guild:
 ```python
 except Exception as exc:
     await func.report_error(exc, 'Error generating GPT response')
-    error_message = '不知道該怎麼回覆你了...'
+    error_message = "I don't know how to respond to you anymore..."
     # Attempt to send error message
 ```
 
@@ -307,7 +307,7 @@ result = await send_message(
 ## Streaming Response Flow
 
 **Message Flow:**
-1. **Initial Message**: "處理中..." (Processing...)
+1. **Initial Message**: "Processing..."
 2. **Streaming Updates**: Real-time content updates
 3. **Continuation Messages**: When content exceeds Discord limits
 4. **Final Message**: Complete processed response

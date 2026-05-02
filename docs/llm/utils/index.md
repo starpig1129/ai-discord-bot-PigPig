@@ -27,7 +27,7 @@ graph TD
 
 ```python
 class FileWatcher:
-    """檔案監控和熱重載"""
+    """File monitoring and hot-reloading"""
     
     def __init__(self, check_interval: float = 1.0):
         self.watched_files: Dict[str, datetime] = {}
@@ -49,7 +49,7 @@ class FileWatcher:
 
 ```python
 def watch_file(self, path: str, callback: Callable):
-    """監控檔案變更"""
+    """Watch file for changes"""
 ```
 
 **Parameters:**
@@ -63,7 +63,7 @@ Adds a file to the watch list and starts monitoring if not already running.
 
 ```python
 def _watch_loop(self):
-    """監控迴圈"""
+    """Monitoring loop"""
 ```
 
 **Description:**
@@ -73,7 +73,7 @@ Background thread that continuously monitors all watched files for changes. Comp
 
 ```python
 def stop_watching(self):
-    """停止監控"""
+    """Stop monitoring"""
 ```
 
 **Description:**
@@ -457,8 +457,8 @@ def test_language_converter():
     assert converter is not None
     
     # Test conversion
-    converted = converter.convert("你好")
-    assert "你好" in converted
+    converted = converter.convert("Hello")
+    assert "Hello" in converted
 
 async def test_message_sanitization():
     # Test @everyone and @here replacement

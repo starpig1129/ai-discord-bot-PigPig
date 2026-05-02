@@ -81,10 +81,10 @@ class StoryManager:
             Parsed model instance on success, None on failure.
         """
         try:
-            # Step 1: 從響應中提取 payload
+            # Step 1: Extract payload from response
             payload = None
             if isinstance(response, dict):
-                # 優先順序: structured_response > output > result > 整個 response
+                # Priority order: structured_response > output > result > entire response
                 payload = (
                     response.get("structured_response") or 
                     response.get("output") or 
@@ -94,29 +94,29 @@ class StoryManager:
             else:
                 payload = response
             
-            # Step 2: 檢查 payload 是否已經是目標類型
+            # Step 2: Check if payload is already the target type
             if isinstance(payload, expected_model):
                 self.logger.debug(f"{context}: Payload already correct type")
                 return payload
             
-            # Step 3: 根據 payload 類型進行轉換
+            # Step 3: Convert based on payload type
             if isinstance(payload, str):
-                # JSON 字符串
+                # JSON string
                 result = expected_model.model_validate_json(payload)
                 self.logger.debug(f"{context}: Parsed from JSON string")
                 return result
             elif isinstance(payload, dict):
-                # 字典
+                # Dictionary
                 result = expected_model.model_validate(payload)
                 self.logger.debug(f"{context}: Parsed from dict")
                 return result
             elif hasattr(payload, "model_dump"):
-                # Pydantic v2 模型
+                # Pydantic v2 model
                 result = expected_model.model_validate(payload.model_dump())
                 self.logger.debug(f"{context}: Parsed from Pydantic v2 model")
                 return result
             elif hasattr(payload, "dict"):
-                # Pydantic v1 模型
+                # Pydantic v1 model
                 result = expected_model.model_validate(payload.dict())
                 self.logger.debug(f"{context}: Parsed from Pydantic v1 model")
                 return result
@@ -140,7 +140,7 @@ class StoryManager:
             return None
 
     # ========================================================================
-    # 初始化與干預
+    # Initialization and Intervention
     # ========================================================================
 
     async def initialize(self):
@@ -176,7 +176,7 @@ class StoryManager:
         await interaction.response.send_modal(modal)
 
     # ========================================================================
-    # 關係與事件更新
+    # Relationships and Event Updates
     # ========================================================================
 
     async def _update_relationships(self, db: StoryDB, story_id: int, updates: List[RelationshipUpdate]):
@@ -269,7 +269,7 @@ class StoryManager:
         )
 
     # ========================================================================
-    # 消息發送
+    # Message Sending
     # ========================================================================
 
     async def _send_story_response(
@@ -304,24 +304,24 @@ class StoryManager:
             embed.set_footer(text=footer_text)
         else:
             # For narrations, use the general story instance state in fields
+            guild_id_str = str(channel.guild.id)
             embed.add_field(
-                name="📍 地點", 
-                value=story_instance.current_location or "未知", 
+                name=self.language_manager.translate(guild_id_str, "story", "labels", "location"), 
+                value=story_instance.current_location or "Unknown", 
                 inline=True
             )
             embed.add_field(
-                name="📅 日期", 
-                value=story_instance.current_date or "未知", 
+                name=self.language_manager.translate(guild_id_str, "story", "labels", "date"), 
+                value=story_instance.current_date or "Unknown", 
                 inline=True
             )
             embed.add_field(
-                name="⏰ 時間", 
-                value=story_instance.current_time or "未知", 
+                name=self.language_manager.translate(guild_id_str, "story", "labels", "time"), 
+                value=story_instance.current_time or "Unknown", 
                 inline=True
             )
 
         # Fetch and add player relationships
-        relationships = db.get_relationships_for_story(story_instance.channel_id)
         relationships = db.get_relationships_for_story(story_instance.channel_id)
         if relationships:
             relationship_lines = []
@@ -367,7 +367,7 @@ class StoryManager:
             await channel.send(embed=embed, allowed_mentions=_ALLOWED_MENTIONS)
 
     # ========================================================================
-    # 核心故事處理邏輯
+    # Core Story Processing Logic
     # ========================================================================
 
     async def process_story_message(self, message: discord.Message):
@@ -453,7 +453,7 @@ class StoryManager:
                 message_list = [HumanMessage(content=message.content)] + gm_dialogue_history
                 response = await agent.ainvoke(cast(Any, {"messages": message_list}))
 
-                # 使用統一方法提取結構化響應
+                # Use unified method to extract structured response
                 gm_plan = self._extract_structured_response(response, GMActionPlan, "GM Agent")
                 if not gm_plan:
                     await message.reply(
@@ -493,8 +493,8 @@ class StoryManager:
                         # --- Step 3B: Loop Through and Call Character Agents ---
                         full_event_text = []
                         
-                        assert gm_plan.state_update is not None,                             "GMActionPlan.state_update required for DIALOGUE"
-                        assert gm_plan.dialogue_context is not None,                             "GMActionPlan.dialogue_context required for DIALOGUE"
+                        assert gm_plan.state_update is not None, "GMActionPlan.state_update required for DIALOGUE"
+                        assert gm_plan.dialogue_context is not None, "GMActionPlan.dialogue_context required for DIALOGUE"
                         
                         latest_location = gm_plan.state_update.location
                         latest_date = gm_plan.state_update.date
@@ -530,7 +530,7 @@ class StoryManager:
                                 content = msg.content
                                 role = "user"
                                 author = cast(discord.abc.User, msg.author)
-                                assert getattr(author, "id", None) is not None,                                     "message author id must not be None"
+                                assert getattr(author, "id", None) is not None, "message author id must not be None"
                                 author_id = cast(int, author.id)
                                 
                                 if author_id == bot_user_id and msg.embeds:
@@ -543,7 +543,7 @@ class StoryManager:
                                     dialogue_history.append({"role": role, "content": content})
 
                             # Build character prompt
-                            char_system_prompt, char_user_prompt =                                 await self.prompt_engine.build_character_prompt(
+                            char_system_prompt, char_user_prompt = await self.prompt_engine.build_character_prompt(
                                     character=speaking_character,
                                     gm_context=dialogue_ctx,
                                     guild_id=guild_id,
@@ -553,7 +553,7 @@ class StoryManager:
                                 )
 
                             # Call character agent with zero retries
-                            story_character_model_name, fallback =                                 ModelManager().get_model("story_character_model")
+                            story_character_model_name, fallback = ModelManager().get_model("story_character_model")
                             story_character_model_instance = init_chat_model(story_character_model_name, max_retries=0)
                             
                             agent = create_agent(
@@ -590,7 +590,7 @@ class StoryManager:
                                     )
                                 continue
 
-                            # 使用統一方法提取結構化響應
+                            # Use unified method to extract structured response
                             character_action = self._extract_structured_response(
                                 response,
                                 CharacterAction,
@@ -685,7 +685,7 @@ class StoryManager:
         channel: discord.abc.Messageable
     ) -> Optional[StoryCharacter]:
         """
-        統一的角色查找邏輯，支持多種匹配方式。
+        Unified character lookup logic, supports multiple matching methods.
         """
         import re
         
@@ -748,7 +748,7 @@ class StoryManager:
         return speaking_character
 
     # ========================================================================
-    # 摘要與大綱生成（使用結構化輸出）
+    # Summary and Outline Generation (using structured output)
     # ========================================================================
 
     async def _generate_and_save_summary(self, story_instance: StoryInstance):
@@ -767,7 +767,7 @@ class StoryManager:
         self.logger.info(f"Generating summary for story in channel {channel.id}")
         try:
             # Fetch last 30 messages for context
-            assert isinstance(channel, discord.TextChannel),                 "channel must be a TextChannel for history access"
+            assert isinstance(channel, discord.TextChannel), "channel must be a TextChannel for history access"
             history_messages = [
                 msg async for msg 
                 in cast(discord.TextChannel, channel).history(limit=30)
@@ -782,7 +782,7 @@ class StoryManager:
                 content = msg.content
                 role = "user"
                 author = cast(discord.abc.User, msg.author)
-                assert getattr(author, "id", None) is not None,                     "message author id must not be None"
+                assert getattr(author, "id", None) is not None, "message author id must not be None"
                 author_id = cast(int, author.id)
                 
                 if author_id == bot_user_id and msg.embeds:
@@ -821,14 +821,14 @@ class StoryManager:
                 story_summary_model_instance, 
                 tools=[], 
                 system_prompt=summary_system_prompt,
-                response_format=StorySummary,  # 使用結構化輸出
+                response_format=StorySummary,  # Use structured output
                 middleware=[fallback]
             )
             response = await agent.ainvoke(cast(Any, {
                 "messages": [HumanMessage(content=summary_inst)] + dialogue_history
             }))
 
-            # 使用統一方法提取結構化響應
+            # Use unified method to extract structured response
             summary_result = self._extract_structured_response(
                 response,
                 StorySummary,
@@ -907,14 +907,14 @@ class StoryManager:
                 story_outline_model_instance, 
                 tools=[], 
                 system_prompt=outline_system_prompt,
-                response_format=StoryOutline,  # 使用結構化輸出
+                response_format=StoryOutline,  # Use structured output
                 middleware=[fallback]
             )
             response = await agent.ainvoke(cast(Any, {
                 "messages": [outline_inst, dialogue_history]
             }))
 
-            # 使用統一方法提取結構化響應
+            # Use unified method to extract structured response
             outline_result = self._extract_structured_response(
                 response,
                 StoryOutline,
@@ -941,7 +941,7 @@ class StoryManager:
             )
 
     # ========================================================================
-    # 故事啟動
+    # Story Startup
     # ========================================================================
 
     async def start_story(
@@ -1095,7 +1095,7 @@ class StoryManager:
                 )]
                 response = await agent.ainvoke(cast(Any, {"messages": message_list}))
 
-                # 使用統一方法提取結構化響應
+                # Use unified method to extract structured response
                 gm_plan = self._extract_structured_response(
                     response, 
                     GMActionPlan, 

@@ -214,7 +214,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             system_prompt = system_prompt.replace('{bot_id}', str(bot_id))
             system_prompt = system_prompt.replace('{bot_owner_id}', str(bot_owner_id))
             system_prompt = system_prompt.replace('{bot_name}', base_vars.get('bot_name', '🐖🐖'))
-            system_prompt = system_prompt.replace('{creator}', base_vars.get('creator', '星豬'))
+            system_prompt = system_prompt.replace('{creator}', base_vars.get('creator', 'StarPig'))
             system_prompt = system_prompt.replace('{environment}', base_vars.get('environment', 'Discord server'))
             
             # Apply language replacements if available
@@ -465,7 +465,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 messages_for_info_agent = list(short_term_msgs)
                 
                 # Update status to "Analyzing..."
-                analyzing_msg = lang_manager.translate(guild_id, "system", "chat_bot", "responses", "analyzing") if lang_manager else "🔍 分析資訊中..."
+                analyzing_msg = lang_manager.translate(guild_id, "system", "chat_bot", "responses", "analyzing") if lang_manager else "🔍 Analyzing information..."
                 await safe_edit_message(message_edit, analyzing_msg)
                 
                 # Prepare callbacks
@@ -593,7 +593,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 messages_for_message_agent = clean_info_messages
                 
                 # Update status to "Thinking..."
-                thinking_msg = lang_manager.translate(guild_id, "system", "chat_bot", "responses", "thinking") if lang_manager else "🧠 思考回覆中..."
+                thinking_msg = lang_manager.translate(guild_id, "system", "chat_bot", "responses", "thinking") if lang_manager else "🧠 Thinking about response..."
                 await safe_edit_message(message_edit, thinking_msg)
                 
                 # Streaming fallback loop - try each model once, no retries
