@@ -74,7 +74,7 @@ class KnowledgeMemoryProvider:
             content = None
             
         # Update cache
-        expire_at = now + getattr(memory_config, "procedural_cache_ttl", 300) # Default 5 mins
+        expire_at = now + getattr(memory_config, "knowledge_cache_ttl", 300) # Default 5 mins
         async with self._lock:
             self._cache[cache_key] = (content, expire_at)
             
