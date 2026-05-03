@@ -137,24 +137,10 @@ class YTMusic(commands.Cog):
                     self
                 )
                 refresh_message = self.lang_manager.translate(str(guild_id), "commands", "play", "responses", "refreshed_ui")
-                msg = await interaction.followup.send(refresh_message, ephemeral=True, wait=True)
-                async def _delete_refresh():
-                    await asyncio.sleep(5)
-                    try:
-                        await msg.delete()
-                    except Exception:
-                        pass
-                asyncio.create_task(_delete_refresh())
+                await interaction.followup.send(refresh_message, ephemeral=True)
             else:
                 no_song_message = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "nothing_playing")
-                msg = await interaction.followup.send(no_song_message, ephemeral=True, wait=True)
-                async def _delete_no_song():
-                    await asyncio.sleep(5)
-                    try:
-                        await msg.delete()
-                    except Exception:
-                        pass
-                asyncio.create_task(_delete_no_song())
+                await interaction.followup.send(no_song_message, ephemeral=True)
             return
 
         # 如果有提供查詢，將音樂加入播放清單
