@@ -94,7 +94,12 @@ class Orchestrator:
 
         from addons.settings import memory_config
         if memory_enabled and getattr(bot, "vector_manager", None) is not None:
-            episodic_provider = EpisodicMemoryProvider(bot=bot, top_k=3, max_chars=1500)
+            episodic_provider = EpisodicMemoryProvider(
+                bot=bot,
+                top_k=3,
+                max_chars=1500,
+                cache_ttl=memory_config.episodic_cache_ttl,
+            )
 
         self.context_manager = ContextManager(
             short_term_provider=short_term_provider,
