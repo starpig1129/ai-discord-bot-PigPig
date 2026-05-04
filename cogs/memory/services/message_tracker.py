@@ -197,7 +197,9 @@ class MessageTracker:
             
             # Get messages after the calculated/found timestamp
             messages = []
-            async for message in channel.history(after=start_timestamp, limit=None):
+            # Fetch limit to prevent memory exhaustion
+            fetch_limit = getattr(self.settings, 'message_threshold', 50) * 2
+            async for message in channel.history(after=start_timestamp, limit=fetch_limit):
                 messages.append(message)
             
             all_messages.extend(messages)
