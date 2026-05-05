@@ -240,6 +240,7 @@ async def _process_token_stream(
     pending_content = ''  # Content waiting to be sent to Discord
     is_capturing = False  # Only capture content between <som> and <eom> markers
     intermediate_content = '' # Buffer for content between <eom> and next <som> or <eom>
+    is_in_thinking = False  # True while inside <think>...</think> or <thinking>...</thinking> blocks
     
     # Tool execution tracking
     tool_call_chunks = []
@@ -396,29 +397,47 @@ async def _process_token_stream(
     
     def extract_display_content(token_str: str) -> str:
         """Extract content that should be displayed on Discord.
-        
+
         Args:
             token_str: Current token string.
-            
+
         Returns:
             Content to display. If markers are present, only content between
             <som> and <eom> is returned. If no markers detected, all content
-            is passed through.
+            is passed through. Content inside <think>...</think> blocks is
+            always suppressed to prevent reasoning process from leaking to Discord.
         """
-        nonlocal is_capturing, tag_buffer, markers_detected, intermediate_content
-        
+        nonlocal is_capturing, tag_buffer, markers_detected, intermediate_content, is_in_thinking
+
         # Prepend any buffered content
         current_str = tag_buffer + token_str
         tag_buffer = ''
-        
+
         display_str = ''
         i = 0
         while i < len(current_str):
             # Check for potential start of a tag
             if current_str[i] == '<':
-                # Check if it's a complete tag (supports <som>, </som>, <eom>, </eom>)
+                # Check if it's a complete tag
                 remaining = current_str[i:]
-                if remaining.startswith('<som>'):
+                # Thinking block tags — always suppress content inside them
+                if remaining.startswith('<thinking>'):
+                    is_in_thinking = True
+                    i += 10
+                    continue
+                elif remaining.startswith('</thinking>'):
+                    is_in_thinking = False
+                    i += 11
+                    continue
+                elif remaining.startswith('<think>'):
+                    is_in_thinking = True
+                    i += 7
+                    continue
+                elif remaining.startswith('</think>'):
+                    is_in_thinking = False
+                    i += 8
+                    continue
+                elif remaining.startswith('<som>'):
                     markers_detected = True
                     if intermediate_content:
                         display_str += intermediate_content
@@ -442,24 +461,29 @@ async def _process_token_stream(
                     is_capturing = False
                     i += 6
                     continue
-                
+
                 # Check if it could be a partial tag (e.g., "<s" as prefix of "<som>")
-                potential_tags = ['<som>', '</som>', '<eom>', '</eom>']
+                potential_tags = ['<thinking>', '</thinking>', '<think>', '</think>', '<som>', '</som>', '<eom>', '</eom>']
                 if any(tag.startswith(remaining) for tag in potential_tags):
                     # If the start of a tag is detected but not yet complete, buffer it
                     tag_buffer = remaining
                     break
-            
+
+            # Always skip content inside thinking blocks
+            if is_in_thinking:
+                i += 1
+                continue
+
             # Capture content based on state
             if is_capturing:
                 display_str += current_str[i]
             elif markers_detected:
                 # If we've seen markers but are not currently capturing (e.g. after an <eom>),
-                # buffer the content in case it's followed by another <eom> (intermediate content)
+                # buffer the content in case it's followed by another <som> (intermediate content)
                 intermediate_content += current_str[i]
-            
+
             i += 1
-            
+
         return display_str
 
     try:
@@ -532,14 +556,16 @@ async def _process_token_stream(
                 _logger.warning("Model used markers but all content was outside them. Applying fallback.")
             else:
                 _logger.warning("Model output without <som>/<eom> markers. Applying fallback with cleanup.")
-            
-            # Try to strip identity prefixes like "[Name | UserID:xxx | MessageID:xxx]  content"
+
             import re
             cleaned_result = message_result
-            # Pattern: [anything | UserID:digits | MessageID:digits] followed by optional whitespace
+            # Strip reasoning/thinking blocks to prevent leaking CoT to Discord
+            cleaned_result = re.sub(r'<thinking>.*?</thinking>', '', cleaned_result, flags=re.DOTALL)
+            cleaned_result = re.sub(r'<think>.*?</think>', '', cleaned_result, flags=re.DOTALL)
+            # Strip identity prefixes like "[Name | UserID:xxx | MessageID:xxx]  content"
             prefix_pattern = r'^\[.*?\|\s*UserID:\d+\s*\|\s*MessageID:\d+\]\s*'
             cleaned_result = re.sub(prefix_pattern, '', cleaned_result, flags=re.DOTALL)
-            
+
             pending_content = cleaned_result.strip() if cleaned_result.strip() else message_result
             await update_message()
             
