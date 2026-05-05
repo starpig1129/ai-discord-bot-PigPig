@@ -73,12 +73,12 @@ class UpdateManagerCog(commands.Cog):
         guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
         
         if not self.permission_checker.check_status_permission(interaction):
-            no_permission_msg = self._get_translation(guild_id, "permissions", "no_permission")
+            no_permission_msg = self._get_translation(guild_id, "commands", "update_manager", "permissions", "no_permission")
             await interaction.response.send_message(no_permission_msg, ephemeral=True)
             return
         
         if not self.update_manager:
-            not_initialized_msg = self._get_translation(guild_id, "system", "not_initialized")
+            not_initialized_msg = self._get_translation(guild_id, "commands", "update_manager", "system", "not_initialized")
             await interaction.response.send_message(not_initialized_msg, ephemeral=True)
             return
         
@@ -87,9 +87,9 @@ class UpdateManagerCog(commands.Cog):
         try:
             result = await self.update_manager.check_for_updates()
             
-            title = self._get_translation(guild_id, "commands", "check_update", "title")
-            current_version_label = self._get_translation(guild_id, "commands", "check_update", "current_version")
-            latest_version_label = self._get_translation(guild_id, "commands", "check_update", "latest_version")
+            title = self._get_translation(guild_id, "commands", "update_manager", "commands", "check_update", "title")
+            current_version_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "check_update", "current_version")
+            latest_version_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "check_update", "latest_version")
             
             embed = discord.Embed(
                 title=title,
@@ -109,8 +109,8 @@ class UpdateManagerCog(commands.Cog):
             )
             
             if result.get("update_available"):
-                status_label = self._get_translation(guild_id, "commands", "check_update", "available", "status")
-                status_field_name = self._get_translation(guild_id, "fields", "status")
+                status_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "check_update", "available", "status")
+                status_field_name = self._get_translation(guild_id, "commands", "update_manager", "fields", "status")
                 embed.add_field(
                     name=status_field_name,
                     value=status_label,
@@ -119,7 +119,7 @@ class UpdateManagerCog(commands.Cog):
                 embed.color = discord.Color.green()
                 
                 if result.get("published_at"):
-                    published_at_label = self._get_translation(guild_id, "commands", "check_update", "available", "published_at")
+                    published_at_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "check_update", "available", "published_at")
                     embed.add_field(
                         name=published_at_label,
                         value=result["published_at"],
@@ -133,8 +133,8 @@ class UpdateManagerCog(commands.Cog):
                 else:
                     await interaction.followup.send(embed=embed)
             else:
-                status_label = self._get_translation(guild_id, "commands", "check_update", "up_to_date", "status")
-                status_field_name = self._get_translation(guild_id, "fields", "status")
+                status_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "check_update", "up_to_date", "status")
+                status_field_name = self._get_translation(guild_id, "commands", "update_manager", "fields", "status")
                 embed.add_field(
                     name=status_field_name,
                     value=status_label,
@@ -145,8 +145,8 @@ class UpdateManagerCog(commands.Cog):
         except Exception as e:
             self.logger.error(f"檢查更新時發生錯誤: {e}")
             await func.report_error(self.bot, e, f"檢查更新時發生錯誤")
-            error_title = self._get_translation(guild_id, "commands", "check_update", "error", "title")
-            error_desc = self._get_translation(guild_id, "commands", "check_update", "error", "description")
+            error_title = self._get_translation(guild_id, "commands", "update_manager", "commands", "check_update", "error", "title")
+            error_desc = self._get_translation(guild_id, "commands", "update_manager", "commands", "check_update", "error", "description")
             embed = discord.Embed(
                 title=error_title,
                 description=error_desc,
@@ -165,12 +165,12 @@ class UpdateManagerCog(commands.Cog):
         guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
         
         if not self.permission_checker.check_update_permission(interaction.user.id):
-            owner_only_msg = self._get_translation(guild_id, "permissions", "owner_only_update")
+            owner_only_msg = self._get_translation(guild_id, "commands", "update_manager", "permissions", "owner_only_update")
             await interaction.response.send_message(owner_only_msg, ephemeral=True)
             return
         
         if not self.update_manager:
-            not_initialized_msg = self._get_translation(guild_id, "system", "not_initialized")
+            not_initialized_msg = self._get_translation(guild_id, "commands", "update_manager", "system", "not_initialized")
             await interaction.response.send_message(not_initialized_msg, ephemeral=True)
             return
         
@@ -180,8 +180,8 @@ class UpdateManagerCog(commands.Cog):
             # 檢查更新狀態
             status = self.update_manager.get_status()
             if status["status"] != "idle":
-                busy_title = self._get_translation(guild_id, "system", "busy")
-                busy_desc = self._get_translation(guild_id, "system", "busy_description", status=status['status'])
+                busy_title = self._get_translation(guild_id, "commands", "update_manager", "system", "busy")
+                busy_desc = self._get_translation(guild_id, "commands", "update_manager", "system", "busy_description", status=status['status'])
                 embed = discord.Embed(
                     title=busy_title,
                     description=busy_desc,
@@ -194,8 +194,8 @@ class UpdateManagerCog(commands.Cog):
             if not force:
                 check_result = await self.update_manager.check_for_updates()
                 if not check_result.get("update_available"):
-                    no_update_title = self._get_translation(guild_id, "commands", "update_now", "no_update_needed", "title")
-                    no_update_desc = self._get_translation(guild_id, "commands", "update_now", "no_update_needed", "description")
+                    no_update_title = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_now", "no_update_needed", "title")
+                    no_update_desc = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_now", "no_update_needed", "description")
                     embed = discord.Embed(
                         title=no_update_title,
                         description=no_update_desc,
@@ -206,7 +206,7 @@ class UpdateManagerCog(commands.Cog):
                 
                 # 創建確認視圖
                 view = UpdateConfirmView(self.update_manager, check_result, guild_id, self._get_translation)
-                confirm_title = self._get_translation(guild_id, "commands", "update_now", "confirm", "title")
+                confirm_title = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_now", "confirm", "title")
                 confirm_desc = self._get_translation(
                     guild_id, "commands", "update_now", "confirm", "description",
                     current_version=check_result['current_version'],
@@ -217,22 +217,22 @@ class UpdateManagerCog(commands.Cog):
                     description=confirm_desc,
                     color=discord.Color.orange()
                 )
-                warning_label = self._get_translation(guild_id, "commands", "update_now", "confirm", "warning")
-                warning_field_name = self._get_translation(guild_id, "fields", "warning")
+                warning_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_now", "confirm", "warning")
+                warning_field_name = self._get_translation(guild_id, "commands", "update_manager", "fields", "warning")
                 embed.add_field(name=warning_field_name, value=warning_label, inline=False)
                 
             else:
                 # 強制更新確認
                 view = UpdateConfirmView(self.update_manager, None, guild_id, self._get_translation, force=True)
-                force_title = self._get_translation(guild_id, "commands", "update_now", "force_confirm", "title")
-                force_desc = self._get_translation(guild_id, "commands", "update_now", "force_confirm", "description")
+                force_title = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_now", "force_confirm", "title")
+                force_desc = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_now", "force_confirm", "description")
                 embed = discord.Embed(
                     title=force_title,
                     description=force_desc,
                     color=discord.Color.red()
                 )
-                force_warning = self._get_translation(guild_id, "commands", "update_now", "force_confirm", "warning")
-                warning_field_name = self._get_translation(guild_id, "fields", "warning")
+                force_warning = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_now", "force_confirm", "warning")
+                warning_field_name = self._get_translation(guild_id, "commands", "update_manager", "fields", "warning")
                 embed.add_field(name=warning_field_name, value=force_warning, inline=False)
             
             await interaction.followup.send(embed=embed, view=view)
@@ -240,8 +240,8 @@ class UpdateManagerCog(commands.Cog):
         except Exception as e:
             self.logger.error(f"準備更新時發生錯誤: {e}")
             await func.report_error(self.bot, e, f"準備更新時發生錯誤")
-            error_title = self._get_translation(guild_id, "commands", "update_now", "error", "title")
-            error_desc = self._get_translation(guild_id, "commands", "update_now", "error", "description")
+            error_title = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_now", "error", "title")
+            error_desc = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_now", "error", "description")
             embed = discord.Embed(
                 title=error_title,
                 description=error_desc,
@@ -255,12 +255,12 @@ class UpdateManagerCog(commands.Cog):
         guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
         
         if not self.permission_checker.check_status_permission(interaction):
-            no_permission_msg = self._get_translation(guild_id, "permissions", "no_permission")
+            no_permission_msg = self._get_translation(guild_id, "commands", "update_manager", "permissions", "no_permission")
             await interaction.response.send_message(no_permission_msg, ephemeral=True)
             return
         
         if not self.update_manager:
-            not_initialized_msg = self._get_translation(guild_id, "system", "not_initialized")
+            not_initialized_msg = self._get_translation(guild_id, "commands", "update_manager", "system", "not_initialized")
             await interaction.response.send_message(not_initialized_msg, ephemeral=True)
             return
         
@@ -272,8 +272,8 @@ class UpdateManagerCog(commands.Cog):
         except Exception as e:
             self.logger.error(f"獲取更新狀態時發生錯誤: {e}")
             await func.report_error(self.bot, e, f"獲取更新狀態時發生錯誤")
-            error_title = self._get_translation(guild_id, "commands", "update_status", "error", "title")
-            error_desc = self._get_translation(guild_id, "commands", "update_status", "error", "description")
+            error_title = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_status", "error", "title")
+            error_desc = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_status", "error", "description")
             embed = discord.Embed(
                 title=error_title,
                 description=error_desc,
@@ -287,19 +287,19 @@ class UpdateManagerCog(commands.Cog):
         guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
         
         if not self.permission_checker.check_update_permission(interaction.user.id):
-            owner_only_msg = self._get_translation(guild_id, "permissions", "owner_only_config")
+            owner_only_msg = self._get_translation(guild_id, "commands", "update_manager", "permissions", "owner_only_config")
             await interaction.response.send_message(owner_only_msg, ephemeral=True)
             return
         
         if not self.update_manager:
-            not_initialized_msg = self._get_translation(guild_id, "system", "not_initialized")
+            not_initialized_msg = self._get_translation(guild_id, "commands", "update_manager", "system", "not_initialized")
             await interaction.response.send_message(not_initialized_msg, ephemeral=True)
             return
         
         # 創建配置視圖
         view = UpdateConfigView(self.update_manager, guild_id, self._get_translation)
-        title = self._get_translation(guild_id, "commands", "update_config", "title")
-        description = self._get_translation(guild_id, "commands", "update_config", "description")
+        title = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "title")
+        description = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "description")
         embed = discord.Embed(
             title=title,
             description=description,
@@ -307,24 +307,24 @@ class UpdateManagerCog(commands.Cog):
         )
         
         config = self.update_manager.config
-        auto_update_label = self._get_translation(guild_id, "commands", "update_config", "auto_update")
-        auto_update_value = self._get_translation(guild_id, "commands", "update_config", "enabled") if config["auto_update"]["enabled"] else self._get_translation(guild_id, "commands", "update_config", "disabled")
+        auto_update_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "auto_update")
+        auto_update_value = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "enabled") if config["auto_update"]["enabled"] else self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "disabled")
         embed.add_field(
             name=auto_update_label, 
             value=auto_update_value, 
             inline=True
         )
         
-        check_interval_label = self._get_translation(guild_id, "commands", "update_config", "check_interval")
-        hours_value = self._get_translation(guild_id, "commands", "update_config", "hours", hours=config['auto_update']['check_interval'] // 3600)
+        check_interval_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "check_interval")
+        hours_value = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "hours", hours=config['auto_update']['check_interval'] // 3600)
         embed.add_field(
             name=check_interval_label, 
             value=hours_value, 
             inline=True
         )
         
-        require_conf_label = self._get_translation(guild_id, "commands", "update_config", "require_confirmation")
-        require_conf_value = self._get_translation(guild_id, "commands", "update_config", "enabled") if config["auto_update"]["require_owner_confirmation"] else self._get_translation(guild_id, "commands", "update_config", "disabled")
+        require_conf_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "require_confirmation")
+        require_conf_value = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "enabled") if config["auto_update"]["require_owner_confirmation"] else self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "disabled")
         embed.add_field(
             name=require_conf_label, 
             value=require_conf_value, 
@@ -340,32 +340,33 @@ class UpdateManagerCog(commands.Cog):
         # 取得狀態相關的翻譯
         if status_text == "idle":
             color = discord.Color.green()
-            status_key = "system", "idle"
+            status_key = "commands", "update_manager", "system", "idle"
         elif status_text == "checking":
             color = discord.Color.blue()
-            status_key = "system", "checking"
+            status_key = "commands", "update_manager", "system", "checking"
         elif status_text == "downloading":
             color = discord.Color.orange()
-            status_key = "system", "downloading"
+            status_key = "commands", "update_manager", "system", "downloading"
         elif status_text == "updating":
             color = discord.Color.yellow()
-            status_key = "system", "updating"
+            status_key = "commands", "update_manager", "system", "updating"
         elif status_text == "restarting":
             color = discord.Color.purple()
-            status_key = "system", "restarting"
+            status_key = "commands", "update_manager", "system", "restarting"
         elif status_text == "error":
             color = discord.Color.red()
-            status_key = "system", "error"
+            status_key = "commands", "update_manager", "system", "error"
         else:
             color = discord.Color.grey()
-            status_key = "system", "unknown"
+            status_key = "commands", "update_manager", "system", "unknown"
         
         title = self._get_translation(guild_id, *status_key, "title")
-        if status_key[1] == "downloading" or status_key[1] == "updating":
+        status_name = status_key[3]  # e.g. "downloading", "error", "unknown"
+        if status_name == "downloading" or status_name == "updating":
             description = self._get_translation(guild_id, *status_key, "description", progress=status['progress'])
-        elif status_key[1] == "error":
+        elif status_name == "error":
             description = self._get_translation(guild_id, *status_key, "description", error=status.get('error', '未知錯誤'))
-        elif status_key[1] == "unknown":
+        elif status_name == "unknown":
             description = self._get_translation(guild_id, *status_key, "description", status=status_text)
         else:
             description = self._get_translation(guild_id, *status_key, "description")
@@ -378,19 +379,19 @@ class UpdateManagerCog(commands.Cog):
         )
         
         if status.get("operation"):
-            operation_label = self._get_translation(guild_id, "fields", "operation")
+            operation_label = self._get_translation(guild_id, "commands", "update_manager", "fields", "operation")
             embed.add_field(name=operation_label, value=status["operation"], inline=False)
         
         if status.get("current_version"):
-            current_version_label = self._get_translation(guild_id, "commands", "check_update", "current_version")
+            current_version_label = self._get_translation(guild_id, "commands", "update_manager", "commands", "check_update", "current_version")
             embed.add_field(name=current_version_label, value=f"`{status['current_version']}`", inline=True)
         
         if status.get("last_check"):
-            last_check_label = self._get_translation(guild_id, "fields", "last_check")
+            last_check_label = self._get_translation(guild_id, "commands", "update_manager", "fields", "last_check")
             embed.add_field(name=last_check_label, value=f"<t:{int(discord.utils.parse_time(status['last_check']).timestamp())}:R>", inline=True)
         
-        auto_update_label = self._get_translation(guild_id, "fields", "auto_update")
-        auto_update_value = self._get_translation(guild_id, "commands", "update_config", "enabled") if status.get("auto_update_enabled") else self._get_translation(guild_id, "commands", "update_config", "disabled")
+        auto_update_label = self._get_translation(guild_id, "commands", "update_manager", "fields", "auto_update")
+        auto_update_value = self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "enabled") if status.get("auto_update_enabled") else self._get_translation(guild_id, "commands", "update_manager", "commands", "update_config", "disabled")
         embed.add_field(
             name=auto_update_label, 
             value=auto_update_value, 
@@ -414,15 +415,15 @@ class UpdateActionView(discord.ui.View):
         """立即更新按鈕"""
         # 創建確認視圖
         view = UpdateConfirmView(self.update_manager, None, self.guild_id, self.get_translation)
-        confirm_title = self.get_translation(self.guild_id, "views", "update_action", "confirm", "title")
-        confirm_desc = self.get_translation(self.guild_id, "views", "update_action", "confirm", "description")
+        confirm_title = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_action", "confirm", "title")
+        confirm_desc = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_action", "confirm", "description")
         embed = discord.Embed(
             title=confirm_title,
             description=confirm_desc,
             color=discord.Color.orange()
         )
-        warning_label = self.get_translation(self.guild_id, "views", "update_action", "confirm", "warning")
-        warning_field_name = self.get_translation(self.guild_id, "fields", "warning")
+        warning_label = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_action", "confirm", "warning")
+        warning_field_name = self.get_translation(self.guild_id, "commands", "update_manager", "fields", "warning")
         embed.add_field(name=warning_field_name, value=warning_label, inline=False)
         
         await interaction.response.edit_message(embed=embed, view=view)
@@ -430,8 +431,8 @@ class UpdateActionView(discord.ui.View):
     @discord.ui.button(label="Remind Later", style=discord.ButtonStyle.secondary, emoji="⏰")
     async def remind_later(self, interaction: discord.Interaction, button: discord.ui.Button):
         """稍後提醒按鈕"""
-        reminded_title = self.get_translation(self.guild_id, "views", "update_action", "reminded", "title")
-        reminded_desc = self.get_translation(self.guild_id, "views", "update_action", "reminded", "description")
+        reminded_title = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_action", "reminded", "title")
+        reminded_desc = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_action", "reminded", "description")
         embed = discord.Embed(
             title=reminded_title,
             description=reminded_desc,
@@ -456,8 +457,8 @@ class UpdateConfirmView(discord.ui.View):
         """確認更新按鈕"""
         await interaction.response.defer()
         
-        starting_title = self.get_translation(self.guild_id, "views", "update_confirm", "starting", "title")
-        starting_desc = self.get_translation(self.guild_id, "views", "update_confirm", "starting", "description")
+        starting_title = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "starting", "title")
+        starting_desc = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "starting", "description")
         embed = discord.Embed(
             title=starting_title,
             description=starting_desc,
@@ -471,8 +472,8 @@ class UpdateConfirmView(discord.ui.View):
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
     async def cancel_update(self, interaction: discord.Interaction, button: discord.ui.Button):
         """取消更新按鈕"""
-        cancelled_title = self.get_translation(self.guild_id, "views", "update_confirm", "cancelled", "title")
-        cancelled_desc = self.get_translation(self.guild_id, "views", "update_confirm", "cancelled", "description")
+        cancelled_title = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "cancelled", "title")
+        cancelled_desc = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "cancelled", "description")
         embed = discord.Embed(
             title=cancelled_title,
             description=cancelled_desc,
@@ -487,8 +488,8 @@ class UpdateConfirmView(discord.ui.View):
             
             if not result.get("success"):
                 # 更新失敗，發送錯誤訊息
-                failed_title = self.get_translation(self.guild_id, "views", "update_confirm", "failed", "title")
-                failed_desc = self.get_translation(self.guild_id, "views", "update_confirm", "failed", "description", error=result.get('error', '未知錯誤'))
+                failed_title = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "failed", "title")
+                failed_desc = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "failed", "description", error=result.get('error', '未知錯誤'))
                 embed = discord.Embed(
                     title=failed_title,
                     description=failed_desc,
@@ -496,8 +497,8 @@ class UpdateConfirmView(discord.ui.View):
                 )
                 
                 if result.get("backup_id"):
-                    backup_name = self.get_translation(self.guild_id, "views", "update_confirm", "backup", "name")
-                    backup_value = self.get_translation(self.guild_id, "views", "update_confirm", "backup", "value", backup_id=result['backup_id'])
+                    backup_name = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "backup", "name")
+                    backup_value = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "backup", "value", backup_id=result['backup_id'])
                     embed.add_field(
                         name=backup_name, 
                         value=backup_value, 
@@ -509,8 +510,8 @@ class UpdateConfirmView(discord.ui.View):
         except Exception as e:
             # 處理未預期的錯誤
             await func.report_error(self.update_manager.bot, e, f"執行更新時發生嚴重錯誤")
-            error_title = self.get_translation(self.guild_id, "views", "update_confirm", "failed", "title")
-            error_desc = self.get_translation(self.guild_id, "views", "update_confirm", "failed", "description", error="執行更新時發生嚴重錯誤，已回報給開發者。")
+            error_title = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "failed", "title")
+            error_desc = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_confirm", "failed", "description", error="執行更新時發生嚴重錯誤，已回報給開發者。")
             embed = discord.Embed(
                 title=error_title,
                 description=error_desc,
@@ -537,13 +538,13 @@ class UpdateConfigView(discord.ui.View):
     async def toggle_auto_update(self, interaction: discord.Interaction, button: discord.ui.Button):
         """切換自動更新開關"""
         # 這裡實現配置切換邏輯
-        in_dev_msg = self.get_translation(self.guild_id, "views", "update_config", "in_development")
+        in_dev_msg = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_config", "in_development")
         await interaction.response.send_message(in_dev_msg, ephemeral=True)
     
     @discord.ui.button(label="Set Check Interval", style=discord.ButtonStyle.secondary, emoji="⏱️")
     async def set_check_interval(self, interaction: discord.Interaction, button: discord.ui.Button):
         """設定檢查間隔"""
-        in_dev_msg = self.get_translation(self.guild_id, "views", "update_config", "in_development")
+        in_dev_msg = self.get_translation(self.guild_id, "commands", "update_manager", "views", "update_config", "in_development")
         await interaction.response.send_message(in_dev_msg, ephemeral=True)
 
 
