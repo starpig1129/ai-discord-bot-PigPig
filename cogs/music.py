@@ -66,7 +66,8 @@ class YTMusic(commands.Cog):
 
         title = self.lang_manager.translate(str(guild_id), "commands", "mode", "responses", "success", mode=mode_name)
         embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
-        message = await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed)
+        message = await interaction.original_response()
         state = self.state_manager.get_state(interaction.guild.id)
         state.ui_messages.append(message)
 
@@ -85,7 +86,8 @@ class YTMusic(commands.Cog):
         status = self.lang_manager.translate(str(guild_id), "commands", "shuffle", "responses", status_key)
         title = self.lang_manager.translate(str(guild_id), "commands", "shuffle", "responses", "success", status=status)
         embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
-        message = await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed)
+        message = await interaction.original_response()
         state = self.state_manager.get_state(interaction.guild.id)
         state.ui_messages.append(message)
 
