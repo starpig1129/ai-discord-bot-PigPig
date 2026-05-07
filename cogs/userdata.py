@@ -124,6 +124,11 @@ class UserDataCog(commands.Cog):
         description="Manage my personal memory and interaction preferences about you"
     )
 
+    knowledge_group = app_commands.Group(
+        name="knowledge",
+        description="Manage shared server/channel knowledge"
+    )
+
     def __init__(
         self,
         bot: commands.Bot,
@@ -742,6 +747,99 @@ class UserDataCog(commands.Cog):
         )
         
         await interaction.followup.send(result, ephemeral=True)
+
+    @knowledge_group.command(
+        name="show",
+        description="View the shared knowledge for this server or channel"
+    )
+    @app_commands.describe(
+        scope="View knowledge for 'guild' (entire server) or 'channel' (this specific channel)"
+    )
+    @app_commands.choices(scope=[
+        app_commands.Choice(name="Guild (Server-wide)", value="guild"),
+        app_commands.Choice(name="Channel (Specific to this channel)", value="channel")
+    ])
+    async def knowledge_show(self, interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
+        """Handles /knowledge show command to display stored knowledge."""
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        target_type = scope.value
+        target_id = str(interaction.guild_id) if target_type == "guild" else str(interaction.channel_id)
+
+        if target_type == "guild" and not interaction.guild_id:
+            await interaction.followup.send("Guild knowledge is only available within a server.", ephemeral=True)
+            return
+
+        if not self.knowledge_storage:
+            await interaction.followup.send("Knowledge storage is not initialized.", ephemeral=True)
+            return
+
+        try:
+            content = await self.knowledge_storage.get_knowledge(target_type, target_id)
+            if content:
+                await interaction.followup.send(f"Current {target_type} knowledge:\n\n{content}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"There is no {target_type} knowledge currently stored.", ephemeral=True)
+        except Exception as e:
+            self.logger.error(f"Failed to read {target_type} knowledge for {target_id}: {e}")
+            await interaction.followup.send(f"Failed to read knowledge: {e}", ephemeral=True)
+
+    @knowledge_group.command(
+        name="clear",
+        description="Clear the shared knowledge for this server or channel"
+    )
+    @app_commands.describe(
+        scope="Clear knowledge for 'guild' (entire server) or 'channel' (this specific channel)"
+    )
+    @app_commands.choices(scope=[
+        app_commands.Choice(name="Guild (Server-wide)", value="guild"),
+        app_commands.Choice(name="Channel (Specific to this channel)", value="channel")
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def knowledge_clear(self, interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None:
+        """Handles /knowledge clear command to clear stored knowledge."""
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        target_type = scope.value
+        target_id = str(interaction.guild_id) if target_type == "guild" else str(interaction.channel_id)
+
+        if target_type == "guild" and not interaction.guild_id:
+            await interaction.followup.send("Guild knowledge is only available within a server.", ephemeral=True)
+            return
+
+        if not self.knowledge_storage:
+            await interaction.followup.send("Knowledge storage is not initialized.", ephemeral=True)
+            return
+
+        try:
+            success = await self.knowledge_storage.delete_knowledge(target_type, target_id)
+            if success:
+                # Invalidate cache
+                try:
+                    orchestrator = getattr(self.bot, "orchestrator", None)
+                    if orchestrator:
+                        provider = getattr(
+                            getattr(orchestrator, "context_manager", None),
+                            "knowledge_provider",
+                            None,
+                        )
+                        if provider and hasattr(provider, "invalidate"):
+                            await provider.invalidate(target_type, target_id)
+                except Exception as cache_err:
+                    self.logger.warning(f"Failed to invalidate knowledge cache for {target_type} {target_id}: {cache_err}")
+
+                await interaction.followup.send(f"Successfully cleared {target_type} knowledge.", ephemeral=True)
+            else:
+                await interaction.followup.send(f"There was no {target_type} knowledge to clear or an error occurred.", ephemeral=True)
+        except Exception as e:
+            self.logger.error(f"Failed to clear {target_type} knowledge for {target_id}: {e}")
+            await interaction.followup.send(f"Failed to clear knowledge: {e}", ephemeral=True)
 
     async def manage_user_data(
         self,
