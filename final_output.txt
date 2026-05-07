@@ -1,0 +1,4716 @@
+### Create File: docs/addons/__init__.md
+```markdown
+# File: `addons/__init__.py`
+
+## Overview
+Core module for __init__.py This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/addons/logging.md
+```markdown
+# File: `addons/logging.py`
+
+## Overview
+Core module for logging.py This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `LogRecord`
+Structured log record following plan.md schema.
+
+- **Attributes**:
+  - `timestamp` (`str`): Class attribute.
+  - `level` (`str`): Class attribute.
+  - `source` (`str`): Class attribute.
+  - `server_id` (`str`): Class attribute.
+  - `channel_or_file` (`str`): Class attribute.
+  - `user_id` (`str`): Class attribute.
+  - `action` (`str`): Class attribute.
+  - `message` (`str`): Class attribute.
+  - `trace_id` (`Optional[str]`): Class attribute.
+  - `extra` (`Dict[Tuple[str, Any]]`): Class attribute.
+
+- **Methods**:
+  - `to_json_line() -> str`: Serialize record to a single NDJSON line.
+
+### `BackgroundWriter`
+Background single-thread writer that batches NDJSON records and writes per-level files.
+
+- **Attributes**:
+  - `batch_size` (`int`): Instance attribute.
+  - `flush_interval` (`float`): Instance attribute.
+  - `queue_maxsize` (`int`): Instance attribute.
+  - `_queue` (`Queue[Dict[str, Any]]`): Instance attribute.
+  - `_thread` (`Any`): Instance attribute.
+  - `_stop_event` (`Any`): Instance attribute.
+  - `_metrics` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_instance() -> BackgroundWriter`: Executes get_instance operation.
+  - `enqueue(server_id: str, level: str, json_line: str, timestamp_iso: str) -> None`: Attempt to enqueue a log event non-blocking. On full queue, drop and report.
+  - `_report_error_async(exc: Exception, context: str) -> None`: Report errors through func.report_error if available, fallback to printing.
+  - `stop(timeout: float) -> None`: Signal worker to stop and flush remaining items.
+  - `_worker() -> None`: Worker loop: collect batches and perform grouped writes per server/date/level.
+
+### `LoggerAdapter`
+Logger-like object exposing bind(...) and level methods (info/warning/error/debug).
+
+- **Attributes**:
+  - `server_id` (`Any`): Instance attribute.
+  - `source` (`Any`): Instance attribute.
+  - `channel` (`Any`): Instance attribute.
+  - `bound_context` (`Dict[Tuple[str, Any]]`): Instance attribute.
+  - `_writer` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `isEnabledFor(level: int) -> bool`: Check if the given numeric level is enabled based on current CONFIG.
+  - `bind(**context) -> LoggerAdapter`: Return a new LoggerAdapter with merged context, similar to structlog.bind.
+  - `_emit(level: str, message: str, exception: Optional[BaseException], **event_fields) -> None`: Compose structured record, enqueue NDJSON line, and render to console as single-line text.
+  - `_format_console_line(record: LogRecord) -> str`: Create enhanced console representation with simplified timestamp and optional emoji.
+  - `_colorize_line(record: LogRecord, line: str) -> str`: Apply ANSI color codes to different parts of the log line for better readability.
+  - `info(message: Optional[str], *args, **event_fields) -> None`: Emit an INFO event.
+  - `warning(message: Optional[str], *args, **event_fields) -> None`: Emit a WARNING event.
+  - `error(message: Optional[str], *args, **event_fields) -> None`: Emit an ERROR event.
+  - `debug(message: Optional[str], *args, **event_fields) -> None`: Emit a DEBUG event.
+  - `exception(message: Optional[str], *args, **event_fields) -> None`: Log an ERROR-level event with the current exception traceback.
+
+### `InterceptHandler`
+Logging.Handler that redirects stdlib logging records into our structured logger.
+
+- **Methods**:
+  - `emit(record: logging.LogRecord) -> None`: Executes emit operation.
+
+## Functions
+
+### `load_config_from_settings() -> None`
+Load logging configuration from addons.settings.base_config and merge with defaults. Plays a key role in the system logic.
+
+### `init_loguru_console() -> None`
+Initialize or reconfigure the loguru console sink based on current CONFIG. Plays a key role in the system logic.
+
+### `get_logger(server_id: Any, source: str, channel: Optional[str]) -> LoggerAdapter`
+Factory returning a bindable logger-like object for a given server_id. Plays a key role in the system logic.
+
+### `configure_std_logging() -> None`
+Configure the standard library logging to route through InterceptHandler and apply third-party levels. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/addons/settings.md
+```markdown
+# File: `addons/settings.py`
+
+## Overview
+Core module for settings.py This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `BaseConfig`
+Configuration object mapped from config/base.yaml
+
+- **Attributes**:
+  - `path` (`Any`): Instance attribute.
+  - `prefix` (`str`): Instance attribute.
+  - `activity` (`list`): Instance attribute.
+  - `ipc_server` (`dict`): Instance attribute.
+  - `version` (`str`): Instance attribute.
+  - `logging` (`dict`): Instance attribute.
+
+### `LLMConfig`
+Configuration object mapped from config/llm.yaml
+
+- **Attributes**:
+  - `path` (`Any`): Instance attribute.
+  - `data` (`dict`): Instance attribute.
+  - `model_priorities` (`list`): Instance attribute.
+  - `google_search_agent` (`str`): Instance attribute.
+  - `ollama_url` (`Optional[str]`): Instance attribute.
+  - `llm_call_timeout` (`float`): Instance attribute.
+  - `reasoning_optimization_prompt` (`str`): Instance attribute.
+
+### `UpdateConfig`
+Configuration object mapped from config/update.yaml
+
+- **Attributes**:
+  - `path` (`Any`): Instance attribute.
+  - `auto_update` (`dict`): Instance attribute.
+  - `security` (`dict`): Instance attribute.
+  - `notification` (`dict`): Instance attribute.
+  - `restart` (`dict`): Instance attribute.
+  - `github` (`dict`): Instance attribute.
+
+### `MusicConfig`
+Configuration object mapped from config/music.yaml
+
+- **Attributes**:
+  - `path` (`Any`): Instance attribute.
+  - `music_temp_base` (`dict`): Instance attribute.
+  - `ffmpeg` (`dict`): Instance attribute.
+  - `youtube_cookies_path` (`str`): Instance attribute.
+
+### `PromptConfig`
+Configuration object mapped from config/prompt/*.yaml
+
+- **Attributes**:
+  - `path` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_system_prompt(agent_name: str, bot_id: int | None, message: Any) -> str`: Retrieve system_prompt from agent config and apply dynamic variable replacement.
+
+### `MemoryConfig`
+Memory subsystem configuration object mapped from config/memory.yaml
+
+- **Attributes**:
+  - `path` (`Any`): Instance attribute.
+  - `enabled` (`bool`): Instance attribute.
+  - `procedural_cache_ttl` (`float`): Instance attribute.
+  - `knowledge_cache_ttl` (`float`): Instance attribute.
+  - `episodic_cache_ttl` (`float`): Instance attribute.
+  - `knowledge_max_cache_size` (`int`): Instance attribute.
+  - `episodic_max_cache_size` (`int`): Instance attribute.
+  - `procedural_data_path` (`str`): Instance attribute.
+  - `episodic_data_path` (`str`): Instance attribute.
+  - `vector_store_type` (`str`): Instance attribute.
+  - `qdrant_url` (`str`): Instance attribute.
+  - `qdrant_api_key` (`Optional[str]`): Instance attribute.
+  - `qdrant_collection_name` (`str`): Instance attribute.
+  - `embedding_provider` (`str`): Instance attribute.
+  - `embedding_model_name` (`str`): Instance attribute.
+  - `embedding_dim` (`int`): Instance attribute.
+  - `vector_search_k` (`int`): Instance attribute.
+  - `keyword_search_k` (`int`): Instance attribute.
+  - `ollama_url` (`Optional[str]`): Instance attribute.
+  - `provider_options` (`dict`): Instance attribute.
+  - `short_term_limit` (`int`): Instance attribute.
+  - `episodic_top_k` (`int`): Instance attribute.
+  - `episodic_max_chars` (`int`): Instance attribute.
+  - `message_threshold` (`int`): Instance attribute.
+  - `time_threshold` (`int`): Instance attribute.
+  - `processing_concurrency` (`int`): Instance attribute.
+  - `processing_delay` (`float`): Instance attribute.
+
+```
+
+### Create File: docs/addons/tokens.md
+```markdown
+# File: `addons/tokens.py`
+
+## Overview
+Core module for tokens.py This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `TOKENS`
+Handles operations related to TOKENS.
+
+- **Attributes**:
+  - `token` (`Any`): Instance attribute.
+  - `client_id` (`Any`): Instance attribute.
+  - `client_secret_id` (`Any`): Instance attribute.
+  - `sercet_key` (`Any`): Instance attribute.
+  - `bug_report_channel_id` (`Any`): Instance attribute.
+  - `anthropic_api_key` (`Any`): Instance attribute.
+  - `openai_api_key` (`Any`): Instance attribute.
+  - `google_api_key` (`Any`): Instance attribute.
+  - `tenor_api_key` (`Any`): Instance attribute.
+  - `vector_store_api_key` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_validate_environment_variables() -> None`: Verify all required environment variables exist and are valid; terminate if validation fails.
+
+```
+
+### Create File: docs/addons/update/__init__.md
+```markdown
+# File: `addons/update/__init__.py`
+
+## Overview
+PigPig Discord Bot 自動更新系統 This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/addons/update/checker.md
+```markdown
+# File: `addons/update/checker.py`
+
+## Overview
+版本檢查器模組 This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `VersionChecker`
+版本檢查器
+
+- **Attributes**:
+  - `github_api_url` (`Any`): Instance attribute.
+  - `current_version` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_current_version() -> str`: 獲取當前版本
+  - `check_for_updates() -> Dict[Tuple[str, any]]`: 檢查是否有可用更新
+  - `_compare_versions(current: str, latest: str) -> bool`: 比較版本號
+  - `_get_error_result(error_message: str) -> Dict[Tuple[str, any]]`: 獲取錯誤結果
+  - `get_current_version() -> str`: 獲取當前版本
+
+```
+
+### Create File: docs/addons/update/downloader.md
+```markdown
+# File: `addons/update/downloader.py`
+
+## Overview
+更新下載管理器模組 This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UpdateDownloader`
+更新下載管理器
+
+- **Attributes**:
+  - `download_dir` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `download_update(download_url: str, progress_callback: Optional[Callable[Tuple[Any, Awaitable[None]]]], chunk_size: int) -> str`: 下載更新檔案
+  - `_verify_download(filepath: str, expected_size: int) -> bool`: 驗證下載的檔案
+  - `calculate_file_hash(filepath: str, algorithm: str) -> str`: 計算檔案雜湊值
+  - `cleanup_downloads(keep_latest: int) -> None`: 清理下載目錄中的舊檔案
+  - `get_download_dir() -> str`: 獲取下載目錄路徑
+
+```
+
+### Create File: docs/addons/update/manager.md
+```markdown
+# File: `addons/update/manager.py`
+
+## Overview
+核心更新管理器模組 This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UpdateStatusTracker`
+更新狀態追蹤器
+
+- **Attributes**:
+  - `current_status` (`Any`): Instance attribute.
+  - `progress` (`Any`): Instance attribute.
+  - `current_operation` (`Any`): Instance attribute.
+  - `start_time` (`Any`): Instance attribute.
+  - `last_check_time` (`Any`): Instance attribute.
+  - `error_message` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `update_status(status: str, progress: int, operation: str) -> Any`: 更新狀態
+  - `set_error(error_message: str) -> Any`: 設定錯誤狀態
+  - `reset() -> Any`: 重置狀態
+
+### `UpdateLogger`
+更新日誌管理器
+
+- **Attributes**:
+  - `log_dir` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `log_file` (`Any`): Instance attribute.
+  - `current_log` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `start_log(event_type: str, trigger_type: str, user_id: Optional[int]) -> Any`: 開始記錄更新事件
+  - `update_log(**kwargs) -> Any`: 更新日誌內容
+  - `finish_log(status: str, error_message: Optional[str]) -> Any`: 完成日誌記錄
+  - `_write_log() -> Any`: 寫入日誌檔案
+
+### `UpdateManager`
+核心更新管理器
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `update_settings` (`Any`): Instance attribute.
+  - `config` (`Any`): Instance attribute.
+  - `version_checker` (`Any`): Instance attribute.
+  - `downloader` (`Any`): Instance attribute.
+  - `permission_checker` (`Any`): Instance attribute.
+  - `backup_manager` (`Any`): Instance attribute.
+  - `config_protector` (`Any`): Instance attribute.
+  - `notifier` (`Any`): Instance attribute.
+  - `restart_manager` (`Any`): Instance attribute.
+  - `status_tracker` (`Any`): Instance attribute.
+  - `update_logger` (`Any`): Instance attribute.
+  - `_update_lock` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `check_for_updates() -> Dict[Tuple[str, Any]]`: 檢查更新
+  - `execute_update(interaction: Any, force: bool) -> Dict[Tuple[str, Any]]`: 執行更新流程
+  - `_install_update(download_path: str, version: str) -> bool`: 安裝更新
+  - `_verify_installation() -> bool`: 驗證安裝是否成功
+  - `_start_auto_check() -> Any`: 啟動自動檢查
+  - `get_status() -> Dict[Tuple[str, Any]]`: 獲取更新系統狀態
+  - `post_restart_initialization() -> Any`: 重啟後初始化
+
+```
+
+### Create File: docs/addons/update/notifier.md
+```markdown
+# File: `addons/update/notifier.py`
+
+## Overview
+Discord 通知系統模組 This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `DiscordNotifier`
+Discord 通知系統
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `owner_id` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_bot_owner_safely() -> Optional[discord.User]`: 安全地獲取 Bot 擁有者
+  - `notify_update_available(version_info: Dict[Tuple[str, Any]]) -> bool`: 通知有新版本可用
+  - `notify_update_progress(stage: str, progress: int, details: str) -> bool`: 通知更新進度
+  - `notify_update_complete(result: Dict[Tuple[str, Any]]) -> bool`: 通知更新完成
+  - `notify_update_error(error: Exception, context: str) -> bool`: 通知更新錯誤
+  - `notify_restart_success(restart_info: Dict[Tuple[str, Any]]) -> bool`: 通知重啟成功
+  - `_create_progress_bar(progress: int, length: int) -> str`: 創建進度條
+  - `send_channel_notification(channel_id: int, embed: discord.Embed) -> bool`: 發送頻道通知
+
+### `QuickUpdateView`
+快速更新視圖
+
+- **Methods**:
+  - `quick_update(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 快速更新按鈕
+  - `remind_later(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 稍後提醒按鈕
+  - `ignore_update(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 忽略更新按鈕
+
+```
+
+### Create File: docs/addons/update/restart.md
+```markdown
+# File: `addons/update/restart.py`
+
+## Overview
+簡單可靠的重啟管理模組 This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SimpleRestartManager`
+簡單可靠的重啟管理器
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `restart_config` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `execute_restart(reason: str) -> None`: 執行簡單重啟流程
+  - `post_restart_check() -> bool`: 重啟後檢查
+  - `_save_restart_flag(reason: str) -> None`: 保存重啟標記
+  - `_notify_restart() -> None`: 通知即將重啟
+  - `_shutdown_bot() -> None`: 關閉 Bot
+  - `_execute_simple_restart() -> None`: 執行簡單重啟
+  - `_windows_simple_restart(python_exe: str, current_dir: str) -> bool`: Windows 簡單重啟方法
+  - `_unix_simple_restart(python_exe: str, current_dir: str) -> bool`: Unix/Linux 簡單重啟方法
+  - `_simple_health_check() -> bool`: 簡單健康檢查
+  - `_notify_restart_success(restart_info: Dict[Tuple[str, Any]]) -> None`: 通知重啟成功
+  - `_notify_restart_failure(error: Exception) -> None`: 通知重啟失敗
+  - `_handle_restart_failure(error: Exception) -> None`: 處理重啟失敗
+  - `_create_emergency_restart_file() -> None`: 創建緊急重啟指示文件
+  - `is_restart_pending() -> bool`: 檢查是否有待處理的重啟
+  - `get_restart_info() -> Optional[Dict[Tuple[str, Any]]]`: 獲取重啟資訊
+  - `cancel_restart() -> bool`: 取消重啟
+
+```
+
+### Create File: docs/addons/update/security.md
+```markdown
+# File: `addons/update/security.py`
+
+## Overview
+安全控制模組 This file is part of the addons subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UpdatePermissionChecker`
+更新權限檢查器
+
+- **Attributes**:
+  - `bot_owner_id` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `check_update_permission(user_id: int) -> bool`: 檢查更新權限 - 僅限 Bot 擁有者
+  - `check_status_permission(interaction: discord.Interaction) -> bool`: 檢查狀態查看權限 - 管理員或擁有者
+  - `get_bot_owner_id() -> int`: 獲取 Bot 擁有者 ID
+
+### `BackupManager`
+備份管理器
+
+- **Attributes**:
+  - `backup_dir` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `create_backup(protected_files: Optional[List[str]]) -> str`: 創建當前版本備份
+  - `_backup_directory_safely(source_dir: str, dest_dir: str, backup_root: str) -> None`: 安全地備份目錄，避免備份目錄本身造成無限遞歸
+  - `rollback_to_backup(backup_id: str) -> bool`: 回滾到指定備份
+  - `list_backups() -> List[dict]`: 列出所有可用的備份
+  - `cleanup_old_backups(max_backups: int) -> None`: 清理過期備份
+  - `get_backup_size(backup_id: str) -> int`: 獲取備份大小
+
+### `ConfigProtector`
+配置檔案保護器
+
+- **Attributes**:
+  - `logger` (`Any`): Instance attribute.
+  - `protected_files` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `backup_configs(backup_path: str) -> bool`: 備份配置檔案
+  - `restore_configs(backup_path: str) -> bool`: 恢復配置檔案
+  - `verify_configs() -> bool`: 驗證配置檔案完整性
+
+```
+
+### Create File: docs/bot.md
+```markdown
+# File: `bot.py`
+
+## Overview
+Discord bot main module. This file is part of the core subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `PigPig`
+Main Discord bot class with music, messaging, and logging features.
+
+- **Attributes**:
+  - `loggers` (`Any`): Instance attribute.
+  - `state_manager` (`Any`): Instance attribute.
+  - `ui_manager` (`Any`): Instance attribute.
+  - `status_cycle` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `change_status_task() -> Any`: Update bot status every 15 seconds.
+  - `_change_presence(*args, **kwargs) -> Any`: Wrapper for change_presence to handle connection errors.
+  - `get_logger_for_guild(guild_id: Any) -> Any`: Get or create logger for a specific guild.
+  - `setup_logger_for_guild(guild_id: Any) -> Any`: Set up logger for a guild if it doesn't exist.
+  - `on_message() -> None`: Handle incoming Discord messages.
+  - `on_message_edit(before: discord.Message, after: discord.Message) -> Any`: Handle edited Discord messages.
+  - `setup_hook() -> None`: Set up bot before connecting to Discord.
+  - `on_ready() -> Any`: Handle bot ready event.
+  - `on_error(event_method: str, *args, **kwargs) -> Any`: Handle errors in event handlers.
+  - `on_command_error(ctx: commands.Context, error: commands.CommandError) -> Any`: Handle errors in command execution.
+  - `send_error_report(embed: discord.Embed) -> Any`: Executes send_error_report operation.
+  - `close() -> Any`: Gracefully shut down the bot and all systems.
+
+```
+
+### Create File: docs/cogs/__init__.md
+```markdown
+# File: `cogs/__init__.py`
+
+## Overview
+Discord Bot Cogs 模組 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/botinfo.md
+```markdown
+# File: `cogs/botinfo.py`
+
+## Overview
+Core module for botinfo.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `BotInfo`
+Cog for displaying bot information and system statistics.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `start_time` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: Initialize LanguageManager when the cog is loaded.
+  - `_format_uptime(uptime: Any, guild_id: str) -> Any`: Format uptime duration into a localized human-readable string.
+  - `botinfo(interaction: discord.Interaction) -> Any`: Display comprehensive bot information and performance metrics.
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+Set up the BotInfo cog. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/channel_manager.md
+```markdown
+# File: `cogs/channel_manager.py`
+
+## Overview
+Core module for channel_manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ChannelManager`
+Cog for managing server-wide and channel-specific response modes and permissions.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `data_dir` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+  - `tokens` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: Initialize LanguageManager when the cog is loaded.
+  - `get_config_path(guild_id: str) -> str`: Get the file path for a guild's configuration.
+  - `load_config(guild_id: str) -> Dict[Tuple[str, Any]]`: Load configuration for a specific guild.
+  - `_get_default_config() -> Dict[Tuple[str, Any]]`: Provide a default configuration template.
+  - `save_config(guild_id: str, config: Dict[Tuple[str, Any]]) -> Any`: Save configuration for a specific guild.
+  - `check_admin_permissions(interaction: discord.Interaction) -> bool`: Check if the user has administrator permissions or is the bot owner.
+  - `set_server_mode(interaction: discord.Interaction, mode: app_commands.Choice[str]) -> Any`: Set the global response mode for the entire server.
+  - `set_channel_mode(interaction: discord.Interaction, channel: discord.TextChannel, mode: app_commands.Choice[str]) -> Any`: Configure a specific mode override for a single channel.
+  - `add_channel_command(interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]) -> Any`: Add a channel to the server's whitelist or blacklist.
+  - `remove_channel_command(interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]) -> Any`: Remove a channel from the server's whitelist or blacklist.
+  - `auto_response_command(interaction: discord.Interaction, channel: discord.TextChannel, enabled: bool) -> Any`: Enable or disable automatic bot responses in a specific channel.
+  - `is_allowed_channel(channel: discord.TextChannel, guild_id: str) -> Tuple[Tuple[bool, bool, Optional[str]]]`: Determine if the bot is allowed to respond in a channel and get its effective mode.
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+Set up the ChannelManager cog. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/eat/__init__.md
+```markdown
+# File: `cogs/eat/__init__.py`
+
+## Overview
+Core module for __init__.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/eat/db/__init__.md
+```markdown
+# File: `cogs/eat/db/__init__.py`
+
+## Overview
+Core module for __init__.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/eat/db/db.md
+```markdown
+# File: `cogs/eat/db/db.py`
+
+## Overview
+Core module for db.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `DB`
+Handles operations related to DB.
+
+- **Attributes**:
+  - `engine` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `getKeywords() -> list`: Executes getKeywords operation.
+  - `checkKeyword(keyword: String) -> Any`: Executes checkKeyword operation.
+  - `storeKeyword(keyword: str) -> None`: Executes storeKeyword operation.
+  - `storeSearchRecord(discord_id: str, title: str, keyword: str, map_rate: str, tag: str, map_address: str) -> int`: Executes storeSearchRecord operation.
+  - `getSearchRecoreds(discord_id: str) -> list`: Executes getSearchRecoreds operation.
+  - `updateRecordRate(id: int, new_rate: float) -> bool`: Executes updateRecordRate operation.
+  - `getRecentRecords(discord_id: str, days: int) -> list`: 取得最近 N 天內的搜尋記錄，用於避免重複推薦
+  - `getLikedRecords(discord_id: str) -> list`: 取得 self_rate >= 1 的記錄（用戶喜歡的）
+  - `getDislikedRecords(discord_id: str) -> list`: 取得 self_rate <= -1 的記錄（用戶不喜歡的）
+
+```
+
+### Create File: docs/cogs/eat/db/tables.md
+```markdown
+# File: `cogs/eat/db/tables.py`
+
+## Overview
+Core module for tables.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UserPref`
+Handles operations related to UserPref.
+
+### `SearchRecord`
+Handles operations related to SearchRecord.
+
+- **Attributes**:
+  - `discord_id` (`Any`): Instance attribute.
+  - `keyword` (`Any`): Instance attribute.
+  - `title` (`Any`): Instance attribute.
+  - `tag` (`Any`): Instance attribute.
+  - `address` (`Any`): Instance attribute.
+  - `map_rate` (`Any`): Instance attribute.
+  - `self_rate` (`Any`): Instance attribute.
+  - `date` (`Any`): Instance attribute.
+
+### `Keywords`
+Handles operations related to Keywords.
+
+- **Attributes**:
+  - `keyword` (`Any`): Instance attribute.
+  - `add_date` (`Any`): Instance attribute.
+
+```
+
+### Create File: docs/cogs/eat/embeds.md
+```markdown
+# File: `cogs/eat/embeds.py`
+
+## Overview
+Core module for embeds.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `eatEmbed(keyword: str, title: str, address: str, rating: Any, photo_url: str, price_level: int, opening_hours: list, lang_manager: Any, guild_id: str) -> discord.Embed`
+Detailed Embed after selecting a restaurant. Plays a key role in the system logic.
+
+### `browseEmbed(results: list, current_index: int, lang_manager: Any, guild_id: str) -> discord.Embed`
+Multi-result browsing Embed, showing current restaurant info and pagination progress. Plays a key role in the system logic.
+
+### `loadingEmbed(keyword: str, lang_manager: Any, guild_id: str) -> discord.Embed`
+Loading Embed for search in progress. Plays a key role in the system logic.
+
+### `mapEmbed(map_url: str, lang_manager: Any, guild_id: str) -> discord.Embed`
+Embed for displaying restaurant map. Plays a key role in the system logic.
+
+### `menuEmbed(menu_url: str, lang_manager: Any, guild_id: str) -> discord.Embed`
+Embed for displaying restaurant menu. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/eat/providers/__init__.md
+```markdown
+# File: `cogs/eat/providers/__init__.py`
+
+## Overview
+餐廳搜尋 Provider 工廠 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `_SeleniumFallbackProvider`
+將 GoogleMapCrawler 包裝為符合 Provider 介面的 fallback。
+
+- **Attributes**:
+  - `_crawler` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `async_search_list(keyword: str, lang: str) -> list[dict]`: Executes async_search_list operation.
+  - `async_fetch_detail(url: str, lang: str) -> dict`: Executes async_fetch_detail operation.
+  - `search(keyword: str, lang: str) -> list[dict]`: Executes search operation.
+  - `close() -> Any`: Executes close operation.
+
+## Functions
+
+### `get_restaurant_provider() -> Any`
+返回最合適的餐廳搜尋 Provider 實例。 Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/eat/providers/foursquare_provider.md
+```markdown
+# File: `cogs/eat/providers/foursquare_provider.py`
+
+## Overview
+Foursquare Places API v3 Provider This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `FoursquareProvider`
+Foursquare Places API 非同步 Provider。
+
+- **Attributes**:
+  - `api_key` (`Any`): Instance attribute.
+  - `_session` (`Optional[aiohttp.ClientSession]`): Instance attribute.
+
+- **Methods**:
+  - `_get_session() -> aiohttp.ClientSession`: Executes _get_session operation.
+  - `close() -> Any`: 關閉 aiohttp session，應在 cog_unload 中呼叫。
+  - `search(keyword: str, lang: str) -> list[dict]`: 搜尋餐廳，返回最多 10 筆 PlaceResult 字典列表。
+  - `_text_search(keyword: str) -> list[dict]`: 呼叫 Foursquare Place Search API。
+  - `_get_first_photo(fsq_id: str) -> str`: 取得餐廳第一張照片 URL。
+  - `_to_place_result(place: dict, photo_url: str) -> dict`: 將 Foursquare API 回應轉換為 PlaceResult 格式字典。
+
+```
+
+### Create File: docs/cogs/eat/providers/googlemap_crawler.md
+```markdown
+# File: `cogs/eat/providers/googlemap_crawler.py`
+
+## Overview
+Core module for googlemap_crawler.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `GoogleMapCrawler`
+Handles operations related to GoogleMapCrawler.
+
+- **Attributes**:
+  - `_lock` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `search_list(keyword: str, lang: str) -> list[dict]`: 快速爬取搜尋結果列表。
+  - `fetch_detail(url: str, lang: str) -> dict`: 導航至特定餐廳頁面，抓取詳盡資訊（地址、評分、照片等）。
+  - `async_search_list(keyword: str, lang: str) -> list[dict]`: Executes async_search_list operation.
+  - `async_fetch_detail(url: str, lang: str) -> dict`: Executes async_fetch_detail operation.
+  - `close() -> Any`: Executes close operation.
+
+```
+
+### Create File: docs/cogs/eat/recommender.md
+```markdown
+# File: `cogs/eat/recommender.py`
+
+## Overview
+Lightweight Weighted Recommender. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `WeightedRecommender`
+Weighted recommender based on user rating history.
+
+- **Attributes**:
+  - `db` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `suggest_keyword(discord_id: str, available_keywords: list[str]) -> str`: Suggest the next search keyword based on user preferences.
+  - `rank_candidates(discord_id: str, candidates: list[dict]) -> list[dict]`: Rank candidate restaurants, excluding disliked ones and weighting liked categories.
+
+```
+
+### Create File: docs/cogs/eat/train/__init__.md
+```markdown
+# File: `cogs/eat/train/__init__.py`
+
+## Overview
+Core module for __init__.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/eat/train/data_loader.md
+```markdown
+# File: `cogs/eat/train/data_loader.py`
+
+## Overview
+Core module for data_loader.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `DataLoader`
+Handles operations related to DataLoader.
+
+- **Attributes**:
+  - `db` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `loadingData(discord_id: str) -> Any`: Executes loadingData operation.
+  - `procressData(data: Any) -> Any`: Executes procressData operation.
+  - `genVocabularyList(data: Any) -> Any`: Executes genVocabularyList operation.
+  - `transform(data: Any, voc_length: Any, batch_size: Any) -> Any`: Executes transform operation.
+
+```
+
+### Create File: docs/cogs/eat/train/model.md
+```markdown
+# File: `cogs/eat/train/model.py`
+
+## Overview
+Core module for model.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `Net`
+Handles operations related to Net.
+
+- **Attributes**:
+  - `embedding_dim` (`Any`): Instance attribute.
+  - `hidden_dim` (`Any`): Instance attribute.
+  - `embeddings` (`Any`): Instance attribute.
+  - `lstm` (`Any`): Instance attribute.
+  - `hidden2out` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `forward(seq_in: Any) -> Any`: Executes forward operation.
+
+```
+
+### Create File: docs/cogs/eat/train/train.md
+```markdown
+# File: `cogs/eat/train/train.py`
+
+## Overview
+Core module for train.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `Train`
+Handles operations related to Train.
+
+- **Attributes**:
+  - `db` (`Any`): Instance attribute.
+  - `embedding_dim` (`Any`): Instance attribute.
+  - `hidden_dim` (`Any`): Instance attribute.
+  - `dropout` (`Any`): Instance attribute.
+  - `learn_rate` (`Any`): Instance attribute.
+  - `epochs` (`Any`): Instance attribute.
+  - `save_interval` (`Any`): Instance attribute.
+  - `log_interval` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `genModel(discord_id: str) -> Any`: Executes genModel operation.
+  - `predict(discord_id: str) -> Any`: Executes predict operation.
+
+```
+
+### Create File: docs/cogs/eat/views.md
+```markdown
+# File: `cogs/eat/views.py`
+
+## Overview
+Core module for views.py managing restaurant recommendations. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `DislikeModal`
+Modal for users to provide feedback on disliked restaurants.
+
+- **Attributes**:
+  - `db` (`Any`): Instance attribute.
+  - `record_id` (`Any`): Instance attribute.
+  - `detail_view` (`Any`): Instance attribute.
+  - `lang_manager` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `on_submit(interaction: discord.Interaction) -> Any`: Handle modal submission.
+
+### `EatDetailView`
+Interactive View after selecting a single restaurant.
+
+- **Attributes**:
+  - `result` (`Any`): Instance attribute.
+  - `db` (`Any`): Instance attribute.
+  - `record_id` (`Any`): Instance attribute.
+  - `discord_id` (`Any`): Instance attribute.
+  - `provider` (`Any`): Instance attribute.
+  - `keyword` (`Any`): Instance attribute.
+  - `browse_results` (`Any`): Instance attribute.
+  - `browse_index` (`Any`): Instance attribute.
+  - `lang_manager` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `_rated` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_update_labels() -> Any`: Update button labels based on localization.
+  - `map_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Provide a link to Google Maps for the selected restaurant.
+  - `menu_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Display a menu image if available.
+  - `review_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Generate food reviews using LangChain streaming.
+  - `like_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Record positive feedback for the restaurant.
+  - `dislike_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Record negative feedback and open a reason modal.
+  - `back_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Return to the multi-result browsing View.
+  - `on_timeout() -> Any`: Disable all buttons when the View times out.
+
+### `EatBrowseView`
+Multi-result browsing View, supporting pagination and dropdown selection.
+
+- **Attributes**:
+  - `results` (`Any`): Instance attribute.
+  - `keyword` (`Any`): Instance attribute.
+  - `db` (`Any`): Instance attribute.
+  - `discord_id` (`Any`): Instance attribute.
+  - `provider` (`Any`): Instance attribute.
+  - `current_index` (`Any`): Instance attribute.
+  - `lang_manager` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `_max_viewed_index` (`Any`): Instance attribute.
+  - `_is_fetching` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_update_labels() -> Any`: Update button labels based on localization.
+  - `_background_prefetch() -> Any`: Complete detailed restaurant info in the background.
+  - `_rebuild_select() -> Any`: Rebuild the dropdown selection menu.
+  - `_select_callback(interaction: discord.Interaction) -> Any`: Handle restaurant selection from dropdown.
+  - `_update_nav_buttons() -> Any`: Enable or disable navigation buttons based on current index.
+  - `prev_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Go to the previous restaurant result.
+  - `next_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Go to the next restaurant result.
+  - `confirm_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Confirm the current restaurant selection.
+  - `regenerate_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Cycle to the next recommended restaurant, performing real-time fetch if needed.
+  - `on_timeout() -> Any`: Disable all buttons when the View times out.
+
+```
+
+### Create File: docs/cogs/episodic_memory.md
+```markdown
+# File: `cogs/episodic_memory.py`
+
+## Overview
+Core module for episodic_memory.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `EpisodicMemoryService`
+A background service responsible for the first stage of the ETL process
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `storage` (`StorageInterface`): Instance attribute.
+  - `settings` (`MemoryConfig`): Instance attribute.
+  - `message_tracker` (`MessageTracker`): Instance attribute.
+  - `is_processing` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> None`: Load the episodic memory service.
+  - `cog_unload() -> None`: Unload the episodic memory service.
+  - `_translate_text(lang_manager: Any, guild_id: str, *args, **kwargs) -> str`: Helper method to safely translate text with fallback.
+  - `force_update_memory(interaction: discord.Interaction) -> Any`: Force update the memory for the current channel. Owner only.
+  - `search_episodic_memory(interaction: discord.Interaction, vector_query: Optional[str], keyword_query: Optional[str], user_id: Optional[str], channel_id: Optional[str]) -> Any`: Search episodic memory with multiple query parameters. Owner only.
+
+## Functions
+
+### `setup(bot: commands.Bot) -> Any`
+The setup function for the cog. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/gen_img.md
+```markdown
+# File: `cogs/gen_img.py`
+
+## Overview
+Core module for gen_img.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ImageGenerationCog`
+Handles operations related to ImageGenerationCog.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+  - `session` (`Any`): Instance attribute.
+  - `tokens` (`Any`): Instance attribute.
+  - `client` (`Any`): Instance attribute.
+  - `model_id` (`Any`): Instance attribute.
+  - `conversation_history` (`Dict[Tuple[int, List[Dict]]]`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: Initialize the language manager when the cog is loaded
+  - `_get_conversation_history(channel_id: int) -> List[Dict]`: Get the conversation history for a specific channel
+  - `_update_conversation_history(channel_id: int, role: str, content: str, images: Optional[List[Image.Image]]) -> Any`: Update the conversation history
+  - `_generate_image_logic(prompt: str, guild_id: str, channel_id: int, input_images: Optional[List[Image.Image]], channel: Optional[discord.TextChannel]) -> Dict`: Core image generation logic.
+  - `generate_image_command(interaction: discord.Interaction, prompt: str) -> Any`: Executes generate_image_command operation.
+  - `_image_to_base64(image: Image.Image) -> str`: Convert a PIL Image to a base64-encoded string
+  - `generate_with_gemini(prompt: str, image_input: List[Image.Image], dialogue_history: List[Dict]) -> tuple[Tuple[Optional[io.BytesIO], Optional[str]]]`: Generate images using the Gemini API
+  - `generate_with_local_model(channel: Any, prompt: str, n_steps: int, message_to_edit: discord.Message, guild_id: str) -> Any`: Generate images using a local model
+  - `cog_unload() -> Any`: 清理資源
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+Executes setup operation. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/gif_tools.md
+```markdown
+# File: `cogs/gif_tools.py`
+
+## Overview
+Core module for gif_tools.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `GifTools`
+GIF 搜尋與管理工具。
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `tenor_api_key` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: 當 Cog 載入時初始化語言管理器
+  - `search_gif(query: str, limit: int, guild_id: str) -> list`: 搜尋 GIF。
+  - `search_gif_command(interaction: discord.Interaction, query: str) -> Any`: Discord 指令: 搜尋 GIF。
+  - `get_gif_url(query: str, guild_id: str) -> str`: 取得隨機一個符合搜尋條件的 GIF URL。
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+Executes setup operation. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/help.md
+```markdown
+# File: `cogs/help.py`
+
+## Overview
+Core module for help.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `HelpCog`
+Handles operations related to HelpCog.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: 當 Cog 載入時初始化語言管理器
+  - `_translate(guild_id: str, *keys) -> str`: Helper to translate with a safe fallback when keys are missing.
+  - `_chunk_field_values(lines: List[str], limit: int) -> List[str]`: Split command lines into chunks that respect Discord's 1024-char field limit.
+  - `_create_embed_page(title: str, description: Optional[str]) -> discord.Embed`: Create a new embed page for the help command.
+  - `_build_help_embeds(guild_id: str, title: str, description: str) -> List[discord.Embed]`: Construct one or more embeds while respecting Discord limits.
+  - `help_command(interaction: discord.Interaction) -> Any`: Executes help_command operation.
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+Executes setup operation. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/internet_search.md
+```markdown
+# File: `cogs/internet_search.py`
+
+## Overview
+Core module for internet_search.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `InternetSearchCog`
+Cog for internet search functionality including general web search, YouTube, and food recommendations.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `db` (`Any`): Instance attribute.
+  - `recommender` (`Any`): Instance attribute.
+  - `provider` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: Initialize LanguageManager when the cog is loaded.
+  - `cog_unload() -> Any`: Close the restaurant provider's HTTP session when the cog is unloaded.
+  - `search_command(interaction: discord.Interaction, type: app_commands.Choice[str], query: str) -> Any`: Slash command wrapper for internet_search.
+  - `internet_search(ctx: Any, query: str, search_type: str, message_to_edit: Optional[discord.Message], guild_id: str) -> Any`: High-level search entry point that delegates to specific search functions.
+  - `google_search(ctx: Any, query: Any, message_to_edit: Any) -> Any`: Perform a web search using Gemini grounding, with fallback to legacy scraping.
+  - `_extract_sources_from_grounding(response: Any) -> Any`: Extract source URLs and titles from Gemini grounding metadata.
+  - `_legacy_google_search(ctx: Any, query: Any, message_to_edit: Any) -> Any`: Original Selenium-based Google scraping preserved as a fallback.
+  - `get_chrome_options() -> Any`: Configure Chrome options for headless scraping.
+  - `youtube_search(ctx: Any, query: Any, message_to_edit: Any) -> Any`: Search for YouTube videos and return a random result from the top hits.
+  - `eat_search(ctx: Any, keyword: str, message_to_edit: discord.Message) -> Any`: Food recommendation search using WeightedRecommender and restaurant providers.
+
+## Functions
+
+### `install_driver() -> Any`
+Install Chrome driver using ChromeDriverManager. Plays a key role in the system logic.
+
+### `setup(bot: Any) -> Any`
+Set up the InternetSearchCog. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/language_manager.md
+```markdown
+# File: `cogs/language_manager.py`
+
+## Overview
+Core module for language_manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `MissingTranslationError`
+Custom exception for missing translation keys
+
+### `TranslationCache`
+Multi-layer cache for translations with LRU eviction
+
+- **Attributes**:
+  - `_cache` (`Dict[Tuple[str, str]]`): Instance attribute.
+  - `_max_size` (`Any`): Instance attribute.
+  - `_access_times` (`Dict[Tuple[str, float]]`): Instance attribute.
+  - `_access_counts` (`Dict[Tuple[str, int]]`): Instance attribute.
+
+- **Methods**:
+  - `get(key: str) -> Optional[str]`: Get cached translation with LRU tracking
+  - `put(key: str, value: str) -> Any`: Store translation in cache with LRU eviction
+  - `_evict_lru() -> Any`: Evict least recently used item
+  - `clear() -> Any`: Clear all cached items
+  - `size() -> int`: Get current cache size
+
+### `LanguageManager`
+Language Management System with modular translation support
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `config_dir` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `default_lang` (`Any`): Instance attribute.
+  - `translations` (`Dict[Tuple[str, Dict[Tuple[str, Any]]]]`): Instance attribute.
+  - `_translation_cache` (`Any`): Instance attribute.
+  - `supported_languages` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_load_translations() -> Any`: Load all language translations, supporting multi-file structure.
+  - `_load_directory(lang_code: str, directory: str, target_dict: Dict[Tuple[str, Any]]) -> Any`: Recursively load all JSON files in a directory.
+  - `_get_supported_languages() -> Dict[Tuple[str, str]]`: Get the list of supported languages.
+  - `get_server_lang(guild_id: str) -> str`: Get the server's language setting.
+  - `save_server_lang(guild_id: str, lang: str) -> bool`: Save the server's language setting.
+  - `_traverse_nested_dict(data: Dict[Tuple[str, Any]], keys: List[str]) -> Optional[Any]`: Traverse a nested dictionary.
+  - `translate(guild_id: str, *keys, **kwargs) -> str`: Translate specified text.
+  - `_format_result(result: str, kwargs: Dict[Tuple[str, Any]]) -> str`: Format translation result.
+  - `_log_missing_translation(guild_id: str, lang: str, keys: List[str]) -> Any`: Log missing translations.
+  - `clear_cache() -> Any`: Clear translation cache.
+  - `get_cache_stats() -> Dict[Tuple[str, Any]]`: Get cache statistics.
+  - `set_language(interaction: discord.Interaction, language: str) -> Any`: Set the display language of the server.
+  - `current_language(interaction: discord.Interaction) -> Any`: Display the current language used by the server.
+  - `get_instance(bot: commands.Bot) -> Optional[LanguageManager]`: Get LanguageManager instance.
+
+## Functions
+
+### `setup(bot: commands.Bot) -> Any`
+Executes setup operation. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/math.md
+```markdown
+# File: `cogs/math.py`
+
+## Overview
+Core module for math.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `MathCalculatorCog`
+Cog for advanced mathematical calculations using SymPy.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: Initialize LanguageManager when the cog is loaded.
+  - `calculate_math(expression: str, message_to_edit: Any, guild_id: Optional[str]) -> str`: Parse and evaluate a mathematical expression, returning a localized result string.
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+Set up the MathCalculatorCog. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/__init__.md
+```markdown
+# File: `cogs/memory/__init__.py`
+
+## Overview
+Core module for __init__.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/memory/db/connection.md
+```markdown
+# File: `cogs/memory/db/connection.py`
+
+## Overview
+Database connection manager for the memory cog. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `DatabaseConnection`
+Manage SQLite connections per-thread and provide thread-safe access.
+
+- **Attributes**:
+  - `db_path` (`Any`): Instance attribute.
+  - `bot` (`Any`): Instance attribute.
+  - `_loop` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `_lock` (`Any`): Instance attribute.
+  - `_connections` (`Dict[Tuple[int, sqlite3.Connection]]`): Instance attribute.
+
+- **Methods**:
+  - `_report_error_threadsafe(exc: Exception, ctx: str) -> None`: Report errors in a thread-safe manner to the async error reporter.
+  - `get_connection() -> Any`: Context manager that yields a sqlite3.Connection bound to the current thread.
+  - `close_connections() -> None`: Close all managed SQLite connections.
+
+```
+
+### Create File: docs/cogs/memory/db/episodic_storage.md
+```markdown
+# File: `cogs/memory/db/episodic_storage.py`
+
+## Overview
+EpisodicStorage: handles message-related tables (messages, pending_messages, messages_archive). This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `EpisodicStorage`
+Handles channel memory state management.
+
+- **Attributes**:
+  - `db` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `initialize_channel_memory_state() -> None`: Initialize the channel_memory_state table in the database.
+  - `get_channel_memory_state(channel_id: int) -> Optional[Dict[Tuple[str, int]]]`: Get the memory state for a specific channel.
+  - `update_channel_memory_state(channel_id: int, message_count: int, start_message_id: int, last_summary_timestamp: Optional[float], last_summary_text: Optional[str]) -> None`: Update the memory state for a specific channel.
+
+```
+
+### Create File: docs/cogs/memory/db/knowledge_storage.md
+```markdown
+# File: `cogs/memory/db/knowledge_storage.py`
+
+## Overview
+KnowledgeStorage: handles guild and channel level knowledge storage. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `KnowledgeStorage`
+Handles knowledge table storage operations.
+
+- **Attributes**:
+  - `db` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_knowledge(target_type: str, target_id: str) -> Optional[str]`: Retrieve knowledge for a specific scope (guild or channel).
+  - `update_knowledge(target_type: str, target_id: str, content: str) -> bool`: Update or insert knowledge for a specific scope.
+  - `delete_knowledge(target_type: str, target_id: str) -> bool`: Delete knowledge for a specific scope.
+
+```
+
+### Create File: docs/cogs/memory/db/procedural_storage.md
+```markdown
+# File: `cogs/memory/db/procedural_storage.py`
+
+## Overview
+ProceduralStorage: handles users table and configuration storage. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ProceduralStorage`
+Handles users table and config storage.
+
+- **Attributes**:
+  - `db` (`Any`): Instance attribute.
+  - `_user_cache` (`Dict[Tuple[str, UserInfo]]`): Instance attribute.
+  - `_cache_size_limit` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_user_info(discord_id: str) -> Optional[UserInfo]`: Executes get_user_info operation.
+  - `update_user_data(discord_id: str, discord_name: str, procedural_memory: Optional[str], user_background: Optional[str], display_names: Optional[List[str]]) -> bool`: Executes update_user_data operation.
+  - `delete_user_data(discord_id: str) -> bool`: Executes delete_user_data operation.
+  - `update_user_activity(discord_id: str, discord_name: str) -> bool`: Executes update_user_activity operation.
+  - `get_config(key: str) -> Optional[str]`: Executes get_config operation.
+  - `set_config(key: str, value: str) -> None`: Executes set_config operation.
+  - `_update_cache(user_id: str, user_info: UserInfo) -> None`: Executes _update_cache operation.
+
+```
+
+### Create File: docs/cogs/memory/db/schema.md
+```markdown
+# File: `cogs/memory/db/schema.py`
+
+## Overview
+Database schema creation for the memory cog. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `create_tables(conn: sqlite3.Connection) -> None`
+Create necessary tables and indexes on the provided SQLite connection. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/db/stats_storage.md
+```markdown
+# File: `cogs/memory/db/stats_storage.py`
+
+## Overview
+StatsStorage: handles user statistics and log migration state persistence. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `StatsStorage`
+Handles user_stats and log_migration_state table operations.
+
+- **Attributes**:
+  - `db` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_user_stats(user_id: str, guild_id: str) -> Optional[Dict[Tuple[str, Any]]]`: Retrieve cumulative stats for a user in a guild.
+  - `upsert_user_stats(user_id: str, guild_id: str, message_content: str, channel_name: str, timestamp: str) -> None`: Insert or update cumulative stats for a single message event.
+  - `bulk_upsert_user_stats(records: List[Dict[Tuple[str, Any]]]) -> None`: Insert or update cumulative stats for a batch of message events.
+  - `get_migration_state(guild_id: str) -> Optional[str]`: Get the last processed date for historical log migration.
+  - `set_migration_state(guild_id: str, date_str: str) -> None`: Record the last processed date for historical log migration.
+
+```
+
+### Create File: docs/cogs/memory/embedding_providers/__init__.md
+```markdown
+# File: `cogs/memory/embedding_providers/__init__.py`
+
+## Overview
+Core module for __init__.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `list_providers() -> List[str]`
+Return registered embedding provider names. Plays a key role in the system logic.
+
+### `get_provider_factory(name: str) -> Optional[Callable]`
+Return the factory callable for a given provider name, or None if not found. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/embedding_providers/base.md
+```markdown
+# File: `cogs/memory/embedding_providers/base.py`
+
+## Overview
+Core module for base.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `base_provider(settings: MemoryConfig) -> Embeddings`
+Base dummy embedding provider returning zero vectors. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/embedding_providers/google.md
+```markdown
+# File: `cogs/memory/embedding_providers/google.py`
+
+## Overview
+Core module for google.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `google_genai_provider(settings: MemoryConfig) -> Embeddings`
+Google Generative AI embeddings provider using langchain_google_genai. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/embedding_providers/huggingface.md
+```markdown
+# File: `cogs/memory/embedding_providers/huggingface.py`
+
+## Overview
+Core module for huggingface.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `huggingface_provider(settings: MemoryConfig) -> Embeddings`
+Provider factory using langchain_huggingface.HuggingFaceEmbeddings. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/embedding_providers/ollama.md
+```markdown
+# File: `cogs/memory/embedding_providers/ollama.py`
+
+## Overview
+Core module for ollama.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `ollama_provider(settings: MemoryConfig) -> Embeddings`
+Ollama embedding provider factory using langchain_ollama.OllamaEmbeddings. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/embedding_providers/openai.md
+```markdown
+# File: `cogs/memory/embedding_providers/openai.py`
+
+## Overview
+Core module for openai.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `openai_provider(settings: MemoryConfig) -> Embeddings`
+OpenAI embedding provider factory. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/exceptions.md
+```markdown
+# File: `cogs/memory/exceptions.py`
+
+## Overview
+Core module for exceptions.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `MemorySystemError`
+Base exception for the memory system.
+
+### `DatabaseError`
+Related to database operations.
+
+### `VectorOperationError`
+Related to vector store operations like add or upsert.
+
+### `SearchError`
+Related to search or query operations in the vector store.
+
+### `IndexIntegrityError`
+Related to index creation or integrity in the vector store.
+
+### `DiscordAPIError`
+Related to errors when fetching data from the Discord API.
+
+```
+
+### Create File: docs/cogs/memory/interfaces/storage_interface.md
+```markdown
+# File: `cogs/memory/interfaces/storage_interface.py`
+
+## Overview
+Core module for storage_interface.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ProceduralStorageInterface`
+Interface for procedural (user) storage operations.
+
+- **Methods**:
+  - `get_user_info(discord_id: str) -> Optional[UserInfo]`: Executes get_user_info operation.
+  - `delete_user_data(discord_id: str) -> bool`: Executes delete_user_data operation.
+  - `update_user_data(discord_id: str, discord_name: str, procedural_memory: Optional[str], user_background: Optional[str], display_names: Optional[List[str]]) -> bool`: Executes update_user_data operation.
+  - `update_user_activity(discord_id: str, discord_name: str) -> bool`: Executes update_user_activity operation.
+  - `get_config(key: str) -> Optional[str]`: Executes get_config operation.
+  - `set_config(key: str, value: str) -> None`: Executes set_config operation.
+
+### `EpisodicStorageInterface`
+Interface for episodic (channel memory state) storage operations.
+
+- **Methods**:
+  - `initialize_channel_memory_state() -> None`: Initialize the channel_memory_state table in the database.
+  - `get_channel_memory_state(channel_id: int) -> Optional[Dict[Tuple[str, int]]]`: Get the memory state for a specific channel.
+  - `update_channel_memory_state(channel_id: int, message_count: int, start_message_id: int, last_summary_timestamp: Optional[float], last_summary_text: Optional[str]) -> None`: Update the memory state for a specific channel.
+
+### `StorageInterface`
+Combined interface kept for backward compatibility.
+
+```
+
+### Create File: docs/cogs/memory/interfaces/vector_store_interface.md
+```markdown
+# File: `cogs/memory/interfaces/vector_store_interface.py`
+
+## Overview
+This module defines the interface for vector stores in the memory system. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `MemoryFragment`
+Represents a single fragment of episodic memory, ready for storage and retrieval.
+
+- **Attributes**:
+  - `id` (`Optional[str]`): Class attribute.
+  - `content` (`str`): Class attribute.
+  - `query_key` (`str`): Class attribute.
+  - `metadata` (`Dict[Tuple[str, Any]]`): Class attribute.
+  - `score` (`Optional[float]`): Class attribute.
+
+### `VectorStoreInterface`
+Abstract base class for vector store implementations.
+
+- **Methods**:
+  - `add_memories(memories: List[MemoryFragment]) -> None`: Adds a list of memory fragments to the vector store.
+  - `search_memories_by_vector(query_text: str, limit: int, user_id: Optional[str], channel_id: Optional[str], min_score: Optional[float]) -> List[MemoryFragment]`: Search memories using vector similarity.
+  - `search_memories_by_keyword(query_text: str, user_id: Optional[str], channel_id: Optional[str], k: int) -> List[MemoryFragment]`: Search memories using keyword / full-text payload matching.
+  - `ensure_storage() -> None`: Ensure underlying storage exists and is ready (for example create collections
+  - `search(vector_query: Optional[str], keyword_query: Optional[str], user_id: Optional[str], channel_id: Optional[str]) -> List[MemoryFragment]`: Performs a hybrid search using separate vector and keyword queries.
+
+```
+
+### Create File: docs/cogs/memory/services/event_summarization_service.md
+```markdown
+# File: `cogs/memory/services/event_summarization_service.py`
+
+## Overview
+EventSummarizationService: Process Discord message lists into meaningful events using LLM summarization. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `EventMetadata`
+Structured metadata for an event.
+
+- **Attributes**:
+  - `start_message_id` (`int`): Class attribute.
+  - `end_message_id` (`int`): Class attribute.
+  - `channel_id` (`int`): Class attribute.
+  - `guild_id` (`int`): Class attribute.
+  - `user_ids` (`List[int]`): Class attribute.
+  - `start_timestamp` (`float`): Class attribute.
+  - `end_timestamp` (`float`): Class attribute.
+  - `reaction_list` (`List[Dict[Tuple[str, Any]]]`): Class attribute.
+  - `event_type` (`Optional[str]`): Class attribute.
+
+### `Entity`
+Represents an entity extracted from the conversation.
+
+- **Attributes**:
+  - `name` (`str`): Class attribute.
+  - `type` (`str`): Class attribute.
+  - `description` (`str`): Class attribute.
+
+### `MemoryFragment`
+Represents a single, distinct memory extracted from a conversation.
+
+- **Attributes**:
+  - `query_key` (`str`): Class attribute.
+  - `query_keywords` (`List[str]`): Class attribute.
+  - `query_value` (`str`): Class attribute.
+  - `start_message_id` (`int`): Class attribute.
+  - `end_message_id` (`int`): Class attribute.
+  - `entities` (`List[Entity]`): Class attribute.
+
+### `MemoryFragmentList`
+A list of MemoryFragment objects, representing all significant events extracted from a conversation.
+
+- **Attributes**:
+  - `fragments` (`List[MemoryFragment]`): Class attribute.
+
+### `EventSummary`
+Structured output for an event summary.
+
+- **Attributes**:
+  - `query_key` (`str`): Class attribute.
+  - `query_keywords` (`List[str]`): Class attribute.
+  - `query_value` (`str`): Class attribute.
+  - `entities` (`List[Dict[Tuple[str, str]]]`): Class attribute.
+  - `metadata` (`EventMetadata`): Class attribute.
+
+### `EventSummarizationService`
+Service for processing Discord messages into meaningful event summaries using LLM.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `settings` (`Any`): Instance attribute.
+  - `model_manager` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_extract_structured_response(response: Any, expected_model: Type[T], context: str) -> Optional[T]`: Unified extractor for structured agent responses.
+  - `summarize_events(messages: List[discord.Message], previous_summary: str) -> List[EventSummary]`: Process a list of messages and extract event summaries using LLM.
+  - `_group_messages(messages: List[discord.Message]) -> List[List[discord.Message]]`: Group related messages into events.
+  - `_process_message_group(messages: List[discord.Message], previous_summary: str) -> Optional[List[EventSummary]]`: Process a group of messages into an event summary using LLM.
+  - `_prepare_message_data(messages: List[discord.Message]) -> List[Dict[Tuple[str, Any]]]`: Prepare message data for LLM processing.
+  - `_get_llm_summary(message_data: List[Dict[Tuple[str, Any]]], previous_summary: str) -> Optional[MemoryFragmentList]`: Get event summary from LLM using the episodic memory extractor prompt with structured output.
+  - `_create_llm_instance(model_name: str, force_json: bool) -> Any`: Create a LangChain model instance from a model name string.
+  - `_get_system_prompt() -> str`: Get the system prompt from the episodic memory extractor template.
+  - `_get_user_prompt_with_messages(message_data: List[Dict[Tuple[str, Any]]], previous_summary: str) -> str`: Get the user prompt with the prepared message data.
+  - `_create_event_summary(messages: List[discord.Message], memory_fragment: MemoryFragment) -> Optional[EventSummary]`: Create an EventSummary from LLM response and message metadata.
+  - `_generate_query_value(summary: str, query_key: str) -> str`: Generate query value for vector search.
+  - `_create_event_metadata(messages: List[discord.Message], memory_fragment: MemoryFragment) -> EventMetadata`: Create event metadata from a group of messages using MemoryFragment info.
+
+```
+
+### Create File: docs/cogs/memory/services/message_tracker.md
+```markdown
+# File: `cogs/memory/services/message_tracker.py`
+
+## Overview
+Core module for message_tracker.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `MessageTracker`
+Tracks new messages in channels for the memory system.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `storage` (`Any`): Instance attribute.
+  - `settings` (`Any`): Instance attribute.
+  - `_pending_message_count` (`Any`): Instance attribute.
+  - `_processing_tasks` (`Any`): Instance attribute.
+  - `_processing_semaphore` (`Any`): Instance attribute.
+  - `_active_summarization_task` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `track_message(message: discord.Message) -> Any`: Tracks a message, adding it to the pending list if it's not from a bot
+  - `_schedule_processing(channel: discord.TextChannel) -> Any`: Schedules channel memory processing with a debounce delay.
+  - `interrupt_all() -> Any`: Interrupts all pending and active memory processing tasks.
+  - `_process_channel_memory(channel: discord.TextChannel) -> Any`: Processes memory for a channel when threshold is reached.
+  - `get_pending_count() -> int`: Gets the current count of pending messages.
+  - `reset_pending_count() -> Any`: Resets the pending message count to zero.
+
+## Functions
+
+### `discord_id_to_unix_timestamp(message_id: int) -> float`
+Convert Discord message ID to Unix timestamp in milliseconds. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/services/vectorization_service.md
+```markdown
+# File: `cogs/memory/services/vectorization_service.py`
+
+## Overview
+Core module for vectorization_service.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `VectorizationService`
+Service responsible for converting EventSummary objects into MemoryFragment objects,
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `storage` (`Any`): Instance attribute.
+  - `vector_manager` (`Any`): Instance attribute.
+  - `settings` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `process_event_summaries(event_summaries: List[EventSummary]) -> None`: Process a list of EventSummary objects and store them in the vector database.
+  - `_convert_event_summaries_to_fragments(event_summaries: List[EventSummary]) -> List[MemoryFragment]`: Convert EventSummary objects to MemoryFragment objects.
+
+```
+
+### Create File: docs/cogs/memory/users/manager.md
+```markdown
+# File: `cogs/memory/users/manager.py`
+
+## Overview
+User manager depending on StorageInterface. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SQLiteUserManager`
+Lightweight user manager that delegates storage operations to StorageInterface.
+
+- **Attributes**:
+  - `storage` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `_user_cache` (`Dict[Tuple[str, UserInfo]]`): Instance attribute.
+  - `_cache_size_limit` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_user_info(user_id: str, use_cache: bool) -> Optional[UserInfo]`: Retrieve user info via storage and update cache.
+  - `get_multiple_users(user_ids: List[str], use_cache: bool) -> Dict[Tuple[str, UserInfo]]`: Retrieve multiple users, leveraging cache and storage concurrently.
+  - `update_user_data(user_id: str, user_data: Any, display_name: Optional[str]) -> bool`: Extracts fields from user_data and delegates to storage.
+  - `delete_user_data(user_id: str) -> bool`: Delegate deletion to storage and invalidate cache.
+  - `update_user_activity(user_id: str, display_name: str) -> bool`: Delegate activity update to storage and invalidate cache.
+  - `search_users_by_display_name(name_pattern: str, limit: int) -> List[UserInfo]`: Attempt to use storage search; fall back to simple cache scan if unavailable.
+  - `get_user_statistics() -> Dict[Tuple[str, Any]]`: Return statistics; delegate to storage if available otherwise return cache-based stats.
+  - `migrate_from_mongodb(mongodb_collection: Any) -> int`: Migrate users by delegating to update_user_data for each document.
+  - `_update_cache(user_id: str, user_info: UserInfo) -> Any`: Update in-memory cache with eviction.
+  - `clear_cache() -> Any`: Clear in-memory cache.
+  - `cleanup_inactive_users(days: int) -> int`: Delegate cleanup if storage provides method; otherwise no-op.
+
+## Functions
+
+### `extract_participant_ids(message: Any, conversation_history: List[Any]) -> set`
+Extract participant IDs from a message and recent conversation history. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/users/models.md
+```markdown
+# File: `cogs/memory/users/models.py`
+
+## Overview
+UserInfo model for user data. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UserInfo`
+Dataclass matching the new `users` schema.
+
+- **Attributes**:
+  - `discord_id` (`str`): Class attribute.
+  - `discord_name` (`str`): Class attribute.
+  - `display_names` (`List[str]`): Class attribute.
+  - `procedural_memory` (`Optional[str]`): Class attribute.
+  - `user_background` (`Optional[str]`): Class attribute.
+  - `created_at` (`Optional[datetime]`): Class attribute.
+
+- **Methods**:
+  - `to_dict() -> Dict[Tuple[str, Any]]`: Convert to dict for serialization; datetimes become ISO strings.
+  - `from_dict(data: Dict[Tuple[str, Any]]) -> UserInfo`: Instantiate from dict, handling created_at and display_names formats.
+
+```
+
+### Create File: docs/cogs/memory/vector/manager.md
+```markdown
+# File: `cogs/memory/vector/manager.py`
+
+## Overview
+Core module for manager.py managing memory components. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `VectorManager`
+Factory class to dynamically initialize and provide a vector store instance and embedding model.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `settings` (`Any`): Instance attribute.
+  - `embedding_model` (`Optional[Embeddings]`): Instance attribute.
+  - `_store` (`Optional[VectorStoreInterface]`): Instance attribute.
+
+- **Methods**:
+  - `_get_store_class(store_type: str) -> Type[VectorStoreInterface]`: Dynamically imports and returns the vector store class from the 'vector_stores' directory.
+  - `_initialize_store() -> VectorStoreInterface`: Creates the configured VectorStore instance, injecting the embedding model.
+  - `_initialize_embedding() -> Embeddings`: Initializes embedding model according to settings.embedding_provider.
+  - `initialize() -> Any`: Async initialization entrypoint.
+  - `store() -> VectorStoreInterface`: Provides public access to the vector store instance.
+  - `get_embedding_model() -> Embeddings`: Return initialized embedding model synchronously (after initialize).
+  - `set_embedding_model_for_tests(model: Embeddings) -> Any`: Executes set_embedding_model_for_tests operation.
+
+## Functions
+
+### `register_embedding_provider(name: str) -> Any`
+Decorator to register an embedding provider factory under a canonical name. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/memory/vector_stores/__init__.md
+```markdown
+# File: `cogs/memory/vector_stores/__init__.py`
+
+## Overview
+Vector store implementations for memory module. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/memory/vector_stores/qdrant_store.md
+```markdown
+# File: `cogs/memory/vector_stores/qdrant_store.py`
+
+## Overview
+Qdrant-based Vector Store using LangChain integration. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `QdrantStore`
+LangChain Qdrant vector store wrapper.
+
+- **Attributes**:
+  - `settings` (`Any`): Instance attribute.
+  - `embedding_model` (`Any`): Instance attribute.
+  - `collection_name` (`Any`): Instance attribute.
+  - `embedding_dim` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `ensure_storage() -> None`: Ensure payload indexes exist.
+  - `add_memories(memories: List[MemoryFragment]) -> None`: Add memories using LangChain's add_documents.
+  - `search_memories_by_vector(query_text: str, limit: int, user_id: Optional[str], channel_id: Optional[str], min_score: Optional[float]) -> List[MemoryFragment]`: Vector similarity search with metadata filtering.
+  - `search_memories_by_keyword(query_text: str, user_id: Optional[str], channel_id: Optional[str], k: int) -> List[MemoryFragment]`: Keyword search using Qdrant query API with payload filtering.
+  - `search(vector_query: Optional[str], keyword_query: Optional[str], user_id: Optional[str], channel_id: Optional[str]) -> List[MemoryFragment]`: Hybrid search combining vector and keyword results.
+  - `_report_error(error: Exception) -> None`: Helper to report errors.
+
+```
+
+### Create File: docs/cogs/music.md
+```markdown
+# File: `cogs/music.py`
+
+## Overview
+Core module for music.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `YTMusic`
+Handles operations related to YTMusic.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `youtube` (`Any`): Instance attribute.
+  - `_executor` (`Any`): Instance attribute.
+  - `settings` (`Any`): Instance attribute.
+  - `audio_manager` (`Any`): Instance attribute.
+  - `state_manager` (`Any`): Instance attribute.
+  - `queue_manager` (`Any`): Instance attribute.
+  - `ui_manager` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+  - `disconnect_timers` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `setup_hook() -> Any`: Initialize async components and LanguageManager
+  - `mode(interaction: discord.Interaction, mode: app_commands.Choice[str]) -> Any`: 播放模式命令
+  - `shuffle(interaction: discord.Interaction) -> Any`: 隨機播放命令
+  - `play(interaction: discord.Interaction, query: Optional[str]) -> Any`: 播放音樂或刷新UI命令
+  - `_handle_playlist(interaction: discord.Interaction, url: str) -> Any`: Handle playlist URL
+  - `_handle_single_video(interaction: discord.Interaction, url: str) -> bool`: Handle single video URL
+  - `_handle_search(interaction: discord.Interaction, query: str) -> Any`: Handle search query
+  - `play_next(interaction: discord.Interaction, force_new: bool) -> Any`: Play the next song in queue
+  - `_handle_single_loop(interaction: discord.Interaction, state: Any, voice_client: Any) -> Any`: Handle single song loop playback
+  - `_get_next_song(interaction: discord.Interaction, guild_id: int, force_new: bool) -> Any`: Get the next song to play, handling autoplay and ensuring download.
+  - `_refill_queue(guild_id: int) -> Any`: Refill the queue with songs
+  - `_play_song(interaction: discord.Interaction, song: dict, voice_client: Any) -> Any`: Play a song and update UI
+  - `_handle_after_play(interaction: discord.Interaction, song: dict) -> Any`: Handle cleanup after song finishes playing
+  - `_trigger_autoplay(interaction: discord.Interaction, guild_id: int) -> Any`: 根據最後播放的歌曲觸發自動播放，精確填充推薦歌曲至5首，並排除重複。
+  - `_get_guild_folder(guild_id: int) -> tuple`: Get guild queue and folder
+  - `get_queue_manager() -> QueueManager`: Executes get_queue_manager operation.
+  - `get_state_manager() -> StateManager`: Executes get_state_manager operation.
+  - `get_voice_client(guild_id: int) -> Optional[discord.VoiceClient]`: Executes get_voice_client operation.
+  - `get_lang_manager() -> Optional[LanguageManager]`: Executes get_lang_manager operation.
+  - `handle_previous(interaction: discord.Interaction) -> Any`: Executes handle_previous operation.
+  - `handle_toggle_playback(interaction: discord.Interaction) -> Any`: Executes handle_toggle_playback operation.
+  - `handle_skip(interaction: discord.Interaction) -> Any`: Executes handle_skip operation.
+  - `handle_stop(interaction: discord.Interaction) -> Any`: Executes handle_stop operation.
+  - `handle_toggle_mode(interaction: discord.Interaction) -> Any`: Executes handle_toggle_mode operation.
+  - `handle_toggle_shuffle(interaction: discord.Interaction) -> Any`: Executes handle_toggle_shuffle operation.
+  - `handle_show_queue(interaction: discord.Interaction) -> Any`: Executes handle_show_queue operation.
+  - `handle_toggle_autoplay(interaction: discord.Interaction) -> Any`: 切換自動播放模式
+  - `get_queue_text(guild_id: int) -> str`: Generates the text for the queue display.
+  - `_fill_autoplay_queue(interaction: discord.Interaction) -> Any`: Fills the queue with recommended songs when autoplay is on.
+  - `_cleanup_voice_session(guild_id: int) -> Any`: Cleans up the voice session for a guild.
+  - `_cancel_disconnect_timer(guild_id: int) -> Any`: Cancels the disconnect timer for a guild.
+  - `_start_disconnect_timer(guild_id: int) -> Any`: Starts the disconnect timer for a guild.
+  - `_disconnect_after_delay(guild_id: int) -> Any`: Disconnects the bot after a 5-minute delay if it's still paused.
+  - `on_voice_state_update(member: Any, before: Any, after: Any) -> Any`: Handle voice state changes, including auto-pause and auto-disconnect.
+  - `_create_dummy_interaction(channel: Any, guild: Any, original_interaction: Any) -> Any`: Creates a dummy interaction object for internal use.
+  - `_player_loop(interaction: discord.Interaction, song: dict) -> Any`: Monitors the player and handles song completion.
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+Initialize the music cog Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/music_lib/__init__.md
+```markdown
+# File: `cogs/music_lib/__init__.py`
+
+## Overview
+Discord Music Bot Module This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/music_lib/audio_manager.md
+```markdown
+# File: `cogs/music_lib/audio_manager.py`
+
+## Overview
+Core module for audio_manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `AudioManager`
+Handles operations related to AudioManager.
+
+- **Attributes**:
+  - `current_audio` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `create_audio_source(song: Dict[Tuple[str, Any]]) -> FFmpegPCMAudio`: Create an FFmpeg audio source based on song information.
+  - `delete_file(guild_id: int, file_path: str) -> Any`: Non-blocking file deletion using asyncio.to_thread
+  - `cleanup_guild_files(guild_id: int, folder: str) -> Any`: Clean up all audio files for a guild
+
+```
+
+### Create File: docs/cogs/music_lib/queue_manager.md
+```markdown
+# File: `cogs/music_lib/queue_manager.py`
+
+## Overview
+Core module for queue_manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `PlayMode`
+Handles operations related to PlayMode.
+
+### `QueueManager`
+Handles operations related to QueueManager.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `guild_queues` (`Dict[Tuple[int, asyncio.Queue]]`): Instance attribute.
+  - `guild_settings` (`Dict[Tuple[int, Dict[Tuple[str, Any]]]]`): Instance attribute.
+  - `guild_playlists` (`Dict[Tuple[int, List[Dict[Tuple[str, Any]]]]]`): Instance attribute.
+
+- **Methods**:
+  - `get_guild_settings(guild_id: int) -> Dict[Tuple[str, Any]]`: Get server playback settings.
+  - `get_guild_queue_and_folder(guild_id: int) -> Tuple[Tuple[asyncio.Queue, str]]`: Ensure the server has a unique folder and playlist.
+  - `get_queue(guild_id: int) -> asyncio.Queue`: Get the queue for the guild.
+  - `clear_guild_data(guild_id: int) -> Any`: Clear the playlist for the specified server.
+  - `set_playlist(guild_id: int, video_infos: List[Dict[Tuple[str, Any]]]) -> Any`: Set the server's playlist.
+  - `get_next_playlist_songs(guild_id: int, count: int, youtube_manager: Any, folder: Optional[str], interaction: Any) -> List[Dict[Tuple[str, Any]]]`: Get the next song from the playlist.
+  - `has_playlist_songs(guild_id: int) -> bool`: Check if there are more songs in the playlist.
+  - `toggle_shuffle(guild_id: int) -> bool`: Toggle shuffle playback state.
+  - `set_play_mode(guild_id: int, mode: PlayMode) -> Any`: Set the playback mode.
+  - `get_play_mode(guild_id: int) -> PlayMode`: Get the playback mode.
+  - `is_shuffle_enabled(guild_id: int) -> bool`: Check if shuffle playback is enabled.
+  - `copy_queue(guild_id: int, shuffle: bool) -> Tuple[Tuple[List[Dict[Tuple[str, Any]]], asyncio.Queue]]`: Copy queue contents without consuming the original queue.
+  - `get_queue_snapshot(guild_id: int) -> List[Dict[Tuple[str, Any]]]`: Get a snapshot of the current playback queue.
+  - `is_queue_empty(guild_id: int) -> bool`: Check if the queue is empty.
+  - `clear_queue(guild_id: int) -> Any`: Clear the playback queue for the specified server.
+  - `set_queue(guild_id: int, q: asyncio.Queue) -> Any`: Set the queue for a specific guild.
+  - `add_to_queue(guild_id: int, item: Dict[Tuple[str, Any]], force: bool) -> bool`: Add an item to the queue and apply different priority logic based on the adder (user or bot).
+  - `add_to_front_of_queue(guild_id: int, item: Dict[Tuple[str, Any]]) -> bool`: Add item to the front of the queue and handle overflow. Returns True on success, False on failure.
+  - `get_next_item(guild_id: int) -> Optional[Dict[Tuple[str, Any]]]`: Get the next item from the queue.
+  - `enforce_autoplay_limit(guild_id: int, limit: int) -> Any`: Ensure the number of autoplayed songs in the queue does not exceed the specified limit.
+
+```
+
+### Create File: docs/cogs/music_lib/state_manager.md
+```markdown
+# File: `cogs/music_lib/state_manager.py`
+
+## Overview
+Core module for state_manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `PlayerState`
+Handles operations related to PlayerState.
+
+- **Attributes**:
+  - `current_song` (`Optional[Dict[Tuple[str, Any]]]`): Class attribute.
+  - `last_played_song` (`Optional[Dict[Tuple[str, Any]]]`): Class attribute.
+  - `current_message` (`Optional[discord.Message]`): Class attribute.
+  - `current_view` (`Optional[Any]`): Class attribute.
+  - `ui_messages` (`list[discord.Message]`): Class attribute.
+  - `autoplay` (`bool`): Class attribute.
+
+### `StateManager`
+Handles operations related to StateManager.
+
+- **Attributes**:
+  - `states` (`Dict[Tuple[int, PlayerState]]`): Instance attribute.
+
+- **Methods**:
+  - `get_state(guild_id: int) -> PlayerState`: Get or create state for a guild
+  - `update_state(guild_id: int, **kwargs) -> Any`: Update state attributes for a guild
+  - `clear_state(guild_id: int) -> Any`: Clear state for a guild
+
+```
+
+### Create File: docs/cogs/music_lib/ui/controls.md
+```markdown
+# File: `cogs/music_lib/ui/controls.py`
+
+## Overview
+Core module for controls.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `MusicControlView`
+Handles operations related to MusicControlView.
+
+- **Attributes**:
+  - `guild` (`Any`): Instance attribute.
+  - `message` (`Any`): Instance attribute.
+  - `current_embed` (`Any`): Instance attribute.
+  - `song_info` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+  - `_is_updating` (`Any`): Instance attribute.
+  - `update_task` (`Any`): Instance attribute.
+  - `current_position` (`Any`): Instance attribute.
+  - `previous_callback` (`Any`): Instance attribute.
+  - `toggle_playback_callback` (`Any`): Instance attribute.
+  - `skip_callback` (`Any`): Instance attribute.
+  - `stop_callback` (`Any`): Instance attribute.
+  - `toggle_mode_callback` (`Any`): Instance attribute.
+  - `toggle_shuffle_callback` (`Any`): Instance attribute.
+  - `show_queue_callback` (`Any`): Instance attribute.
+  - `toggle_autoplay_callback` (`Any`): Instance attribute.
+  - `get_queue_manager` (`Any`): Instance attribute.
+  - `get_state_manager` (`Any`): Instance attribute.
+  - `get_voice_client` (`Any`): Instance attribute.
+  - `get_lang_manager` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_lang_manager() -> Any`: Get language manager instance
+  - `_translate_music(*path, **kwargs) -> str`: 音樂模組專用翻譯方法
+  - `_get_fallback_text(key: str, **kwargs) -> str`: 備用文字機制
+  - `_get_mode_name(mode: str) -> str`: 獲取播放模式翻譯名稱
+  - `_get_shuffle_status(is_enabled: bool) -> str`: 獲取隨機播放狀態文字
+  - `update_button_state(update_message: bool) -> Any`: Update button states based on current playback and mode status
+  - `start_progress_updater(duration: int) -> Any`: Executes start_progress_updater operation.
+  - `stop_progress_updater() -> Any`: Executes stop_progress_updater operation.
+  - `update_progress(duration: Any) -> Any`: Executes update_progress operation.
+  - `update_embed(interaction: discord.Interaction, title: str, color: discord.Color) -> Any`: Update the embed with error handling and message recreation
+  - `previous(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Executes previous operation.
+  - `toggle_playback(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Executes toggle_playback operation.
+  - `skip(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Executes skip operation.
+  - `stop(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Executes stop operation.
+  - `toggle_mode(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 切換播放模式
+  - `toggle_shuffle(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 切換隨機播放
+  - `show_queue(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: Executes show_queue operation.
+  - `toggle_autoplay(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 切換自動播放
+
+```
+
+### Create File: docs/cogs/music_lib/ui/progress.md
+```markdown
+# File: `cogs/music_lib/ui/progress.py`
+
+## Overview
+Core module for progress.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ProgressDisplay`
+A class to handle the display of music playback progress
+
+- **Methods**:
+  - `create_progress_bar(current: Any, total: Any, length: Any) -> Any`: Create a more aesthetic progress bar
+  - `format_timestamp(seconds: Any) -> Any`: Format seconds into MM:SS format
+
+```
+
+### Create File: docs/cogs/music_lib/ui/song_select.md
+```markdown
+# File: `cogs/music_lib/ui/song_select.py`
+
+## Overview
+Core module for song_select.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SongSelectView`
+Handles operations related to SongSelectView.
+
+- **Attributes**:
+  - `player` (`Any`): Instance attribute.
+  - `results` (`Any`): Instance attribute.
+  - `original_interaction` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+
+- **Methods**:
+  - `_get_lang_manager() -> Any`: Get language manager instance
+  - `_translate_music(*path, **kwargs) -> str`: 音樂模組專用翻譯方法
+  - `_get_fallback_text(key: str, **kwargs) -> str`: 備用文字機制
+  - `on_timeout() -> Any`: Handle view timeout
+
+### `SongSelectMenu`
+Handles operations related to SongSelectMenu.
+
+- **Attributes**:
+  - `view_parent` (`Any`): Instance attribute.
+  - `results` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: Handle song selection
+
+```
+
+### Create File: docs/cogs/music_lib/ui_manager.md
+```markdown
+# File: `cogs/music_lib/ui_manager.py`
+
+## Overview
+Core module for ui_manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UIManager`
+Handles operations related to UIManager.
+
+- **Attributes**:
+  - `views` (`Dict[Tuple[int, MusicControlView]]`): Instance attribute.
+  - `bot` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+
+- **Methods**:
+  - `_get_lang_manager() -> Any`: Get language manager instance
+  - `_translate_music(guild_id: str, *path, **kwargs) -> str`: Music module specific translation method.
+  - `_get_fallback_text(key: str, **kwargs) -> str`: Fallback text for when translation fails.
+  - `get_current_view(guild_id: int) -> Optional[MusicControlView]`: Executes get_current_view operation.
+  - `update_player_ui(interaction: discord.Interaction, item: Dict[Tuple[str, Any]], current_message: Optional[discord.Message], youtube_manager: Any, music_cog: Any) -> discord.Message`: Update or create the music player UI
+  - `_create_player_embed(item: Dict[Tuple[str, Any]], youtube_manager: Any, guild_id: str) -> discord.Embed`: Create the player embed with song information
+  - `cleanup_view(guild_id: int) -> Any`: Clean up the view for a specific guild.
+
+```
+
+### Create File: docs/cogs/music_lib/youtube.md
+```markdown
+# File: `cogs/music_lib/youtube.py`
+
+## Overview
+Core module for youtube.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `YouTubeManager`
+Handles operations related to YouTubeManager.
+
+- **Attributes**:
+  - `time_limit` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_default_ffmpeg_config() -> dict`: Executes _get_default_ffmpeg_config operation.
+  - `_build_postprocessor_args() -> list`: Executes _build_postprocessor_args operation.
+  - `create(time_limit: Any) -> Any`: Executes create operation.
+  - `search_videos(query: Any, max_results: Any) -> Any`: Executes search_videos operation.
+  - `download_playlist(url: Any, folder: Any, interaction: Any) -> Any`: Executes download_playlist operation.
+  - `get_video_info_without_download(url: Any, interaction: Any) -> Any`: Executes get_video_info_without_download operation.
+  - `download_audio(url: Any, folder: Any, interaction: Any) -> Any`: Executes download_audio operation.
+  - `get_thumbnail_url(video_id: Any) -> Any`: Executes get_thumbnail_url operation.
+  - `get_related_videos(video_id: str, title: str, author: str, interaction: discord.Interaction, limit: int, exclude_ids: set) -> Any`: Executes get_related_videos operation.
+
+## Functions
+
+### `check_ffmpeg(ffmpeg_path: Any) -> Any`
+Executes check_ffmpeg operation. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/remind.md
+```markdown
+# File: `cogs/remind.py`
+
+## Overview
+Core module for remind.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ReminderCog`
+Handles operations related to ReminderCog.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: 當 Cog 載入時初始化語言管理器
+  - `_set_reminder_logic(channel: Any, target_user: Any, time_str: str, message: str, guild_id: str, interaction: Optional[discord.Interaction]) -> Any`: 核心提醒邏輯，可被斜線命令和LLM工具共用
+  - `remind(interaction: discord.Interaction, time: str, message: str, user: discord.User) -> Any`: Executes remind operation.
+  - `_parse_relative_time_regex(time_str: str) -> Optional[datetime]`: 使用正規表示式解析簡單的相對時間，例如 '10 分鐘後'
+  - `parse_time(time_str: str, guild_id: str) -> Optional[datetime]`: 使用 dateparser 解析時間字串，並提供基於正規表示式的備用方案。
+  - `format_timedelta(td: timedelta, guild_id: str) -> str`: 格式化時間長度為本地化字串
+  - `_format_time_fallback(td: timedelta) -> str`: 備用時間格式化機制（當翻譯系統不可用時）
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+Executes setup operation. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/schedule.md
+```markdown
+# File: `cogs/schedule.py`
+
+## Overview
+Core module for schedule.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ScheduleManager`
+Handles operations related to ScheduleManager.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `schedule_dir` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: 當 Cog 載入時初始化語言管理器
+  - `_sanitize_schedule_data(data: Any, fallback_channel_id: int) -> Any`: Ensure schedule_data has required keys and types. Returns (data, repaired).
+  - `upload_schedule_command(interaction: discord.Interaction, file: discord.Attachment) -> Any`: Executes upload_schedule_command operation.
+  - `_core_upload_schedule(user_id: int, channel_id: int, yaml_data: bytes) -> Any`: Executes _core_upload_schedule operation.
+  - `query_schedule_command(interaction: discord.Interaction, query_type: app_commands.Choice[str], time: str, day: app_commands.Choice[str], target_user: discord.Member) -> Any`: Executes query_schedule_command operation.
+  - `_core_query_schedule(interaction_or_ctx: Any, query_type: str, target_user_id: int, time: str, day: str) -> Any`: Executes _core_query_schedule operation.
+  - `format_full_schedule(schedule: Any, guild_id: Any) -> Any`: Executes format_full_schedule operation.
+  - `format_specific_time_schedule(schedule: Any, specific_time: Any, day: Any, guild_id: Any) -> Any`: Executes format_specific_time_schedule operation.
+  - `format_next_schedule(schedule: Any, now: Any, guild_id: Any) -> Any`: Executes format_next_schedule operation.
+  - `update_schedule_command(interaction: discord.Interaction, day: str, time: str, description: str) -> Any`: Executes update_schedule_command operation.
+  - `_core_update_schedule(user_id: int, day: str, time: str, description: str) -> Any`: Executes _core_update_schedule operation.
+  - `show_template_command(interaction: discord.Interaction) -> Any`: Executes show_template_command operation.
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+Executes setup operation. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/stats_cog.md
+```markdown
+# File: `cogs/stats_cog.py`
+
+## Overview
+StatsCog: real-time user statistics tracking and historical log migration. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `StatsCog`
+Real-time user stats tracking and historical log migration.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `stats_storage` (`Optional[StatsStorage]`): Instance attribute.
+  - `_migration_task` (`Optional[asyncio.Task]`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> None`: Start background log migration task when cog loads.
+  - `cog_unload() -> None`: Cancel background migration task on cog unload.
+  - `on_message(message: Any) -> None`: Update user stats for every incoming message.
+  - `_migrate_logs_background() -> None`: Ingest historical NDJSON log files into user_stats.
+  - `_migrate_guild_logs(guild_id: str, guild_dir: Path) -> None`: Migrate log files for a single guild.
+
+## Functions
+
+### `setup(bot: commands.Bot) -> None`
+Register StatsCog with the bot. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/story/__init__.md
+```markdown
+# File: `cogs/story/__init__.py`
+
+## Overview
+Core module for __init__.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/story/database.md
+```markdown
+# File: `cogs/story/database.py`
+
+## Overview
+Core module for database.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `CharacterDB`
+Handles all database operations for characters, independent of story worlds.
+
+- **Attributes**:
+  - `db_path` (`Any`): Instance attribute.
+  - `_initialized` (`Any`): Instance attribute.
+  - `_lock` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_connection() -> sqlite3.Connection`: Establishes and returns a database connection.
+  - `initialize() -> Any`: Initializes the character database, creates the table, and handles migrations.
+  - `save_character(character: StoryCharacter) -> Any`: Saves or updates a character.
+  - `_row_to_character(row: sqlite3.Row) -> StoryCharacter`: Converts a database row to a StoryCharacter object.
+  - `get_character(character_id: str) -> Optional[StoryCharacter]`: Retrieves a character by ID.
+  - `get_characters_by_user(user_id: int, guild_id: int) -> List[StoryCharacter]`: Retrieves all characters created by a user in a specific guild.
+  - `get_characters_by_guild(guild_id: int) -> List[StoryCharacter]`: Retrieves all characters for a specific guild.
+  - `get_selectable_characters(guild_id: int, user_id: int) -> List[StoryCharacter]`: Retrieves all characters that a user can select in a guild.
+  - `get_characters_by_ids(character_ids: List[str]) -> List[StoryCharacter]`: Retrieves multiple characters by their IDs.
+  - `delete_character(character_id: str) -> Any`: Deletes a character by ID.
+
+### `StoryDB`
+Handles all database operations for the story module (worlds and instances).
+
+- **Attributes**:
+  - `db_path` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `_initialized` (`Any`): Instance attribute.
+  - `_lock` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_connection() -> sqlite3.Connection`: Establishes and returns a database connection.
+  - `initialize() -> Any`: Initializes the database and creates tables if they don't exist.
+  - `save_world(world: StoryWorld) -> Any`: Saves or updates a story world using a SELECT then INSERT/UPDATE strategy.
+  - `get_world(world_name: str) -> Optional[StoryWorld]`: Retrieves a story world by name.
+  - `get_all_worlds() -> List[StoryWorld]`: Retrieves all story worlds for this guild.
+  - `save_story_instance(instance: StoryInstance) -> Any`: Saves or updates a story instance.
+  - `get_story_instance(channel_id: int) -> Optional[StoryInstance]`: Retrieves a story instance by channel ID.
+  - `save_player_relationship(relationship: PlayerRelationship) -> Any`: Saves or updates a player-NPC relationship.
+  - `get_player_relationship(relationship_id: str) -> Optional[PlayerRelationship]`: Retrieves a player-NPC relationship by ID.
+  - `get_relationships_for_story(story_id: int) -> List[PlayerRelationship]`: Retrieves all relationships for a given story instance.
+
+```
+
+### Create File: docs/cogs/story/exceptions.md
+```markdown
+# File: `cogs/story/exceptions.py`
+
+## Overview
+Custom exceptions for the story module. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `StoryError`
+Base exception for story-related errors.
+
+### `StoryNotFoundError`
+Raised when a story instance is not found.
+
+### `WorldNotFoundError`
+Raised when a world is not found.
+
+### `CharacterNotFoundError`
+Raised when a character is not found.
+
+### `StoryDatabaseError`
+Raised when there's a database-related error.
+
+### `StoryPromptError`
+Raised when there's an error building the story prompt.
+
+### `StoryGenerationError`
+Raised when there's an error generating the story response.
+
+```
+
+### Create File: docs/cogs/story/manager.md
+```markdown
+# File: `cogs/story/manager.py`
+
+## Overview
+Core module for manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `StoryManager`
+The core manager for story logic. It coordinates the database, state,
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `cog` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `system_prompt_manager` (`Any`): Instance attribute.
+  - `_initialized` (`Any`): Instance attribute.
+  - `db_instances` (`Dict[Tuple[int, StoryDB]]`): Instance attribute.
+  - `character_db` (`Any`): Instance attribute.
+  - `prompt_engine` (`Any`): Instance attribute.
+  - `state_manager` (`Any`): Instance attribute.
+  - `language_manager` (`LanguageManager`): Instance attribute.
+  - `interventions` (`Dict[Tuple[int, str]]`): Instance attribute.
+
+- **Methods**:
+  - `_get_db(guild_id: int) -> StoryDB`: Gets or creates a database connection for a specific guild.
+  - `_extract_structured_response(response: Any, expected_model: Type[T], context: str) -> Optional[T]`: Unified extractor for structured agent responses.
+  - `initialize() -> Any`: Initializes the StoryManager and its components.
+  - `add_intervention(channel_id: int, text: str) -> Any`: Stores an intervention for a specific channel.
+  - `intervene(interaction: discord.Interaction) -> Any`: Opens a modal for the user to provide an OOC intervention.
+  - `_update_relationships(db: StoryDB, story_id: int, updates: List[RelationshipUpdate]) -> Any`: Updates player-NPC relationships based on the GM plan.
+  - `_record_event(db: StoryDB, world: StoryWorld, instance: StoryInstance, gm_plan: GMActionPlan, final_content: str) -> Any`: Creates and records an event in the world state.
+  - `_send_story_response(channel: discord.TextChannel, character: Optional[StoryCharacter], story_instance: StoryInstance, content: str | CharacterAction) -> Any`: Constructs and sends the story response as an embed, using a webhook if available.
+  - `process_story_message(message: discord.Message) -> Any`: Processes a message from a story channel using the v5 layered agent architecture.
+  - `_find_speaking_character(speaker_name: Optional[str], characters: List[StoryCharacter], channel: discord.abc.Messageable) -> Optional[StoryCharacter]`: Unified character lookup logic, supports multiple matching methods.
+  - `_generate_and_save_summary(story_instance: StoryInstance) -> Any`: Generates a summary of the last 20-40 messages and saves it.
+  - `_generate_and_save_outline(story_instance: StoryInstance) -> Any`: Generates a high-level outline from the last 10 summaries and saves it.
+  - `start_story(interaction: discord.Interaction, world_name: str, character_ids: List[str], use_narrator: bool, initial_date: Optional[str], initial_time: Optional[str], initial_location: str) -> Any`: Handles the logic of starting a new story, creating the instance,
+  - `generate_first_scene(interaction: discord.Interaction, story_instance: StoryInstance) -> Any`: Generates the introductory scene for a new story using the v5 architecture.
+
+```
+
+### Create File: docs/cogs/story/models.md
+```markdown
+# File: `cogs/story/models.py`
+
+## Overview
+Core module for models.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `Event`
+Represents a specific event that occurred at a location.
+
+- **Attributes**:
+  - `title` (`str`): Class attribute.
+  - `summary` (`str`): Class attribute.
+  - `full_content` (`str`): Class attribute.
+  - `timestamp` (`str`): Class attribute.
+
+### `Location`
+Represents a specific location within the story world.
+
+- **Attributes**:
+  - `name` (`str`): Class attribute.
+  - `events` (`List[Event]`): Class attribute.
+  - `attributes` (`Dict[Tuple[str, Any]]`): Class attribute.
+
+### `StoryWorld`
+Represents the lore and rules of a story world, acting as a container for locations.
+
+- **Attributes**:
+  - `guild_id` (`int`): Class attribute.
+  - `world_name` (`str`): Class attribute.
+  - `locations` (`List[Location]`): Class attribute.
+  - `attributes` (`Dict[Tuple[str, Any]]`): Class attribute.
+
+### `StoryCharacter`
+Represents a character, either player-controlled (PC) or non-player (NPC).
+
+- **Attributes**:
+  - `name` (`str`): Class attribute.
+  - `description` (`str`): Class attribute.
+  - `guild_id` (`int`): Class attribute.
+  - `creator_id` (`int`): Class attribute.
+  - `is_pc` (`bool`): Class attribute.
+  - `user_id` (`Optional[int]`): Class attribute.
+  - `is_public` (`bool`): Class attribute.
+  - `webhook_url` (`Optional[str]`): Class attribute.
+  - `attributes` (`Dict[Tuple[str, Any]]`): Class attribute.
+  - `inventory` (`List[str]`): Class attribute.
+  - `status` (`str`): Class attribute.
+  - `character_id` (`str`): Class attribute.
+
+### `StoryInstance`
+Represents an active story session in a specific channel.
+
+- **Attributes**:
+  - `channel_id` (`int`): Class attribute.
+  - `guild_id` (`int`): Class attribute.
+  - `world_name` (`str`): Class attribute.
+  - `current_date` (`Optional[str]`): Class attribute.
+  - `current_time` (`Optional[str]`): Class attribute.
+  - `current_location` (`str`): Class attribute.
+  - `is_active` (`bool`): Class attribute.
+  - `active_character_ids` (`List[str]`): Class attribute.
+  - `current_state` (`Dict[Tuple[str, Any]]`): Class attribute.
+  - `event_log` (`List[str]`): Class attribute.
+  - `message_counter` (`int`): Class attribute.
+  - `summaries` (`List[str]`): Class attribute.
+  - `outlines` (`List[str]`): Class attribute.
+  - `narration_enabled` (`bool`): Class attribute.
+
+### `PlayerRelationship`
+Represents the relationship between a player (user) and an NPC.
+
+- **Attributes**:
+  - `story_id` (`int`): Class attribute.
+  - `character_id` (`str`): Class attribute.
+  - `user_id` (`int`): Class attribute.
+  - `description` (`str`): Class attribute.
+  - `relationship_id` (`str`): Class attribute.
+
+### `DialogueContext`
+Handles operations related to DialogueContext.
+
+- **Attributes**:
+  - `speaker_name` (`str`): Class attribute.
+  - `motivation` (`str`): Class attribute.
+  - `emotional_state` (`str`): Class attribute.
+
+### `StateUpdate`
+Handles operations related to StateUpdate.
+
+- **Attributes**:
+  - `location` (`str`): Class attribute.
+  - `date` (`str`): Class attribute.
+  - `time` (`str`): Class attribute.
+
+### `RelationshipUpdate`
+Handles operations related to RelationshipUpdate.
+
+- **Attributes**:
+  - `character_name` (`str`): Class attribute.
+  - `user_name` (`str`): Class attribute.
+  - `description` (`str`): Class attribute.
+
+### `GMActionPlan`
+The Game Master's action plan, defining the next step in the story.
+
+- **Attributes**:
+  - `action_type` (`str`): Class attribute.
+  - `event_title` (`str`): Class attribute.
+  - `event_summary` (`str`): Class attribute.
+  - `state_update` (`Optional[StateUpdate]`): Class attribute.
+  - `narration_content` (`Optional[str]`): Class attribute.
+  - `dialogue_context` (`Optional[List[DialogueContext]]`): Class attribute.
+  - `relationships_update` (`Optional[List[RelationshipUpdate]]`): Class attribute.
+
+### `CharacterAction`
+Represents a character's action, combining dialogue, physical action, and internal thought.
+
+- **Attributes**:
+  - `action` (`Optional[str]`): Class attribute.
+  - `dialogue` (`str`): Class attribute.
+  - `thought` (`Optional[str]`): Class attribute.
+  - `location` (`str`): Class attribute.
+  - `date` (`str`): Class attribute.
+  - `time` (`str`): Class attribute.
+
+### `StorySummary`
+Structured output for a story summary
+
+- **Attributes**:
+  - `summary` (`str`): Class attribute.
+  - `key_events` (`List[str]`): Class attribute.
+  - `character_developments` (`List[str]`): Class attribute.
+
+### `StoryOutline`
+Structured output for a story outline
+
+- **Attributes**:
+  - `outline` (`str`): Class attribute.
+  - `major_plot_points` (`List[str]`): Class attribute.
+  - `character_arcs` (`Dict[Tuple[str, str]]`): Class attribute.
+
+```
+
+### Create File: docs/cogs/story/prompt_engine.md
+```markdown
+# File: `cogs/story/prompt_engine.py`
+
+## Overview
+Core module for prompt_engine.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `StoryPromptEngine`
+Builds high-quality prompts for the layered AI agents in the story.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `system_prompt_manager` (`Any`): Instance attribute.
+  - `language_manager` (`Optional[LanguageManager]`): Instance attribute.
+  - `language_map` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `build_gm_prompt(instance: StoryInstance, world: StoryWorld, characters: List[StoryCharacter], user_input: str, story_outlines: List[str], language: str, intervention_text: Optional[str]) -> str`: Constructs the prompt for the Game Master (GM) Agent.
+  - `build_story_start_prompt(instance: StoryInstance, world: StoryWorld, characters: List[StoryCharacter]) -> str`: Constructs the prompt for the GM to generate the very first scene.
+  - `_get_fallback_gm_prompt() -> str`: 提供回退的 GM 系統提示詞，當沒有頻道特定的系統提示詞時使用。
+  - `build_character_prompt(character: StoryCharacter, gm_context: DialogueContext, guild_id: int, location: str, date: str, time: str) -> Tuple[Tuple[str, str]]`: Constructs the prompts for the Character Agent.
+
+```
+
+### Create File: docs/cogs/story/state_manager.md
+```markdown
+# File: `cogs/story/state_manager.py`
+
+## Overview
+Core module for state_manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `StoryStateManager`
+Manages story state updates based on structured GM Action Plans.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `update_state_from_gm_plan(instance: StoryInstance, gm_plan: GMActionPlan) -> StoryInstance`: Updates the story state based on a structured GMActionPlan.
+  - `initialize_default_state(instance: StoryInstance) -> StoryInstance`: Initialize default state for a new story instance.
+
+```
+
+### Create File: docs/cogs/story/ui/__init__.md
+```markdown
+# File: `cogs/story/ui/__init__.py`
+
+## Overview
+故事模組 UI 元件 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/story/ui/modals.md
+```markdown
+# File: `cogs/story/ui/modals.py`
+
+## Overview
+Core module for modals.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `WorldCreateModal`
+世界創建 Modal
+
+- **Attributes**:
+  - `story_manager` (`Any`): Instance attribute.
+  - `story_db` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `on_submit(interaction: discord.Interaction) -> Any`: 處理世界創建表單提交
+  - `on_error(interaction: discord.Interaction, error: Exception) -> Any`: 處理 Modal 錯誤
+
+### `CharacterCreateModal`
+角色創建 Modal
+
+- **Attributes**:
+  - `story_manager` (`Any`): Instance attribute.
+  - `character_db` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `character_name` (`Any`): Instance attribute.
+  - `description` (`Any`): Instance attribute.
+  - `webhook_url` (`Any`): Instance attribute.
+  - `privacy_input` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `on_submit(interaction: discord.Interaction) -> Any`: 處理角色創建表單提交
+  - `on_error(interaction: discord.Interaction, error: Exception) -> Any`: 處理 Modal 錯誤
+
+### `StoryStartModal`
+故事開始 Modal
+
+- **Attributes**:
+  - `story_manager` (`Any`): Instance attribute.
+  - `bot` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `channel_id` (`Any`): Instance attribute.
+  - `world_name` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `on_submit(interaction: discord.Interaction) -> Any`: 立即回應互動以防止超時，並在背景準備 NPC 選擇介面。
+  - `_prepare_and_send_npc_select(interaction: discord.Interaction) -> Any`: 在背景中執行耗時操作，然後發送帶有 NPC 選擇視圖的 followup 訊息。
+  - `on_error(interaction: discord.Interaction, error: Exception) -> Any`: 處理 Modal 錯誤
+
+### `InterventionModal`
+A modal for users to submit an OOC intervention to the story director.
+
+- **Attributes**:
+  - `manager` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `on_submit(interaction: discord.Interaction) -> Any`: Handles the submission of the intervention.
+  - `on_error(interaction: discord.Interaction, error: Exception) -> Any`: Handles errors in the modal.
+
+```
+
+### Create File: docs/cogs/story/ui/ui_manager.md
+```markdown
+# File: `cogs/story/ui/ui_manager.py`
+
+## Overview
+Core module for ui_manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UIManager`
+故事模組的 UI 管理器
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `story_manager` (`Any`): Instance attribute.
+  - `character_db` (`Any`): Instance attribute.
+  - `system_prompt_manager` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `show_main_menu(interaction: discord.Interaction) -> Any`: 顯示主要的故事管理選單
+  - `_create_initial_story_embed(guild_id: int, channel_id: int) -> discord.Embed`: 創建初始故事選單的 Embed
+  - `_create_active_story_embed(story_instance: Any) -> discord.Embed`: 創建進行中故事的 Embed
+  - `_update_world_select_options(view: Any, guild_id: int) -> Any`: 更新視圖中的世界選擇選單選項
+  - `handle_load_default_character(interaction: discord.Interaction) -> Any`: 處理從頻道預設設定載入角色的請求
+  - `show_character_create_modal(interaction: discord.Interaction, name: str, description: str) -> Any`: 顯示角色創建 Modal，可選填預設值
+
+```
+
+### Create File: docs/cogs/story/ui/views.md
+```markdown
+# File: `cogs/story/ui/views.py`
+
+## Overview
+Core module for views.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `InitialStoryView`
+初始故事視圖
+
+- **Attributes**:
+  - `story_manager` (`Any`): Instance attribute.
+  - `ui_manager` (`Any`): Instance attribute.
+  - `channel_id` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `selected_world` (`Optional[str]`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `on_timeout() -> Any`: 視圖超時處理
+  - `world_select(interaction: discord.Interaction, select: discord.ui.Select) -> Any`: 世界選擇選單
+  - `create_world_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 創建世界按鈕
+  - `create_character_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 創建角色按鈕
+  - `load_default_character_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 從預設載入角色按鈕
+  - `start_story_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 開始故事按鈕
+  - `_refresh_world_select() -> Any`: 重新整理世界選擇選單
+
+### `ActiveStoryView`
+進行中故事視圖
+
+- **Attributes**:
+  - `story_manager` (`Any`): Instance attribute.
+  - `story_instance` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_update_narration_button_state() -> Any`: 更新旁白切換按鈕的狀態
+  - `_update_pause_button_state() -> Any`: 更新暫停/恢復按鈕的狀態
+  - `join_story_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 加入故事按鈕
+  - `pause_story_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 暫停故事按鈕（管理員專用）
+  - `toggle_narration_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 切換旁白功能的按鈕
+  - `end_story_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 結束故事按鈕（管理員專用）
+
+### `NPCSelectView`
+NPC 選擇視圖
+
+- **Attributes**:
+  - `story_manager` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `channel_id` (`Any`): Instance attribute.
+  - `world_name` (`Any`): Instance attribute.
+  - `initial_date` (`Any`): Instance attribute.
+  - `initial_time` (`Any`): Instance attribute.
+  - `initial_location` (`Any`): Instance attribute.
+  - `characters` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `npc_select` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `create(manager: StoryManager, interaction: discord.Interaction, channel_id: int, world_name: str, initial_date: Optional[str], initial_time: Optional[str], initial_location: str, system_prompt: str) -> NPCSelectView`: 非同步工廠方法，用於創建和填充 NPCSelectView。
+  - `npc_select_callback(interaction: discord.Interaction) -> Any`: 處理 NPC 選擇的回調
+  - `confirm_button(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 確認選擇並將邏輯委派給 StoryManager 開始故事
+
+```
+
+### Create File: docs/cogs/story_manager.md
+```markdown
+# File: `cogs/story_manager.py`
+
+## Overview
+Core module for story_manager.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `StoryManagerCog`
+故事模組主要 Cog
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `system_prompt_manager` (`Optional[SystemPromptManager]`): Instance attribute.
+  - `story_manager` (`Optional[StoryManager]`): Instance attribute.
+  - `ui_manager` (`Optional[UIManager]`): Instance attribute.
+
+- **Methods**:
+  - `story_menu(interaction: discord.Interaction) -> Any`: 故事管理主命令
+  - `intervene(interaction: discord.Interaction) -> Any`: Allows a user to intervene in the story with OOC instructions for the director.
+  - `on_ready() -> Any`: Cog 準備就緒事件。
+  - `handle_story_message(message: discord.Message) -> Any`: 處理故事頻道中的訊息
+
+## Functions
+
+### `setup(bot: commands.Bot) -> Any`
+設定函式，將 Cog 加入到 bot 中 Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/summarizer.md
+```markdown
+# File: `cogs/summarizer.py`
+
+## Overview
+Core module for summarizer.py This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SummarizerCog`
+Cog for conversation summarization using AI with source mapping and character limits.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `MAX_CHAR_COUNT` (`Any`): Instance attribute.
+  - `EMBED_DESC_LIMIT` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: Initialize LanguageManager when the cog is loaded.
+  - `_split_text_robustly(text: str) -> Any`: Split long text into multiple chunks safely, handling exceptionally long single lines.
+  - `summarize(interaction: discord.Interaction, limit: int, persona: Optional[str], only_me: bool) -> Any`: Analyze and summarize recent channel conversation history using an AI agent.
+
+## Functions
+
+### `setup(bot: commands.Bot) -> Any`
+Set up the SummarizerCog. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/system_prompt/__init__.md
+```markdown
+# File: `cogs/system_prompt/__init__.py`
+
+## Overview
+頻道系統提示管理模組 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/cogs/system_prompt/cache_checker.md
+```markdown
+# File: `cogs/system_prompt/cache_checker.py`
+
+## Overview
+快取一致性檢查工具 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `CacheConsistencyChecker`
+快取一致性檢查器
+
+- **Attributes**:
+  - `cache_manager` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `check_cache_consistency(guild_id: str, channel_id: str, expected_content: str) -> Dict[Tuple[str, Any]]`: 檢查快取一致性
+  - `force_cache_refresh(guild_id: str, channel_id: str) -> bool`: 強制重新整理快取
+  - `get_cache_statistics() -> Dict[Tuple[str, Any]]`: 取得快取統計資訊
+
+```
+
+### Create File: docs/cogs/system_prompt/commands.md
+```markdown
+# File: `cogs/system_prompt/commands.py`
+
+## Overview
+頻道系統提示管理模組的 Discord 斜線命令 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SystemPromptCommands`
+系統提示管理命令類別
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `manager` (`Any`): Instance attribute.
+  - `permission_validator` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_system_prompt_manager() -> SystemPromptManager`: 取得系統提示管理器實例
+  - `system_prompt(interaction: discord.Interaction) -> Any`: 統一的系統提示管理命令 - 主選單介面
+
+## Functions
+
+### `handle_system_prompt_error(func: Any) -> Any`
+系統提示錯誤處理裝飾器 Plays a key role in the system logic.
+
+### `setup(bot: Any) -> Any`
+設定函式，用於載入 Cog Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/system_prompt/data_validator.md
+```markdown
+# File: `cogs/system_prompt/data_validator.py`
+
+## Overview
+系統提示數據驗證助手 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SystemPromptDataValidator`
+系統提示數據驗證器
+
+- **Attributes**:
+  - `data_dir` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `validate_config_consistency(guild_id: str, channel_id: str) -> Dict[Tuple[str, Any]]`: 驗證配置一致性
+  - `fix_inconsistent_data(guild_id: str, channel_id: str) -> bool`: 修復不一致的數據
+  - `get_module_comparison(guild_id: str, channel_id: str, expected_modules: Dict[Tuple[str, str]]) -> Dict[Tuple[str, Any]]`: 比較期望的模組與實際存儲的模組
+
+```
+
+### Create File: docs/cogs/system_prompt/exceptions.md
+```markdown
+# File: `cogs/system_prompt/exceptions.py`
+
+## Overview
+頻道系統提示管理模組的自訂例外類別 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SystemPromptError`
+系統提示相關錯誤的基類
+
+- **Attributes**:
+  - `error_code` (`Any`): Instance attribute.
+
+### `PermissionError`
+權限不足錯誤
+
+- **Attributes**:
+  - `required_permission` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_localized_message(key: str, lang_manager: Any, guild_id: Optional[str]) -> str`: 獲取本地化訊息
+
+### `ValidationError`
+驗證失敗錯誤
+
+- **Attributes**:
+  - `field` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_localized_message(key: str, lang_manager: Any, guild_id: Optional[str], field: Optional[str]) -> str`: 獲取本地化訊息
+
+### `ConfigurationError`
+配置錯誤
+
+- **Attributes**:
+  - `config_path` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_localized_message(key: str, lang_manager: Any, guild_id: Optional[str]) -> str`: 獲取本地化訊息
+
+### `ContentTooLongError`
+內容過長錯誤
+
+- **Attributes**:
+  - `max_length` (`Any`): Instance attribute.
+  - `current_length` (`Any`): Instance attribute.
+
+### `ChannelNotFoundError`
+頻道未找到錯誤
+
+- **Attributes**:
+  - `channel_id` (`Any`): Instance attribute.
+
+### `PromptNotFoundError`
+系統提示未找到錯誤
+
+- **Attributes**:
+  - `scope` (`Any`): Instance attribute.
+  - `target_id` (`Any`): Instance attribute.
+
+### `OperationTimeoutError`
+操作超時錯誤
+
+- **Attributes**:
+  - `operation` (`Any`): Instance attribute.
+  - `timeout_seconds` (`Any`): Instance attribute.
+
+### `ModuleNotFoundError`
+模組未找到錯誤
+
+- **Attributes**:
+  - `module_name` (`Any`): Instance attribute.
+
+### `UnsafeContentError`
+不安全內容錯誤
+
+- **Attributes**:
+  - `detected_pattern` (`Any`): Instance attribute.
+
+```
+
+### Create File: docs/cogs/system_prompt/manager.md
+```markdown
+# File: `cogs/system_prompt/manager.py`
+
+## Overview
+Channel system prompt manager. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SystemPromptCache`
+System prompt cache manager.
+
+- **Attributes**:
+  - `cache` (`Dict[Tuple[str, Tuple[Tuple[float, str]]]]`): Instance attribute.
+  - `ttl` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_cache_key(guild_id: str, channel_id: str, lang: str) -> str`: Generate cache key.
+  - `get(guild_id: str, channel_id: str, lang: str) -> Optional[str]`: Get system prompt from cache.
+  - `set(guild_id: str, channel_id: str, prompt: str, lang: str) -> None`: Set cache.
+  - `invalidate(guild_id: str, channel_id: Optional[str]) -> None`: Invalidate cache.
+  - `clear_all() -> None`: Clear all cache.
+
+### `PromptValidator`
+System prompt validator.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `validate_prompt_content(content: str) -> Tuple[Tuple[bool, str]]`: Validate prompt content.
+  - `validate_modules(modules: Dict[Tuple[str, str]], guild_id: Optional[str]) -> Tuple[Tuple[bool, str]]`: Validate module configuration.
+
+### `SystemPromptManager`
+System prompt manager - Core coordinator.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `cache` (`Any`): Instance attribute.
+  - `validator` (`Any`): Instance attribute.
+  - `permission_validator` (`Any`): Instance attribute.
+  - `data_dir` (`Any`): Instance attribute.
+  - `_prompt_manager` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_init_prompt_manager() -> None`: Initialize YAML prompt manager.
+  - `get_effective_prompt(channel_id: str, guild_id: str, message: Optional[discord.Message]) -> Dict[Tuple[str, Any]]`: Get effective system prompt (integrated three-level inheritance).
+  - `get_channel_prompt_config(guild_id: str, channel_id: str) -> Optional[Dict[Tuple[str, Any]]]`: 取得指定頻道的原始系統提示設定。
+  - `set_channel_prompt(guild_id: str, channel_id: str, prompt_data: Dict[Tuple[str, Any]], user_id: str) -> bool`: 設定頻道系統提示
+  - `set_server_prompt(guild_id: str, prompt_data: Dict[Tuple[str, Any]], user_id: str) -> bool`: 設定伺服器級別系統提示
+  - `remove_channel_prompt(guild_id: str, channel_id: str) -> bool`: 移除頻道系統提示
+  - `remove_server_prompt(guild_id: str) -> bool`: 移除伺服器級別系統提示
+  - `copy_channel_prompt(source_guild: str, source_channel: str, target_guild: str, target_channel: str) -> bool`: 複製頻道提示設定
+  - `get_available_modules() -> List[str]`: 取得可覆蓋的 YAML 模組列表
+  - `get_default_module_content(module_name: str) -> str`: 獲取指定模組的預設內容
+  - `get_effective_full_prompt(channel_id: str, guild_id: str, for_editing: bool) -> str`: 獲取當前有效的完整系統提示（用於直接編輯時顯示）
+  - `get_module_descriptions(lang: str) -> Dict[Tuple[str, str]]`: 獲取模組說明字典
+  - `clear_cache(guild_id: Optional[str], channel_id: Optional[str]) -> None`: 清除快取（全面同步清除）
+  - `force_clear_all_caches(guild_id: str, channel_id: Optional[str], interaction: Optional[object]) -> None`: 強制清除所有相關快取（整合版）- 異步版本
+  - `_enhanced_force_clear_all_caches(guild_id: str, channel_id: Optional[str]) -> None`: 增強的強制清除所有相關快取方法（整合版）
+  - `_legacy_force_clear_all_caches(guild_id: str, channel_id: Optional[str]) -> None`: 原有的強制清除所有相關快取方法（降級使用）
+  - `reload_system_prompts(guild_id: str, channel_id: Optional[str]) -> bool`: 重新載入系統提示配置（完整重新載入方案）
+  - `_clear_yaml_prompt_cache(guild_id: Optional[str], channel_id: Optional[str]) -> None`: 清除 YAML PromptManager 的相關快取
+  - `_force_clear_yaml_cache(guild_id: str) -> None`: 強制清除 YAML PromptManager 的所有相關快取
+  - `_force_clear_sendmessage_cache(guild_id: str, channel_id: Optional[str]) -> None`: 強制清除 prompting 模組的所有相關快取
+  - `_clear_hidden_caches(guild_id: str, channel_id: Optional[str]) -> None`: 清除可能的隱藏快取層級
+  - `_deep_cache_cleanup(guild_id: str, channel_id: Optional[str]) -> None`: 深度快取清理（額外的清除策略）
+  - `_reinitialize_components() -> None`: 重新初始化相關組件
+  - `_verify_reload_result(guild_id: str, channel_id: Optional[str]) -> bool`: 驗證重新載入結果
+  - `_load_guild_config(guild_id: str) -> Dict[Tuple[str, Any]]`: 載入伺服器配置
+  - `_save_guild_config(guild_id: str, config: Dict[Tuple[str, Any]]) -> None`: 保存伺服器配置
+  - `_get_default_config() -> Dict[Tuple[str, Any]]`: 取得預設配置
+  - `_get_yaml_prompt(guild_id: str, message: Optional[discord.Message]) -> Dict[Tuple[str, Any]]`: 取得 YAML 基礎提示
+  - `_apply_server_overrides(base_prompt: str, server_config: Dict[Tuple[str, Any]], guild_id: Optional[str]) -> str`: 應用伺服器級別覆蓋
+  - `_apply_channel_overrides(base_prompt: str, channel_config: Dict[Tuple[str, Any]], guild_id: Optional[str]) -> str`: 應用頻道級別覆蓋
+  - `_apply_language_localization(prompt: str, lang: str, guild_id: str) -> str`: 應用語言本地化
+  - `_rebuild_prompt_with_module_overrides(module_overrides: Dict[Tuple[str, str]], override_modules: List[str]) -> str`: 使用模組覆蓋重新建構 YAML 提示
+  - `_apply_variable_replacements(prompt: str, guild_id: Optional[str]) -> str`: 對系統提示應用變數替換
+  - `_get_system_variables() -> Dict[Tuple[str, Any]]`: 獲取系統變數字典
+  - `_get_language(guild_id: str, message: Optional[discord.Message]) -> str`: 取得語言設定
+  - `debug_cache_state(guild_id: str, channel_id: str) -> Dict[Tuple[str, Any]]`: 快取狀態除錯（供管理員使用）
+  - `get_diagnostics() -> Dict[Tuple[str, Any]]`: 取得診斷資訊
+  - `handle_discord_interaction_cache_issues(interaction: Any) -> Dict[Tuple[str, Any]]`: 處理 Discord 互動的快取問題（整合版）
+  - `reload_all_configs() -> bool`: 重新載入所有配置（用於 UI 介面）
+
+```
+
+### Create File: docs/cogs/system_prompt/permissions.md
+```markdown
+# File: `cogs/system_prompt/permissions.py`
+
+## Overview
+頻道系統提示管理模組的權限驗證器 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `PermissionValidator`
+權限驗證器類別
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `can_modify_channel_prompt(user: discord.Member, channel: discord.TextChannel, config: Optional[Dict]) -> bool`: 檢查用戶是否可修改頻道提示
+  - `can_modify_server_prompt(user: discord.Member, guild: discord.Guild, config: Optional[Dict]) -> bool`: 檢查用戶是否可修改伺服器提示
+  - `can_view_prompt(user: discord.Member, channel: Optional[discord.TextChannel]) -> bool`: 檢查用戶是否可查看系統提示
+  - `get_user_permissions(user: discord.Member, guild: discord.Guild, config: Optional[Dict]) -> Dict[Tuple[str, any]]`: 取得用戶的詳細權限資訊
+  - `validate_permission_or_raise(user: discord.Member, action: str, target: any, config: Optional[Dict]) -> None`: 驗證權限，如果沒有權限則拋出例外
+  - `_is_bot_owner(user: discord.Member) -> bool`: 檢查是否為機器人擁有者
+  - `_has_custom_permission(user: discord.Member, channel: discord.TextChannel, config: Dict) -> bool`: 檢查是否有自訂頻道權限
+  - `_has_server_level_permission(user: discord.Member, config: Dict) -> bool`: 檢查是否有伺服器級別的自訂權限
+  - `_get_all_channels(guild: discord.Guild) -> List[str]`: 取得伺服器所有文字頻道 ID
+  - `_get_custom_permissions(user: discord.Member, config: Dict) -> Dict`: 取得自訂權限設定
+
+```
+
+### Create File: docs/cogs/system_prompt/ui.md
+```markdown
+# File: `cogs/system_prompt/ui.py`
+
+## Overview
+頻道系統提示管理模組的 UI 元件 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SystemPromptModal`
+系統提示設定的 Modal 對話框
+
+- **Attributes**:
+  - `callback_func` (`Any`): Instance attribute.
+  - `manager` (`Any`): Instance attribute.
+  - `channel_id` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `prompt_input` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_restore_variable_placeholders(prompt: str, manager: Any) -> str`: 還原變數占位符格式
+  - `on_submit(interaction: discord.Interaction) -> Any`: 處理 Modal 提交
+  - `on_error(interaction: discord.Interaction, error: Exception) -> Any`: 處理 Modal 錯誤
+
+### `SystemPromptModuleModal`
+模組設定的 Modal 對話框
+
+- **Attributes**:
+  - `module_name` (`Any`): Instance attribute.
+  - `callback_func` (`Any`): Instance attribute.
+  - `manager` (`Any`): Instance attribute.
+  - `module_description` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `module_input` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `on_submit(interaction: discord.Interaction) -> Any`: 處理模組 Modal 提交
+
+### `ConfirmationView`
+確認對話框 View
+
+- **Attributes**:
+  - `result` (`Any`): Instance attribute.
+  - `confirmed` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `confirm_button` (`Any`): Instance attribute.
+  - `cancel_button` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_confirm_callback(interaction: discord.Interaction) -> Any`: 確認按鈕回調
+  - `_cancel_callback(interaction: discord.Interaction) -> Any`: 取消按鈕回調
+  - `on_timeout() -> Any`: 處理超時
+
+### `ChannelSelectView`
+頻道選擇器 View
+
+- **Attributes**:
+  - `callback_func` (`Any`): Instance attribute.
+  - `selected_channel` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_select_callback(interaction: discord.Interaction) -> Any`: 選擇器回調
+
+### `ModuleSelectView`
+模組選擇器 View
+
+- **Attributes**:
+  - `callback_func` (`Any`): Instance attribute.
+  - `selected_modules` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_select_callback(interaction: discord.Interaction) -> Any`: 模組選擇器回調
+
+### `SystemPromptView`
+系統提示管理的主要 View
+
+- **Attributes**:
+  - `prompt_data` (`Any`): Instance attribute.
+  - `can_edit` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `preview_button` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_edit_callback(interaction: discord.Interaction) -> Any`: 編輯按鈕回調
+  - `_edit_modal_callback(interaction: discord.Interaction, new_prompt: str) -> Any`: 編輯 Modal 回調
+  - `_preview_callback(interaction: discord.Interaction) -> Any`: 預覽按鈕回調
+  - `on_timeout() -> Any`: 處理超時
+
+## Functions
+
+### `create_system_prompt_embed(prompt_data: Dict[Tuple[str, Any]], channel: Optional[discord.TextChannel]) -> discord.Embed`
+建立系統提示的 Embed Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/system_prompt/views.md
+```markdown
+# File: `cogs/system_prompt/views.py`
+
+## Overview
+系統提示管理的統一 UI 選單系統 This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `LocalizedView`
+Base class for all system-prompt views.
+
+- **Attributes**:
+  - `manager` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `_bot` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_t(*keys) -> str`: Translate *keys* using the guild's language.
+
+### `SystemPromptMainView`
+系統提示管理主選單
+
+- **Attributes**:
+  - `permission_validator` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_setup_main_buttons() -> Any`: 設定主要功能按鈕
+  - `function_callback(interaction: discord.Interaction, function: str) -> Any`: 處理功能按鈕回調
+  - `_handle_set_function(interaction: discord.Interaction) -> Any`: Executes _handle_set_function operation.
+  - `_handle_view_function(interaction: discord.Interaction) -> Any`: Executes _handle_view_function operation.
+  - `_handle_copy_function(interaction: discord.Interaction) -> Any`: Executes _handle_copy_function operation.
+  - `_handle_remove_function(interaction: discord.Interaction) -> Any`: Executes _handle_remove_function operation.
+  - `_handle_reset_function(interaction: discord.Interaction) -> Any`: Executes _handle_reset_function operation.
+  - `_handle_reload_function(interaction: discord.Interaction) -> Any`: Executes _handle_reload_function operation.
+
+### `SystemPromptFunctionButton`
+系統提示功能按鈕
+
+- **Attributes**:
+  - `function` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: 按鈕回調
+
+### `SystemPromptSetView`
+設定系統提示的子選單
+
+- **Attributes**:
+  - `permission_validator` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `scope_callback(interaction: discord.Interaction, scope: str) -> Any`: Executes scope_callback operation.
+
+### `EditModeSelectionView`
+編輯模式選擇選單
+
+- **Attributes**:
+  - `permission_validator` (`Any`): Instance attribute.
+  - `scope` (`Any`): Instance attribute.
+  - `target_channel` (`Any`): Instance attribute.
+  - `scope_text` (`Any`): Instance attribute.
+  - `guild` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `edit_mode_callback(interaction: discord.Interaction, edit_mode: str) -> Any`: 處理編輯模式選擇
+  - `_handle_direct_edit(interaction: discord.Interaction) -> Any`: 處理直接編輯提示
+  - `_restore_variable_placeholders(prompt: str, guild_id: str) -> str`: 將已替換的變數還原為占位符格式，以便編輯時顯示原始模板
+  - `_handle_module_edit(interaction: discord.Interaction) -> Any`: 處理模組化編輯
+  - `_handle_direct_set_callback(interaction: discord.Interaction, content: str) -> Any`: 處理直接設定回調
+
+### `EditModeButton`
+編輯模式按鈕
+
+- **Attributes**:
+  - `edit_mode` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: Executes callback operation.
+
+### `SystemPromptScopeButton`
+範圍選擇按鈕
+
+- **Attributes**:
+  - `scope` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: Executes callback operation.
+
+### `SystemPromptViewOptionsView`
+查看配置選項選單
+
+- **Attributes**:
+  - `permission_validator` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `view_callback(interaction: discord.Interaction, view_type: str) -> Any`: 處理查看回調
+
+### `SystemPromptViewButton`
+查看選項按鈕
+
+- **Attributes**:
+  - `view_type` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: Executes callback operation.
+
+### `ModuleEditView`
+Handles operations related to ModuleEditView.
+
+- **Attributes**:
+  - `permission_validator` (`Any`): Instance attribute.
+  - `modules` (`Any`): Instance attribute.
+  - `guild` (`Any`): Instance attribute.
+  - `scope` (`Any`): Instance attribute.
+  - `target_channel` (`Any`): Instance attribute.
+  - `scope_text` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `selected_scope` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_setup_scope_selector() -> Any`: Executes _setup_scope_selector operation.
+  - `_setup_module_selector() -> Any`: Executes _setup_module_selector operation.
+  - `scope_callback(interaction: discord.Interaction, scope: str) -> Any`: Executes scope_callback operation.
+
+### `ModuleScopeButton`
+模組範圍選擇按鈕
+
+- **Attributes**:
+  - `scope` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: Executes callback operation.
+
+### `ModuleSelect`
+模組選擇器
+
+- **Attributes**:
+  - `manager` (`Any`): Instance attribute.
+  - `scope` (`Any`): Instance attribute.
+  - `channel` (`Any`): Instance attribute.
+  - `guild` (`Any`): Instance attribute.
+  - `scope_text` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_update_option_descriptions() -> Any`: 更新選項的說明文字 (基於語言管理器)
+  - `callback(interaction: discord.Interaction) -> Any`: 選擇器回調
+  - `_handle_module_callback(interaction: discord.Interaction, module_name: str, content: str) -> Any`: 處理模組編輯回調
+
+### `SystemPromptCopyView`
+複製系統提示選單
+
+- **Attributes**:
+  - `permission_validator` (`Any`): Instance attribute.
+  - `guild` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+### `SystemPromptRemoveView`
+移除系統提示的子選單
+
+- **Attributes**:
+  - `permission_validator` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+### `SystemPromptResetView`
+重置系統提示的子選單
+
+- **Attributes**:
+  - `permission_validator` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+### `BackButton`
+返回主選單按鈕
+
+- **Attributes**:
+  - `guild_id` (`str`): Instance attribute.
+  - `_bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: 返回主選單
+
+### `ChannelSelect`
+頻道選擇器（用於複製功能）
+
+- **Attributes**:
+  - `selected_channel_id` (`Optional[str]`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: Executes callback operation.
+
+### `CopyExecuteButton`
+執行複製按鈕
+
+- **Attributes**:
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: Executes callback operation.
+
+### `RemoveButton`
+移除按鈕
+
+- **Attributes**:
+  - `remove_type` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: Executes callback operation.
+
+### `ResetButton`
+重置按鈕
+
+- **Attributes**:
+  - `reset_type` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `callback(interaction: discord.Interaction) -> Any`: Executes callback operation.
+
+```
+
+### Create File: docs/cogs/system_prompt_manager.md
+```markdown
+# File: `cogs/system_prompt_manager.py`
+
+## Overview
+頻道系統提示管理模組的主要 Cog This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `SystemPromptManagerCog`
+系統提示管理主要 Cog 類別
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `manager` (`Any`): Instance attribute.
+  - `permission_validator` (`Any`): Instance attribute.
+  - `commands_cog` (`Any`): Instance attribute.
+  - `language_manager` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_language_manager() -> Any`: 安全地取得語言管理器實例
+  - `_translate(guild_id: str, *keys) -> Any`: 安全的翻譯方法，使用 getattr 避免類型檢查問題
+  - `cog_load() -> Any`: Cog 載入時的初始化
+  - `cog_unload() -> Any`: Cog 卸載時的清理
+  - `get_system_prompt_manager() -> SystemPromptManager`: 取得系統提示管理器實例
+  - `get_permission_validator() -> PermissionValidator`: 取得權限驗證器實例
+  - `get_effective_system_prompt(channel_id: str, guild_id: str, message: Optional[discord.Message]) -> str`: 取得有效的系統提示（供外部模組調用的便利方法）
+  - `validate_user_permission(user: discord.Member, action: str, target: any) -> bool`: 驗證用戶權限（供外部模組調用的便利方法）
+  - `on_guild_join(guild: discord.Guild) -> Any`: 當機器人加入新伺服器時的處理
+  - `on_guild_remove(guild: discord.Guild) -> Any`: 當機器人離開伺服器時的處理
+  - `system_prompt_status(ctx: Any) -> Any`: View system prompt module status (bot owner only)
+  - `clear_system_prompt_cache(ctx: Any, guild_id: Optional[str]) -> Any`: Clear system prompt cache (bot owner only)
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+設定函式，用於載入 Cog Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/update_manager.md
+```markdown
+# File: `cogs/update_manager.py`
+
+## Overview
+Discord 更新管理 Cog This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UpdateManagerCog`
+Discord 更新管理介面
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> Any`: Cog 載入時初始化語言管理器
+  - `_get_translation(guild_id: str, *keys, **kwargs) -> str`: 取得翻譯文字的安全方法
+  - `check_update(interaction: discord.Interaction) -> Any`: 檢查更新命令
+  - `update_now(interaction: discord.Interaction, force: bool) -> Any`: 立即更新命令
+  - `update_status(interaction: discord.Interaction) -> Any`: 更新狀態查詢
+  - `configure_update(interaction: discord.Interaction) -> Any`: 更新配置命令
+  - `_create_status_embed(status: dict, guild_id: str) -> discord.Embed`: 創建狀態嵌入
+
+### `UpdateActionView`
+更新操作視圖
+
+- **Attributes**:
+  - `update_manager` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `get_translation` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `update_now(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 立即更新按鈕
+  - `remind_later(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 稍後提醒按鈕
+
+### `UpdateConfirmView`
+更新確認視圖
+
+- **Attributes**:
+  - `update_manager` (`Any`): Instance attribute.
+  - `version_info` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `get_translation` (`Any`): Instance attribute.
+  - `force` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `confirm_update(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 確認更新按鈕
+  - `cancel_update(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 取消更新按鈕
+  - `_execute_update(interaction: Any) -> Any`: 執行更新
+
+### `UpdateConfigView`
+更新配置視圖
+
+- **Attributes**:
+  - `update_manager` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+  - `get_translation` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `toggle_auto_update(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 切換自動更新開關
+  - `set_check_interval(interaction: discord.Interaction, button: discord.ui.Button) -> Any`: 設定檢查間隔
+
+## Functions
+
+### `setup(bot: Any) -> Any`
+設定 Cog Plays a key role in the system logic.
+
+```
+
+### Create File: docs/cogs/userdata.md
+```markdown
+# File: `cogs/userdata.py`
+
+## Overview
+User data management cog for Discord bot. This file is part of the cogs subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UserDataResponse`
+Structured response schema for user data agent.
+
+- **Attributes**:
+  - `procedural_memory` (`Optional[str]`): Class attribute.
+  - `user_background` (`Optional[str]`): Class attribute.
+  - `display_names` (`List[str]`): Class attribute.
+
+### `UserDataCog`
+Manages personalized user data for Discord bot interactions.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `user_manager` (`Any`): Instance attribute.
+  - `_knowledge_lock` (`Any`): Instance attribute.
+  - `lang_manager` (`Optional[LanguageManager]`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `knowledge_storage` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `cog_load() -> None`: Initializes language manager and user manager when cog loads.
+  - `_translate(guild_id: str, *path, **kwargs) -> str`: Unified translation method with fallback mechanism.
+  - `_get_guild_id_from_context(context: Union[Tuple[discord.Interaction, discord.Message]]) -> str`: Extracts guild_id from various context types.
+  - `_extract_json_from_response(response_text: str) -> Optional[Dict[Tuple[str, Any]]]`: Extracts and validates JSON from AI response text.
+  - `_validate_user_data_response(data: Dict[Tuple[str, Any]]) -> bool`: Validates that response contains expected user data fields.
+  - `_extract_user_id_from_context(context: Union[Tuple[discord.Interaction, discord.Message]]) -> Optional[str]`: Extracts user ID from context (interaction or message).
+  - `_read_user_data(user_id: str, context: Union[Tuple[discord.Interaction, discord.Message]]) -> str`: Core logic for reading and formatting user's stored data.
+  - `_invoke_ai_merge_agent(existing_data: Optional[UserInfo], new_data: str, user_id: str) -> UserDataResponse`: Invokes AI agent to merge existing and new user data.
+  - `_invoke_knowledge_merge_agent(existing_knowledge: Optional[str], new_knowledge: str, target_type: str, category: str) -> str`: Invokes AI agent to merge existing and new guild/channel knowledge.
+  - `_save_knowledge_data(target_type: str, target_id: str, content: str, category: str, context: Union[Tuple[discord.Interaction, discord.Message]]) -> str`: Core logic for saving guild/channel knowledge with AI merge.
+  - `_clear_knowledge_data(target_type: str, target_id: str) -> str`: Core logic for clearing guild/channel knowledge.
+  - `_save_user_data(user_id: str, display_name: str, user_data: str, context: Union[Tuple[discord.Interaction, discord.Message]]) -> str`: Core logic for saving user data with AI-assisted merge.
+  - `memory_save(interaction: discord.Interaction, preference: str) -> None`: Handles /memory save command to store user preferences.
+  - `memory_clear(interaction: discord.Interaction) -> None`: Handles /memory clear command to clear user preferences.
+  - `memory_show(interaction: discord.Interaction) -> None`: Handles /memory show command to display stored user preferences.
+  - `knowledge_show(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None`: Handles /knowledge show command to display stored knowledge.
+  - `knowledge_clear(interaction: discord.Interaction, scope: app_commands.Choice[str]) -> None`: Handles /knowledge clear command to clear stored knowledge.
+  - `manage_user_data(context: Union[Tuple[discord.Interaction, discord.Message]], user: Union[Tuple[discord.User, discord.Member]], user_data: str, action: str, message_to_edit: Optional[discord.Message]) -> str`: Dispatcher for managing user data operations.
+  - `_clear_user_data(user_id: str, context: Union[Tuple[discord.Interaction, discord.Message]]) -> str`: Core logic for clearing user data.
+  - `manage_user_data_message(message: Union[Tuple[discord.Interaction, discord.Message]], user_id: Optional[str], user_data: str, action: str, message_to_edit: Optional[discord.Message]) -> str`: Manages user data triggered from message (for internal tool use).
+  - `get_user_statistics() -> Dict[Tuple[str, Any]]`: Retrieves user statistics from user manager.
+  - `update_user_activity(user_id: str, display_name: str) -> bool`: Updates user activity status.
+
+## Functions
+
+### `setup(bot: commands.Bot) -> None`
+Sets up the UserDataCog. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/function.md
+```markdown
+# File: `function.py`
+
+## Overview
+Core module for function.py This file is part of the core subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ErrorDeduplicator`
+Tracks recently reported errors to avoid sending duplicates to Discord.
+
+- **Attributes**:
+  - `_recent_errors` (`Dict[Tuple[str, tuple[Tuple[float, int]]]]`): Instance attribute.
+  - `_cooldown_seconds` (`Any`): Instance attribute.
+  - `_lock` (`Any`): Instance attribute.
+  - `_cleanup_threshold` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_make_key(error: Exception, details: Optional[str]) -> str`: Create a unique key for the error.
+  - `should_report(error: Exception, details: Optional[str]) -> bool`: Check if this error should be reported or suppressed as duplicate.
+  - `get_suppressed_count(error: Exception, details: Optional[str]) -> int`: Get the number of times this error was suppressed since last report.
+  - `_cleanup(current_time: float) -> None`: Remove expired entries from the cache.
+
+### `Function`
+Handles operations related to Function.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `set_bot(bot: Any) -> Any`: Executes set_bot operation.
+  - `report_error(error: Exception, details: str) -> Any`: Report an error to Discord with deduplication.
+  - `open_json(path: str) -> dict`: Executes open_json operation.
+  - `update_json(path: str, new_data: dict) -> None`: Executes update_json operation.
+
+## Functions
+
+### `get_error_deduplicator() -> ErrorDeduplicator`
+Get the global ErrorDeduplicator singleton. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/llm/__init__.md
+```markdown
+# File: `llm/__init__.py`
+
+## Overview
+Core module for __init__.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/llm/callbacks.md
+```markdown
+# File: `llm/callbacks.py`
+
+## Overview
+Core module for callbacks.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ToolFeedbackCallbackHandler`
+Callback handler for providing feedback during tool execution.
+
+- **Attributes**:
+  - `message_edit` (`Any`): Instance attribute.
+  - `language_manager` (`Any`): Instance attribute.
+  - `guild_id` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `on_tool_start(serialized: Dict[Tuple[str, Any]], input_str: str, **kwargs) -> Any`: Run when tool starts running.
+
+```
+
+### Create File: docs/llm/context_manager.md
+```markdown
+# File: `llm/context_manager.py`
+
+## Overview
+Context manager that returns procedural context string and short-term LangChain messages. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ContextManager`
+Build procedural context string and return short-term messages list.
+
+- **Attributes**:
+  - `short_term_provider` (`Any`): Instance attribute.
+  - `procedural_provider` (`Any`): Instance attribute.
+  - `episodic_provider` (`Any`): Instance attribute.
+  - `knowledge_provider` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_context(message: discord.Message) -> Tuple[Tuple[str, List[BaseMessage]]]`: Return (procedural_context_str, short_term_msgs).
+  - `_extract_user_ids_from_messages(messages: List[BaseMessage], message: discord.Message) -> List[str]`: Extract unique user ids from short-term messages and include message author.
+  - `_format_context_for_prompt(procedural_memory: ProceduralMemory, channel_name: str, timestamp: float, episodic_str: Optional[str], human_time: Optional[str], knowledge: Optional[KnowledgeMemory]) -> str`: Format procedural memory and current state into a single string.
+
+```
+
+### Create File: docs/llm/memory/__init__.md
+```markdown
+# File: `llm/memory/__init__.py`
+
+## Overview
+Core module for __init__.py managing memory components. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/llm/memory/episodic.md
+```markdown
+# File: `llm/memory/episodic.py`
+
+## Overview
+Automatic Episodic Memory Provider for context injection. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `EpisodicMemoryProvider`
+Retrieve semantically relevant past memory fragments for context injection.
+
+- **Attributes**:
+  - `bot` (`Any`): Instance attribute.
+  - `top_k` (`Any`): Instance attribute.
+  - `max_chars` (`Any`): Instance attribute.
+  - `max_cache_size` (`Any`): Instance attribute.
+  - `cache_ttl` (`Any`): Instance attribute.
+  - `_cache` (`Dict[Tuple[Tuple[Tuple[str, str]], Tuple[Tuple[Optional[str], float]]]]`): Instance attribute.
+
+- **Methods**:
+  - `get(message: discord.Message) -> Optional[str]`: Return formatted episodic context string, or None if nothing relevant.
+
+```
+
+### Create File: docs/llm/memory/knowledge.md
+```markdown
+# File: `llm/memory/knowledge.py`
+
+## Overview
+KnowledgeMemoryProvider: provides guild and channel level knowledge with caching. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `KnowledgeMemory`
+Represents the fetched knowledge for a specific context.
+
+- **Attributes**:
+  - `guild_knowledge` (`Any`): Instance attribute.
+  - `channel_knowledge` (`Any`): Instance attribute.
+
+### `KnowledgeMemoryProvider`
+Provides guild/channel knowledge with caching.
+
+- **Attributes**:
+  - `storage` (`Any`): Instance attribute.
+  - `max_cache_size` (`Any`): Instance attribute.
+  - `_cache` (`Dict[Tuple[Tuple[Tuple[str, str]], Tuple[Tuple[Optional[str], float]]]]`): Instance attribute.
+  - `_lock` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get(guild_id: Optional[str], channel_id: str) -> KnowledgeMemory`: Fetch knowledge for the current guild and channel.
+  - `_get_single(target_type: str, target_id: str) -> Optional[str]`: Internal helper with TTL cache.
+  - `invalidate(target_type: str, target_id: str) -> None`: Invalidate cache for a specific target.
+
+```
+
+### Create File: docs/llm/memory/procedural.md
+```markdown
+# File: `llm/memory/procedural.py`
+
+## Overview
+Core module for procedural.py managing memory components. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ProceduralMemoryProvider`
+Provides procedural memory for multiple users with per-user TTL cache.
+
+- **Attributes**:
+  - `user_manager` (`Any`): Instance attribute.
+  - `max_cache_size` (`Any`): Instance attribute.
+  - `_cache` (`Dict[Tuple[str, Tuple[Tuple[UserInfo, float]]]]`): Instance attribute.
+  - `_lock` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get(user_ids: List[str]) -> ProceduralMemory`: Fetch procedural memory with per-user TTL cache.
+  - `invalidate(user_id: str) -> None`: Evict a single user from the cache.
+
+```
+
+### Create File: docs/llm/memory/schema.md
+```markdown
+# File: `llm/memory/schema.py`
+
+## Overview
+Core module for schema.py managing memory components. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UserInfo`
+Information about a single user used by procedural memory.
+
+- **Attributes**:
+  - `user_background` (`Optional[str]`): Class attribute.
+  - `procedural_memory` (`Dict[Tuple[str, Any]]`): Class attribute.
+  - `last_updated` (`Optional[str]`): Class attribute.
+
+### `ProceduralMemory`
+Holds procedural memory for multiple users keyed by user_id.
+
+- **Attributes**:
+  - `user_info` (`Dict[Tuple[str, UserInfo]]`): Class attribute.
+
+### `ShortTermMemory`
+Stores recent messages; each message is a mapping containing at least author_id, author, content, timestamp (numeric UNIX seconds as float).
+
+- **Attributes**:
+  - `messages` (`List[Dict[Tuple[str, Any]]]`): Class attribute.
+
+### `SystemContext`
+Aggregated context used to build prompts for the LLM.
+
+- **Attributes**:
+  - `short_term_memory` (`ShortTermMemory`): Class attribute.
+  - `procedural_memory` (`ProceduralMemory`): Class attribute.
+  - `current_channel_name` (`str`): Class attribute.
+  - `timestamp` (`float`): Class attribute.
+
+```
+
+### Create File: docs/llm/memory/short_term.md
+```markdown
+# File: `llm/memory/short_term.py`
+
+## Overview
+Core module for short_term.py managing memory components. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ShortTermMemoryProvider`
+Provides short-term memory as a list of LangChain messages.
+
+- **Attributes**:
+  - `limit` (`Any`): Instance attribute.
+  - `bot` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get(message: discord.Message) -> List[BaseMessage]`: Fetch recent messages and return as LangChain BaseMessage list.
+
+```
+
+### Create File: docs/llm/model_circuit_breaker.md
+```markdown
+# File: `llm/model_circuit_breaker.py`
+
+## Overview
+ModelCircuitBreaker: Tracks model failures and temporarily skips known-failing models. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ErrorCategory`
+Categorizes errors for different cooldown strategies.
+
+### `FailureRecord`
+Record of a model failure.
+
+- **Attributes**:
+  - `model_name` (`str`): Class attribute.
+  - `category` (`ErrorCategory`): Class attribute.
+  - `failure_time` (`float`): Class attribute.
+  - `cooldown_until` (`float`): Class attribute.
+  - `error_message` (`str`): Class attribute.
+  - `consecutive_failures` (`int`): Class attribute.
+
+### `ModelCircuitBreaker`
+Thread-safe circuit breaker for LLM model calls.
+
+- **Attributes**:
+  - `_failures` (`Dict[Tuple[str, FailureRecord]]`): Instance attribute.
+  - `_lock` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `categorize_error(error: Exception) -> ErrorCategory`: Classify an exception into an error category.
+  - `is_available(model_name: str) -> bool`: Check if a model is currently available (not in cooldown).
+  - `record_failure(model_name: str, error: Exception, category: Optional[ErrorCategory]) -> ErrorCategory`: Record a model failure and start the cooldown period.
+  - `get_available_models(model_list: list[str]) -> list[str]`: Filter a model list to only include available models.
+  - `reset(model_name: Optional[str]) -> None`: Reset circuit breaker state.
+  - `get_status() -> Dict[Tuple[str, Dict]]`: Get current status of all tracked failures.
+
+## Functions
+
+### `get_model_circuit_breaker() -> ModelCircuitBreaker`
+Get the global ModelCircuitBreaker singleton instance. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/llm/model_manager.md
+```markdown
+# File: `llm/model_manager.py`
+
+## Overview
+ModelManager: Loads config/llm.yaml and returns ModelFallbackMiddleware or priority lists based on agent_type. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ModelManager`
+Manages LLM model priority by loading configuration and creating ModelFallbackMiddleware.
+
+- **Methods**:
+  - `_load_config() -> None`: Executes _load_config operation.
+  - `_resolve_priority_list(agent_type: str) -> List[str]`: 將設定檔中指定的 agent_type 轉成 provider:model 字串清單，順序保留
+  - `get_model_priority_list(agent_type: str) -> List[str]`: Returns the full list of models for a given agent_type.
+  - `get_model(agent_type: str) -> Tuple[Tuple[str, ModelFallbackMiddleware]]`: 公開方法，回傳 (primary_model, ModelFallbackMiddleware)。
+
+```
+
+### Create File: docs/llm/orchestrator.md
+```markdown
+# File: `llm/orchestrator.py`
+
+## Overview
+Core module for orchestrator.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `DirectToolOutputMiddleware`
+Handles operations related to DirectToolOutputMiddleware.
+
+- **Methods**:
+  - `after_tools(state: Any, runtime: Any) -> Any`: Executes after_tools operation.
+
+### `Orchestrator`
+Orchestrator updated to accept ContextManager's new return type.
+
+- **Attributes**:
+  - `model_manager` (`Any`): Instance attribute.
+  - `context_manager` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_build_info_agent_prompt(bot_id: int, message: Message) -> str`: Build system prompt for info_agent from settings with fallback.
+  - `_get_info_agent_fallback_prompt(bot_id: int) -> str`: Executes _get_info_agent_fallback_prompt operation.
+  - `_build_message_agent_prompt(bot_id: int, message: Message) -> str`: Build system prompt for message_agent using ProtectedPromptManager.
+  - `_sanitize_messages_for_model(messages: List[BaseMessage], model_name: str, image_cache: Optional[MutableMapping[Tuple[str, dict[Tuple[str, Any]]]]]) -> List[BaseMessage]`: Sanitize messages for the specific model.
+  - `handle_message(bot: Any, message_edit: Message, message: Message, logger: Any) -> OrchestratorResponse`: Main entrypoint for handling an incoming Discord message.
+
+```
+
+### Create File: docs/llm/prompting/__init__.md
+```markdown
+# File: `llm/prompting/__init__.py`
+
+## Overview
+Core module for __init__.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/llm/prompting/builder.md
+```markdown
+# File: `llm/prompting/builder.py`
+
+## Overview
+Core module for builder.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `PromptBuilder`
+提示建構器
+
+- **Attributes**:
+  - `logger` (`Any`): Instance attribute.
+  - `module_titles` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `build_system_prompt(config: dict, modules: List[str]) -> str`: 建構完整的系統提示
+  - `_format_module_content(module_config: dict, module_name: str) -> str`: 格式化模組內容
+  - `_process_nested_content(nested_config: dict, content_parts: List[str]) -> None`: 處理巢狀配置內容
+  - `_get_module_title(module_name: str) -> str`: 取得模組標題
+  - `apply_language_replacements(prompt: str, lang: str, lang_manager: Any, mappings: Optional[dict]) -> str`: Resolve explicit language placeholders and apply language mappings.
+  - `format_with_variables(prompt: str, variables: dict, lang_manager: Any, guild_id: Union[Tuple[str, None]]) -> str`: 格式化變數替換
+  - `compose_modules(config: dict, module_list: List[str]) -> str`: 組合指定模組的提示內容
+  - `validate_module_references(config: dict, modules: List[str]) -> List[str]`: 驗證模組引用，返回缺失的模組列表
+  - `get_module_summary(config: dict, module_name: str) -> Optional[str]`: 取得模組的摘要描述
+  - `build_partial_prompt(config: dict, modules: List[str], max_length: Optional[int]) -> str`: 建構部分提示（用於預覽或測試）
+
+```
+
+### Create File: docs/llm/prompting/cache.md
+```markdown
+# File: `llm/prompting/cache.py`
+
+## Overview
+Core module for cache.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `PromptCache`
+Intelligent caching system for prompt components and combinations.
+
+- **Attributes**:
+  - `cache_storage` (`Dict[Tuple[str, Any]]`): Instance attribute.
+  - `ttl_storage` (`Dict[Tuple[str, datetime]]`): Instance attribute.
+  - `precompiled_cache` (`Dict[Tuple[str, str]]`): Instance attribute.
+  - `access_count` (`Dict[Tuple[str, int]]`): Instance attribute.
+  - `_lock` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get(key: str) -> Optional[Any]`: Retrieve a cached item if it exists and has not expired.
+  - `set(key: str, value: Any, ttl: int) -> None`: Set a value in the cache with a specific time-to-live.
+  - `invalidate(key: str) -> None`: Explicitly remove an item from the cache.
+  - `clear_all() -> None`: Clear all cached items and metadata.
+  - `is_expired(key: str) -> bool`: Check if a cached item has passed its expiration time.
+  - `precompile_templates(config: dict) -> None`: Precompile common prompt module combinations to reduce runtime overhead.
+  - `get_precompiled(key: str) -> Optional[str]`: Retrieve a precompiled template combination.
+  - `cleanup_expired() -> int`: Iterate through the cache and remove all expired items.
+  - `get_cache_stats() -> Dict[Tuple[str, Any]]`: Retrieve usage and performance statistics for the cache.
+  - `get_cache_keys(prefix: str) -> Set[str]`: Retrieve all keys currently in the cache.
+  - `extend_ttl(key: str, additional_seconds: int) -> bool`: Extend the life of a cached item by adding more time to its expiration.
+
+```
+
+### Create File: docs/llm/prompting/loader.md
+```markdown
+# File: `llm/prompting/loader.py`
+
+## Overview
+Core module for loader.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `PromptLoader`
+YAML 提示配置載入器
+
+- **Attributes**:
+  - `config_path` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `_cached_config` (`Optional[Dict[Tuple[str, Any]]]`): Instance attribute.
+  - `_last_loaded` (`Optional[datetime]`): Instance attribute.
+
+- **Methods**:
+  - `load_yaml_config() -> Dict[Tuple[str, Any]]`: 載入 YAML 配置檔案
+  - `reload_if_changed() -> bool`: 檢查檔案是否變更，如有變更則重新載入
+  - `get_last_modified() -> Optional[datetime]`: 獲取配置檔案的最後修改時間
+  - `get_cached_config() -> Optional[Dict[Tuple[str, Any]]]`: Get the cached configuration.
+  - `is_config_loaded() -> bool`: Check whether a configuration has been loaded into the cache.
+  - `get_config_section(section_name: str) -> Optional[Dict[Tuple[str, Any]]]`: Retrieve a specific section from the configuration.
+  - `validate_config_structure(config: Dict[Tuple[str, Any]]) -> bool`: 驗證配置結構的基本完整性
+
+```
+
+### Create File: docs/llm/prompting/manager.md
+```markdown
+# File: `llm/prompting/manager.py`
+
+## Overview
+Core module for manager.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `PromptManager`
+YAML 基礎的系統提示管理器
+
+- **Attributes**:
+  - `config_path` (`Any`): Instance attribute.
+  - `loader` (`Any`): Instance attribute.
+  - `cache` (`Any`): Instance attribute.
+  - `builder` (`Any`): Instance attribute.
+  - `file_watcher` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `_initialized` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_initialize() -> Any`: 初始化管理器
+  - `_validate_config(config: dict) -> bool`: 驗證配置的基本結構
+  - `get_system_prompt(bot_id: str, message: Any) -> str`: 取得系統提示（替換原有的 get_system_prompt 函式）
+  - `_get_language_key(message: Any) -> str`: 取得語言鍵值用於快取
+  - `_apply_dynamic_replacements(prompt: str, bot_id: str, message: Any) -> str`: 套用動態替換（整合現有語言管理功能）
+  - `_get_fallback_prompt(bot_id: str) -> str`: 降級策略：使用硬編碼的基本提示
+  - `reload_prompts() -> bool`: 重新載入提示配置
+  - `_on_config_changed(path: str) -> Any`: 配置檔案變更回調
+  - `get_module_prompt(module_name: str) -> str`: 取得特定模組的提示內容
+  - `compose_prompt(modules: Optional[List[str]]) -> str`: 組合指定模組的提示內容
+  - `get_available_modules() -> List[str]`: 取得可用的模組列表
+  - `validate_modules(modules: List[str]) -> Dict[Tuple[str, bool]]`: 驗證模組是否存在
+  - `get_cache_stats() -> Dict[Tuple[str, Any]]`: 取得快取統計資訊
+  - `get_manager_info() -> Dict[Tuple[str, Any]]`: 取得管理器資訊
+  - `cleanup() -> Any`: 清理資源
+
+## Functions
+
+### `get_prompt_manager(config_path: str) -> PromptManager`
+取得指定 config_path 的 PromptManager 實例（若不存在則建立並快取）。 Plays a key role in the system logic.
+
+```
+
+### Create File: docs/llm/prompting/protected_prompt_manager.md
+```markdown
+# File: `llm/prompting/protected_prompt_manager.py`
+
+## Overview
+Protected Prompt Management System. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ProtectedPromptManager`
+Manages system-level (protected) and user-customizable prompts.
+
+- **Attributes**:
+  - `PROTECTED_MODULES` (`Set[str]`): Class attribute.
+  - `CUSTOMIZABLE_MODULES` (`Set[str]`): Class attribute.
+  - `base_config_path` (`Any`): Instance attribute.
+  - `base_config` (`Dict`): Instance attribute.
+  - `custom_modules` (`Dict[Tuple[str, str]]`): Instance attribute.
+
+- **Methods**:
+  - `_load_base_config() -> None`: Load base configuration from YAML file.
+  - `get_protected_module(module_name: str) -> Optional[str]`: Get a protected module's content.
+  - `get_customizable_module(module_name: str, custom_content: Optional[str]) -> Optional[str]`: Get a customizable module's content.
+  - `set_custom_module(module_name: str, content: str) -> bool`: Set custom content for a customizable module.
+  - `compose_system_prompt(module_order: Optional[List[str]], custom_module_contents: Optional[Dict[Tuple[str, str]]]) -> str`: Compose complete system prompt from modules.
+  - `get_base_variables() -> Dict[Tuple[str, str]]`: Get base configuration variables (bot_name, creator, etc.).
+  - `is_module_protected(module_name: str) -> bool`: Check if a module is protected (cannot be modified).
+  - `is_module_customizable(module_name: str) -> bool`: Check if a module is customizable.
+  - `get_module_info() -> Dict[Tuple[str, any]]`: Get information about available modules.
+
+## Functions
+
+### `get_protected_prompt_manager(config_path: Optional[str]) -> ProtectedPromptManager`
+Get or create a ProtectedPromptManager instance. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/llm/prompting/system_prompt.md
+```markdown
+# File: `llm/prompting/system_prompt.py`
+
+## Overview
+Core module for system_prompt.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `get_channel_system_prompt(channel_id: str, guild_id: str, bot_id: str, message: Optional[discord.Message]) -> str`
+Gets channel-specific system prompt with three-tier inheritance. Plays a key role in the system logic.
+
+### `get_system_prompt(bot_id: str, message: Optional[discord.Message]) -> str`
+Gets system prompt with fallback hierarchy. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/llm/schema.md
+```markdown
+# File: `llm/schema.py`
+
+## Overview
+LangChain compatible data schemas. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `OrchestratorRequest`
+Handles operations related to OrchestratorRequest.
+
+- **Attributes**:
+  - `bot` (`Any`): Class attribute.
+  - `message` (`Message`): Class attribute.
+  - `logger` (`Any`): Class attribute.
+
+### `OrchestratorResponse`
+Response model returned by the orchestrator.
+
+- **Attributes**:
+  - `reply` (`Any | None`): Class attribute.
+  - `tool_calls` (`List[Dict] | None`): Class attribute.
+
+```
+
+### Create File: docs/llm/tools/__init__.md
+```markdown
+# File: `llm/tools/__init__.py`
+
+## Overview
+Core module for __init__.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/llm/tools/bot_info.md
+```markdown
+# File: `llm/tools/bot_info.py`
+
+## Overview
+Bot info tools for LLM integration. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `BotInfoTools`
+Container for bot self-information tools.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+  - `_checker` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> list`: Return bot info tools.
+
+```
+
+### Create File: docs/llm/tools/episodic_memory.md
+```markdown
+# File: `llm/tools/episodic_memory.py`
+
+## Overview
+Core module for episodic_memory.py managing memory components. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `EpisodicMemoryTools`
+Container for episodic memory tools bound to a runtime.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_bot() -> Optional[Any]`: Safely retrieve the bot instance from the runtime.
+  - `get_tools() -> List`: Return a list of LangChain tools (closures) bound to the runtime.
+
+```
+
+### Create File: docs/llm/tools/image.md
+```markdown
+# File: `llm/tools/image.py`
+
+## Overview
+Image generation tools for LLM integration. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ImageTools`
+Container class for image generation tools.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> list`: Returns a list of LangChain tools bound to this runtime.
+
+```
+
+### Create File: docs/llm/tools/interaction_tools.md
+```markdown
+# File: `llm/tools/interaction_tools.py`
+
+## Overview
+Core module for interaction_tools.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `DiscordInteractionTools`
+Tools for advanced Discord interactions (Emojis, Polls, Stickers).
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> list`: Executes get_tools operation.
+
+```
+
+### Create File: docs/llm/tools/internet_search.md
+```markdown
+# File: `llm/tools/internet_search.py`
+
+## Overview
+Internet search tools for LLM integration. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `InternetSearchTools`
+Container class for internet search tools.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> list`: Returns a list of LangChain tools bound to this runtime.
+
+```
+
+### Create File: docs/llm/tools/knowledge.md
+```markdown
+# File: `llm/tools/knowledge.py`
+
+## Overview
+Knowledge tools for managing guild and channel level memories. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UpdateKnowledgeInput`
+Input for updating knowledge.
+
+- **Attributes**:
+  - `new_information` (`str`): Class attribute.
+  - `category` (`str`): Class attribute.
+
+### `UpdateGuildKnowledgeTool`
+Tool to update knowledge shared across the entire server.
+
+- **Attributes**:
+  - `name` (`str`): Class attribute.
+  - `description` (`str`): Class attribute.
+  - `args_schema` (`Type[BaseModel]`): Class attribute.
+  - `runtime` (`Optional[Any]`): Class attribute.
+
+- **Methods**:
+  - `_run(new_information: str, category: str) -> str`: Synchronous run (not used).
+  - `_arun(new_information: str, category: str) -> str`: Update guild-level knowledge.
+
+### `UpdateChannelKnowledgeTool`
+Tool to update knowledge specific to the current channel.
+
+- **Attributes**:
+  - `name` (`str`): Class attribute.
+  - `description` (`str`): Class attribute.
+  - `args_schema` (`Type[BaseModel]`): Class attribute.
+  - `runtime` (`Optional[Any]`): Class attribute.
+
+- **Methods**:
+  - `_run(new_information: str, category: str) -> str`: Synchronous run (not used).
+  - `_arun(new_information: str, category: str) -> str`: Update channel-level knowledge.
+
+### `ClearKnowledgeInput`
+Input for clearing knowledge.
+
+- **Attributes**:
+  - `dummy` (`Optional[str]`): Class attribute.
+
+### `ClearGuildKnowledgeTool`
+Tool to clear all knowledge shared across the entire server.
+
+- **Attributes**:
+  - `name` (`str`): Class attribute.
+  - `description` (`str`): Class attribute.
+  - `args_schema` (`Type[BaseModel]`): Class attribute.
+  - `runtime` (`Optional[Any]`): Class attribute.
+
+- **Methods**:
+  - `_run(dummy: Optional[str]) -> str`: Synchronous run (not used).
+  - `_arun(dummy: Optional[str]) -> str`: Clear guild-level knowledge.
+
+### `ClearChannelKnowledgeTool`
+Tool to clear knowledge specific to the current channel.
+
+- **Attributes**:
+  - `name` (`str`): Class attribute.
+  - `description` (`str`): Class attribute.
+  - `args_schema` (`Type[BaseModel]`): Class attribute.
+  - `runtime` (`Optional[Any]`): Class attribute.
+
+- **Methods**:
+  - `_run(dummy: Optional[str]) -> str`: Synchronous run (not used).
+  - `_arun(dummy: Optional[str]) -> str`: Clear channel-level knowledge.
+
+### `KnowledgeTools`
+Wrapper class for discovering knowledge management tools.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> list`: Return list of knowledge tools with shared runtime.
+
+## Functions
+
+### `get_tools(runtime: Any) -> list`
+Discovery function for the tools factory. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/llm/tools/math.md
+```markdown
+# File: `llm/tools/math.py`
+
+## Overview
+Math calculation tools for LLM integration. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `MathTools`
+Container class for mathematical calculation tools.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> list`: Returns a list of LangChain tools bound to this runtime.
+
+```
+
+### Create File: docs/llm/tools/reminder.md
+```markdown
+# File: `llm/tools/reminder.py`
+
+## Overview
+Reminder tools for LLM integration. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ReminderTools`
+Container class for reminder management tools.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> list`: Returns a list of LangChain tools bound to this runtime.
+
+```
+
+### Create File: docs/llm/tools/server_context.md
+```markdown
+# File: `llm/tools/server_context.py`
+
+## Overview
+Server context tools for LLM integration. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ServerContextTools`
+Container for Discord server/channel/user info query tools.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> list`: Return server context query tools.
+
+```
+
+### Create File: docs/llm/tools/tools_overview.md
+```markdown
+# File: `llm/tools/tools_overview.py`
+
+## Overview
+Core module for tools_overview.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `ToolsOverviewTools`
+Container for a tool that lists available tools and their short descriptions.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> List`: Return a list containing a single tool that summarizes available tools.
+
+```
+
+### Create File: docs/llm/tools/user_activity.md
+```markdown
+# File: `llm/tools/user_activity.py`
+
+## Overview
+Core module for user_activity.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UserActivityTools`
+Tools for inspecting user activities and status.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `get_tools() -> list`: Executes get_tools operation.
+
+```
+
+### Create File: docs/llm/tools/user_data.md
+```markdown
+# File: `llm/tools/user_data.py`
+
+## Overview
+User memory management tools for LLM integration. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UserMemoryTools`
+Container class for user memory management tools.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_bot() -> Optional[Any]`: Safely retrieves the bot instance from the runtime.
+  - `_get_cog() -> Optional[UserDataCog]`: Safely retrieves the UserDataCog.
+  - `get_tools() -> list`: Returns a list of LangChain tools bound to this runtime.
+
+```
+
+### Create File: docs/llm/tools/user_stats.md
+```markdown
+# File: `llm/tools/user_stats.py`
+
+## Overview
+User stats tools for LLM integration. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UserStatsTools`
+Container for user statistics query and image generation tools.
+
+- **Attributes**:
+  - `runtime` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_get_stats_storage() -> Any`: Retrieve StatsStorage from StatsCog.
+  - `get_tools() -> list`: Return user stats tools.
+
+```
+
+### Create File: docs/llm/tools_factory.md
+```markdown
+# File: `llm/tools_factory.py`
+
+## Overview
+Factory for LangChain tools that auto-loads only @tool-decorated functions. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `get_tools(user: discord.Member, guid: discord.Guild, runtime: OrchestratorRequest, agent_mode: str) -> List[BaseTool]`
+Returns a list of LangChain tools available to the Discord user based on permissions. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/llm/utils/__init__.md
+```markdown
+# File: `llm/utils/__init__.py`
+
+## Overview
+llm.utils package. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+```
+
+### Create File: docs/llm/utils/file_watcher.md
+```markdown
+# File: `llm/utils/file_watcher.py`
+
+## Overview
+Core module for file_watcher.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `FileWatcher`
+檔案監控和熱重載
+
+- **Attributes**:
+  - `watched_files` (`Dict[Tuple[str, datetime]]`): Instance attribute.
+  - `callbacks` (`Dict[Tuple[str, Callable]]`): Instance attribute.
+  - `check_interval` (`Any`): Instance attribute.
+  - `_running` (`Any`): Instance attribute.
+  - `_thread` (`Any`): Instance attribute.
+  - `_lock` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `watch_file(path: str, callback: Callable) -> Any`: 監控檔案變更
+  - `_start_watching() -> Any`: 開始監控執行緒
+  - `_watch_loop() -> Any`: 監控迴圈
+  - `stop_watching() -> Any`: 停止監控
+  - `check_changes() -> bool`: 手動檢查變更
+  - `add_file(path: str, callback: Callable) -> Any`: 添加要監控的檔案（watch_file 的別名）
+  - `remove_file(path: str) -> Any`: 移除監控檔案
+  - `get_watched_files() -> Set[str]`: 獲取正在監控的檔案列表
+  - `is_watching(path: str) -> bool`: 檢查是否正在監控指定檔案
+  - `get_file_info(path: str) -> Dict[Tuple[str, Any]]`: 獲取監控檔案的資訊
+  - `get_watcher_stats() -> Dict[Tuple[str, Any]]`: 獲取監控器統計資訊
+
+```
+
+### Create File: docs/llm/utils/media.md
+```markdown
+# File: `llm/utils/media.py`
+
+## Overview
+Core module for media.py interacting with LLM models and orchestrator. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `standardize_image(image: Any, target_size: Any) -> Any`
+Executes standardize_image operation. Plays a key role in the system logic.
+
+### `is_valid_image(img: Any, expected_size: Any) -> Any`
+Executes is_valid_image operation. Plays a key role in the system logic.
+
+### `image_to_base64(pil_image: Any) -> Any`
+Executes image_to_base64 operation. Plays a key role in the system logic.
+
+### `encode_video(video_data: Any) -> Any`
+Executes encode_video operation. Plays a key role in the system logic.
+
+### `safe_process_pdf(file_data: Any) -> Any`
+Executes safe_process_pdf operation. Plays a key role in the system logic.
+
+### `process_attachment_data(message: Any) -> Any`
+Executes process_attachment_data operation. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/llm/utils/send_message.md
+```markdown
+# File: `llm/utils/send_message.py`
+
+## Overview
+Simplified message sender module for Discord bot GPT responses. This file is part of the llm subsystem and handles the primary operations for its respective domain.
+
+## Functions
+
+### `get_converter(lang: str) -> Optional[opencc.OpenCC]`
+Gets appropriate converter based on language. Plays a key role in the system logic.
+
+### `safe_edit_message(message: discord.Message, content: str, max_retries: int) -> bool`
+Safely edits a Discord message with retry logic. Plays a key role in the system logic.
+
+### `send_message(bot: Any, message_to_edit: Optional[discord.Message], message: discord.Message, streamer: AsyncIterator, update_interval: float, raise_exception: bool, tools: Optional[List[Any]], inactivity_timeout: float) -> str`
+Consumes a token stream and updates Discord messages with time-based updates. Plays a key role in the system logic.
+
+```
+
+### Create File: docs/main.md
+```markdown
+# File: `main.py`
+
+## Overview
+Core module for main.py This file is part of the core subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `CommandCheck`
+Handles operations related to CommandCheck.
+
+- **Methods**:
+  - `interaction_check() -> bool`: Executes interaction_check operation.
+
+```
+
+### Create File: docs/update.md
+```markdown
+# File: `update.py`
+
+## Overview
+Lightweight CLI wrapper for update system This file is part of the core subsystem and handles the primary operations for its respective domain.
+
+## Classes
+
+### `UpdateCLI`
+Lightweight CLI wrapper for update operations
+
+- **Attributes**:
+  - `config` (`Any`): Instance attribute.
+  - `bot_owner_id` (`Any`): Instance attribute.
+  - `github_config` (`Any`): Instance attribute.
+  - `version_checker` (`Any`): Instance attribute.
+  - `permission_checker` (`Any`): Instance attribute.
+  - `logger` (`Any`): Instance attribute.
+
+- **Methods**:
+  - `_init_bot_owner_id() -> Any`: Initialize bot owner ID from environment
+  - `check_version(with_message: bool) -> str`: Check current version status
+  - `install_version(version: Optional[str], is_latest: bool, is_beta: bool) -> bool`: Install specified version
+  - `parse_args() -> argparse.Namespace`: Parse command line arguments
+  - `run() -> int`: Main execution method
+
+## Functions
+
+### `main() -> Any`
+Main entry point Plays a key role in the system logic.
+
+```
