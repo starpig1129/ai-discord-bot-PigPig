@@ -75,14 +75,11 @@ class Orchestrator:
                 )
             )
 
-        from addons.settings import memory_config
         short_term_provider = ShortTermMemoryProvider(bot=bot, limit=memory_config.short_term_limit)
         procedural_provider = ProceduralMemoryProvider(user_manager=user_manager)
 
         # Episodic provider: only when memory is enabled and vector store is available
         episodic_provider: Optional[EpisodicMemoryProvider] = None
-        
-        from addons.settings import memory_config
 
         # Initialize Knowledge Provider
         knowledge_provider = None
