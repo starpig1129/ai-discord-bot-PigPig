@@ -428,6 +428,36 @@ class PigPig(commands.Bot):
         if base_config.version:
             func.update_json("settings.json", new_data={"version": base_config.version})
     
+        # Add a global error handler for slash commands
+        async def on_tree_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+            logger = getattr(self, "system_logger", log)
+            guild_id_str = str(interaction.guild_id) if interaction.guild_id else "0"
+
+            logger.error(f"Error in slash command '{interaction.command.name if interaction.command else 'Unknown'}': {error}")
+            logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+
+            await func.report_error(error, f"on_tree_error: {interaction.command.name if interaction.command else 'Unknown'}")
+
+            # Send a user-friendly error message
+            lang_manager = self.get_cog("LanguageManager")
+            if lang_manager:
+                try:
+                    error_msg = lang_manager.translate(guild_id_str, "system", "general", "errors", "unexpected_error")
+                except Exception:
+                    error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
+            else:
+                error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
+
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(error_msg, ephemeral=True)
+                else:
+                    await interaction.followup.send(error_msg, ephemeral=True)
+            except Exception as send_e:
+                logger.error(f"Failed to send slash command error message: {send_e}")
+
+        self.tree.on_error = on_tree_error
+
         await self.tree.sync()
 
     async def on_ready(self):
@@ -592,7 +622,17 @@ class PigPig(commands.Bot):
 
         # Try to reply to channel (only log if reply fails, don't raise)
         try:
-            await ctx.send("error on command execution.")
+            guild_id_str = str(ctx.guild.id) if getattr(ctx, "guild", None) else "0"
+            lang_manager = self.get_cog("LanguageManager")
+            if lang_manager:
+                try:
+                    error_msg = lang_manager.translate(guild_id_str, "system", "general", "errors", "unexpected_error")
+                except Exception:
+                    error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
+            else:
+                error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
+
+            await ctx.send(error_msg)
         except Exception as e:
             if logger:
                 logger.error("Failed replying error message", exception=e)
