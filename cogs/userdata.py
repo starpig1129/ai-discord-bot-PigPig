@@ -534,6 +534,43 @@ class UserDataCog(commands.Cog):
             await func.report_error(e, f"save_knowledge_data failed ({target_type}:{target_id})")
             return f"Error: {str(e)}"
 
+    async def _clear_knowledge_data(self, target_type: str, target_id: str) -> str:
+        """Core logic for clearing guild/channel knowledge."""
+        async with self._knowledge_lock:
+            self.logger.info(f"Initiating sequential knowledge clear for {target_type} {target_id}...")
+
+            try:
+                if not self.knowledge_storage:
+                    return "Knowledge storage not initialized."
+
+                success = await self.knowledge_storage.delete_knowledge(target_type, target_id)
+
+                if success:
+                    # Invalidate KnowledgeMemoryProvider cache
+                    try:
+                        orchestrator = getattr(self.bot, "orchestrator", None)
+                        if orchestrator:
+                            provider = getattr(
+                                getattr(orchestrator, "context_manager", None),
+                                "knowledge_provider",
+                                None,
+                            )
+                            if provider and hasattr(provider, "invalidate"):
+                                await provider.invalidate(target_type, target_id)
+                    except Exception as cache_err:
+                        self.logger.warning(f"Failed to invalidate knowledge cache for {target_type} {target_id}: {cache_err}")
+
+                    self.logger.info(f"Successfully cleared {target_type} knowledge.")
+                    return f"Successfully cleared {target_type} knowledge."
+                else:
+                    self.logger.info(f"No {target_type} knowledge found to clear for {target_id}.")
+                    return f"No {target_type} knowledge found to clear."
+
+            except Exception as e:
+                self.logger.error(f"Failed to clear {target_type} knowledge for {target_id}: {e}")
+                await func.report_error(e, f"clear_knowledge_data failed ({target_type}:{target_id})")
+                return f"Error: {str(e)}"
+
     async def _save_user_data(
         self,
         user_id: str,

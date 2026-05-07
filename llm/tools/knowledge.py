@@ -96,11 +96,90 @@ class UpdateChannelKnowledgeTool(BaseTool):
             logger.error(f"update_channel_knowledge tool failed: {e}")
             return f"Error updating channel knowledge: {str(e)}"
 
+class ClearKnowledgeInput(BaseModel):
+    """Input for clearing knowledge."""
+    dummy: Optional[str] = Field(default=None, description="Dummy argument, leave empty.")
+
+class ClearGuildKnowledgeTool(BaseTool):
+    """Tool to clear all knowledge shared across the entire server."""
+    name: str = "clear_guild_knowledge"
+    description: str = "Clear all recorded facts, memes, or culture for the ENTIRE SERVER. Use only when explicitly asked to forget server knowledge."
+    args_schema: Type[BaseModel] = ClearKnowledgeInput
+    runtime: Optional[Any] = None
+
+    def _run(self, dummy: Optional[str] = None) -> str:
+        """Synchronous run (not used)."""
+        raise NotImplementedError("Use _arun")
+
+    async def _arun(self, dummy: Optional[str] = None) -> str:
+        """Clear guild-level knowledge."""
+        if not self.runtime or not self.runtime.message:
+            return "Error: Runtime context missing."
+
+        guild = self.runtime.message.guild
+        if not guild:
+            return "Error: This tool can only be used within a Discord Server (Guild)."
+
+        bot = self.runtime.bot
+        cog = bot.get_cog("UserDataCog")
+        if not cog:
+            return "Error: UserDataCog not loaded."
+
+        try:
+            result = await cog._clear_knowledge_data(
+                target_type="guild",
+                target_id=str(guild.id),
+            )
+            return result
+        except Exception as e:
+            from addons.logging import get_logger
+            local_logger = get_logger(server_id=str(guild.id), source="llm.tools.knowledge")
+            local_logger.error(f"clear_guild_knowledge tool failed: {e}")
+            return f"Error clearing guild knowledge: {str(e)}"
+
+class ClearChannelKnowledgeTool(BaseTool):
+    """Tool to clear knowledge specific to the current channel."""
+    name: str = "clear_channel_knowledge"
+    description: str = "Clear all recorded facts, rules, or culture for the CURRENT CHANNEL only. Use only when explicitly asked to forget channel knowledge."
+    args_schema: Type[BaseModel] = ClearKnowledgeInput
+    runtime: Optional[Any] = None
+
+    def _run(self, dummy: Optional[str] = None) -> str:
+        """Synchronous run (not used)."""
+        raise NotImplementedError("Use _arun")
+
+    async def _arun(self, dummy: Optional[str] = None) -> str:
+        """Clear channel-level knowledge."""
+        if not self.runtime or not self.runtime.message:
+            return "Error: Runtime context missing."
+
+        channel = self.runtime.message.channel
+        guild = getattr(self.runtime.message, "guild", None)
+        bot = self.runtime.bot
+        cog = bot.get_cog("UserDataCog")
+        if not cog:
+            return "Error: UserDataCog not loaded."
+
+        try:
+            result = await cog._clear_knowledge_data(
+                target_type="channel",
+                target_id=str(channel.id),
+            )
+            return result
+        except Exception as e:
+            from addons.logging import get_logger
+            guild_id = str(guild.id) if guild else "Bot"
+            local_logger = get_logger(server_id=guild_id, source="llm.tools.knowledge")
+            local_logger.error(f"clear_channel_knowledge tool failed: {e}")
+            return f"Error clearing channel knowledge: {str(e)}"
+
 def get_tools(runtime: Any) -> list:
     """Discovery function for the tools factory."""
     return [
         UpdateGuildKnowledgeTool(runtime=runtime),
         UpdateChannelKnowledgeTool(runtime=runtime),
+        ClearGuildKnowledgeTool(runtime=runtime),
+        ClearChannelKnowledgeTool(runtime=runtime),
     ]
 
 class KnowledgeTools:
