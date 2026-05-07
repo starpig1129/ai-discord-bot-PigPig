@@ -82,6 +82,8 @@ class Orchestrator:
         # Episodic provider: only when memory is enabled and vector store is available
         episodic_provider: Optional[EpisodicMemoryProvider] = None
         
+        from addons.settings import memory_config
+
         # Initialize Knowledge Provider
         knowledge_provider = None
         db = getattr(user_manager, "storage", None)
@@ -91,13 +93,18 @@ class Orchestrator:
             conn = getattr(db, "db", None)
             if conn:
                 knowledge_storage = KnowledgeStorage(conn)
-                knowledge_provider = KnowledgeMemoryProvider(knowledge_storage)
+                knowledge_provider = KnowledgeMemoryProvider(
+                    knowledge_storage,
+                    max_cache_size=memory_config.knowledge_max_cache_size
+                )
 
         if memory_enabled and getattr(bot, "vector_manager", None) is not None:
             episodic_provider = EpisodicMemoryProvider(
                 bot=bot,
                 top_k=memory_config.episodic_top_k,
-                max_chars=memory_config.episodic_max_chars
+                max_chars=memory_config.episodic_max_chars,
+                max_cache_size=memory_config.episodic_max_cache_size,
+                cache_ttl=memory_config.episodic_cache_ttl
             )
 
         self.context_manager = ContextManager(
