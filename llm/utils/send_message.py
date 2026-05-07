@@ -439,6 +439,8 @@ async def _process_token_stream(
                     continue
                 elif remaining.startswith('<som>'):
                     markers_detected = True
+                    # Reset thinking state — <som> always starts the displayable response
+                    is_in_thinking = False
                     if intermediate_content:
                         display_str += intermediate_content
                         intermediate_content = ''
@@ -559,9 +561,13 @@ async def _process_token_stream(
 
             import re
             cleaned_result = message_result
-            # Strip reasoning/thinking blocks to prevent leaking CoT to Discord
+            # Strip reasoning/thinking blocks (complete blocks first)
             cleaned_result = re.sub(r'<thinking>.*?</thinking>', '', cleaned_result, flags=re.DOTALL)
             cleaned_result = re.sub(r'<think>.*?</think>', '', cleaned_result, flags=re.DOTALL)
+            # Strip unclosed thinking blocks — if no closing tag, drop everything from <think> onward
+            # since the response boundary cannot be reliably determined
+            cleaned_result = re.sub(r'<thinking>.*$', '', cleaned_result, flags=re.DOTALL)
+            cleaned_result = re.sub(r'<think>.*$', '', cleaned_result, flags=re.DOTALL)
             # Strip identity prefixes like "[Name | UserID:xxx | MessageID:xxx]  content"
             prefix_pattern = r'^\[.*?\|\s*UserID:\d+\s*\|\s*MessageID:\d+\]\s*'
             cleaned_result = re.sub(prefix_pattern, '', cleaned_result, flags=re.DOTALL)
