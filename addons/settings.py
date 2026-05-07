@@ -321,6 +321,11 @@ class MemoryConfig:
         # Generic provider options bag for future extensions
         self.provider_options: dict = data.get("provider_options", {})
 
+        # Limits for retrieving memories during conversation context injection
+        self.short_term_limit: int = data.get("short_term_limit", 15)
+        self.episodic_top_k: int = data.get("episodic_top_k", 3)
+        self.episodic_max_chars: int = data.get("episodic_max_chars", 1500)
+
         # Message threshold for triggering memory processing
         self.message_threshold: int = data.get("message_threshold", 100)
         # Time threshold for triggering memory processing (in seconds)
