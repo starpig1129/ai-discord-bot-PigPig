@@ -40,10 +40,12 @@ class DiscordInteractionTools:
         @tool
         def get_guild_emojis() -> str:
             """
-            Retrieves a list of available custom emojis in the current server (guild).
-            
-            Use this tool when you want to see what custom emojis are available to use in your response.
-            The output will be a formatted list of emojis that you can include in your message.
+            Retrieves all custom emojis available in the current server.
+
+            Call this tool when:
+            - The user asks to use or see custom emojis.
+            - You want to react to a message with a custom guild emoji (call this first to find the emoji name).
+            - The response agent will need custom emoji strings (e.g. `<:pig_smile:123456>`) in its reply.
             """
             message = getattr(runtime, "message", None)
             if not message or not message.guild:
@@ -106,7 +108,11 @@ class DiscordInteractionTools:
         @tool
         def get_guild_stickers() -> str:
             """
-            Retrieves a list of available stickers in the current server (guild).
+            Retrieves all stickers available in the current server, including their IDs.
+
+            Call this tool when:
+            - The user asks to use or see stickers.
+            - You intend to call `send_sticker` — the sticker ID returned here is required.
             """
             message = getattr(runtime, "message", None)
             if not message or not message.guild:
@@ -157,10 +163,15 @@ class DiscordInteractionTools:
         @tool
         async def change_own_nickname(new_nickname: str) -> str:
             """
-            Changes your own nickname in the current server to fit the roleplay or atmosphere.
-            
+            Changes your own nickname in the current server.
+
+            You are encouraged to call this proactively when the mood, roleplay, or
+            conversation topic calls for a different persona (e.g. "Angry PigPig",
+            "Detective Pig", "Chef Pig"). The nickname change takes effect immediately
+            and will be visible to everyone in the server.
+
             Args:
-                new_nickname: The new name you want to adopt (e.g. "Angry PigPig", "Detective Pig"). Max 32 characters.
+                new_nickname: The new nickname to adopt. Max 32 characters.
             """
             message = getattr(runtime, "message", None)
             if not message or not message.guild or not message.guild.me:
@@ -198,11 +209,12 @@ class DiscordInteractionTools:
         @tool
         async def dramatic_pause(seconds: int) -> str:
             """
-            Pauses for a specified number of seconds before continuing your response, 
-            while keeping the 'typing...' indicator active.
-            
-            Use this to create comedic timing, suspense, or a thoughtful pause in your conversation.
-            
+            Pauses for a specified number of seconds BEFORE the text response appears,
+            while keeping the 'typing...' indicator active in Discord.
+
+            Use this to create comedic timing or suspense — the bot will appear to be
+            thinking, then the response will arrive after the pause.
+
             Args:
                 seconds: Number of seconds to pause (maximum 10).
             """
@@ -218,5 +230,16 @@ class DiscordInteractionTools:
                 return f"Paused dramatically for {pause_time} seconds."
             except Exception as e:
                 return f"Pause failed: {str(e)}"
+
+        # Mark action tools for the message agent.
+        # Primary: set directly on the tool's __dict__ (readable via hasattr/getattr on Pydantic model).
+        # Fallback: set on .coroutine or .func for older LangChain versions.
+        for _t in (add_reaction, send_sticker, change_own_nickname, delete_own_last_message):
+            try:
+                _t.__dict__["target_agent_mode"] = "message"
+            except Exception:
+                fn = getattr(_t, "coroutine", None) or getattr(_t, "func", None)
+                if fn is not None:
+                    fn.target_agent_mode = "message"
 
         return [get_guild_emojis, add_reaction, get_guild_stickers, send_sticker, change_own_nickname, delete_own_last_message, dramatic_pause]

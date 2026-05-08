@@ -351,8 +351,10 @@ def get_tools(
                     raw_mode = metadata["target_agent_mode"]
                 elif hasattr(t, "target_agent_mode"):
                     raw_mode = getattr(t, "target_agent_mode")
-                elif hasattr(t, "func") and hasattr(t.func, "target_agent_mode"):
+                elif hasattr(t, "func") and t.func is not None and hasattr(t.func, "target_agent_mode"):
                     raw_mode = getattr(t.func, "target_agent_mode")
+                elif hasattr(t, "coroutine") and t.coroutine is not None and hasattr(t.coroutine, "target_agent_mode"):
+                    raw_mode = getattr(t.coroutine, "target_agent_mode")
             except (AttributeError, KeyError, TypeError) as e:
                 logger.warning(
                     "Failed to extract target_agent_mode for tool %s: %s",

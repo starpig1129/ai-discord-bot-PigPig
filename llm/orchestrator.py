@@ -256,6 +256,39 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             return get_system_prompt(str(bot_id), message)
 
 
+    @staticmethod
+    def _build_action_tools_section(tools: List[Any]) -> str:
+        """Dynamically generate an Action Tools prompt section from the actual message-mode tools.
+
+        Called once per message after message_agent_tools are resolved, so the
+        description always matches the tools the model will actually receive.
+        """
+        if not tools:
+            return ""
+
+        lines = [
+            "## Action Tools",
+            "",
+            "You have access to Discord action tools that execute **after** your text is streamed.",
+            "Call them as tool calls alongside your `<som>...<eom>` response — they are NOT text commands.",
+            "",
+        ]
+
+        for t in tools:
+            name = getattr(t, "name", None) or getattr(t, "__name__", repr(t))
+            desc = getattr(t, "description", "") or ""
+            first_line = next((ln.strip() for ln in desc.splitlines() if ln.strip()), "")
+            lines.append(f"- `{name}` — {first_line}" if first_line else f"- `{name}`")
+
+        lines += [
+            "",
+            "### Usage Rules",
+            "- Write `<som>...<eom>` AND call the tool in the same turn.",
+            "- Do **not** describe tool actions in text (e.g. don't write \"I will react with 👍\"). Call the tool silently.",
+        ]
+
+        return "\n".join(lines)
+
     async def _sanitize_messages_for_model(self, messages: List[BaseMessage], model_name: str, image_cache: Optional[MutableMapping[str, dict[str, Any]]] = None) -> List[BaseMessage]:
         """
         Sanitize messages for the specific model.
@@ -571,9 +604,16 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                     raise RuntimeError(f"Failed to get message_model priority list: {e}") from e
 
                 # Build message agent prompt using ProtectedPromptManager
-                # This ensures system-level modules (Discord format, input parsing, etc.)  
+                # This ensures system-level modules (Discord format, input parsing, etc.)
                 # are protected from user modification
                 message_system_prompt = self._build_message_agent_prompt(bot.user.id, message)
+
+                # Dynamically inject action tools section based on actually loaded tools.
+                # This keeps the description always in sync with the real tool list,
+                # regardless of user system prompt customisations.
+                if message_agent_tools:
+                    action_tools_section = self._build_action_tools_section(message_agent_tools)
+                    message_system_prompt = f"{message_system_prompt}\n\n{action_tools_section}"
 
                 # IMPORTANT: Place static message_system_prompt before dynamic procedural_context_str to maximize KV cache reuse!
                 full_message_prompt = f"{message_system_prompt}\n\n{procedural_context_str}"

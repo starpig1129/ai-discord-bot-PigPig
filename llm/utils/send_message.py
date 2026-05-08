@@ -514,6 +514,15 @@ async def _process_token_stream(
                 token_obj = token
                 metadata = None
 
+            # Only process streaming chunks from the model (AIMessageChunk).
+            # Middleware-injected full AIMessage objects (e.g. "Model call limits exceeded")
+            # and ToolMessage / HumanMessage objects must be skipped — they are not part of
+            # the model's response and would otherwise trigger the fallback path with
+            # irrelevant content.
+            from langchain_core.messages import AIMessageChunk as _AIMessageChunk
+            if not isinstance(token_obj, _AIMessageChunk):
+                continue
+
             # Extract text token
             if hasattr(token_obj, "content") and token_obj.content:
                 token_str = str(token_obj.content)
@@ -561,18 +570,35 @@ async def _process_token_stream(
 
             import re
             cleaned_result = message_result
-            # Strip reasoning/thinking blocks (complete blocks first)
-            cleaned_result = re.sub(r'<thinking>.*?</thinking>', '', cleaned_result, flags=re.DOTALL)
-            cleaned_result = re.sub(r'<think>.*?</think>', '', cleaned_result, flags=re.DOTALL)
-            # Strip unclosed thinking blocks — if no closing tag, drop everything from <think> onward
-            # since the response boundary cannot be reliably determined
-            cleaned_result = re.sub(r'<thinking>.*$', '', cleaned_result, flags=re.DOTALL)
-            cleaned_result = re.sub(r'<think>.*$', '', cleaned_result, flags=re.DOTALL)
+
+            # Step 1: If the model properly closed its thinking block, everything after the
+            # last </think> is the actual response — use it directly.
+            for end_tag in ('</think>', '</thinking>'):
+                if end_tag in cleaned_result:
+                    after = cleaned_result.rsplit(end_tag, 1)[-1].strip()
+                    if after:
+                        cleaned_result = after
+                        break
+            else:
+                # Step 2: Strip complete thinking blocks.
+                cleaned_result = re.sub(r'<thinking>.*?</thinking>\s*', '', cleaned_result, flags=re.DOTALL)
+                cleaned_result = re.sub(r'<think>.*?</think>\s*', '', cleaned_result, flags=re.DOTALL)
+
             # Strip identity prefixes like "[Name | UserID:xxx | MessageID:xxx]  content"
             prefix_pattern = r'^\[.*?\|\s*UserID:\d+\s*\|\s*MessageID:\d+\]\s*'
-            cleaned_result = re.sub(prefix_pattern, '', cleaned_result, flags=re.DOTALL)
+            cleaned_result = re.sub(prefix_pattern, '', cleaned_result, flags=re.DOTALL).strip()
 
-            pending_content = cleaned_result.strip() if cleaned_result.strip() else message_result
+            if not cleaned_result:
+                cleaned_result = message_result.strip()
+
+            # Truncate to the hard limit in the fallback path.
+            # The fallback only fires when the model ignores the <som>/<eom> format.
+            # Creating continuation messages here would spam the channel — a single
+            # (possibly truncated) message is far better than multiple partial ones.
+            if len(cleaned_result) > _HARD_LIMIT:
+                cleaned_result = cleaned_result[: _HARD_LIMIT - 1] + "…"
+
+            pending_content = cleaned_result
             await update_message()
             
         # Check if we have any content after all processing

@@ -1368,61 +1368,100 @@ class SystemPromptManager:
                 'timestamp': time.time()
             }
     
+    def _append_protected_suffix(self, prompt: str) -> str:
+        """Re-appends critical protected modules (output_format, reminders) from base YAML.
+
+        Called only after a full `prompt` replacement, which discards the base content.
+        Ensures <som>/<eom> rules and thinking-model ordering are never silently lost.
+        The protected content goes through variable replacement in the caller.
+        """
+        try:
+            from llm.prompting.protected_prompt_manager import get_protected_prompt_manager
+            protected_manager = get_protected_prompt_manager()
+            parts = []
+            for module_name in ("output_format", "reminders"):
+                content = protected_manager.get_protected_module(module_name)
+                if content and content.strip():
+                    parts.append(content.strip())
+            if parts:
+                return prompt + "\n\n" + "\n\n".join(parts)
+            return prompt
+        except Exception as e:
+            asyncio.create_task(func.report_error(e, "_append_protected_suffix failed"))
+            self.logger.warning(f"_append_protected_suffix failed, protected modules may be missing: {e}")
+            return prompt
+
     def _apply_server_overrides(self, base_prompt: str, server_config: Dict[str, Any], guild_id: Optional[str] = None) -> str:
         """應用伺服器級別覆蓋"""
         try:
             if 'prompt' in server_config:
-                # 對編輯後的提示進行變數替換
                 prompt = server_config['prompt']
+                # Full replacement discards the base prompt entirely.
+                # Re-attach output_format + reminders so critical rules are never lost.
+                prompt = self._append_protected_suffix(prompt)
                 return self._apply_variable_replacements(prompt, guild_id)
-            
-            # 模組覆蓋邏輯 - 重新建構 YAML 提示
-            modules = server_config.get('modules', {})
-            override_modules = server_config.get('override_modules', [])
-            
+
+            # 模組覆蓋邏輯 — 僅允許覆蓋可自訂模組，保護模組永遠從 YAML 載入
+            from llm.prompting.protected_prompt_manager import ProtectedPromptManager
+            modules = {
+                k: v for k, v in server_config.get('modules', {}).items()
+                if k not in ProtectedPromptManager.PROTECTED_MODULES
+            }
+            override_modules = [
+                m for m in server_config.get('override_modules', [])
+                if m not in ProtectedPromptManager.PROTECTED_MODULES
+            ]
+
             if modules or override_modules:
                 prompt = self._rebuild_prompt_with_module_overrides(modules, override_modules)
                 self.logger.info(f"🔄 伺服器級別應用模組覆蓋：{list(modules.keys())}")
             else:
                 prompt = base_prompt
-            
+
             # 追加內容
             if 'append_content' in server_config:
                 prompt += f"\n\n{server_config['append_content']}"
-            
-            # 對最終提示進行變數替換
+
             return self._apply_variable_replacements(prompt, guild_id)
-            
+
         except Exception as e:
             asyncio.create_task(func.report_error(e, "Error applying server overrides"))
             self.logger.error(f"應用伺服器覆蓋時發生錯誤: {e}")
             return base_prompt
-    
+
     def _apply_channel_overrides(self, base_prompt: str, channel_config: Dict[str, Any], guild_id: Optional[str] = None) -> str:
         """應用頻道級別覆蓋"""
         try:
             if 'prompt' in channel_config:
-                # 對編輯後的提示進行變數替換
                 prompt = channel_config['prompt']
+                # Full replacement discards the base prompt entirely.
+                # Re-attach output_format + reminders so critical rules are never lost.
+                prompt = self._append_protected_suffix(prompt)
                 return self._apply_variable_replacements(prompt, guild_id)
-            
-            # 模組覆蓋邏輯 - 重新建構 YAML 提示
-            modules = channel_config.get('modules', {})
-            override_modules = channel_config.get('override_modules', [])
-            
+
+            # 模組覆蓋邏輯 — 僅允許覆蓋可自訂模組，保護模組永遠從 YAML 載入
+            from llm.prompting.protected_prompt_manager import ProtectedPromptManager
+            modules = {
+                k: v for k, v in channel_config.get('modules', {}).items()
+                if k not in ProtectedPromptManager.PROTECTED_MODULES
+            }
+            override_modules = [
+                m for m in channel_config.get('override_modules', [])
+                if m not in ProtectedPromptManager.PROTECTED_MODULES
+            ]
+
             if modules or override_modules:
                 prompt = self._rebuild_prompt_with_module_overrides(modules, override_modules)
                 self.logger.info(f"🔄 頻道級別應用模組覆蓋：{list(modules.keys())}")
             else:
                 prompt = base_prompt
-            
+
             # 追加內容
             if 'append_content' in channel_config:
                 prompt += f"\n\n{channel_config['append_content']}"
-            
-            # 對最終提示進行變數替換
+
             return self._apply_variable_replacements(prompt, guild_id)
-            
+
         except Exception as e:
             asyncio.create_task(func.report_error(e, "Error applying channel overrides"))
             self.logger.error(f"應用頻道覆蓋時發生錯誤: {e}")
