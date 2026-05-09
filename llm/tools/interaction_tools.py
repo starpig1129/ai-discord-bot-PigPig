@@ -71,16 +71,14 @@ class DiscordInteractionTools:
         @tool
         async def add_reaction(emoji: str, message_id: Optional[str] = None) -> str:
             """
-            Adds an emoji reaction to a specific message.
-            
-            Use this tool to react to a message (e.g., thumbs up, or custom emoji).
-            IMPORTANT: To target a specific past message, find its ID in the memory 
-            context formatted as `[... | MessageID:12345]` and pass '12345' as message_id.
+            React to a message with an emoji — unicode emojis (e.g. 👍 🐷 😂) always work without any prior lookup.
+
+            Only call `get_guild_emojis` first if you specifically want to use a server custom emoji by name.
             If not provided, reacts to the triggering message.
-            
+
             Args:
-                emoji: The emoji to react with. Can be unicode (e.g. "👍") or a custom emoji name (e.g. "pig_smile").
-                message_id: The ID of the message to react to. Must be extracted from memory.
+                emoji: Unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pig_smile").
+                message_id: Target message ID from context (`[... | MessageID:12345]`). Defaults to triggering message.
             """
             target_message = await _get_target_message(message_id)
             if not target_message:

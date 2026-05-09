@@ -7,6 +7,7 @@ from addons.logging import get_logger
 
 logger = get_logger(server_id="Bot", source="llm.orchestrator")
 
+import discord
 from discord import Message
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain.chat_models import init_chat_model
@@ -34,6 +35,46 @@ from llm.memory.knowledge import KnowledgeMemoryProvider
 from cogs.memory.db.knowledge_storage import KnowledgeStorage
 from llm.callbacks import ToolFeedbackCallbackHandler
 from llm.model_circuit_breaker import get_model_circuit_breaker
+
+
+class _SafeTyping:
+    """Typing indicator that backs off gracefully on 429 rate limits instead of retrying endlessly."""
+
+    _INTERVAL = 8.0  # seconds between keep-alive sends (Discord drops typing after ~10 s)
+    _BACKOFF = 30.0  # seconds to wait after a 429 before trying again
+
+    def __init__(self, channel: Any) -> None:
+        self._channel = channel
+        self._task: Optional[asyncio.Task] = None
+
+    async def _loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._INTERVAL)
+            try:
+                await self._channel.trigger_typing()
+            except discord.HTTPException as exc:
+                if exc.status == 429:
+                    await asyncio.sleep(self._BACKOFF)
+                else:
+                    return
+            except Exception:
+                return
+
+    async def __aenter__(self) -> "_SafeTyping":
+        try:
+            await self._channel.trigger_typing()
+        except Exception:
+            pass
+        self._task = asyncio.create_task(self._loop())
+        return self
+
+    async def __aexit__(self, *_: Any) -> None:
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
 
 
 class DirectToolOutputMiddleware(AgentMiddleware):
@@ -257,37 +298,23 @@ Focus on understanding what the user actually needs and prepare a clear analysis
 
 
     @staticmethod
-    def _build_action_tools_section(tools: List[Any]) -> str:
-        """Dynamically generate an Action Tools prompt section from the actual message-mode tools.
+    def _build_action_tools_rules(tools: List[Any]) -> str:
+        """Inject behavioral rules for message-mode action tools.
 
-        Called once per message after message_agent_tools are resolved, so the
-        description always matches the tools the model will actually receive.
+        Tool names and descriptions are already provided via tool binding — this
+        section only adds the cross-cutting rules that tool docstrings cannot express:
+        how action tools interact with the <som>/<eom> response format.
         """
         if not tools:
             return ""
 
-        lines = [
-            "## Action Tools",
+        return "\n".join([
+            "## Action Tools — Usage Rules",
             "",
-            "You have access to Discord action tools that execute **after** your text is streamed.",
-            "Call them as tool calls alongside your `<som>...<eom>` response — they are NOT text commands.",
-            "",
-        ]
-
-        for t in tools:
-            name = getattr(t, "name", None) or getattr(t, "__name__", repr(t))
-            desc = getattr(t, "description", "") or ""
-            first_line = next((ln.strip() for ln in desc.splitlines() if ln.strip()), "")
-            lines.append(f"- `{name}` — {first_line}" if first_line else f"- `{name}`")
-
-        lines += [
-            "",
-            "### Usage Rules",
-            "- Write `<som>...<eom>` AND call the tool in the same turn.",
+            "- Call action tools **alongside** your `<som>...<eom>` response in the same turn.",
             "- Do **not** describe tool actions in text (e.g. don't write \"I will react with 👍\"). Call the tool silently.",
-        ]
-
-        return "\n".join(lines)
+            "- `add_reaction` works with any unicode emoji (👍 🐷 😂) at any time — no prior lookup needed.",
+        ])
 
     async def _sanitize_messages_for_model(self, messages: List[BaseMessage], model_name: str, image_cache: Optional[MutableMapping[str, dict[str, Any]]] = None) -> List[BaseMessage]:
         """
@@ -437,7 +464,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
         guild_id = str(message.guild.id) if message.guild else "0"
 
         # Provide feedback to the user that the bot is processing
-        async with message.channel.typing():
+        async with _SafeTyping(message.channel):
             # Interrupt any active background memory tasks to prioritize this conversation
             if hasattr(bot, "message_tracker") and bot.message_tracker:
                 bot.message_tracker.interrupt_all()
@@ -612,8 +639,8 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 # This keeps the description always in sync with the real tool list,
                 # regardless of user system prompt customisations.
                 if message_agent_tools:
-                    action_tools_section = self._build_action_tools_section(message_agent_tools)
-                    message_system_prompt = f"{message_system_prompt}\n\n{action_tools_section}"
+                    action_tools_rules = self._build_action_tools_rules(message_agent_tools)
+                    message_system_prompt = f"{message_system_prompt}\n\n{action_tools_rules}"
 
                 # IMPORTANT: Place static message_system_prompt before dynamic procedural_context_str to maximize KV cache reuse!
                 full_message_prompt = f"{message_system_prompt}\n\n{procedural_context_str}"
