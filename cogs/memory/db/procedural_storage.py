@@ -81,6 +81,73 @@ class ProceduralStorage:
             await func.report_error(e, f"get_user_info failed (user: {discord_id})")
             return None
 
+    async def get_users_info(self, discord_ids: List[str]) -> Dict[str, UserInfo]:
+        if not discord_ids:
+            return {}
+
+        result: Dict[str, UserInfo] = {}
+        uncached: List[str] = []
+
+        for did in discord_ids:
+            if did in self._user_cache:
+                result[did] = self._user_cache[did]
+            else:
+                uncached.append(did)
+
+        if not uncached:
+            return result
+
+        try:
+            with self.db.get_connection() as conn:
+                placeholders = ",".join("?" for _ in uncached)
+                cursor = conn.execute(
+                    f"""
+                    SELECT discord_id, discord_name, display_names,
+                           procedural_memory, user_background, created_at
+                    FROM users
+                    WHERE discord_id IN ({placeholders})
+                    """,
+                    tuple(uncached),
+                )
+                rows = cursor.fetchall()
+
+                for row in rows:
+                    did = str(row["discord_id"])
+                    display_names = []
+                    if row["display_names"]:
+                        try:
+                            display_names = json.loads(row["display_names"])
+                            if not isinstance(display_names, list):
+                                display_names = [str(display_names)]
+                        except Exception:
+                            display_names = [row["display_names"]]
+
+                    created_at = None
+                    if row["created_at"]:
+                        try:
+                            created_at = datetime.fromisoformat(row["created_at"])
+                        except Exception:
+                            try:
+                                created_at = datetime.fromtimestamp(float(row["created_at"]))
+                            except Exception:
+                                created_at = None
+
+                    user_info = UserInfo(
+                        discord_id=did,
+                        discord_name=row["discord_name"] or "",
+                        display_names=display_names,
+                        procedural_memory=row["procedural_memory"],
+                        user_background=row["user_background"],
+                        created_at=created_at,
+                    )
+                    self._update_cache(did, user_info)
+                    result[did] = user_info
+
+        except Exception as e:
+            await func.report_error(e, f"get_users_info failed for ids: {uncached}")
+
+        return result
+
     async def update_user_data(
         self,
         discord_id: str,
