@@ -84,7 +84,6 @@ export default function DeleteData() {
           {[
             t('user.deleteItem1'),
             t('user.deleteItem2'),
-            t('user.deleteItem3'),
           ].map((item) => (
             <div key={item} style={{ display: 'flex', gap: '0.5rem', fontSize: '0.8125rem', color: 'var(--color-accent-rose)', padding: '0.2rem 0' }}>
               <span>•</span>

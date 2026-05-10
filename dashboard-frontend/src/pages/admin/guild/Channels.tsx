@@ -279,30 +279,67 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
           <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
             {t('common.loading')}
           </div>
-        ) : memory ? (
-          <div style={{
-            padding: '1rem',
-            background: 'rgba(255, 255, 255, 0.03)',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--color-border)',
-            fontSize: '0.875rem',
-            lineHeight: 1.6,
-            color: 'var(--color-text-secondary)',
-            whiteSpace: 'pre-wrap'
-          }}>
-            {memory}
-          </div>
         ) : (
-          <div style={{
-            padding: '1.5rem',
-            textAlign: 'center',
-            color: 'var(--color-text-muted)',
-            fontSize: '0.875rem',
-            background: 'rgba(255, 255, 255, 0.01)',
-            borderRadius: 'var(--radius-md)',
-            border: '1px dashed var(--color-border)',
-          }}>
-            {t('user.noEpisodicMemory')}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Summary */}
+            {memory ? (
+              <div style={{
+                padding: '1rem',
+                background: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)',
+                fontSize: '0.875rem',
+                lineHeight: 1.6,
+                color: 'var(--color-text-secondary)',
+                whiteSpace: 'pre-wrap'
+              }}>
+                {memory}
+              </div>
+            ) : (
+              <div style={{
+                padding: '1rem',
+                textAlign: 'center',
+                color: 'var(--color-text-muted)',
+                fontSize: '0.875rem',
+                background: 'rgba(255, 255, 255, 0.01)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px dashed var(--color-border)',
+              }}>
+                {t('user.noEpisodicMemory')}
+              </div>
+            )}
+
+            {/* Fragments */}
+            {fragments.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>
+                  {t('user.episodicFragments')}
+                </p>
+                {fragments.map((frag: MemoryFragment) => (
+                  <div key={frag.id} style={{
+                    padding: '0.875rem',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                    fontSize: '0.8125rem',
+                    lineHeight: 1.5,
+                    color: 'var(--color-text-secondary)',
+                  }}>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{frag.content}</div>
+                    {frag.timestamp && (
+                      <div style={{
+                        marginTop: '0.5rem',
+                        fontSize: '0.7rem',
+                        color: 'var(--color-text-muted)',
+                        textAlign: 'right'
+                      }}>
+                        {new Date(frag.timestamp * 1000).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -346,62 +383,6 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
             border: '1px dashed var(--color-border)',
           }}>
             {t('user.noConsolidatedKnowledge')}
-          </div>
-        )}
-      </div>
-
-      {/* Episodic Fragments Section */}
-      <div className="glass-card" style={{ padding: '1.25rem' }}>
-        <h4 style={{
-          fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase',
-          letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: '1rem',
-          display: 'flex', alignItems: 'center', gap: '0.5rem'
-        }}>
-          <span>💬</span>
-          {t('user.episodicFragments')}
-        </h4>
-        
-        {memoryLoading ? (
-          <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
-            {t('common.loading')}
-          </div>
-        ) : fragments.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {fragments.map((frag: MemoryFragment) => (
-              <div key={frag.id} style={{
-                padding: '0.875rem',
-                background: 'rgba(255, 255, 255, 0.03)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)',
-                fontSize: '0.8125rem',
-                lineHeight: 1.5,
-                color: 'var(--color-text-secondary)',
-              }}>
-                <div style={{ whiteSpace: 'pre-wrap' }}>{frag.content}</div>
-                {frag.timestamp && (
-                  <div style={{
-                    marginTop: '0.5rem',
-                    fontSize: '0.75rem',
-                    color: 'var(--color-text-muted)',
-                    textAlign: 'right'
-                  }}>
-                    {new Date(frag.timestamp * 1000).toLocaleString()}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{
-            padding: '1.5rem',
-            textAlign: 'center',
-            color: 'var(--color-text-muted)',
-            fontSize: '0.875rem',
-            background: 'rgba(255, 255, 255, 0.01)',
-            borderRadius: 'var(--radius-md)',
-            border: '1px dashed var(--color-border)',
-          }}>
-            {t('user.noEpisodicFragments')}
           </div>
         )}
       </div>

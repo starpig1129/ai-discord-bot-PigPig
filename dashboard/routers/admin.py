@@ -387,8 +387,6 @@ async def admin_delete_user_memory(
             async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
                 c = await db.execute("DELETE FROM users WHERE discord_id = ?", (user_id,))
                 deleted["procedural_users"] = c.rowcount
-                c = await db.execute("DELETE FROM user_stats WHERE user_id = ?", (user_id,))
-                deleted["user_stats"] = c.rowcount
                 await db.commit()
         except Exception as exc:
             log.error(f"admin_delete_user_memory failed for {user_id}: {exc}")
