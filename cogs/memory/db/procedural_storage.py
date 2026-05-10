@@ -210,6 +210,66 @@ class ProceduralStorage:
             await func.report_error(e, f"update_user_activity failed (user: {discord_id})")
             return False
 
+    async def get_all_users(self, limit: int = 500, offset: int = 0) -> List[UserInfo]:
+        """Return all users ordered by creation date (newest first)."""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT discord_id, discord_name, display_names,
+                           procedural_memory, user_background, created_at
+                    FROM users
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (limit, offset),
+                )
+                rows = cursor.fetchall()
+
+            users: List[UserInfo] = []
+            for row in rows:
+                display_names: List[str] = []
+                if row["display_names"]:
+                    try:
+                        parsed = json.loads(row["display_names"])
+                        display_names = parsed if isinstance(parsed, list) else [str(parsed)]
+                    except Exception:
+                        display_names = [row["display_names"]]
+
+                created_at = None
+                if row["created_at"]:
+                    try:
+                        created_at = datetime.fromisoformat(row["created_at"])
+                    except Exception:
+                        try:
+                            created_at = datetime.fromtimestamp(float(row["created_at"]))
+                        except Exception:
+                            created_at = None
+
+                users.append(UserInfo(
+                    discord_id=str(row["discord_id"]),
+                    discord_name=row["discord_name"] or "",
+                    display_names=display_names,
+                    procedural_memory=row["procedural_memory"],
+                    user_background=row["user_background"],
+                    created_at=created_at,
+                ))
+            return users
+        except Exception as e:
+            await func.report_error(e, "get_all_users failed")
+            return []
+
+    async def get_users_count(self) -> int:
+        """Return total number of users in the database."""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.execute("SELECT COUNT(*) as count FROM users")
+                row = cursor.fetchone()
+                return int(row["count"]) if row else 0
+        except Exception as e:
+            await func.report_error(e, "get_users_count failed")
+            return 0
+
     async def get_config(self, key: str) -> Optional[str]:
         try:
             with self.db.get_connection() as conn:
