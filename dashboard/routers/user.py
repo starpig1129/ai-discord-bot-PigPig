@@ -31,6 +31,10 @@ router = APIRouter(prefix="/api/user", tags=["user"])
 _PROCEDURAL_DB = Path(ROOT_DIR) / "data" / "memory" / "procedural.db"
 _EPISODIC_DB   = Path(ROOT_DIR) / "data" / "memory" / "episodic.db"
 
+from addons.settings import memory_config
+from qdrant_client import QdrantClient
+from qdrant_client.models import Filter, FieldCondition, MatchAny
+
 
 # ── Personal Statistics ───────────────────────────────────────────────
 
@@ -282,9 +286,49 @@ async def get_episodic_memory(
             record["top_channels"] = {}
         records.append(record)
 
+    # Enrichment: Fetch episodic fragments from Qdrant for this user
+    fragments = []
+    if memory_config.enabled and memory_config.vector_store_type == "qdrant":
+        try:
+            client = QdrantClient(
+                url=memory_config.qdrant_url, 
+                api_key=memory_config.qdrant_api_key
+            )
+            
+            # Filter by user_id in metadata.author_ids (Qdrant stores this inside a metadata object in payload)
+            points, _ = client.scroll(
+                collection_name=memory_config.qdrant_collection_name,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(key="metadata.author_ids", match=MatchAny(any=[str(user_id)]))
+                    ]
+                ),
+                limit=100,
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            for p in points:
+                payload = p.payload or {}
+                metadata = payload.get("metadata", {})
+                # The payload contains a 'metadata' dict when using LangChain Qdrant
+                fragments.append({
+                    "id": metadata.get("fragment_id", str(p.id)),
+                    "content": metadata.get("summary", payload.get("page_content", "")),
+                    "timestamp": metadata.get("end_timestamp") or metadata.get("timestamp"),
+                    "guild_id": metadata.get("guild_id"),
+                    "channel_id": metadata.get("channel_id"),
+                })
+            
+            fragments.sort(key=lambda x: x.get("timestamp") or 0, reverse=True)
+            
+        except Exception as exc:
+            log.error(f"Qdrant fragments read failed for user {user_id}: {exc}")
+
     return JSONResponse({
         "user_id": user_id,
         "records": records,
+        "fragments": fragments,
         "total": total,
         "limit": limit,
         "offset": offset,

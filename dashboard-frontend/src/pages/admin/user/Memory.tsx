@@ -18,12 +18,21 @@ interface EpisodicRecord {
   channel_memories: Record<string, string>;
 }
 
+interface MemoryFragment {
+  id: string;
+  content: string;
+  timestamp?: number;
+  guild_id?: string;
+  channel_id?: string;
+}
+
 export default function UserMemory() {
   const { t } = useTranslation();
   const [procedural, setProcedural] = useState<ProceduralData | null>(null);
   const [episodic, setEpisodic] = useState<EpisodicRecord[]>([]);
+  const [fragments, setFragments] = useState<MemoryFragment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'procedural' | 'episodic'>('procedural');
+  const [tab, setTab] = useState<'procedural' | 'episodic' | 'fragments'>('procedural');
   const [deletingGuild, setDeletingGuild] = useState<string | null>(null);
 
   const fetchData = async (isInitial = false) => {
@@ -35,6 +44,7 @@ export default function UserMemory() {
       ]);
       setProcedural(p.data);
       setEpisodic(e.data.records);
+      setFragments(e.data.fragments || []);
     } catch {
       // errors handled by layout or silently
     } finally {
@@ -59,7 +69,7 @@ export default function UserMemory() {
     <div>
       {/* Tab switcher */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
-        {(['procedural', 'episodic'] as const).map(t_name => (
+        {(['procedural', 'episodic', 'fragments'] as const).map(t_name => (
           <button
             key={t_name}
             onClick={() => setTab(t_name)}
@@ -72,7 +82,7 @@ export default function UserMemory() {
               cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
             }}
           >
-            {t(`user.${t_name}Memory`)}
+            {t_name === 'fragments' ? t('user.episodicFragments') : t(`user.${t_name}Memory`)}
           </button>
         ))}
       </div>
@@ -231,6 +241,49 @@ export default function UserMemory() {
                   )}
                 </motion.div>
               )}
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'fragments' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {fragments.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+              {t('user.noEpisodicFragments')}
+            </div>
+          ) : fragments.map((frag: MemoryFragment) => (
+            <motion.div
+              key={frag.id}
+              className="glass-card"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              style={{ padding: '1rem' }}
+            >
+              <div style={{ 
+                fontSize: '0.875rem', 
+                lineHeight: 1.6, 
+                color: 'var(--color-text-secondary)',
+                whiteSpace: 'pre-wrap'
+              }}>
+                {frag.content}
+              </div>
+              <div style={{ 
+                marginTop: '0.75rem', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                fontSize: '0.75rem',
+                color: 'var(--color-text-muted)'
+              }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {frag.guild_id && <span>📍 {frag.guild_id}</span>}
+                  {frag.channel_id && <span># {frag.channel_id}</span>}
+                </div>
+                {frag.timestamp && (
+                  <span>{new Date(frag.timestamp * 1000).toLocaleString()}</span>
+                )}
+              </div>
             </motion.div>
           ))}
         </div>
