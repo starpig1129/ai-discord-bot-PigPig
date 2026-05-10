@@ -23,17 +23,27 @@ export default function UserMemory() {
   const [episodic, setEpisodic] = useState<EpisodicRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'procedural' | 'episodic'>('procedural');
+  const [deletingGuild, setDeletingGuild] = useState<string | null>(null);
 
-  useEffect(() => {
-    Promise.all([
-      api.get('/api/user/memory/procedural'),
-      api.get('/api/user/memory/episodic?limit=20'),
-    ]).then(([p, e]) => {
+  const fetchData = async () => {
+    try {
+      const [p, e] = await Promise.all([
+        api.get('/api/user/memory/procedural'),
+        api.get('/api/user/memory/episodic?limit=20'),
+      ]);
       setProcedural(p.data);
       setEpisodic(e.data.records);
-    }).catch(() => {})
-      .finally(() => setLoading(false));
+    } catch {
+      // errors handled by layout or silently
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
   }, []);
+
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
@@ -112,13 +122,43 @@ export default function UserMemory() {
               style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
             >
               <div>
-                <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{rec.guild_name || rec.guild_id}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{rec.guild_name || rec.guild_id}</p>
+                  <button
+                    disabled={deletingGuild === rec.guild_id}
+                    onClick={async () => {
+                      if (!confirm(`Delete episodic memory for guild ${rec.guild_id}?`)) return;
+                      setDeletingGuild(rec.guild_id);
+                      try {
+                        await api.delete(`/api/user/memory/episodic/${rec.guild_id}`);
+                        fetchData();
+                      } catch {
+                        alert('Delete failed');
+                      } finally {
+                        setDeletingGuild(null);
+                      }
+                    }}
+                    style={{
+                      padding: '0.2rem 0.5rem',
+                      fontSize: '0.7rem',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid rgba(244,63,94,0.3)',
+                      background: 'rgba(244,63,94,0.08)',
+                      color: '#f43f5e',
+                      cursor: 'pointer',
+                      opacity: deletingGuild === rec.guild_id ? 0.5 : 1,
+                    }}
+                  >
+                    {deletingGuild === rec.guild_id ? '...' : '🗑️'}
+                  </button>
+                </div>
                 {rec.last_active_at && (
                   <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.125rem' }}>
                     {t('user.lastActive')}: {new Date(rec.last_active_at).toLocaleDateString()}
                   </p>
                 )}
               </div>
+
               <div style={{ textAlign: 'right' }}>
                 <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{rec.total_messages.toLocaleString()} {t('stats.totalMessages').toLowerCase()}</p>
                 <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.125rem' }}>
