@@ -78,3 +78,19 @@ async def test_episodic_get_total_count():
     finally:
         os.unlink(db_path)
 
+# ---------- SQLiteUserManager tests ----------
+
+@pytest.mark.asyncio
+async def test_user_manager_get_all_users():
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+    try:
+        storage = _make_storage(db_path)
+        await _seed_users(storage, 4)
+        from cogs.memory.users.manager import SQLiteUserManager
+        manager = SQLiteUserManager(storage)
+        users = await manager.get_all_users()
+        assert len(users) == 4
+        assert all(hasattr(u, "discord_id") for u in users)
+    finally:
+        os.unlink(db_path)

@@ -146,6 +146,26 @@ class SQLiteUserManager:
             await func.report_error(e, f"Failed to search users (pattern: {name_pattern})")
             return []
 
+    async def get_all_users(self, limit: int = 500, offset: int = 0) -> List[UserInfo]:
+        """Return all users from storage; delegates to storage.get_all_users if available."""
+        try:
+            if hasattr(self.storage, "get_all_users"):
+                return await self.storage.get_all_users(limit=limit, offset=offset)
+            return []
+        except Exception as e:
+            await func.report_error(e, "SQLiteUserManager.get_all_users failed")
+            return []
+
+    async def get_users_count(self) -> int:
+        """Return total user count from storage."""
+        try:
+            if hasattr(self.storage, "get_users_count"):
+                return await self.storage.get_users_count()
+            return 0
+        except Exception as e:
+            await func.report_error(e, "SQLiteUserManager.get_users_count failed")
+            return 0
+
     async def get_user_statistics(self) -> Dict[str, Any]:
         """Return statistics; delegate to storage if available otherwise return cache-based stats."""
         try:
