@@ -55,16 +55,23 @@ class SQLiteUserManager:
 
         if uncached:
             try:
-                coros = [self.storage.get_user_info(uid) for uid in uncached]
-                rows = await asyncio.gather(*coros, return_exceptions=True)
-                for uid, row in zip(uncached, rows):
-                    if isinstance(row, Exception):
-                        await func.report_error(row, f"get_user_info failed for {uid}")
-                        continue
-                    if isinstance(row, UserInfo):
+                if hasattr(self.storage, "get_users_info"):
+                    fetched = await self.storage.get_users_info(uncached)
+                    for uid, row in fetched.items():
                         result[uid] = row
                         if use_cache:
                             self._update_cache(uid, row)
+                else:
+                    coros = [self.storage.get_user_info(uid) for uid in uncached]
+                    rows = await asyncio.gather(*coros, return_exceptions=True)
+                    for uid, row in zip(uncached, rows):
+                        if isinstance(row, Exception):
+                            await func.report_error(row, f"get_user_info failed for {uid}")
+                            continue
+                        if isinstance(row, UserInfo):
+                            result[uid] = row
+                            if use_cache:
+                                self._update_cache(uid, row)
             except Exception as e:
                 await func.report_error(e, "Failed to retrieve multiple users")
         return result
