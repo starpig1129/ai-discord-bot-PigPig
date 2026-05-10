@@ -13,6 +13,7 @@ interface GuildStatsData {
   llm_calls: number;
   avg_response_ms: number;
   daily_messages: { date: string; count: number }[];
+  accurate_total_messages?: number;
 }
 
 interface GuildContext {
@@ -34,7 +35,11 @@ export default function GuildStats() {
   }, [guildId, period]);
 
   const cards = data ? [
-    { label: t('stats.totalMessages'), value: (data.total_messages).toLocaleString(), icon: '💬' },
+    { 
+      label: period === 'all' ? t('stats.totalMessages') : `${t('stats.totalMessages')} (${period})`, 
+      value: (data.total_messages).toLocaleString(), 
+      icon: '💬' 
+    },
     { label: t('guild.activeUsers'), value: data.active_users.toLocaleString(), icon: '👥' },
     { label: 'LLM Calls', value: data.llm_calls.toLocaleString(), icon: '🤖' },
     { label: t('stats.avgResponse'), value: `${data.avg_response_ms}ms`, icon: '⚡' },
@@ -45,7 +50,7 @@ export default function GuildStats() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>📈 {t('guild.stats')}</h2>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {['7d', '30d', '90d'].map(p => (
+          {['7d', '30d', '90d', 'all'].map(p => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
@@ -57,7 +62,7 @@ export default function GuildStats() {
                 color: period === p ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
                 cursor: 'pointer', fontSize: '0.8125rem',
               }}
-            >{p}</button>
+            >{p === 'all' ? t('stats.periodAll') : p}</button>
           ))}
         </div>
       </div>
@@ -110,6 +115,9 @@ export default function GuildStats() {
                 <Area type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} fill="url(#guildGrad)" />
               </AreaChart>
             </ResponsiveContainer>
+            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1rem', textAlign: 'right' }}>
+              {t('dashboard.accurateTotal')}: {data?.accurate_total_messages?.toLocaleString() || 0}
+            </p>
           </motion.div>
         </>
       )}

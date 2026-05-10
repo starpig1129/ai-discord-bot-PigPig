@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import time
 from typing import Any, List, MutableMapping, Optional
 import re
 
@@ -145,12 +146,14 @@ class Orchestrator:
                 cache_ttl=memory_config.episodic_cache_ttl
             )
 
+        self.bot = bot
         self.context_manager = ContextManager(
             short_term_provider=short_term_provider,
             procedural_provider=procedural_provider,
             episodic_provider=episodic_provider,
             knowledge_provider=knowledge_provider,
         )
+
 
     def _build_info_agent_prompt(self, bot_id: int, message: Message) -> str:
         """
@@ -580,6 +583,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         sanitized_messages = await self._sanitize_messages_for_model(messages_for_info_agent, current_info_model, image_cache)
 
                         # Execute info_agent to process user message and tools
+                        call_start = time.time()
                         info_result = await asyncio.wait_for(
                             info_agent.ainvoke(
                                 {"messages": sanitized_messages},
@@ -587,6 +591,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             ),
                             timeout=_LLM_CALL_TIMEOUT_SECONDS,
                         )
+                        await self._record_llm_stats(guild_id, current_info_model, call_start, success=True)
                         
                         # Success!
                         if models_tried > 1:
@@ -717,6 +722,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         remaining_models = [m for m in model_priority_list[model_index + 1:] if circuit_breaker.is_available(m)]
                         is_last_available = len(remaining_models) == 0
                         
+                        call_start = time.time()
                         message_result = await asyncio.wait_for(
                             send_message(
                                 bot,
@@ -729,6 +735,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             ),
                             timeout=180.0,  # Much larger total safety timeout
                         )
+                        await self._record_llm_stats(guild_id, current_model, call_start, success=True)
                         
                         # Success!
                         if models_tried > 1:

@@ -42,22 +42,29 @@ export default function Stats() {
   }
 
   const periodLabels: Record<string, string> = {
-    '7d': t('stats.period7'), '30d': t('stats.period30'), '90d': t('stats.period90'),
+    '7d': t('stats.period7'), 
+    '30d': t('stats.period30'), 
+    '90d': t('stats.period90'),
+    'all': t('stats.periodAll'),
   };
-  const summaryCards = [
-    { label: t('stats.totalMessages'), value: (globalStats?.total_messages ?? 0).toLocaleString(), icon: '💬' },
+  const summaryCards = globalStats ? [
+    { 
+      label: period === 'all' ? t('stats.totalMessages') : `${t('stats.totalMessages')} (${period})`, 
+      value: (globalStats?.total_messages ?? 0).toLocaleString(), 
+      icon: '💬' 
+    },
     { label: 'LLM Calls',             value: (globalStats?.total_llm_calls ?? 0).toLocaleString(), icon: '🤖' },
     { label: 'Commands',              value: (globalStats?.total_commands ?? 0).toLocaleString(), icon: '⌨️' },
     { label: 'Error Rate',            value: `${globalStats?.error_rate ?? 0}%`, icon: '⚠️' },
     { label: t('stats.avgResponse'),  value: `${globalStats?.avg_response_ms ?? 0}${t('stats.ms')}`, icon: '⚡' },
-  ];
+  ] : [];
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>📈 {t('stats.title')}</h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {['7d', '30d', '90d'].map((p) => (
+          {['7d', '30d', '90d', 'all'].map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}

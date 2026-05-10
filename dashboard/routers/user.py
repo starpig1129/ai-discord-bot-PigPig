@@ -44,104 +44,34 @@ async def user_stats(
     period: str = "30d",
     user: dict[str, Any] = Depends(get_current_user),
 ) -> JSONResponse:
-    """Return personal usage statistics for the authenticated user.
-
-    Integrates real-time events from StatsCollector with accurate cumulative
-    data from the procedural memory database (which includes historical logs).
-
-    Args:
-        request: FastAPI request.
-        period: Time window — "7d", "30d", "90d", or "all".
-        user: Authenticated user payload (JWT).
-
-    Returns:
-        JSON with total messages, commands, and per-guild/channel breakdown.
-    """
+    """Return personal usage statistics for the authenticated user."""
     user_id: str = user["sub"]
     stats_collector = request.app.state.stats_collector
+    bot = request.app.state.bot
 
-    # 1. Fetch time-windowed data from StatsCollector (recent trends)
     try:
         data = await stats_collector.get_user_stats(user_id, period)
-    except Exception as exc:
-        log.warning(f"StatsCollector query failed for {user_id}: {exc}")
-        data = {
-            "user_id": user_id,
-            "period": period,
-            "total_messages": 0,
-            "total_commands": 0,
-            "guild_breakdown": [],
-        }
+        
+        # Resolve guild names
+        for g_entry in data.get("guild_breakdown", []):
+            guild = bot.get_guild(int(g_entry["guild_id"]))
+            g_entry["guild_name"] = guild.name if guild else f"Unknown ({g_entry['guild_id']})"
 
-    # 2. Fetch accurate cumulative data from procedural.db
-    # This is the "source of truth" for total message counts.
-    accurate_total_messages = 0
-    channel_list = [] # List of {guild_id, channel_name, messages}
+        # Resolve channel names
+        for c_entry in data.get("channel_breakdown", []):
+            channel = bot.get_channel(int(c_entry["channel_id"]))
+            if channel:
+                c_entry["channel_name"] = channel.name
+                c_entry["guild_name"] = channel.guild.name if hasattr(channel, "guild") else "Unknown"
+            else:
+                c_entry["channel_name"] = f"Unknown ({c_entry['channel_id']})"
+                guild = bot.get_guild(int(c_entry["guild_id"]))
+                c_entry["guild_name"] = guild.name if guild else "Unknown"
 
-    if _PROCEDURAL_DB.exists():
-        try:
-            async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
-                db.row_factory = aiosqlite.Row
-                cursor = await db.execute(
-                    "SELECT guild_id, total_messages, top_channels FROM user_stats WHERE user_id = ?",
-                    (user_id,),
-                )
-                rows = await cursor.fetchall()
-                for row in rows:
-                    gid = row["guild_id"]
-                    accurate_total_messages += row["total_messages"]
-                    try:
-                        tc = json.loads(row["top_channels"] or "{}")
-                        for cname, count in tc.items():
-                            channel_list.append({
-                                "guild_id": gid,
-                                "channel_name": cname,
-                                "messages": count
-                            })
-                    except:
-                        continue
-        except Exception as e:
-            log.warning(f"Failed to fetch accurate stats from procedural.db: {e}")
-
-    # 3. Merge data
-    # If period is "all", we use the accurate total.
-    # Otherwise, we keep the StatsCollector's windowed total but provide the accurate one as a reference.
-    if period == "all":
-        data["total_messages"] = accurate_total_messages
-        # For "all", we also need to rebuild guild_breakdown from procedural.db
-        # (StatsCollector only has recent guild activity)
-        try:
-            async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
-                db.row_factory = aiosqlite.Row
-                cursor = await db.execute(
-                    "SELECT guild_id, total_messages FROM user_stats WHERE user_id = ? ORDER BY total_messages DESC",
-                    (user_id,),
-                )
-                data["guild_breakdown"] = [
-                    {"guild_id": r["guild_id"], "messages": r["total_messages"]}
-                    for r in await cursor.fetchall()
-                ]
-        except:
-            pass
-    
-    # Always include accurate total and channel breakdown
-    data["accurate_total_messages"] = accurate_total_messages
-    
-    # 4. Enrich breakdowns with names from bot state
-    bot = request.app.state.bot
-    # Guild names enrichment
-    for entry in data.get("guild_breakdown", []):
-        guild = bot.get_guild(int(entry["guild_id"]))
-        entry["guild_name"] = guild.name if guild else entry["guild_id"]
-    
-    # Channel list enrichment
-    for entry in channel_list:
-        guild = bot.get_guild(int(entry["guild_id"]))
-        entry["guild_name"] = guild.name if guild else entry["guild_id"]
-    
-    data["channel_breakdown"] = sorted(channel_list, key=lambda x: x["messages"], reverse=True)
-
-    return JSONResponse(data)
+        return JSONResponse(data)
+    except Exception as e:
+        log.error(f"User stats error for {user_id}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # ── Procedural Memory ─────────────────────────────────────────────────

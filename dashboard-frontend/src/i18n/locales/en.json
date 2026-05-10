@@ -46,7 +46,10 @@
     "period": "Period",
     "period7": "Last 7 days",
     "period30": "Last 30 days",
-    "period90": "Last 90 days"
+    "period90": "Last 90 days",
+    "periodAll": "All Time",
+    "accurateTotal": "Accurate Total Messages",
+    "totalMessagesAccurate": "Cumulative Total Messages"
   },
   "config": {
     "title": "Configuration",
@@ -190,9 +193,12 @@
     "background": "User Background",
     "noMemory": "No memory data found",
     "lastActive": "Last Active",
-    "streakDays": "streak days",
+    "streakDays": "Streak Days",
+    "commands": "Commands Used",
+    "channelStats": "Per-Channel Stats",
     "guildBreakdown": "Per-Server Breakdown",
     "noActivity": "No activity in this period",
+    "noChannelData": "No channel activity data found",
     "deleteTitle": "Delete Personal Data",
     "deleteDescription": "This will permanently delete all your memory data across all servers. This action cannot be undone.",
     "deleteWillRemove": "The following data will be deleted",
@@ -203,9 +209,7 @@
     "deleteSuccess": "Data successfully deleted",
     "deleteFailed": "Deletion failed, please try again",
     "redirecting": "Redirecting in 3 seconds...",
-    "channelStats": "Channel Activity Stats",
-    "noChannelData": "No channel activity data found",
-    "commands": "Commands Sent"
+    "commandsSent": "Commands Sent"
   },
   "admin": {
     "usersTitle": "User Management",

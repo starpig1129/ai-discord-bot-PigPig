@@ -875,14 +875,7 @@ async def guild_stats(
     stats = _get_stats(request)
     try:
         data = await stats.get_guild_stats(guild_id, period)
-    except Exception as exc:
-        log.warning(f"Guild stats query failed for {guild_id}: {exc}")
-        data = {
-            "total_messages": 0,
-            "total_llm_calls": 0,
-            "total_commands": 0,
-            "active_users": 0,
-            "daily_messages": [],
-        }
-
-    return JSONResponse({"guild_id": guild_id, "period": period, **data})
+        return JSONResponse(data)
+    except Exception as e:
+        log.error(f"Guild stats error for {guild_id}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)

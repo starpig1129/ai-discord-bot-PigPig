@@ -10,7 +10,7 @@ interface UserPortalProps {
 const USER_NAV = [
   { to: '/me', label: 'user.profile', icon: '👤', end: true },
   { to: '/me/stats', label: 'user.stats', icon: '📊', end: false },
-  { to: '/me/memory', label: 'user.memory', icon: '🧠', end: false },
+  { to: '/me/memory', label: 'user.proceduralMemory', icon: '🧠', end: false },
   { to: '/me/delete', label: 'user.deleteData', icon: '🗑️', end: false },
 ];
 

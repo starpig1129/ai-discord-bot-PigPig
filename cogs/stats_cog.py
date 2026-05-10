@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -102,8 +103,7 @@ class StatsCog(commands.Cog):
             )
             content = message.content or ""
 
-            # Use asyncio.shield to prevent task cancellation from
-            # interrupting the DB write mid-transaction
+            # 1) Update cumulative stats in procedural.db
             await asyncio.shield(
                 self.stats_storage.upsert_user_stats(
                     user_id=user_id,
@@ -113,6 +113,15 @@ class StatsCog(commands.Cog):
                     timestamp=timestamp,
                 )
             )
+
+            # 2) Update event stats in stats.db for dashboard trends
+            if hasattr(self.bot, "stats_collector"):
+                await self.bot.stats_collector.record_message(
+                    guild_id=guild_id,
+                    user_id=user_id,
+                    channel_id=str(message.channel.id)
+                )
+
         except Exception as e:
             # Non-critical: log and continue; do not break message flow
             logger.warning(
@@ -124,22 +133,21 @@ class StatsCog(commands.Cog):
     # ------------------------------------------------------------------
 
     async def _migrate_logs_background(self) -> None:
-        """Ingest historical NDJSON log files into user_stats.
+        """Ingest historical NDJSON log files into user_stats and stats.db.
 
         Processes logs/{guild_id}/{YYYYMMDD}/info.jsonl files that have
         not been processed yet (tracked via log_migration_state table).
-
-        Performance safeguards:
-        - Reads NDJSON line-by-line (no full file loads)
-        - Commits every 500 records
-        - Yields event loop every batch (asyncio.sleep(0))
-        - Sleeps 30s between each day directory
         """
         if not self.stats_storage:
             return
 
         # Wait for bot to be fully ready before starting migration
         await self.bot.wait_until_ready()
+        
+        # Ensure StatsCollector is initialized
+        if hasattr(self.bot, "stats_collector"):
+            await self.bot.stats_collector.initialize()
+
         # Small initial delay to avoid competing with startup I/O
         await asyncio.sleep(10)
 
@@ -219,7 +227,9 @@ class StatsCog(commands.Cog):
             )
 
             batch_count = 0
-            batch_records = []
+            batch_cumulative = []
+            batch_events = []
+            
             try:
                 with open(jsonl_path, "r", encoding="utf-8") as fh:
                     for line in fh:
@@ -241,48 +251,53 @@ class StatsCog(commands.Cog):
                             continue
 
                         channel_name = record.get("channel_or_file", "unknown")
-                        timestamp = record.get(
+                        channel_id = str(record.get("extra", {}).get("channel_id", "0"))
+                        timestamp_str = record.get(
                             "timestamp",
                             datetime.now(timezone.utc).isoformat(),
                         )
                         content = record.get("message", "")
 
-                        batch_records.append({
+                        # Cumulative stats record
+                        batch_cumulative.append({
                             "user_id": user_id,
                             "guild_id": guild_id,
                             "message_content": content,
                             "channel_name": channel_name,
-                            "timestamp": timestamp,
+                            "timestamp": timestamp_str,
                         })
+
+                        # Event stats record (for trends)
+                        try:
+                            dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                            ts_float = dt.timestamp()
+                        except Exception:
+                            ts_float = time.time()
+                        
+                        batch_events.append((guild_id, user_id, channel_id, ts_float))
 
                         batch_count += 1
                         processed_count += 1
 
                         # Yield event loop every 500 records
-                        if len(batch_records) >= 500:
-                            await self.stats_storage.bulk_upsert_user_stats(batch_records)
-                            batch_records.clear()
-                            await asyncio.sleep(0)
-                            logger.debug(
-                                "Migration progress: guild=%s date=%s "
-                                "processed=%d",
-                                guild_id,
-                                date_str,
-                                batch_count,
-                            )
+                        if len(batch_cumulative) >= 500:
+                            await self.stats_storage.bulk_upsert_user_stats(batch_cumulative)
+                            if hasattr(self.bot, "stats_collector"):
+                                await self.bot.stats_collector.bulk_record_messages(batch_events)
                             
+                            batch_cumulative.clear()
+                            batch_events.clear()
+                            await asyncio.sleep(0)
+
                     # Process any remaining records
-                    if batch_records:
-                        await self.stats_storage.bulk_upsert_user_stats(batch_records)
-                        batch_records.clear()
+                    if batch_cumulative:
+                        await self.stats_storage.bulk_upsert_user_stats(batch_cumulative)
+                        if hasattr(self.bot, "stats_collector"):
+                            await self.bot.stats_collector.bulk_record_messages(batch_events)
 
             except Exception as e:
-                logger.error(
-                    "Error reading %s: %s", jsonl_path, e
-                )
-                await func.report_error(
-                    e, f"Log migration read error: {jsonl_path}"
-                )
+                logger.error("Error reading %s: %s", jsonl_path, e)
+                await func.report_error(e, f"Log migration read error: {jsonl_path}")
                 continue
 
             # Mark this date as processed
@@ -306,9 +321,5 @@ class StatsCog(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    """Register StatsCog with the bot.
-
-    Args:
-        bot: The Discord bot instance.
-    """
+    """Register StatsCog with the bot."""
     await bot.add_cog(StatsCog(bot))

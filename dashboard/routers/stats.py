@@ -8,8 +8,14 @@ from fastapi.responses import JSONResponse
 from addons.logging import get_logger
 from dashboard.middleware.permission import require_owner, require_admin, get_current_user
 
+import aiosqlite
+from pathlib import Path
+from function import ROOT_DIR
+
 log = get_logger(server_id="Bot", source=__name__)
 router = APIRouter(prefix="/api", tags=["stats"])
+
+_PROCEDURAL_DB = Path(ROOT_DIR) / "data" / "memory" / "procedural.db"
 
 
 def _get_stats(request: Request):
@@ -89,13 +95,4 @@ async def guild_stats(
     return JSONResponse(data)
 
 
-@router.get("/user/stats")
-async def user_stats(
-    request: Request,
-    period: str = Query(default="30d"),
-    user: dict = Depends(get_current_user),
-) -> JSONResponse:
-    """Personal usage statistics for the logged-in user."""
-    stats = _get_stats(request)
-    data = await stats.get_user_stats(user["sub"], period)
-    return JSONResponse(data)
+

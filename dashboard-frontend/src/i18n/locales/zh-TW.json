@@ -46,7 +46,10 @@
     "period": "時間範圍",
     "period7": "近 7 天",
     "period30": "近 30 天",
-    "period90": "近 90 天"
+    "period90": "最近 90 天",
+    "periodAll": "全部時間",
+    "accurateTotal": "精確累積總量",
+    "totalMessagesAccurate": "累積訊息總量"
   },
   "config": {
     "title": "設定管理",
@@ -191,8 +194,11 @@
     "noMemory": "目前沒有記憶資料",
     "lastActive": "最後活躍",
     "streakDays": "連續天數",
+    "commands": "指令使用數",
+    "channelStats": "各頻道詳情",
     "guildBreakdown": "各伺服器詳情",
     "noActivity": "此時段無活動記錄",
+    "noChannelData": "此時段無頻道活動記錄",
     "deleteTitle": "刪除個人資料",
     "deleteDescription": "此操作將永久刪除您在所有伺服器的記憶資料，無法復原。",
     "deleteWillRemove": "將刪除以下資料",
@@ -202,10 +208,7 @@
     "confirmDelete": "確認刪除",
     "deleteSuccess": "資料已成功刪除",
     "deleteFailed": "刪除失敗，請稍後再試",
-    "redirecting": "3 秒後將自動登出...",
-    "channelStats": "頻道活躍統計",
-    "noChannelData": "尚無頻道活動數據",
-    "commands": "指令發送數"
+    "redirecting": "3 秒後將自動登出..."
   },
   "admin": {
     "usersTitle": "使用者管理",

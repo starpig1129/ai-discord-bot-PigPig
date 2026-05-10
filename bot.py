@@ -101,6 +101,10 @@ class PigPig(commands.Bot):
         self.state_manager = StateManager()
         self.ui_manager = UIManager(self)
 
+        # Statistics Subsystem
+        from dashboard.services.stats_collector import StatsCollector
+        self.stats_collector = StatsCollector()
+
         # Memory subsystem (instantiate only when enabled)
         if getattr(memory_config, "enabled", True):
             # lazy import to avoid loading memory modules when disabled
@@ -119,18 +123,18 @@ class PigPig(commands.Bot):
             # assign storages explicitly
             self.procedural_storage = ProceduralStorage(db_conn_procedural)
             self.episodic_storage = EpisodicStorage(db_conn_episodic)
- 
+
             # Initialize managers/services with the appropriate storage
             self.user_manager = SQLiteUserManager(storage=self.procedural_storage)
             self.vector_manager = VectorManager(bot=self, settings=memory_config)
             self.message_tracker = MessageTracker(bot=self, storage=self.episodic_storage, settings=memory_config)
         else:
             # keep attributes for compatibility but do not initialize subsystems
-            self.storage = None
+            self.procedural_storage = None
+            self.episodic_storage = None
             self.user_manager = None
-            self.db_manager = None
-            self.message_tracker = None
             self.vector_manager = None
+            self.message_tracker = None
         
         self.status_cycle = cycle([
             (discord.ActivityType.listening, "大家的聲音"),
@@ -425,8 +429,6 @@ class PigPig(commands.Bot):
                     logger.error(f"Failed to load {module[:-3]}", exception=e)
                     logger.error(traceback.format_exc())
 
-        # Initialize core services
-        self.orchestrator = Orchestrator(self)
         # Provide running event loop to storage (for thread-safe coroutine submission) if supported.
         if getattr(memory_config, "enabled", True) and getattr(self, "storage", None):
             try:
@@ -608,6 +610,7 @@ class PigPig(commands.Bot):
         logger.error(traceback.format_exc())
 
         await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
+
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         """Handle errors in command execution.

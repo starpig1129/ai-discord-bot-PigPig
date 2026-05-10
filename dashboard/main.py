@@ -51,7 +51,7 @@ def create_app(bot: "PigPig") -> FastAPI:
 
     # ── Attach bot + services to app state ────────────────────────────
     app.state.bot = bot
-    app.state.stats_collector = StatsCollector()
+    app.state.stats_collector = bot.stats_collector
 
     # ── CORS ──────────────────────────────────────────────────────────
     dashboard_cfg = getattr(base_config, "dashboard", {}) or {}

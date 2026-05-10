@@ -9,31 +9,23 @@ interface ProceduralData {
   display_names: string[];
 }
 
-interface ProceduralData {
-  procedural_memory: string | null;
-  user_background: string | null;
-  display_names: string[];
-}
-
 export default function UserMemory() {
   const { t } = useTranslation();
   const [procedural, setProcedural] = useState<ProceduralData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = async (isInitial = false) => {
-    if (!isInitial) setLoading(true);
-    try {
-      const p = await api.get('/api/user/memory/procedural');
-      setProcedural(p.data);
-    } catch {
-      // errors handled by layout or silently
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchData(true);
+    const fetchData = async () => {
+      try {
+        const p = await api.get('/api/user/memory/procedural');
+        setProcedural(p.data);
+      } catch {
+        // errors handled by layout or silently
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
   if (loading) return (
