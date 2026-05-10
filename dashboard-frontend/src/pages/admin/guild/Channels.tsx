@@ -159,7 +159,16 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
           {/* Whitelist */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <motion.div 
+            onClick={() => { if (savingField !== 'in_whitelist') toggleField('in_whitelist'); }}
+            whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.04)' }}
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              cursor: savingField === 'in_whitelist' ? 'default' : 'pointer',
+              padding: '0.625rem 0.75rem', margin: '-0.625rem -0.75rem', borderRadius: 'var(--radius-md)',
+              transition: 'background 0.2s'
+            }}
+          >
             <div>
               <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{t('guild.whitelist')}</p>
               <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
@@ -172,12 +181,21 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
               onChange={() => toggleField('in_whitelist')}
               color="var(--color-accent-emerald)"
             />
-          </div>
+          </motion.div>
 
           <div style={{ height: 1, background: 'var(--color-border)' }} />
 
           {/* Blacklist */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <motion.div 
+            onClick={() => { if (savingField !== 'in_blacklist') toggleField('in_blacklist'); }}
+            whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.04)' }}
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              cursor: savingField === 'in_blacklist' ? 'default' : 'pointer',
+              padding: '0.625rem 0.75rem', margin: '-0.625rem -0.75rem', borderRadius: 'var(--radius-md)',
+              transition: 'background 0.2s'
+            }}
+          >
             <div>
               <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{t('guild.blacklist')}</p>
               <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
@@ -190,12 +208,21 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
               onChange={() => toggleField('in_blacklist')}
               color="var(--color-accent-rose)"
             />
-          </div>
+          </motion.div>
 
           <div style={{ height: 1, background: 'var(--color-border)' }} />
 
           {/* Auto response */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <motion.div 
+            onClick={() => { if (savingField !== 'auto_response') toggleField('auto_response'); }}
+            whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.04)' }}
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              cursor: savingField === 'auto_response' ? 'default' : 'pointer',
+              padding: '0.625rem 0.75rem', margin: '-0.625rem -0.75rem', borderRadius: 'var(--radius-md)',
+              transition: 'background 0.2s'
+            }}
+          >
             <div>
               <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{t('guild.autoResponse')}</p>
               <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
@@ -208,7 +235,7 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
               onChange={() => toggleField('auto_response')}
               color="var(--color-accent-blue)"
             />
-          </div>
+          </motion.div>
         </div>
       </div>
 
@@ -227,7 +254,15 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <motion.div 
+              onClick={togglePromptEnabled}
+              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.04)' }}
+              style={{ 
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                cursor: 'pointer', padding: '0.625rem 0.75rem', margin: '-0.625rem -0.75rem', borderRadius: 'var(--radius-md)',
+                transition: 'background 0.2s'
+              }}
+            >
               <div>
                 <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{t('guild.channelOverrideEnable')}</p>
                 <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
@@ -239,7 +274,7 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
                 onChange={togglePromptEnabled}
                 color="var(--color-accent-violet)"
               />
-            </div>
+            </motion.div>
 
             {promptEnabled && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
@@ -346,22 +381,23 @@ export default function GuildChannels() {
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             {MODES.map(mode => (
-              <button
+              <motion.button
                 key={mode}
                 onClick={() => updateGuildMode(mode)}
                 disabled={savingMode}
+                whileHover={!savingMode && data.guild_mode !== mode ? { backgroundColor: 'rgba(255, 255, 255, 0.05)' } : undefined}
                 style={{
                   padding: '0.4rem 0.75rem', textAlign: 'left',
                   borderRadius: 'var(--radius-sm)', border: '1px solid',
                   borderColor: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'transparent',
                   background: data.guild_mode === mode ? 'rgba(59,130,246,0.12)' : 'transparent',
                   color: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
-                  cursor: 'pointer', fontSize: '0.8125rem', fontWeight: data.guild_mode === mode ? 600 : 400,
+                  cursor: savingMode ? 'not-allowed' : 'pointer', fontSize: '0.8125rem', fontWeight: data.guild_mode === mode ? 600 : 400,
                   opacity: savingMode ? 0.7 : 1, transition: 'all 0.15s',
                 }}
               >
                 {data.guild_mode === mode ? '● ' : '○ '}{t(`guild.mode_${mode}`)}
-              </button>
+              </motion.button>
             ))}
           </div>
         </div>
