@@ -10,7 +10,15 @@ import Guilds from './pages/admin/Guilds';
 import Logs from './pages/admin/Logs';
 import Update from './pages/admin/Update';
 import GuildLayout from './pages/admin/GuildLayout';
+import GuildOverview from './pages/admin/guild/Overview';
+import GuildChannels from './pages/admin/guild/Channels';
+import GuildPrompt from './pages/admin/guild/Prompt';
+import GuildStats from './pages/admin/guild/GuildStats';
 import UserPortal from './pages/admin/UserPortal';
+import UserProfile from './pages/admin/user/Profile';
+import UserMemory from './pages/admin/user/Memory';
+import UserStatsPage from './pages/admin/user/UserStats';
+import DeleteData from './pages/admin/user/DeleteData';
 import { useAuth } from './hooks/useAuth';
 
 const queryClient = new QueryClient({
@@ -46,11 +54,21 @@ export default function App() {
             <Route path="/admin/logs" element={<Logs />} />
             <Route path="/admin/update" element={<Update />} />
 
-            {/* Server Admin routes — guild sub-pages */}
-            <Route path="/guild/:guildId/*" element={<GuildLayout />} />
+            {/* Server Admin routes — GuildLayout uses Outlet */}
+            <Route path="/guild/:guildId" element={<GuildLayout />}>
+              <Route index element={<GuildOverview />} />
+              <Route path="channels" element={<GuildChannels />} />
+              <Route path="prompt" element={<GuildPrompt />} />
+              <Route path="stats" element={<GuildStats />} />
+            </Route>
 
-            {/* General User routes */}
-            <Route path="/me/*" element={<UserPortalWrapper />} />
+            {/* General User routes — UserPortal uses Outlet */}
+            <Route path="/me" element={<UserPortalWrapper />}>
+              <Route index element={<UserProfile />} />
+              <Route path="stats" element={<UserStatsPage />} />
+              <Route path="memory" element={<UserMemory />} />
+              <Route path="delete" element={<DeleteData />} />
+            </Route>
           </Route>
 
           {/* Catch-all redirect */}

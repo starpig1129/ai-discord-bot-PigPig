@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useOutletContext } from 'react-router-dom';
 import api from '../../../lib/api';
 
 interface OverviewData {
@@ -12,12 +13,18 @@ interface OverviewData {
   system_prompt_enabled: boolean;
 }
 
-export default function GuildOverview({ guildId }: { guildId: string }) {
+interface GuildContext {
+  guildId: string;
+}
+
+export default function GuildOverview() {
+  const { guildId } = useOutletContext<GuildContext>();
   const { t } = useTranslation();
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     api.get(`/api/guild/${guildId}/overview`)
       .then(({ data }) => setData(data))
       .catch(() => {})

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useOutletContext } from 'react-router-dom';
 import api from '../../../lib/api';
 
 interface PromptData {
@@ -9,7 +10,12 @@ interface PromptData {
   prompt_name: string;
 }
 
-export default function GuildPrompt({ guildId }: { guildId: string }) {
+interface GuildContext {
+  guildId: string;
+}
+
+export default function GuildPrompt() {
+  const { guildId } = useOutletContext<GuildContext>();
   const { t } = useTranslation();
   const [data, setData] = useState<PromptData>({ enabled: false, prompt: '', prompt_name: '' });
   const [loading, setLoading] = useState(true);
@@ -17,6 +23,7 @@ export default function GuildPrompt({ guildId }: { guildId: string }) {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
+    setLoading(true);
     api.get(`/api/guild/${guildId}/prompt`)
       .then(({ data }) => setData(data))
       .catch(() => {})

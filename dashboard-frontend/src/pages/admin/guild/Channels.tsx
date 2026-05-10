@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useOutletContext } from 'react-router-dom';
 import api from '../../../lib/api';
 
 interface Channel {
@@ -19,23 +20,29 @@ interface ChannelData {
   channels: Channel[];
 }
 
+interface GuildContext {
+  guildId: string;
+}
+
 const MODES = ['unrestricted', 'whitelist', 'blacklist'];
 
-export default function GuildChannels({ guildId }: { guildId: string }) {
+export default function GuildChannels() {
+  const { guildId } = useOutletContext<GuildContext>();
   const { t } = useTranslation();
   const [data, setData] = useState<ChannelData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
 
-  const fetchChannels = () => {
-    setLoading(true);
+  const fetchChannels = useCallback(() => {
     api.get(`/api/guild/${guildId}/channels`)
       .then(({ data }) => setData(data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, [guildId]);
 
-  useEffect(() => { fetchChannels(); }, [guildId]);
+  useEffect(() => {
+    fetchChannels();
+  }, [fetchChannels]);
 
   const updateGuildMode = async (mode: string) => {
     setSaving('mode');
@@ -83,7 +90,7 @@ export default function GuildChannels({ guildId }: { guildId: string }) {
             <button
               key={mode}
               onClick={() => updateGuildMode(mode)}
-              disabled={saving === 'mode'}
+              disabled={!!saving}
               style={{
                 padding: '0.5rem 1.25rem',
                 borderRadius: 'var(--radius-sm)',
@@ -130,7 +137,6 @@ export default function GuildChannels({ guildId }: { guildId: string }) {
                   # {ch.name}
                 </span>
 
-                {/* Whitelist toggle */}
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer', fontSize: '0.75rem' }}>
                   <input
                     type="checkbox"
@@ -141,7 +147,6 @@ export default function GuildChannels({ guildId }: { guildId: string }) {
                   {t('guild.whitelist')}
                 </label>
 
-                {/* Blacklist toggle */}
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer', fontSize: '0.75rem' }}>
                   <input
                     type="checkbox"
@@ -152,7 +157,6 @@ export default function GuildChannels({ guildId }: { guildId: string }) {
                   {t('guild.blacklist')}
                 </label>
 
-                {/* Auto-response toggle */}
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer', fontSize: '0.75rem' }}>
                   <input
                     type="checkbox"

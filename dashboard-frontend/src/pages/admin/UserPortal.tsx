@@ -1,21 +1,17 @@
-import { Routes, Route, NavLink } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { type User, getAvatarUrl } from '../../lib/auth';
-import UserProfile from './user/Profile';
-import UserMemory from './user/Memory';
-import UserStatsPage from './user/UserStats';
-import DeleteData from './user/DeleteData';
 
 interface UserPortalProps {
   user: User;
 }
 
 const USER_NAV = [
-  { path: '', label: 'user.profile', icon: '👤', end: true },
-  { path: 'stats', label: 'user.stats', icon: '📊' },
-  { path: 'memory', label: 'user.memory', icon: '🧠' },
-  { path: 'delete', label: 'user.deleteData', icon: '🗑️' },
+  { to: '/me', label: 'user.profile', icon: '👤', end: true },
+  { to: '/me/stats', label: 'user.stats', icon: '📊', end: false },
+  { to: '/me/memory', label: 'user.memory', icon: '🧠', end: false },
+  { to: '/me/delete', label: 'user.deleteData', icon: '🗑️', end: false },
 ];
 
 export default function UserPortal({ user }: UserPortalProps) {
@@ -46,12 +42,12 @@ export default function UserPortal({ user }: UserPortalProps) {
         </div>
       </motion.div>
 
-      {/* Sub-nav */}
+      {/* Sub-nav with absolute paths */}
       <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {USER_NAV.map(({ path, label, icon, end }) => (
+        {USER_NAV.map(({ to, label, icon, end }) => (
           <NavLink
-            key={label}
-            to={path}
+            key={to}
+            to={to}
             end={end}
             style={({ isActive }) => ({
               display: 'flex', alignItems: 'center', gap: '0.4rem',
@@ -70,12 +66,8 @@ export default function UserPortal({ user }: UserPortalProps) {
         ))}
       </div>
 
-      <Routes>
-        <Route index element={<UserProfile user={user} />} />
-        <Route path="stats" element={<UserStatsPage />} />
-        <Route path="memory" element={<UserMemory />} />
-        <Route path="delete" element={<DeleteData />} />
-      </Routes>
+      {/* Child pages via Outlet, pass user as context */}
+      <Outlet context={{ user }} />
     </div>
   );
 }

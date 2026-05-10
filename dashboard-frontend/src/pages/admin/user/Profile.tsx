@@ -1,8 +1,14 @@
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useOutletContext } from 'react-router-dom';
 import { type User, getAvatarUrl } from '../../../lib/auth';
 
-export default function UserProfile({ user }: { user: User }) {
+interface UserContext {
+  user: User;
+}
+
+export default function UserProfile() {
+  const { user } = useOutletContext<UserContext>();
   const { t } = useTranslation();
 
   const infoRows = [
@@ -35,7 +41,10 @@ export default function UserProfile({ user }: { user: User }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {infoRows.map(({ label, value }) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.625rem 0', borderBottom: '1px solid var(--color-border)' }}>
+            <div key={label} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '0.625rem 0', borderBottom: '1px solid var(--color-border)',
+            }}>
               <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>{label}</span>
               <span style={{ fontWeight: 500, fontSize: '0.875rem', fontFamily: 'monospace' }}>{value}</span>
             </div>

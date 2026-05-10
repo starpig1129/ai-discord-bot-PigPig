@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Routes, Route, NavLink } from 'react-router-dom';
+import { useParams, useNavigate, NavLink, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import api from '../../lib/api';
-import GuildOverview from './guild/Overview';
-import GuildChannels from './guild/Channels';
-import GuildPrompt from './guild/Prompt';
-import GuildStats from './guild/GuildStats';
 
 interface GuildInfo {
   id: string;
@@ -16,10 +12,10 @@ interface GuildInfo {
 }
 
 const GUILD_NAV = [
-  { path: '', label: 'guild.overview', icon: '📊', end: true },
-  { path: 'channels', label: 'guild.channels', icon: '📋' },
-  { path: 'prompt', label: 'guild.prompt', icon: '✍️' },
-  { path: 'stats', label: 'guild.stats', icon: '📈' },
+  { to: '', label: 'guild.overview', icon: '📊', end: true },
+  { to: 'channels', label: 'guild.channels', icon: '📋', end: false },
+  { to: 'prompt', label: 'guild.prompt', icon: '✍️', end: false },
+  { to: 'stats', label: 'guild.stats', icon: '📈', end: false },
 ];
 
 export default function GuildLayout() {
@@ -40,6 +36,8 @@ export default function GuildLayout() {
       <div className="animate-pulse-glow" style={{ fontSize: '2rem' }}>🏠</div>
     </div>
   );
+
+  const basePath = `/guild/${guildId}`;
 
   return (
     <div>
@@ -93,12 +91,12 @@ export default function GuildLayout() {
         </div>
       </motion.div>
 
-      {/* Sub-navigation tabs */}
+      {/* Sub-navigation tabs — use absolute paths to avoid nested Routes issues */}
       <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {GUILD_NAV.map(({ path, label, icon, end }) => (
+        {GUILD_NAV.map(({ to, label, icon, end }) => (
           <NavLink
             key={label}
-            to={path}
+            to={to ? `${basePath}/${to}` : basePath}
             end={end}
             style={({ isActive }) => ({
               display: 'flex', alignItems: 'center', gap: '0.4rem',
@@ -118,13 +116,8 @@ export default function GuildLayout() {
         ))}
       </div>
 
-      {/* Nested routes */}
-      <Routes>
-        <Route index element={<GuildOverview guildId={guildId!} />} />
-        <Route path="channels" element={<GuildChannels guildId={guildId!} />} />
-        <Route path="prompt" element={<GuildPrompt guildId={guildId!} />} />
-        <Route path="stats" element={<GuildStats guildId={guildId!} />} />
-      </Routes>
+      {/* Child pages rendered via Outlet (defined in App.tsx Route children) */}
+      <Outlet context={{ guildId }} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useOutletContext } from 'react-router-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
@@ -14,14 +15,18 @@ interface GuildStatsData {
   daily_messages: { date: string; count: number }[];
 }
 
-export default function GuildStats({ guildId }: { guildId: string }) {
+interface GuildContext {
+  guildId: string;
+}
+
+export default function GuildStats() {
+  const { guildId } = useOutletContext<GuildContext>();
   const { t } = useTranslation();
   const [period, setPeriod] = useState('30d');
   const [data, setData] = useState<GuildStatsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
     api.get(`/api/guild/${guildId}/stats?period=${period}`)
       .then(({ data }) => setData(data))
       .catch(() => {})
