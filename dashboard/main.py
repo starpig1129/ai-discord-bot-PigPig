@@ -20,6 +20,8 @@ from addons.logging import get_logger
 from addons.settings import base_config
 from dashboard.auth.discord_oauth import router as auth_router
 from dashboard.routers.admin import router as admin_router
+from dashboard.routers.guild import router as guild_router
+from dashboard.routers.user import router as user_router
 from dashboard.routers.stats import router as stats_router
 from dashboard.websocket.log_streamer import router as ws_router
 from dashboard.middleware.rate_limit import limiter, rate_limit_exceeded_handler
@@ -69,6 +71,8 @@ def create_app(bot: "PigPig") -> FastAPI:
     # ── Routers ───────────────────────────────────────────────────────
     app.include_router(auth_router)
     app.include_router(admin_router)
+    app.include_router(guild_router)
+    app.include_router(user_router)
     app.include_router(stats_router)
     app.include_router(ws_router)
 

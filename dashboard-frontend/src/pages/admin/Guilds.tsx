@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
 
 interface Guild {
@@ -13,6 +14,7 @@ interface Guild {
 
 export default function Guilds() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [guilds, setGuilds] = useState<Guild[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -56,7 +58,11 @@ export default function Guilds() {
               alignItems: 'center',
               gap: '1rem',
               cursor: 'pointer',
+              transition: 'transform var(--transition-fast)',
             }}
+            onClick={() => navigate(`/guild/${guild.id}`)}
+            onMouseEnter={e => (e.currentTarget.style.transform = 'translateX(4px)')}
+            onMouseLeave={e => (e.currentTarget.style.transform = 'none')}
           >
             {guild.icon ? (
               <img

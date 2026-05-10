@@ -9,6 +9,9 @@ import Config from './pages/admin/Config';
 import Guilds from './pages/admin/Guilds';
 import Logs from './pages/admin/Logs';
 import Update from './pages/admin/Update';
+import GuildLayout from './pages/admin/GuildLayout';
+import UserPortal from './pages/admin/UserPortal';
+import { useAuth } from './hooks/useAuth';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,6 +22,12 @@ const queryClient = new QueryClient({
   },
 });
 
+function UserPortalWrapper() {
+  const { user } = useAuth();
+  if (!user) return null;
+  return <UserPortal user={user} />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -27,14 +36,21 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/callback" element={<AuthCallback />} />
 
-          {/* Protected admin routes */}
+          {/* Protected routes inside Layout */}
           <Route element={<Layout />}>
+            {/* Admin (Bot Owner) routes */}
             <Route path="/admin" element={<Dashboard />} />
             <Route path="/admin/stats" element={<Stats />} />
             <Route path="/admin/config" element={<Config />} />
             <Route path="/admin/guilds" element={<Guilds />} />
             <Route path="/admin/logs" element={<Logs />} />
             <Route path="/admin/update" element={<Update />} />
+
+            {/* Server Admin routes — guild sub-pages */}
+            <Route path="/guild/:guildId/*" element={<GuildLayout />} />
+
+            {/* General User routes */}
+            <Route path="/me/*" element={<UserPortalWrapper />} />
           </Route>
 
           {/* Catch-all redirect */}

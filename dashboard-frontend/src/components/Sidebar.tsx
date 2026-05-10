@@ -20,6 +20,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
     { path: '/admin/config',  label: t('nav.config'),    icon: '⚙️' },
     { path: '/admin/logs',    label: t('nav.logs'),      icon: '📝' },
     { path: '/admin/update',  label: t('nav.update'),    icon: '🔄' },
+    { path: '/me',            label: t('nav.myPortal'),  icon: '👤', divider: true },
   ];
 
   return (
@@ -59,33 +60,37 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
           const isActive = location.pathname === item.path ||
             (item.path !== '/admin' && location.pathname.startsWith(item.path));
           return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.625rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                textDecoration: 'none',
-                fontSize: '0.875rem',
-                fontWeight: isActive ? 600 : 400,
-                transition: 'all var(--transition-fast)',
-                borderLeft: isActive ? '3px solid var(--color-accent-blue)' : '3px solid transparent',
-              }}
-              onMouseEnter={(e) => {
-                if (!isActive) e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
-              }}
-              onMouseLeave={(e) => {
-                if (!isActive) e.currentTarget.style.background = 'transparent';
-              }}
-            >
-              <span style={{ fontSize: '1.1rem' }}>{item.icon}</span>
-              {item.label}
-            </NavLink>
+            <div key={item.path}>
+              {item.divider && (
+                <div style={{ height: 1, background: 'var(--color-border)', margin: '0.5rem 0.25rem' }} />
+              )}
+              <NavLink
+                to={item.path}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '0.625rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                  background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                  textDecoration: 'none',
+                  fontSize: '0.875rem',
+                  fontWeight: isActive ? 600 : 400,
+                  transition: 'all var(--transition-fast)',
+                  borderLeft: isActive ? '3px solid var(--color-accent-blue)' : '3px solid transparent',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <span style={{ fontSize: '1.1rem' }}>{item.icon}</span>
+                {item.label}
+              </NavLink>
+            </div>
           );
         })}
       </nav>
