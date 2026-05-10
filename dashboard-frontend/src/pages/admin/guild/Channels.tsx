@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useOutletContext } from 'react-router-dom';
 import api from '../../../lib/api';
-
+import ModuleCard from '../../../components/prompt/ModuleCard';
+import type { PromptModule } from '../../../components/prompt/ModuleCard';
 interface Channel {
   id: string;
   name: string;
@@ -20,33 +21,273 @@ interface ChannelData {
   channels: Channel[];
 }
 
-interface ChannelPrompt {
-  enabled: boolean;
-  prompt: string;
-}
-
 interface GuildContext {
   guildId: string;
 }
 
 const MODES = ['unrestricted', 'whitelist', 'blacklist'];
 
+// ─── Toggle switch ────────────────────────────────────────────────────
+
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+  color = 'var(--color-accent-blue)',
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  color?: string;
+}) {
+  return (
+    <div
+      onClick={disabled ? undefined : onChange}
+      style={{
+        width: 40, height: 22, borderRadius: 11, flexShrink: 0,
+        background: checked ? color : 'var(--color-border)',
+        position: 'relative',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        transition: 'background 0.18s',
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <motion.div
+        animate={{ x: checked ? 20 : 2 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+        style={{
+          position: 'absolute', top: 3,
+          width: 16, height: 16, borderRadius: '50%',
+          background: 'white',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+        }}
+      />
+    </div>
+  );
+}
+
+// ─── Right detail panel ───────────────────────────────────────────────
+
+interface DetailPanelProps {
+  channel: Channel;
+  guildId: string;
+  onChannelUpdate: (updated: Partial<Channel>) => void;
+}
+
+function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
+  const { t } = useTranslation();
+  const [savingField, setSavingField] = useState<string | null>(null);
+
+  // Prompt state
+  const [promptLoaded, setPromptLoaded] = useState(false);
+  const [promptEnabled, setPromptEnabled] = useState(false);
+  const [modules, setModules] = useState<PromptModule[]>([]);
+  const [moduleOrder, setModuleOrder] = useState<string[]>([]);
+
+  // Load channel prompt whenever channel changes
+  useEffect(() => {
+    api.get(`/api/guild/${guildId}/channels/${channel.id}/prompt/modules`)
+      .then(({ data }) => {
+        setPromptEnabled(data.enabled ?? false);
+        setModules(data.modules ?? []);
+        setModuleOrder(data.module_order ?? []);
+      })
+      .catch(() => {
+        setPromptEnabled(false);
+        setModules([]);
+      })
+      .finally(() => setPromptLoaded(true));
+  }, [channel.id, guildId]);
+
+  const toggleField = async (field: 'in_whitelist' | 'in_blacklist' | 'auto_response') => {
+    setSavingField(field);
+    const next = !channel[field];
+    try {
+      await api.put(`/api/guild/${guildId}/channels/${channel.id}`, { [field]: next });
+      onChannelUpdate({ [field]: next });
+    } finally {
+      setSavingField(null);
+    }
+  };
+
+  const togglePromptEnabled = async () => {
+    const next = !promptEnabled;
+    setPromptEnabled(next);
+    try {
+      await api.put(`/api/guild/${guildId}/channels/${channel.id}/prompt`, { enabled: next });
+    } catch {
+      // Revert on error
+      setPromptEnabled(!next);
+    }
+  };
+
+  return (
+    <motion.div
+      key={channel.id}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15 }}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: '1rem',
+        height: '100%', overflow: 'auto',
+      }}
+    >
+      {/* Channel header */}
+      <div style={{
+        padding: '1.125rem 1.25rem',
+        background: 'rgba(139,92,246,0.06)',
+        border: '1px solid rgba(139,92,246,0.2)',
+        borderRadius: 'var(--radius-lg)',
+      }}>
+        <h3 style={{ fontSize: '1.0625rem', fontWeight: 700, marginBottom: '0.2rem' }}>
+          <span style={{ color: 'var(--color-text-muted)', marginRight: '0.25rem' }}>#</span>
+          {channel.name}
+        </h3>
+        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+          {channel.category ?? t('guild.noCategory')} · ID {channel.id}
+        </p>
+      </div>
+
+      {/* Channel settings */}
+      <div className="glass-card" style={{ padding: '1.25rem' }}>
+        <h4 style={{
+          fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: '1rem',
+        }}>
+          {t('guild.channelSettings')}
+        </h4>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+          {/* Whitelist */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{t('guild.whitelist')}</p>
+              <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
+                {t('guild.whitelistNote')}
+              </p>
+            </div>
+            <Toggle
+              checked={channel.in_whitelist}
+              disabled={savingField === 'in_whitelist'}
+              onChange={() => toggleField('in_whitelist')}
+              color="var(--color-accent-emerald)"
+            />
+          </div>
+
+          <div style={{ height: 1, background: 'var(--color-border)' }} />
+
+          {/* Blacklist */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{t('guild.blacklist')}</p>
+              <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
+                {t('guild.blacklistNote')}
+              </p>
+            </div>
+            <Toggle
+              checked={channel.in_blacklist}
+              disabled={savingField === 'in_blacklist'}
+              onChange={() => toggleField('in_blacklist')}
+              color="var(--color-accent-rose)"
+            />
+          </div>
+
+          <div style={{ height: 1, background: 'var(--color-border)' }} />
+
+          {/* Auto response */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{t('guild.autoResponse')}</p>
+              <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
+                {t('guild.autoResponseNote')}
+              </p>
+            </div>
+            <Toggle
+              checked={channel.auto_response}
+              disabled={savingField === 'auto_response'}
+              onChange={() => toggleField('auto_response')}
+              color="var(--color-accent-blue)"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Prompt editor */}
+      <div className="glass-card" style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+        <h4 style={{
+          fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', color: 'var(--color-text-muted)',
+        }}>
+          {t('guild.channelPromptOverride')}
+        </h4>
+
+        {!promptLoaded ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+            {t('common.loading')}
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{t('guild.channelOverrideEnable')}</p>
+                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.1rem' }}>
+                  {t('guild.channelOverrideNote')}
+                </p>
+              </div>
+              <Toggle
+                checked={promptEnabled}
+                onChange={togglePromptEnabled}
+                color="var(--color-accent-violet)"
+              />
+            </div>
+
+            {promptEnabled && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
+                {moduleOrder.map(name => {
+                  const mod = modules.find(m => m.name === name);
+                  if (!mod || mod.protected) return null;
+                  return (
+                    <ModuleCard
+                      key={mod.name}
+                      mod={mod}
+                      guildId={guildId}
+                      channelId={channel.id}
+                      onSaved={(modName, newCustom) => {
+                        setModules(prev => prev.map(m => 
+                          m.name === modName 
+                            ? { ...m, custom_content: newCustom, is_customized: newCustom !== null } 
+                            : m
+                        ));
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────
+
 export default function GuildChannels() {
   const { guildId } = useOutletContext<GuildContext>();
   const { t } = useTranslation();
   const [data, setData] = useState<ChannelData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<string | null>(null);
-
-  // Per-channel prompt editing state
-  const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
-  const [channelPrompts, setChannelPrompts] = useState<Record<string, ChannelPrompt>>({});
-  const [savingPrompt, setSavingPrompt] = useState<string | null>(null);
-  const [promptMsg, setPromptMsg] = useState<Record<string, { text: string; ok: boolean }>>({});
+  const [savingMode, setSavingMode] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const fetchChannels = useCallback(() => {
     api.get(`/api/guild/${guildId}/channels`)
-      .then(({ data }) => setData(data))
+      .then(({ data }) => {
+        setData(data);
+        // Auto-select first channel if none selected
+        setSelectedId(prev => prev ?? data.channels[0]?.id ?? null);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [guildId]);
@@ -54,54 +295,22 @@ export default function GuildChannels() {
   useEffect(() => { fetchChannels(); }, [fetchChannels]);
 
   const updateGuildMode = async (mode: string) => {
-    setSaving('mode');
+    setSavingMode(true);
     try {
       await api.put(`/api/guild/${guildId}/channels/__guild__`, { guild_mode: mode });
       setData(prev => prev ? { ...prev, guild_mode: mode } : prev);
-    } finally { setSaving(null); }
+    } finally { setSavingMode(false); }
   };
 
-  const toggleChannel = async (
-    ch: Channel,
-    field: 'in_whitelist' | 'in_blacklist' | 'auto_response',
-  ) => {
-    setSaving(ch.id + field);
-    try {
-      await api.put(`/api/guild/${guildId}/channels/${ch.id}`, {
-        [field]: !ch[field],
-      });
-      fetchChannels();
-    } finally { setSaving(null); }
-  };
-
-  const openPromptEditor = async (chId: string) => {
-    if (expandedPrompt === chId) { setExpandedPrompt(null); return; }
-    setExpandedPrompt(chId);
-    if (!channelPrompts[chId]) {
-      try {
-        const { data } = await api.get(`/api/guild/${guildId}/channels/${chId}/prompt`);
-        setChannelPrompts(prev => ({ ...prev, [chId]: { enabled: data.enabled, prompt: data.prompt } }));
-      } catch {
-        setChannelPrompts(prev => ({ ...prev, [chId]: { enabled: false, prompt: '' } }));
-      }
-    }
-  };
-
-  const saveChannelPrompt = async (chId: string) => {
-    const p = channelPrompts[chId];
-    if (!p) return;
-    setSavingPrompt(chId);
-    setPromptMsg(prev => ({ ...prev, [chId]: undefined as unknown as { text: string; ok: boolean } }));
-    try {
-      await api.put(`/api/guild/${guildId}/channels/${chId}/prompt`, { enabled: p.enabled, prompt: p.prompt });
-      setPromptMsg(prev => ({ ...prev, [chId]: { text: t('guild.promptSaved'), ok: true } }));
-    } catch {
-      setPromptMsg(prev => ({ ...prev, [chId]: { text: t('guild.promptSaveFailed'), ok: false } }));
-    } finally {
-      setSavingPrompt(null);
-      setTimeout(() => setPromptMsg(prev => ({ ...prev, [chId]: undefined as unknown as { text: string; ok: boolean } })), 4000);
-    }
-  };
+  const handleChannelUpdate = useCallback((id: string, updated: Partial<Channel>) => {
+    setData(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        channels: prev.channels.map(ch => ch.id === id ? { ...ch, ...updated } : ch),
+      };
+    });
+  }, []);
 
   if (loading || !data) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
@@ -116,204 +325,131 @@ export default function GuildChannels() {
     return acc;
   }, {});
 
+  const selectedChannel = data.channels.find(c => c.id === selectedId) ?? null;
+
   return (
-    <div>
-      {/* Guild-level mode selector */}
-      <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, marginBottom: '0.875rem' }}>
-          {t('guild.globalMode')}
-        </h2>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {MODES.map((mode) => (
-            <button
-              key={mode}
-              onClick={() => updateGuildMode(mode)}
-              disabled={!!saving}
-              style={{
-                padding: '0.5rem 1.25rem',
-                borderRadius: 'var(--radius-sm)', border: '1px solid',
-                borderColor: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'var(--color-border)',
-                background: data.guild_mode === mode ? 'rgba(59,130,246,0.15)' : 'transparent',
-                color: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
-                cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
-                opacity: saving === 'mode' ? 0.7 : 1,
-              }}
-            >
-              {t(`guild.mode_${mode}`)}
-            </button>
+    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', height: '100%' }}>
+
+      {/* ── Left: channel selector ──────────────────────────────────── */}
+      <div style={{
+        width: 240, flexShrink: 0,
+        display: 'flex', flexDirection: 'column', gap: '0.875rem',
+        position: 'sticky', top: 0,
+      }}>
+        {/* Global mode pill selector */}
+        <div className="glass-card" style={{ padding: '0.875rem' }}>
+          <p style={{
+            fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: '0.6rem',
+          }}>
+            {t('guild.globalMode')}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            {MODES.map(mode => (
+              <button
+                key={mode}
+                onClick={() => updateGuildMode(mode)}
+                disabled={savingMode}
+                style={{
+                  padding: '0.4rem 0.75rem', textAlign: 'left',
+                  borderRadius: 'var(--radius-sm)', border: '1px solid',
+                  borderColor: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'transparent',
+                  background: data.guild_mode === mode ? 'rgba(59,130,246,0.12)' : 'transparent',
+                  color: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
+                  cursor: 'pointer', fontSize: '0.8125rem', fontWeight: data.guild_mode === mode ? 600 : 400,
+                  opacity: savingMode ? 0.7 : 1, transition: 'all 0.15s',
+                }}
+              >
+                {data.guild_mode === mode ? '● ' : '○ '}{t(`guild.mode_${mode}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Channel list */}
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: '0.625rem',
+          maxHeight: 'calc(100vh - 260px)', overflowY: 'auto',
+          paddingRight: '0.25rem',
+        }}>
+          {Object.entries(grouped).map(([category, channels]) => (
+            <div key={category}>
+              <p style={{
+                fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.09em', color: 'var(--color-text-muted)',
+                marginBottom: '0.35rem', paddingLeft: '0.5rem',
+              }}>
+                {category}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                {channels.map(ch => {
+                  const isActive = ch.id === selectedId;
+                  const hasBadge = ch.in_whitelist || ch.in_blacklist || ch.auto_response;
+                  return (
+                    <button
+                      key={ch.id}
+                      onClick={() => setSelectedId(ch.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.4rem',
+                        padding: '0.5rem 0.75rem', width: '100%', textAlign: 'left',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid',
+                        borderColor: isActive ? 'rgba(139,92,246,0.4)' : 'transparent',
+                        background: isActive ? 'rgba(139,92,246,0.1)' : 'transparent',
+                        color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                        cursor: 'pointer', fontSize: '0.8125rem',
+                        fontWeight: isActive ? 600 : 400,
+                        transition: 'all 0.12s',
+                      }}
+                    >
+                      <span style={{ color: isActive ? 'var(--color-accent-violet)' : 'var(--color-text-muted)', fontSize: '0.9rem' }}>#</span>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ch.name}
+                      </span>
+                      {hasBadge && (
+                        <span style={{
+                          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                          background: ch.in_blacklist ? 'var(--color-accent-rose)'
+                            : ch.in_whitelist ? 'var(--color-accent-emerald)'
+                            : 'var(--color-accent-blue)',
+                        }} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Per-channel list */}
-      {Object.entries(grouped).map(([category, channels]) => (
-        <div key={category} style={{ marginBottom: '1.5rem' }}>
-          <h3 style={{
-            fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase',
-            letterSpacing: '0.08em', color: 'var(--color-text-muted)',
-            marginBottom: '0.625rem',
-          }}>
-            {category}
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-            {channels.map((ch) => (
-              <div key={ch.id}>
-                <motion.div
-                  className="glass-card"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  style={{ padding: '0.875rem 1.125rem' }}
-                >
-                  {/* Channel row */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <span style={{ flex: 1, fontWeight: 500, fontSize: '0.875rem' }}>
-                      # {ch.name}
-                    </span>
-
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer', fontSize: '0.75rem' }}>
-                      <input
-                        type="checkbox"
-                        checked={ch.in_whitelist}
-                        disabled={!!saving}
-                        onChange={() => toggleChannel(ch, 'in_whitelist')}
-                      />
-                      {t('guild.whitelist')}
-                    </label>
-
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer', fontSize: '0.75rem' }}>
-                      <input
-                        type="checkbox"
-                        checked={ch.in_blacklist}
-                        disabled={!!saving}
-                        onChange={() => toggleChannel(ch, 'in_blacklist')}
-                      />
-                      {t('guild.blacklist')}
-                    </label>
-
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer', fontSize: '0.75rem' }}>
-                      <input
-                        type="checkbox"
-                        checked={ch.auto_response}
-                        disabled={!!saving}
-                        onChange={() => toggleChannel(ch, 'auto_response')}
-                      />
-                      {t('guild.autoResponse')}
-                    </label>
-
-                    {/* Toggle prompt editor */}
-                    <button
-                      onClick={() => openPromptEditor(ch.id)}
-                      style={{
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: 'var(--radius-sm)',
-                        border: '1px solid',
-                        borderColor: expandedPrompt === ch.id ? 'var(--color-accent-violet)' : 'var(--color-border)',
-                        background: expandedPrompt === ch.id ? 'rgba(139,92,246,0.12)' : 'transparent',
-                        color: expandedPrompt === ch.id ? 'var(--color-accent-violet)' : 'var(--color-text-muted)',
-                        cursor: 'pointer', fontSize: '0.75rem',
-                        transition: 'all 0.15s',
-                      }}
-                    >
-                      ✍️ {t('guild.prompt')} {expandedPrompt === ch.id ? '▲' : '▼'}
-                    </button>
-                  </div>
-
-                  {/* Expandable channel prompt editor */}
-                  <AnimatePresence>
-                    {expandedPrompt === ch.id && (
-                      <motion.div
-                        key="prompt-editor"
-                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                        animate={{ opacity: 1, height: 'auto', marginTop: '0.875rem' }}
-                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                        style={{ overflow: 'hidden' }}
-                      >
-                        <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.875rem' }}>
-                          {!channelPrompts[ch.id] ? (
-                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem' }}>
-                              {t('common.loading')}
-                            </div>
-                          ) : (
-                            <>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.625rem', cursor: 'pointer' }}>
-                                <div
-                                  onClick={() => setChannelPrompts(prev => ({
-                                    ...prev,
-                                    [ch.id]: { ...prev[ch.id], enabled: !prev[ch.id]?.enabled },
-                                  }))}
-                                  style={{
-                                    width: 36, height: 20, borderRadius: 10,
-                                    background: channelPrompts[ch.id]?.enabled ? 'var(--color-accent-violet)' : 'var(--color-border)',
-                                    position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0,
-                                  }}
-                                >
-                                  <div style={{
-                                    position: 'absolute', top: 3,
-                                    left: channelPrompts[ch.id]?.enabled ? 18 : 3,
-                                    width: 14, height: 14, borderRadius: '50%',
-                                    background: 'white', transition: 'left 0.2s',
-                                  }} />
-                                </div>
-                                <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)' }}>
-                                  {t('guild.channelPromptOverride')}
-                                </span>
-                              </label>
-
-                              <textarea
-                                value={channelPrompts[ch.id]?.prompt ?? ''}
-                                onChange={e => setChannelPrompts(prev => ({
-                                  ...prev,
-                                  [ch.id]: { ...prev[ch.id], prompt: e.target.value },
-                                }))}
-                                placeholder={t('guild.promptPlaceholder')}
-                                style={{
-                                  width: '100%', minHeight: 120,
-                                  padding: '0.625rem 0.75rem',
-                                  fontFamily: '"JetBrains Mono", monospace',
-                                  fontSize: '0.8125rem', lineHeight: 1.6,
-                                  background: 'rgba(15,23,42,0.8)',
-                                  color: 'var(--color-text-primary)',
-                                  border: '1px solid var(--color-border)',
-                                  borderRadius: 'var(--radius-md)',
-                                  resize: 'vertical', outline: 'none',
-                                  boxSizing: 'border-box',
-                                }}
-                              />
-
-                              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
-                                {promptMsg[ch.id] && (
-                                  <span style={{ fontSize: '0.75rem', color: promptMsg[ch.id].ok ? 'var(--color-accent-emerald)' : 'var(--color-accent-rose)' }}>
-                                    {promptMsg[ch.id].ok ? '✅' : '❌'} {promptMsg[ch.id].text}
-                                  </span>
-                                )}
-                                <button
-                                  onClick={() => saveChannelPrompt(ch.id)}
-                                  disabled={savingPrompt === ch.id}
-                                  style={{
-                                    padding: '0.375rem 1rem',
-                                    borderRadius: 'var(--radius-sm)',
-                                    border: '1px solid var(--color-accent-violet)',
-                                    background: 'rgba(139,92,246,0.15)',
-                                    color: 'var(--color-accent-violet)',
-                                    cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600,
-                                    opacity: savingPrompt === ch.id ? 0.7 : 1,
-                                  }}
-                                >
-                                  {savingPrompt === ch.id ? t('common.saving') : `💾 ${t('common.save')}`}
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+      {/* ── Right: detail panel ─────────────────────────────────────── */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <AnimatePresence mode="wait">
+          {selectedChannel ? (
+            <DetailPanel
+              key={selectedChannel.id}
+              channel={selectedChannel}
+              guildId={guildId}
+              onChannelUpdate={(updated) => handleChannelUpdate(selectedChannel.id, updated)}
+            />
+          ) : (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{
+                height: 400, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                color: 'var(--color-text-muted)', gap: '0.5rem',
+              }}
+            >
+              <span style={{ fontSize: '2rem' }}>💬</span>
+              <p style={{ fontSize: '0.875rem' }}>{t('guild.selectChannel')}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

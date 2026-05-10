@@ -249,6 +249,35 @@ async def update_channel(
 
 _PROMPT_YAML = Path(ROOT_DIR) / "configs" / "prompt" / "message_agent.yaml"
 
+# Modules that cannot be edited by server admins (from ProtectedPromptManager)
+_PROTECTED_MODULES: frozenset[str] = frozenset({
+    "output_format",
+    "input_parsing",
+    "memory_system",
+    "information_handling",
+    "error_handling",
+    "reminders",
+})
+
+_CUSTOMIZABLE_MODULES: frozenset[str] = frozenset({
+    "identity",
+    "response_principles",
+    "interaction",
+    "professional_personality",
+})
+
+
+def _load_yaml_config() -> dict[str, Any]:
+    """Load and return the raw YAML prompt config dict."""
+    try:
+        if not _PROMPT_YAML.exists():
+            return {}
+        with open(_PROMPT_YAML, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except Exception as exc:
+        log.warning(f"Failed to load prompt YAML: {exc}")
+        return {}
+
 
 def _read_base_prompt_yaml() -> str:
     """Assemble the human-readable base prompt from the YAML config.
@@ -261,18 +290,13 @@ def _read_base_prompt_yaml() -> str:
         Combined prompt string (best-effort; empty string on error).
     """
     try:
-        if not _PROMPT_YAML.exists():
-            return ""
-        with open(_PROMPT_YAML, "r", encoding="utf-8") as f:
-            cfg: dict[str, Any] = yaml.safe_load(f) or {}
-
+        cfg = _load_yaml_config()
         composition: dict[str, Any] = cfg.get("composition", {})
         module_order: list[str] = composition.get("module_order", [
             m for m in cfg.keys() if m not in ("metadata", "base", "composition")
         ])
 
         parts: list[str] = []
-        # Core instruction from base section
         base = cfg.get("base", {})
         if base.get("core_instruction"):
             parts.append(base["core_instruction"].strip())
@@ -281,14 +305,12 @@ def _read_base_prompt_yaml() -> str:
             if mod_name in ("base", "metadata", "composition"):
                 continue
             mod = cfg.get(mod_name)
-            if isinstance(mod, dict):
-                content = mod.get("content", "")
-                if content:
-                    parts.append(content.strip())
+            if isinstance(mod, dict) and mod.get("content"):
+                parts.append(mod["content"].strip())
 
         return "\n\n".join(parts)
     except Exception as exc:
-        log.warning(f"Failed to read base prompt YAML: {exc}")
+        log.warning(f"Failed to assemble base prompt YAML: {exc}")
         return ""
 
 
@@ -324,6 +346,136 @@ async def get_effective_prompt(
         "override_prompt": server_level.get("prompt", server_level.get("content", "")),
         "override_name": server_level.get("name", ""),
     })
+
+
+# ── Modular Prompt Endpoints ───────────────────────────────────────────────
+
+@router.get("/{guild_id}/prompt/modules")
+async def list_prompt_modules(
+    guild_id: str,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> JSONResponse:
+    """Return all prompt modules with their base content and any custom overrides.
+
+    Protected modules are marked as read-only; customizable modules include
+    any server-level custom content stored in ``channel_configs``.
+
+    Args:
+        guild_id: The target Discord guild ID.
+        user: Authenticated user payload.
+
+    Returns:
+        JSON with module list, each entry including protection status and content.
+    """
+    require_guild_access(guild_id, user)
+
+    yaml_cfg = _load_yaml_config()
+    guild_cfg = _read_guild_config(guild_id)
+    sp = guild_cfg.get("system_prompts", {})
+    sp_enabled: bool = sp.get("enabled", False)
+    custom_modules: dict[str, Any] = sp.get("modules", {})
+
+    composition: dict[str, Any] = yaml_cfg.get("composition", {})
+    module_order: list[str] = composition.get("module_order", [
+        m for m in yaml_cfg if m not in ("metadata", "base", "composition", "conditions", "language_replacements")
+    ])
+
+    modules: list[dict[str, Any]] = []
+    for mod_name in module_order:
+        mod_data = yaml_cfg.get(mod_name)
+        if not isinstance(mod_data, dict):
+            continue
+
+        base_content: str = mod_data.get("content", "").strip()
+        description: str = mod_data.get("description", "")
+        is_protected: bool = mod_name in _PROTECTED_MODULES
+        custom_content: str | None = custom_modules.get(mod_name)
+
+        modules.append({
+            "name": mod_name,
+            "description": description,
+            "protected": is_protected,
+            "base_content": base_content,
+            "custom_content": custom_content,
+            "is_customized": custom_content is not None,
+        })
+
+    return JSONResponse({
+        "guild_id": guild_id,
+        "sp_enabled": sp_enabled,
+        "modules": modules,
+        "module_order": module_order,
+    })
+
+
+@router.put("/{guild_id}/prompt/modules/{module_name}")
+async def update_prompt_module(
+    guild_id: str,
+    module_name: str,
+    request: Request,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> JSONResponse:
+    """Update a single customizable prompt module for a guild.
+
+    Accepts either ``custom_content`` (new text) or ``reset: true`` to revert
+    the module to its YAML base. Protected modules cannot be modified.
+
+    Accepted body fields:
+        custom_content (str | None): New override text for this module.
+        reset (bool): If true, removes any custom override.
+
+    Args:
+        guild_id: The target Discord guild ID.
+        module_name: The prompt module to update (must be customizable).
+        request: FastAPI request.
+        user: Authenticated user payload.
+
+    Returns:
+        JSON confirmation.
+
+    Raises:
+        HTTPException 403: If the module is protected.
+        HTTPException 400: If the module name is unknown.
+    """
+    require_guild_access(guild_id, user)
+
+    if module_name in _PROTECTED_MODULES:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Module '{module_name}' is protected and cannot be modified.",
+        )
+
+    yaml_cfg = _load_yaml_config()
+    if module_name not in yaml_cfg:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown module '{module_name}'.",
+        )
+
+    body: dict[str, Any] = await request.json()
+    guild_cfg = _read_guild_config(guild_id)
+    sp = guild_cfg.setdefault("system_prompts", {
+        "enabled": True,
+        "server_level": {},
+        "modules": {},
+        "channels": {},
+        "permissions": {"allowed_roles": [], "allowed_users": [], "manage_server_prompts": []},
+    })
+    modules_store: dict[str, Any] = sp.setdefault("modules", {})
+
+    if body.get("reset"):
+        modules_store.pop(module_name, None)
+        log.info(f"Guild {guild_id} module '{module_name}' reset to base by {user.get('sub')}")
+    elif "custom_content" in body:
+        modules_store[module_name] = str(body["custom_content"])
+        log.info(f"Guild {guild_id} module '{module_name}' customized by {user.get('sub')}")
+
+    # Also update sp_enabled if provided
+    if "sp_enabled" in body:
+        sp["enabled"] = bool(body["sp_enabled"])
+
+    _write_guild_config(guild_id, guild_cfg)
+    return JSONResponse({"detail": f"Module '{module_name}' updated."})
 
 
 @router.get("/{guild_id}/prompt")
@@ -473,6 +625,132 @@ async def update_channel_prompt(
     _write_guild_config(guild_id, cfg)
     log.info(f"Guild {guild_id} channel {channel_id} prompt updated by {user.get('sub')}")
     return JSONResponse({"detail": "Channel prompt updated"})
+
+
+@router.get("/{guild_id}/channels/{channel_id}/prompt/modules")
+async def list_channel_prompt_modules(
+    guild_id: str,
+    channel_id: str,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> JSONResponse:
+    """Return prompt modules for a specific channel.
+
+    The base_content for a channel module is the server's custom content (if any),
+    otherwise the YAML base.
+
+    Args:
+        guild_id: The target Discord guild ID.
+        channel_id: The target Discord channel ID.
+        user: Authenticated user payload.
+
+    Returns:
+        JSON with module list and the effective channel enabled status.
+    """
+    require_guild_access(guild_id, user)
+
+    yaml_cfg = _load_yaml_config()
+    guild_cfg = _read_guild_config(guild_id)
+    sp = guild_cfg.get("system_prompts", {})
+    server_modules: dict[str, Any] = sp.get("modules", {})
+    channels: dict[str, Any] = sp.get("channels", {})
+    ch_cfg: dict[str, Any] = channels.get(channel_id, {})
+    ch_enabled: bool = ch_cfg.get("enabled", False)
+    channel_modules: dict[str, Any] = ch_cfg.get("modules", {})
+
+    composition: dict[str, Any] = yaml_cfg.get("composition", {})
+    module_order: list[str] = composition.get("module_order", [
+        m for m in yaml_cfg if m not in ("metadata", "base", "composition", "conditions", "language_replacements")
+    ])
+
+    modules: list[dict[str, Any]] = []
+    for mod_name in module_order:
+        mod_data = yaml_cfg.get(mod_name)
+        if not isinstance(mod_data, dict):
+            continue
+
+        description: str = mod_data.get("description", "")
+        is_protected: bool = mod_name in _PROTECTED_MODULES
+        
+        yaml_base: str = mod_data.get("content", "").strip()
+        server_custom: str | None = server_modules.get(mod_name)
+        
+        # Base content for a channel is the server's override, or the YAML default if no override exists
+        effective_base: str = server_custom if server_custom is not None else yaml_base
+        channel_custom: str | None = channel_modules.get(mod_name)
+
+        modules.append({
+            "name": mod_name,
+            "description": description,
+            "protected": is_protected,
+            "base_content": effective_base,
+            "custom_content": channel_custom,
+            "is_customized": channel_custom is not None,
+        })
+
+    return JSONResponse({
+        "channel_id": channel_id,
+        "enabled": ch_enabled,
+        "modules": modules,
+        "module_order": module_order,
+    })
+
+
+@router.put("/{guild_id}/channels/{channel_id}/prompt/modules/{module_name}")
+async def update_channel_prompt_module(
+    guild_id: str,
+    channel_id: str,
+    module_name: str,
+    request: Request,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> JSONResponse:
+    """Update a single customizable prompt module for a channel.
+
+    Args:
+        guild_id: The target Discord guild ID.
+        channel_id: The Discord channel ID.
+        module_name: The prompt module to update.
+        request: FastAPI request.
+        user: Authenticated user payload.
+
+    Returns:
+        JSON confirmation.
+    """
+    require_guild_access(guild_id, user)
+
+    if module_name in _PROTECTED_MODULES:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Module '{module_name}' is protected and cannot be modified.",
+        )
+
+    yaml_cfg = _load_yaml_config()
+    if module_name not in yaml_cfg:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown module '{module_name}'.",
+        )
+
+    body: dict[str, Any] = await request.json()
+    cfg = _read_guild_config(guild_id)
+    sp = cfg.setdefault("system_prompts", {
+        "enabled": True,
+        "server_level": {},
+        "modules": {},
+        "channels": {},
+        "permissions": {"allowed_roles": [], "allowed_users": [], "manage_server_prompts": []},
+    })
+    channels = sp.setdefault("channels", {})
+    ch_cfg = channels.setdefault(channel_id, {})
+    ch_modules = ch_cfg.setdefault("modules", {})
+
+    if body.get("reset"):
+        ch_modules.pop(module_name, None)
+    elif "custom_content" in body:
+        ch_modules[module_name] = str(body["custom_content"])
+
+    _write_guild_config(guild_id, cfg)
+    log.info(f"Guild {guild_id} channel {channel_id} module '{module_name}' updated by {user.get('sub')}")
+    return JSONResponse({"detail": f"Module '{module_name}' updated"})
 
 
 # ── Guild Stats ───────────────────────────────────────────────────────
