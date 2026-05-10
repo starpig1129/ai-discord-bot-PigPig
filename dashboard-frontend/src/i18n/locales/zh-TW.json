@@ -6,6 +6,7 @@
     "guilds": "伺服器列表",
     "logs": "即時日誌",
     "update": "版本更新",
+    "users": "使用者管理",
     "myPortal": "我的專區"
   },
   "login": {
@@ -196,5 +197,23 @@
     "deleteSuccess": "資料已成功刪除",
     "deleteFailed": "刪除失敗，請稍後再試",
     "redirecting": "3 秒後將自動登出..."
+  },
+  "admin": {
+    "usersTitle": "使用者管理",
+    "usersWithMemory": "個使用者擁有記憶資料",
+    "searchPlaceholder": "搜尋名稱或 ID...",
+    "deleteUserMemory": "刪除使用者記憶",
+    "deleteUserMemoryDesc": "這將永久刪除使用者 {{id}} 的所有記憶資料。此操作無法復原。",
+    "guildActivity": "伺服器活動",
+    "messages": "訊息",
+    "streak": "天連續",
+    "lastActive": "最後活躍",
+    "memorySystem": "記憶系統",
+    "channelSegments": "頻道片段",
+    "vectorCollections": "向量集合",
+    "users": "擁有記憶的使用者",
+    "deleteSuccess": "已刪除使用者 {{id}} 的記憶資料",
+    "deleteFailed": "刪除失敗"
   }
 }
+

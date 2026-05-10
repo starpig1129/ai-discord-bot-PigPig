@@ -6,6 +6,7 @@
     "guilds": "Servers",
     "logs": "Live Logs",
     "update": "Updates",
+    "users": "Users",
     "myPortal": "My Portal"
   },
   "login": {
@@ -196,5 +197,23 @@
     "deleteSuccess": "Data successfully deleted",
     "deleteFailed": "Deletion failed, please try again",
     "redirecting": "Redirecting in 3 seconds..."
+  },
+  "admin": {
+    "usersTitle": "User Management",
+    "usersWithMemory": "users with memory data",
+    "searchPlaceholder": "Search by name or ID...",
+    "deleteUserMemory": "Delete User Memory",
+    "deleteUserMemoryDesc": "This will permanently delete all memory data for user {{id}}. This action cannot be undone.",
+    "guildActivity": "Guild Activity",
+    "messages": "msgs",
+    "streak": "d streak",
+    "lastActive": "Last",
+    "memorySystem": "Memory System",
+    "channelSegments": "Channel Segments",
+    "vectorCollections": "Vector Collections",
+    "users": "Users with Memory",
+    "deleteSuccess": "Deleted memory for user {{id}}",
+    "deleteFailed": "Deletion failed"
   }
 }
+

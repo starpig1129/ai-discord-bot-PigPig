@@ -15,6 +15,7 @@ interface EpisodicRecord {
   total_messages: number;
   streak_days: number;
   last_active_at: string | null;
+  channel_memories: Record<string, string>;
 }
 
 export default function UserMemory() {
@@ -25,7 +26,8 @@ export default function UserMemory() {
   const [tab, setTab] = useState<'procedural' | 'episodic'>('procedural');
   const [deletingGuild, setDeletingGuild] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = async (isInitial = false) => {
+    if (!isInitial) setLoading(true);
     try {
       const [p, e] = await Promise.all([
         api.get('/api/user/memory/procedural'),
@@ -41,7 +43,7 @@ export default function UserMemory() {
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(true);
   }, []);
 
 
@@ -119,53 +121,68 @@ export default function UserMemory() {
               className="glass-card"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              style={{ padding: '1.25rem', marginBottom: '0.75rem' }}
             >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <p style={{ fontWeight: 600, fontSize: '0.9rem' }}>{rec.guild_name || rec.guild_id}</p>
-                  <button
-                    disabled={deletingGuild === rec.guild_id}
-                    onClick={async () => {
-                      if (!confirm(`Delete episodic memory for guild ${rec.guild_id}?`)) return;
-                      setDeletingGuild(rec.guild_id);
-                      try {
-                        await api.delete(`/api/user/memory/episodic/${rec.guild_id}`);
-                        fetchData();
-                      } catch {
-                        alert('Delete failed');
-                      } finally {
-                        setDeletingGuild(null);
-                      }
-                    }}
-                    style={{
-                      padding: '0.2rem 0.5rem',
-                      fontSize: '0.7rem',
-                      borderRadius: 'var(--radius-sm)',
-                      border: '1px solid rgba(244,63,94,0.3)',
-                      background: 'rgba(244,63,94,0.08)',
-                      color: '#f43f5e',
-                      cursor: 'pointer',
-                      opacity: deletingGuild === rec.guild_id ? 0.5 : 1,
-                    }}
-                  >
-                    {deletingGuild === rec.guild_id ? '...' : '🗑️'}
-                  </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <p style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{rec.guild_name || rec.guild_id}</p>
+                    <button
+                      disabled={deletingGuild === rec.guild_id}
+                      onClick={async () => {
+                        if (!confirm(t('admin.deleteUserMemoryDesc', { id: rec.guild_name || rec.guild_id }))) return;
+                        setDeletingGuild(rec.guild_id);
+                        try {
+                          await api.delete(`/api/user/memory/episodic/${rec.guild_id}`);
+                          fetchData();
+                        } catch {
+                          alert(t('admin.deleteFailed'));
+                        } finally {
+                          setDeletingGuild(null);
+                        }
+                      }}
+                      style={{
+                        padding: '0.2rem 0.5rem',
+                        fontSize: '0.7rem',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid rgba(244,63,94,0.3)',
+                        background: 'rgba(244,63,94,0.08)',
+                        color: '#f43f5e',
+                        cursor: 'pointer',
+                        opacity: deletingGuild === rec.guild_id ? 0.5 : 1,
+                      }}
+                    >
+                      {deletingGuild === rec.guild_id ? '...' : '🗑️'}
+                    </button>
+                  </div>
+                  {rec.last_active_at && (
+                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                      {t('user.lastActive')}: {new Date(rec.last_active_at).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
-                {rec.last_active_at && (
-                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.125rem' }}>
-                    {t('user.lastActive')}: {new Date(rec.last_active_at).toLocaleDateString()}
+
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{rec.total_messages.toLocaleString()} {t('stats.totalMessages').toLowerCase()}</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                    🔥 {rec.streak_days} {t('user.streakDays')}
                   </p>
-                )}
+                </div>
               </div>
 
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{rec.total_messages.toLocaleString()} {t('stats.totalMessages').toLowerCase()}</p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.125rem' }}>
-                  🔥 {rec.streak_days} {t('user.streakDays')}
-                </p>
-              </div>
+              {Object.entries(rec.channel_memories).length > 0 && (
+                <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
+                  {Object.entries(rec.channel_memories).map(([cid, mem]) => (
+                    <div key={cid} style={{ marginBottom: '0.75rem' }}>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--color-accent-blue)', opacity: 0.8, marginBottom: '0.25rem' }}>#{cid}</div>
+                      <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', lineHeight: 1.5,
+                        background: 'rgba(0,0,0,0.15)', padding: '0.625rem', borderRadius: 'var(--radius-sm)' }}>{mem}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
+
           ))}
         </div>
       )}

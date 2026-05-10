@@ -201,22 +201,57 @@ async def get_episodic_memory(
         log.error(f"Episodic memory read failed for {user_id}: {exc}")
         raise HTTPException(status_code=503, detail="Memory database temporarily unavailable")
 
+    # Enrichment: Fetch episodic memory summaries if episodic db exists
+    channel_memories = {}
+    if _EPISODIC_DB.exists():
+        try:
+            async with aiosqlite.connect(str(_EPISODIC_DB)) as edb:
+                edb.row_factory = aiosqlite.Row
+                # Collect all top channel IDs across guilds
+                all_channel_ids = set()
+                for srow in rows:
+                    try:
+                        tc = json.loads(srow["top_channels"] or "{}")
+                        all_channel_ids.update(tc.keys())
+                    except:
+                        continue
+                
+                if all_channel_ids:
+                    placeholders = ",".join(["?"] * len(all_channel_ids))
+                    m_cursor = await edb.execute(
+                        f"SELECT channel_id, last_summary_text FROM channel_memory_state WHERE channel_id IN ({placeholders})",
+                        list(all_channel_ids)
+                    )
+                    mrows = await m_cursor.fetchall()
+                    for mrow in mrows:
+                        channel_memories[str(mrow["channel_id"])] = mrow["last_summary_text"]
+        except Exception as e:
+            log.warning(f"Failed to fetch episodic enrichment for user {user_id}: {e}")
+
     records = []
     for row in rows:
+        try:
+            tc = json.loads(row["top_channels"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            tc = {}
+        
+        mems = {cid: channel_memories[cid] for cid in tc.keys() if cid in channel_memories}
+        
         record: dict[str, Any] = {
             "guild_id": row["guild_id"],
             "total_messages": row["total_messages"],
             "streak_days": row["streak_days"],
             "last_active_at": row["last_active_at"],
             "first_message_at": row["first_message_at"],
+            "channel_memories": mems
         }
         try:
             record["active_hours"] = json.loads(row["active_hours"] or "{}")
         except (json.JSONDecodeError, TypeError):
             record["active_hours"] = {}
         try:
-            record["top_channels"] = json.loads(row["top_channels"] or "{}")
-        except (json.JSONDecodeError, TypeError):
+            record["top_channels"] = tc
+        except:
             record["top_channels"] = {}
         records.append(record)
 

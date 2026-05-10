@@ -20,7 +20,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
     { path: '/admin/config',  label: t('nav.config'),    icon: '⚙️' },
     { path: '/admin/logs',    label: t('nav.logs'),      icon: '📝' },
     { path: '/admin/update',  label: t('nav.update'),    icon: '🔄' },
-    { path: '/admin/users',   label: 'Users',            icon: '👥' },
+    { path: '/admin/users',   label: t('nav.users'),     icon: '👥' },
     { path: '/me',            label: t('nav.myPortal'),  icon: '👤', divider: true },
   ];
 

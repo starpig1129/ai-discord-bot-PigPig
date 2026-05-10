@@ -18,7 +18,6 @@ export default function Stats() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
     Promise.all([
       api.get(`/api/admin/stats/global?period=${period}`),
       api.get(`/api/admin/stats/models?period=${period}`),
@@ -181,7 +180,6 @@ export default function Stats() {
         </motion.div>
       </div>
 
-      {/* Memory Stats */}
       <motion.div
         className="glass-card"
         initial={{ opacity: 0, y: 20 }}
@@ -189,13 +187,14 @@ export default function Stats() {
         transition={{ delay: 0.6 }}
         style={{ padding: '1.5rem', marginTop: '1.5rem' }}
       >
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>🧠 Memory System</h2>
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>🧠 {t('admin.memorySystem')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
           {[
-            { label: 'Users with Memory', value: memoryStats?.procedural_users ?? '—', icon: '👤' },
-            { label: 'Channel Segments',  value: memoryStats?.episodic_total ?? '—',   icon: '💾' },
-            { label: 'Vector Collections', value: memoryStats?.vector_collections ?? '—', icon: '🔮' },
+            { label: t('admin.users'), value: memoryStats?.procedural_users ?? '—', icon: '👤' },
+            { label: t('admin.channelSegments'),  value: memoryStats?.episodic_total ?? '—',   icon: '💾' },
+            { label: t('admin.vectorCollections'), value: memoryStats?.vector_collections ?? '—', icon: '🔮' },
           ].map((item) => (
+
             <div
               key={item.label}
               style={{

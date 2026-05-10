@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import api from '../../lib/api';
+
 
 interface UserSummary {
   discord_id: string;
@@ -24,11 +26,14 @@ interface UserDetail {
     streak_days: number;
     last_active_at: string | null;
     first_message_at: string | null;
+    channel_memories: Record<string, string>;
   }[];
 }
 
 export default function Users() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
+
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(0);
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
@@ -37,11 +42,13 @@ export default function Users() {
   const [deleteMsg, setDeleteMsg] = useState('');
   const LIMIT = 50;
 
+  const timerRef = useRef<number | null>(null);
+  
   // Debounce search input
   const handleSearchChange = (val: string) => {
     setSearch(val);
-    clearTimeout((handleSearchChange as any)._t);
-    (handleSearchChange as any)._t = setTimeout(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
       setDebouncedSearch(val);
       setPage(0);
     }, 400);
@@ -60,7 +67,8 @@ export default function Users() {
     try {
       const res = await api.get(`/api/admin/users/${userId}`);
       setSelectedUser(res.data as UserDetail);
-    } catch {
+    } catch (err: unknown) {
+      console.error('Failed to fetch user:', err);
       setSelectedUser(null);
     } finally {
       setDetailLoading(false);
@@ -70,12 +78,12 @@ export default function Users() {
   const handleDelete = async (userId: string) => {
     try {
       await api.delete(`/api/admin/users/${userId}/memory`, { data: { confirm: true } });
-      setDeleteMsg(`✅ Deleted memory for user ${userId}`);
+      setDeleteMsg(t('admin.deleteSuccess', { id: userId }));
       setDeleteConfirm(null);
       setSelectedUser(null);
       refetch();
     } catch {
-      setDeleteMsg('❌ Deletion failed');
+      setDeleteMsg(t('admin.deleteFailed'));
     }
   };
 
@@ -84,17 +92,18 @@ export default function Users() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>👥 User Management</h1>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>👥 {t('admin.usersTitle')}</h1>
         <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
-          {data?.total ?? 0} users with memory data
+          {data?.total ?? 0} {t('admin.usersWithMemory')}
         </span>
       </div>
 
       {/* Search */}
       <input
         type="text"
-        placeholder="Search by name..."
+        placeholder={t('admin.searchPlaceholder')}
         value={search}
+
         onChange={(e) => handleSearchChange(e.target.value)}
         style={{
           width: '100%',
@@ -121,7 +130,7 @@ export default function Users() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-              {['Discord ID', 'Name', 'Display Names', 'Created', 'Memory', ''].map((h) => (
+              {[t('user.discordId'), t('guild.promptName'), t('user.profile'), t('dashboard.lastUpdated'), t('user.memory'), ''].map((h) => (
                 <th key={h} style={{ padding: '0.875rem 1rem', textAlign: 'left',
                   color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.75rem', textTransform: 'uppercase' }}>
                   {h}
@@ -129,9 +138,10 @@ export default function Users() {
               ))}
             </tr>
           </thead>
+
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading...</td></tr>
+              <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{t('common.loading')}</td></tr>
             ) : (data?.users ?? []).map((u, i) => (
               <motion.tr
                 key={u.discord_id}
@@ -159,7 +169,7 @@ export default function Users() {
                     background: u.has_memory ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.1)',
                     color: u.has_memory ? '#10b981' : 'var(--color-text-muted)',
                   }}>
-                    {u.has_memory ? 'Yes' : 'No'}
+                    {u.has_memory ? t('common.yes') : t('common.no')}
                   </span>
                 </td>
                 <td style={{ padding: '0.875rem 1rem' }}>
@@ -171,9 +181,10 @@ export default function Users() {
                       color: '#f43f5e', cursor: 'pointer',
                     }}
                   >
-                    Delete
+                    {t('admin.deleteUserMemory')}
                   </button>
                 </td>
+
               </motion.tr>
             ))}
           </tbody>
@@ -215,24 +226,24 @@ export default function Users() {
               onClick={(e) => e.stopPropagation()}
             >
               <h3 style={{ fontSize: '1.125rem', fontWeight: 700, marginBottom: '0.5rem', color: '#f43f5e' }}>
-                ⚠️ Delete User Memory
+                ⚠️ {t('admin.deleteUserMemory')}
               </h3>
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                This will permanently delete all memory data for user <code style={{ color: 'var(--color-text-primary)' }}>{deleteConfirm}</code>.
-                This action cannot be undone.
+                {t('admin.deleteUserMemoryDesc', { id: deleteConfirm })}
               </p>
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
                 <button onClick={() => setDeleteConfirm(null)}
                   style={{ padding: '0.5rem 1rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)',
                     background: 'transparent', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button onClick={() => handleDelete(deleteConfirm)}
                   style={{ padding: '0.5rem 1rem', borderRadius: 'var(--radius-sm)', border: 'none',
                     background: '#f43f5e', color: 'white', cursor: 'pointer', fontWeight: 600 }}>
-                  Delete Memory
+                  {t('admin.deleteUserMemory')}
                 </button>
               </div>
+
             </motion.div>
           </motion.div>
         )}
@@ -269,8 +280,9 @@ export default function Users() {
                 {selectedUser.display_names.length > 0 && (
                   <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase',
-                      letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Display Names</div>
+                      letterSpacing: '0.05em', marginBottom: '0.5rem' }}>{t('user.profile')}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+
                       {selectedUser.display_names.map((n) => (
                         <span key={n} style={{ padding: '0.2rem 0.5rem', borderRadius: '9999px', fontSize: '0.8125rem',
                           background: 'rgba(59,130,246,0.1)', color: 'var(--color-accent-blue)' }}>{n}</span>
@@ -282,8 +294,9 @@ export default function Users() {
                 {selectedUser.procedural_memory && (
                   <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase',
-                      letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Procedural Memory</div>
+                      letterSpacing: '0.05em', marginBottom: '0.5rem' }}>{t('user.proceduralMemory')}</div>
                     <div style={{ padding: '0.875rem', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-md)',
+
                       fontSize: '0.8125rem', lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 200, overflowY: 'auto' }}>
                       {selectedUser.procedural_memory}
                     </div>
@@ -293,8 +306,9 @@ export default function Users() {
                 {selectedUser.user_background && (
                   <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase',
-                      letterSpacing: '0.05em', marginBottom: '0.5rem' }}>User Background</div>
+                      letterSpacing: '0.05em', marginBottom: '0.5rem' }}>{t('user.background')}</div>
                     <div style={{ padding: '0.875rem', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-md)',
+
                       fontSize: '0.8125rem', lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 200, overflowY: 'auto' }}>
                       {selectedUser.user_background}
                     </div>
@@ -304,20 +318,31 @@ export default function Users() {
                 {selectedUser.guild_stats.length > 0 && (
                   <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textTransform: 'uppercase',
-                      letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Guild Activity ({selectedUser.guild_stats.length})</div>
+                      letterSpacing: '0.05em', marginBottom: '0.75rem' }}>{t('admin.guildActivity')} ({selectedUser.guild_stats.length})</div>
                     {selectedUser.guild_stats.map((gs) => (
                       <div key={gs.guild_id} style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.15)',
                         borderRadius: 'var(--radius-md)', marginBottom: '0.5rem', fontSize: '0.8125rem' }}>
                         <div style={{ fontFamily: 'monospace', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{gs.guild_id}</div>
                         <div style={{ display: 'flex', gap: '1rem', marginTop: '0.375rem', flexWrap: 'wrap' }}>
-                          <span>💬 {gs.total_messages} msgs</span>
-                          <span>🔥 {gs.streak_days}d streak</span>
+                          <span>💬 {gs.total_messages} {t('admin.messages')}</span>
+                          <span>🔥 {gs.streak_days}{t('admin.streak')}</span>
                           {gs.last_active_at && (
                             <span style={{ color: 'var(--color-text-muted)' }}>
-                              Last: {new Date(gs.last_active_at).toLocaleDateString()}
+                              {t('admin.lastActive')}: {new Date(gs.last_active_at).toLocaleDateString()}
                             </span>
                           )}
                         </div>
+                        {Object.entries(gs.channel_memories).length > 0 && (
+                          <div style={{ marginTop: '0.75rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
+                            {Object.entries(gs.channel_memories).map(([cid, mem]) => (
+                              <div key={cid} style={{ marginBottom: '0.5rem' }}>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--color-accent-blue)', opacity: 0.8 }}>#{cid}</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)', lineHeight: 1.4,
+                                  background: 'rgba(0,0,0,0.1)', padding: '0.4rem', borderRadius: '4px' }}>{mem}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -328,8 +353,9 @@ export default function Users() {
                   style={{ width: '100%', padding: '0.625rem', borderRadius: 'var(--radius-md)',
                     background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)',
                     color: '#f43f5e', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem' }}>
-                  🗑️ Delete This User's Memory
+                  🗑️ {t('admin.deleteUserMemory')}
                 </button>
+
               </>
             )}
           </motion.div>

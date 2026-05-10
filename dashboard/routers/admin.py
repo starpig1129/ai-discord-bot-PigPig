@@ -196,6 +196,7 @@ async def execute_update(
 # ── User Management (Bot Owner) ───────────────────────────────────────
 
 _PROCEDURAL_DB = Path(ROOT_DIR) / "data" / "memory" / "procedural.db"
+_EPISODIC_DB = Path(ROOT_DIR) / "data" / "memory" / "episodic.db"
 
 
 @router.get("/users")
@@ -292,11 +293,38 @@ async def get_user_detail(
             user_row = await user_cursor.fetchone()
 
             stats_cursor = await db.execute(
-                "SELECT guild_id, total_messages, streak_days, last_active_at, first_message_at "
+                "SELECT guild_id, total_messages, streak_days, last_active_at, first_message_at, top_channels "
                 "FROM user_stats WHERE user_id = ? ORDER BY total_messages DESC",
                 (user_id,),
             )
             stats_rows = await stats_cursor.fetchall()
+
+        # Enrichment: Fetch episodic memory summaries if episodic db exists
+        channel_memories = {}
+        if _EPISODIC_DB.exists():
+            try:
+                async with aiosqlite.connect(str(_EPISODIC_DB)) as edb:
+                    edb.row_factory = aiosqlite.Row
+                    # Collect all top channel IDs across guilds
+                    all_channel_ids = set()
+                    for srow in stats_rows:
+                        try:
+                            tc = _json.loads(srow["top_channels"] or "{}")
+                            all_channel_ids.update(tc.keys())
+                        except:
+                            continue
+                    
+                    if all_channel_ids:
+                        placeholders = ",".join(["?"] * len(all_channel_ids))
+                        m_cursor = await edb.execute(
+                            f"SELECT channel_id, last_summary_text FROM channel_memory_state WHERE channel_id IN ({placeholders})",
+                            list(all_channel_ids)
+                        )
+                        mrows = await m_cursor.fetchall()
+                        for mrow in mrows:
+                            channel_memories[str(mrow["channel_id"])] = mrow["last_summary_text"]
+            except Exception as e:
+                log.warning(f"Failed to fetch episodic enrichment: {e}")
 
     except Exception as exc:
         log.error(f"get_user_detail failed for {user_id}: {exc}")
@@ -311,16 +339,23 @@ async def get_user_detail(
     except Exception:
         pass
 
-    guild_stats = [
-        {
+    guild_stats = []
+    for row in stats_rows:
+        try:
+            tc = _json.loads(row["top_channels"] or "{}")
+        except:
+            tc = {}
+            
+        memories = {cid: channel_memories[cid] for cid in tc.keys() if cid in channel_memories}
+        
+        guild_stats.append({
             "guild_id": row["guild_id"],
             "total_messages": row["total_messages"],
             "streak_days": row["streak_days"],
             "last_active_at": row["last_active_at"],
             "first_message_at": row["first_message_at"],
-        }
-        for row in stats_rows
-    ]
+            "channel_memories": memories
+        })
 
     return JSONResponse({
         "discord_id": user_row["discord_id"],
