@@ -574,9 +574,10 @@ class UserDataCog(commands.Cog):
     async def _save_user_data(
         self,
         user_id: str,
-        display_name: str,
+        discord_name: str,
         user_data: str,
-        context: Union[discord.Interaction, discord.Message]
+        context: Union[discord.Interaction, discord.Message],
+        nickname: Optional[str] = None
     ) -> str:
         """Core logic for saving user data with AI-assisted merge.
         
@@ -606,13 +607,16 @@ class UserDataCog(commands.Cog):
             if not user_info:
                 try:
                     # Create a minimal user record
-                    await self.user_manager.update_user_activity(user_id, display_name)
+                    await self.user_manager.update_user_activity(user_id, discord_name, nickname)
                     self.logger.info(f"Initialized user record for {user_id}")
                     # Use a default UserInfo object instead of re-fetching from DB
+                    display_names = []
+                    if discord_name: display_names.append(discord_name)
+                    if nickname: display_names.append(nickname)
                     existing_data = UserInfo(
                         discord_id=user_id,
-                        discord_name=display_name,
-                        display_names=[display_name] if display_name else []
+                        discord_name=discord_name,
+                        display_names=display_names
                     )
                 except Exception as e:
                     self.logger.error(f"Failed to initialize user record for {user_id}: {e}")
@@ -642,7 +646,8 @@ class UserDataCog(commands.Cog):
             success = await self.user_manager.update_user_data(
                 user_id,
                 merged_data,
-                display_name
+                discord_name=discord_name,
+                nickname=nickname
             )
             
             if success:
@@ -940,9 +945,10 @@ class UserDataCog(commands.Cog):
                 )
             return await self._save_user_data(
                 user_id,
-                user.display_name,
+                user.name,
                 user_data,
-                context
+                context,
+                nickname=user.display_name
             )
         elif action == 'clear':
             return await self._clear_user_data(user_id, context)
@@ -1107,7 +1113,8 @@ class UserDataCog(commands.Cog):
     async def update_user_activity(
         self,
         user_id: str,
-        display_name: str = ''
+        discord_name: str = '',
+        nickname: Optional[str] = None
     ) -> bool:
         """Updates user activity status.
         
@@ -1124,7 +1131,8 @@ class UserDataCog(commands.Cog):
         try:
             return await self.user_manager.update_user_activity(
                 user_id,
-                display_name
+                discord_name,
+                nickname
             )
         except Exception as e:
             self.logger.error(f"Failed to update user activity: {e}")

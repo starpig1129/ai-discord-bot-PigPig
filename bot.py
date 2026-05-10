@@ -242,6 +242,14 @@ class PigPig(commands.Bot):
             
             if self.message_tracker:
                 await self.message_tracker.track_message(message)
+            
+            # Update user activity and names in background
+            if hasattr(self, 'user_manager') and self.user_manager:
+                asyncio.create_task(self.user_manager.update_user_activity(
+                    str(message.author.id), 
+                    message.author.name, 
+                    message.author.display_name
+                ))
 
             # Record message event for dashboard statistics
             try:

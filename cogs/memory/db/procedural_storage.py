@@ -88,6 +88,7 @@ class ProceduralStorage:
         procedural_memory: Optional[str] = None,
         user_background: Optional[str] = None,
         display_names: Optional[List[str]] = None,
+        nickname: Optional[str] = None,
     ) -> bool:
         try:
             with self.db.get_connection() as conn:
@@ -107,6 +108,8 @@ class ProceduralStorage:
                     new_display_names.update(display_names)
                 if discord_name:
                     new_display_names.add(discord_name)
+                if nickname:
+                    new_display_names.add(nickname)
 
                 if exists:
                     conn.execute(
@@ -168,7 +171,7 @@ class ProceduralStorage:
             await func.report_error(e, f"delete_user_data failed (user: {discord_id})")
             return False
 
-    async def update_user_activity(self, discord_id: str, discord_name: str) -> bool:
+    async def update_user_activity(self, discord_id: str, discord_name: str, nickname: Optional[str] = None) -> bool:
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.execute("SELECT display_names FROM users WHERE discord_id = ?", (discord_id,))
@@ -180,20 +183,33 @@ class ProceduralStorage:
                             existing_display_names = json.loads(row["display_names"])
                         except Exception:
                             existing_display_names = [row["display_names"]]
+                    changed = False
                     if discord_name and discord_name not in existing_display_names:
                         existing_display_names.append(discord_name)
-                    conn.execute(
-                        """
-                        UPDATE users
-                        SET discord_name = COALESCE(?, discord_name),
-                            display_names = COALESCE(?, display_names)
-                        WHERE discord_id = ?
-                        """,
-                        (discord_name or None, json.dumps(existing_display_names, ensure_ascii=False), discord_id),
-                    )
+                        changed = True
+                    if nickname and nickname not in existing_display_names:
+                        existing_display_names.append(nickname)
+                        changed = True
+                    
+                    # Also check if discord_name itself changed
+                    # (we might want to skip update if discord_name is already correct)
+                    
+                    if changed:
+                        conn.execute(
+                            """
+                            UPDATE users
+                            SET discord_name = COALESCE(?, discord_name),
+                                display_names = COALESCE(?, display_names)
+                            WHERE discord_id = ?
+                            """,
+                            (discord_name or None, json.dumps(existing_display_names, ensure_ascii=False), discord_id),
+                        )
                 else:
                     now_iso = datetime.utcnow().isoformat()
-                    display_names = [discord_name] if discord_name else []
+                    names = set()
+                    if discord_name: names.add(discord_name)
+                    if nickname: names.add(nickname)
+                    display_names = list(names)
                     conn.execute(
                         """
                         INSERT INTO users (discord_id, discord_name, display_names, created_at)

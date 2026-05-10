@@ -51,7 +51,7 @@ class UserDataCog(commands.Cog):
     
     # Core processing methods
     async def _read_user_data(self, user_id: str, context) -> str
-    async def _save_user_data(self, user_id: str, display_name: str, user_data: str, context) -> str
+    async def _save_user_data(self, user_id: str, discord_name: str, user_data: str, context, nickname: Optional[str] = None) -> str
     async def _invoke_ai_merge_agent(self, existing_data: Optional[UserInfo], new_data: str, user_id: str) -> UserDataResponse
 ```
 
@@ -131,8 +131,8 @@ from cogs.memory.users.models import UserInfo
 
 # Database operations
 user_info = await self.user_manager.get_user_info(user_id)
-await self.user_manager.update_user_data(user_id, merged_data, display_name)
-await self.user_manager.update_user_activity(user_id, display_name)
+await self.user_manager.update_user_data(user_id, merged_data, discord_name=discord_name, nickname=nickname)
+await self.user_manager.update_user_activity(user_id, discord_name, nickname)
 ```
 
 #### Data Structure

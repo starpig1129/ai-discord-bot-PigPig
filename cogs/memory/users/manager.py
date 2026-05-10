@@ -69,7 +69,7 @@ class SQLiteUserManager:
                 await func.report_error(e, "Failed to retrieve multiple users")
         return result
 
-    async def update_user_data(self, user_id: str, user_data: Any, display_name: Optional[str] = None) -> bool:
+    async def update_user_data(self, user_id: str, user_data: Any, discord_name: Optional[str] = None, nickname: Optional[str] = None) -> bool:
         """Extracts fields from user_data and delegates to storage."""
         try:
             # user_data is expected to be a UserDataResponse object
@@ -77,16 +77,20 @@ class SQLiteUserManager:
             user_background = user_data.user_background
             display_names = user_data.display_names
 
-            # Ensure display_name from context is included
-            if display_name and display_name not in display_names:
-                display_names.append(display_name)
+            # Ensure nickname from context is included
+            if nickname and nickname not in display_names:
+                display_names.append(nickname)
+            # Ensure discord_name from context is included
+            if discord_name and discord_name not in display_names:
+                display_names.append(discord_name)
 
             success = await self.storage.update_user_data(
                 discord_id=user_id,
-                discord_name=display_name or "",
+                discord_name=discord_name or "",
                 procedural_memory=procedural_memory,
                 user_background=user_background,
-                display_names=display_names
+                display_names=display_names,
+                nickname=nickname
             )
 
             if success and user_id in self._user_cache:
@@ -107,10 +111,10 @@ class SQLiteUserManager:
             await func.report_error(e, f"Failed to delete user data (user: {user_id})")
             return False
 
-    async def update_user_activity(self, user_id: str, display_name: str = "") -> bool:
+    async def update_user_activity(self, user_id: str, discord_name: str = "", nickname: Optional[str] = None) -> bool:
         """Delegate activity update to storage and invalidate cache."""
         try:
-            success = await self.storage.update_user_activity(user_id, display_name)
+            success = await self.storage.update_user_activity(user_id, discord_name, nickname)
             if success and user_id in self._user_cache:
                 del self._user_cache[user_id]
             return success
@@ -190,7 +194,7 @@ class SQLiteUserManager:
                     user_data = doc.get("user_data")
                     display = doc.get("display_name") or ""
                     if user_id and user_data:
-                        ok = await self.update_user_data(user_id, user_data, display)
+                        ok = await self.update_user_data(user_id, user_data, discord_name=display)
                         if ok:
                             migrated += 1
                         else:

@@ -142,6 +142,7 @@ async def get_procedural_memory(
 
 @router.get("/memory/episodic")
 async def get_episodic_memory(
+    request: Request,
     user: dict[str, Any] = Depends(get_current_user),
     guild_id: str | None = None,
     limit: int = 50,
@@ -202,43 +203,69 @@ async def get_episodic_memory(
         raise HTTPException(status_code=503, detail="Memory database temporarily unavailable")
 
     # Enrichment: Fetch episodic memory summaries if episodic db exists
-    channel_memories = {}
-    if _EPISODIC_DB.exists():
+    bot = request.app.state.bot
+    channel_summaries = {}
+    
+    # Pre-fetch all relevant channel IDs across all guilds for this user
+    all_target_channel_ids = set()
+    guild_channel_maps = {} # guild_id -> {name: id}
+
+    for row in rows:
+        gid = row["guild_id"]
+        guild = bot.get_guild(int(gid))
+        if not guild:
+            continue
+            
+        # Build mapping for this guild
+        name_map = {c.name: str(c.id) for c in guild.channels}
+        guild_channel_maps[gid] = name_map
+        
+        try:
+            tc = json.loads(row["top_channels"] or "{}")
+            for cname in tc.keys():
+                if cname in name_map:
+                    all_target_channel_ids.add(name_map[cname])
+        except:
+            continue
+
+    if _EPISODIC_DB.exists() and all_target_channel_ids:
         try:
             async with aiosqlite.connect(str(_EPISODIC_DB)) as edb:
                 edb.row_factory = aiosqlite.Row
-                # Collect all top channel IDs across guilds
-                all_channel_ids = set()
-                for srow in rows:
-                    try:
-                        tc = json.loads(srow["top_channels"] or "{}")
-                        all_channel_ids.update(tc.keys())
-                    except:
-                        continue
-                
-                if all_channel_ids:
-                    placeholders = ",".join(["?"] * len(all_channel_ids))
-                    m_cursor = await edb.execute(
-                        f"SELECT channel_id, last_summary_text FROM channel_memory_state WHERE channel_id IN ({placeholders})",
-                        list(all_channel_ids)
-                    )
-                    mrows = await m_cursor.fetchall()
-                    for mrow in mrows:
-                        channel_memories[str(mrow["channel_id"])] = mrow["last_summary_text"]
+                placeholders = ",".join(["?"] * len(all_target_channel_ids))
+                m_cursor = await edb.execute(
+                    f"SELECT channel_id, last_summary_text FROM channel_memory_state WHERE channel_id IN ({placeholders})",
+                    list(all_target_channel_ids)
+                )
+                mrows = await m_cursor.fetchall()
+                for mrow in mrows:
+                    channel_summaries[str(mrow["channel_id"])] = mrow["last_summary_text"]
         except Exception as e:
-            log.warning(f"Failed to fetch episodic enrichment for user {user_id}: {e}")
+            log.warning(f"Failed to fetch episodic enrichment: {e}")
 
     records = []
     for row in rows:
+        gid = row["guild_id"]
         try:
             tc = json.loads(row["top_channels"] or "{}")
         except (json.JSONDecodeError, TypeError):
             tc = {}
         
-        mems = {cid: channel_memories[cid] for cid in tc.keys() if cid in channel_memories}
+        # Build memories dict for this guild's top channels
+        mems = {}
+        name_map = guild_channel_maps.get(gid, {})
+        for cname in tc.keys():
+            cid = name_map.get(cname)
+            if cid and cid in channel_summaries:
+                mems[cname] = channel_summaries[cid]
+        
+        # Resolve guild name
+        guild = bot.get_guild(int(gid))
+        guild_name = guild.name if guild else gid
         
         record: dict[str, Any] = {
-            "guild_id": row["guild_id"],
+            "guild_id": gid,
+            "guild_name": guild_name,
             "total_messages": row["total_messages"],
             "streak_days": row["streak_days"],
             "last_active_at": row["last_active_at"],

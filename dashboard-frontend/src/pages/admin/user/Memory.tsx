@@ -47,6 +47,8 @@ export default function UserMemory() {
   }, []);
 
 
+  const [expandedGuild, setExpandedGuild] = useState<string | null>(null);
+
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
       <div className="animate-pulse-glow">🧠</div>
@@ -121,15 +123,27 @@ export default function UserMemory() {
               className="glass-card"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              style={{ padding: '1.25rem', marginBottom: '0.75rem' }}
+              style={{ padding: '0', overflow: 'hidden' }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+              <div 
+                onClick={() => setExpandedGuild(expandedGuild === rec.guild_id ? null : rec.guild_id)}
+                style={{ 
+                  padding: '1.25rem', 
+                  cursor: 'pointer',
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'flex-start',
+                  background: expandedGuild === rec.guild_id ? 'rgba(255,255,255,0.03)' : 'transparent',
+                  transition: 'background 0.2s'
+                }}
+              >
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <p style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{rec.guild_name || rec.guild_id}</p>
                     <button
                       disabled={deletingGuild === rec.guild_id}
-                      onClick={async () => {
+                      onClick={async (e) => {
+                        e.stopPropagation();
                         if (!confirm(t('admin.deleteUserMemoryDesc', { id: rec.guild_name || rec.guild_id }))) return;
                         setDeletingGuild(rec.guild_id);
                         try {
@@ -162,27 +176,62 @@ export default function UserMemory() {
                   )}
                 </div>
 
-                <div style={{ textAlign: 'right' }}>
-                  <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{rec.total_messages.toLocaleString()} {t('stats.totalMessages').toLowerCase()}</p>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
-                    🔥 {rec.streak_days} {t('user.streakDays')}
-                  </p>
+                <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ fontSize: '0.875rem', fontWeight: 600 }}>{rec.total_messages.toLocaleString()} {t('stats.totalMessages').toLowerCase()}</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                      🔥 {rec.streak_days} {t('user.streakDays')}
+                    </p>
+                  </div>
+                  <div style={{ 
+                    transform: expandedGuild === rec.guild_id ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s',
+                    color: 'var(--color-text-muted)'
+                  }}>
+                    ▼
+                  </div>
                 </div>
               </div>
 
-              {Object.entries(rec.channel_memories).length > 0 && (
-                <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
-                  {Object.entries(rec.channel_memories).map(([cid, mem]) => (
-                    <div key={cid} style={{ marginBottom: '0.75rem' }}>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--color-accent-blue)', opacity: 0.8, marginBottom: '0.25rem' }}>#{cid}</div>
-                      <div style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', lineHeight: 1.5,
-                        background: 'rgba(0,0,0,0.15)', padding: '0.625rem', borderRadius: 'var(--radius-sm)' }}>{mem}</div>
+              {expandedGuild === rec.guild_id && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  style={{ 
+                    padding: '0 1.25rem 1.25rem 1.25rem',
+                    borderTop: '1px solid var(--color-border)',
+                    background: 'rgba(0,0,0,0.1)'
+                  }}
+                >
+                  {Object.entries(rec.channel_memories).length > 0 ? (
+                    <div style={{ paddingTop: '1rem' }}>
+                      {Object.entries(rec.channel_memories).map(([cid, mem]) => (
+                        <div key={cid} style={{ marginBottom: '1rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--color-accent-blue)', fontWeight: 600 }}>#{cid}</div>
+                          </div>
+                          <div style={{ 
+                            fontSize: '0.8125rem', 
+                            color: 'var(--color-text-secondary)', 
+                            lineHeight: 1.6,
+                            background: 'rgba(255,255,255,0.03)', 
+                            padding: '0.75rem', 
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid rgba(255,255,255,0.05)'
+                          }}>
+                            {mem}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  ) : (
+                    <div style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+                      {t('user.noEpisodicMemory')}
+                    </div>
+                  )}
+                </motion.div>
               )}
             </motion.div>
-
           ))}
         </div>
       )}

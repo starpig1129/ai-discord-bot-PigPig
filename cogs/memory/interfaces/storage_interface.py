@@ -25,11 +25,12 @@ class ProceduralStorageInterface(ABC):
         procedural_memory: Optional[str] = None,
         user_background: Optional[str] = None,
         display_names: Optional[List[str]] = None,
+        nickname: Optional[str] = None,
     ) -> bool:
         raise NotImplementedError
 
     @abstractmethod
-    async def update_user_activity(self, discord_id: str, discord_name: str) -> bool:
+    async def update_user_activity(self, discord_id: str, discord_name: str, nickname: Optional[str] = None) -> bool:
         raise NotImplementedError
 
     @abstractmethod
