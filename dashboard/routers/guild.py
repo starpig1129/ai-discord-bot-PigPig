@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import yaml
+import aiosqlite
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,12 @@ log = get_logger(server_id="Bot", source=__name__)
 router = APIRouter(prefix="/api/guild", tags=["guild"])
 
 _CHANNEL_CONFIG_DIR = Path(ROOT_DIR) / "data" / "channel_configs"
+_EPISODIC_DB = Path(ROOT_DIR) / "data" / "memory" / "episodic.db"
+_PROCEDURAL_DB = Path(ROOT_DIR) / "data" / "memory" / "procedural.db"
+
+from addons.settings import memory_config
+from qdrant_client import QdrantClient
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -625,6 +632,96 @@ async def update_channel_prompt(
     _write_guild_config(guild_id, cfg)
     log.info(f"Guild {guild_id} channel {channel_id} prompt updated by {user.get('sub')}")
     return JSONResponse({"detail": "Channel prompt updated"})
+
+
+@router.get("/{guild_id}/channels/{channel_id}/memory")
+async def get_channel_memory(
+    guild_id: str,
+    channel_id: str,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> JSONResponse:
+    """Return the memory (episodic summary + knowledge + fragments) for a specific channel."""
+    require_guild_access(guild_id, user)
+
+    summary = None
+    knowledge = None
+    fragments = []
+
+    # 1. Fetch episodic summary
+    if _EPISODIC_DB.exists():
+        try:
+            async with aiosqlite.connect(str(_EPISODIC_DB)) as db:
+                db.row_factory = aiosqlite.Row
+                async with db.execute(
+                    "SELECT last_summary_text FROM channel_memory_state WHERE channel_id = ?",
+                    (channel_id,),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                    summary = row["last_summary_text"] if row else None
+        except Exception as exc:
+            log.error(f"Episodic summary read failed for {channel_id}: {exc}")
+
+    # 2. Fetch consolidated knowledge
+    if _PROCEDURAL_DB.exists():
+        try:
+            async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
+                db.row_factory = aiosqlite.Row
+                async with db.execute(
+                    "SELECT content FROM knowledge WHERE target_type = 'channel' AND target_id = ?",
+                    (channel_id,),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                    knowledge = row["content"] if row else None
+        except Exception as exc:
+            log.error(f"Channel knowledge read failed for {channel_id}: {exc}")
+
+    # 3. Fetch episodic fragments from Qdrant
+    if memory_config.enabled and memory_config.vector_store_type == "qdrant":
+        try:
+            # We initialize client here; in a production app, this would be a shared dependency.
+            client = QdrantClient(
+                url=memory_config.qdrant_url, 
+                api_key=memory_config.qdrant_api_key
+            )
+            
+            # Use scroll to get points matching the channel_id in metadata
+            # Note: channel_id in Qdrant metadata is stored as a string
+            points, _ = client.scroll(
+                collection_name=memory_config.qdrant_collection_name,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(key="metadata.channel_id", match=MatchValue(value=str(channel_id)))
+                    ]
+                ),
+                limit=50,
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            for p in points:
+                payload = p.payload or {}
+                metadata = payload.get("metadata", {})
+                fragments.append({
+                    "id": metadata.get("fragment_id", str(p.id)),
+                    "content": metadata.get("summary", payload.get("page_content", "")),
+                    "timestamp": metadata.get("end_timestamp") or metadata.get("timestamp"),
+                })
+            
+            # Sort by timestamp descending (newest first)
+            fragments.sort(key=lambda x: x.get("timestamp") or 0, reverse=True)
+            
+        except Exception as exc:
+            log.error(f"Qdrant fragments read failed for {channel_id}: {exc}")
+
+    return JSONResponse({
+        "channel_id": channel_id,
+        "summary": summary,
+        "knowledge": knowledge,
+        "fragments": fragments
+    })
+
+
+
 
 
 @router.get("/{guild_id}/channels/{channel_id}/prompt/modules")

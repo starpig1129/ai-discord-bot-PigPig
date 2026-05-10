@@ -68,6 +68,12 @@ function Toggle({
 
 // ─── Right detail panel ───────────────────────────────────────────────
 
+interface MemoryFragment {
+  id: string;
+  content: string;
+  timestamp?: number;
+}
+
 interface DetailPanelProps {
   channel: Channel;
   guildId: string;
@@ -84,19 +90,39 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
   const [modules, setModules] = useState<PromptModule[]>([]);
   const [moduleOrder, setModuleOrder] = useState<string[]>([]);
 
+  // Memory state
+  const [memory, setMemory] = useState<string | null>(null);
+  const [knowledge, setKnowledge] = useState<string | null>(null);
+  const [fragments, setFragments] = useState<MemoryFragment[]>([]);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+
   // Load channel prompt whenever channel changes
   useEffect(() => {
+    setPromptLoaded(false);
+    setMemoryLoading(true);
+    
+    // Fetch prompt
     api.get(`/api/guild/${guildId}/channels/${channel.id}/prompt/modules`)
       .then(({ data }) => {
         setPromptEnabled(data.enabled ?? false);
         setModules(data.modules ?? []);
         setModuleOrder(data.module_order ?? []);
+        setPromptLoaded(true);
       })
-      .catch(() => {
-        setPromptEnabled(false);
-        setModules([]);
+      .catch(err => console.error('Failed to fetch prompt modules', err));
+
+    // Fetch memory (summary + knowledge + fragments)
+    api.get(`/api/guild/${guildId}/channels/${channel.id}/memory`)
+      .then(({ data }) => {
+        setMemory(data.summary);
+        setKnowledge(data.knowledge);
+        setFragments(data.fragments || []);
+        setMemoryLoading(false);
       })
-      .finally(() => setPromptLoaded(true));
+      .catch(err => {
+        console.error('Failed to fetch channel memory', err);
+        setMemoryLoading(false);
+      });
   }, [channel.id, guildId]);
 
   const toggleField = async (field: 'in_whitelist' | 'in_blacklist' | 'auto_response') => {
@@ -233,10 +259,151 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
               checked={channel.auto_response}
               disabled={savingField === 'auto_response'}
               onChange={() => toggleField('auto_response')}
-              color="var(--color-accent-blue)"
-            />
+              />
           </motion.div>
         </div>
+      </div>
+
+      {/* Episodic Memory Section */}
+      <div className="glass-card" style={{ padding: '1.25rem' }}>
+        <h4 style={{
+          fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: '1rem',
+          display: 'flex', alignItems: 'center', gap: '0.5rem'
+        }}>
+          <span>🧠</span>
+          {t('user.episodicMemory')}
+        </h4>
+        
+        {memoryLoading ? (
+          <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+            {t('common.loading')}
+          </div>
+        ) : memory ? (
+          <div style={{
+            padding: '1rem',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-border)',
+            fontSize: '0.875rem',
+            lineHeight: 1.6,
+            color: 'var(--color-text-secondary)',
+            whiteSpace: 'pre-wrap'
+          }}>
+            {memory}
+          </div>
+        ) : (
+          <div style={{
+            padding: '1.5rem',
+            textAlign: 'center',
+            color: 'var(--color-text-muted)',
+            fontSize: '0.875rem',
+            background: 'rgba(255, 255, 255, 0.01)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px dashed var(--color-border)',
+          }}>
+            {t('user.noEpisodicMemory')}
+          </div>
+        )}
+      </div>
+
+      {/* Consolidated Knowledge Section */}
+      <div className="glass-card" style={{ padding: '1.25rem' }}>
+        <h4 style={{
+          fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: '1rem',
+          display: 'flex', alignItems: 'center', gap: '0.5rem'
+        }}>
+          <span>📚</span>
+          {t('user.consolidatedKnowledge')}
+        </h4>
+        
+        {memoryLoading ? (
+          <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+            {t('common.loading')}
+          </div>
+        ) : knowledge ? (
+          <div style={{
+            padding: '1rem',
+            background: 'rgba(255, 255, 255, 0.03)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-border)',
+            fontSize: '0.875rem',
+            lineHeight: 1.6,
+            color: 'var(--color-text-secondary)',
+            whiteSpace: 'pre-wrap'
+          }}>
+            {knowledge}
+          </div>
+        ) : (
+          <div style={{
+            padding: '1.5rem',
+            textAlign: 'center',
+            color: 'var(--color-text-muted)',
+            fontSize: '0.875rem',
+            background: 'rgba(255, 255, 255, 0.01)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px dashed var(--color-border)',
+          }}>
+            {t('user.noConsolidatedKnowledge')}
+          </div>
+        )}
+      </div>
+
+      {/* Episodic Fragments Section */}
+      <div className="glass-card" style={{ padding: '1.25rem' }}>
+        <h4 style={{
+          fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: '1rem',
+          display: 'flex', alignItems: 'center', gap: '0.5rem'
+        }}>
+          <span>💬</span>
+          {t('user.episodicFragments')}
+        </h4>
+        
+        {memoryLoading ? (
+          <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+            {t('common.loading')}
+          </div>
+        ) : fragments.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {fragments.map((frag: MemoryFragment) => (
+              <div key={frag.id} style={{
+                padding: '0.875rem',
+                background: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-border)',
+                fontSize: '0.8125rem',
+                lineHeight: 1.5,
+                color: 'var(--color-text-secondary)',
+              }}>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{frag.content}</div>
+                {frag.timestamp && (
+                  <div style={{
+                    marginTop: '0.5rem',
+                    fontSize: '0.75rem',
+                    color: 'var(--color-text-muted)',
+                    textAlign: 'right'
+                  }}>
+                    {new Date(frag.timestamp * 1000).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{
+            padding: '1.5rem',
+            textAlign: 'center',
+            color: 'var(--color-text-muted)',
+            fontSize: '0.875rem',
+            background: 'rgba(255, 255, 255, 0.01)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px dashed var(--color-border)',
+          }}>
+            {t('user.noEpisodicFragments')}
+          </div>
+        )}
       </div>
 
       {/* Prompt editor */}
