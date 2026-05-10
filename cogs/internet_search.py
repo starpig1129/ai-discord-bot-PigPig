@@ -89,7 +89,7 @@ class InternetSearchCog(commands.Cog):
             app_commands.Choice(name="eat", value="eat"),
         ]
     )
-    async def search_command(self, interaction: discord.Interaction, type: app_commands.Choice[str] = 'general', query: str = ''):
+    async def search_command(self, interaction: discord.Interaction, type: Optional[app_commands.Choice[str]] = None, query: str = ''):
         """Slash command wrapper for internet_search.
     
         Delegates to internet_search and returns the textual result if available.
@@ -97,7 +97,7 @@ class InternetSearchCog(commands.Cog):
         markdown outputs into multiple followups.
         """
         await interaction.response.defer(thinking=True)
-        selected_type = type.value if type else "general"
+        selected_type = type.value if isinstance(type, app_commands.Choice) else (type or "general")
         guild_id = str(interaction.guild_id) if interaction.guild_id is not None else "0"
     
         def _split_markdown(md: str, limit: int = 1900) -> list:

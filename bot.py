@@ -462,7 +462,7 @@ class PigPig(commands.Bot):
             lang_manager = self.get_cog("LanguageManager")
             if lang_manager:
                 try:
-                    error_msg = lang_manager.translate(guild_id_str, "system", "general", "errors", "unexpected_error")
+                    error_msg = lang_manager.translate(guild_id_str, "system", "errors", "unexpected")
                 except Exception:
                     error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
             else:
@@ -657,7 +657,7 @@ class PigPig(commands.Bot):
             lang_manager = self.get_cog("LanguageManager")
             if lang_manager:
                 try:
-                    error_msg = lang_manager.translate(guild_id_str, "system", "general", "errors", "unexpected_error")
+                    error_msg = lang_manager.translate(guild_id_str, "system", "errors", "unexpected")
                 except Exception:
                     error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
             else:

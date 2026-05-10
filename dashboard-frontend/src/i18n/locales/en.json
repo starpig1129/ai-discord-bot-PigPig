@@ -203,7 +203,10 @@
     "confirmDelete": "Confirm Delete",
     "deleteSuccess": "Data successfully deleted",
     "deleteFailed": "Deletion failed, please try again",
-    "redirecting": "Redirecting in 3 seconds..."
+    "redirecting": "Redirecting in 3 seconds...",
+    "channelStats": "Channel Activity Stats",
+    "noChannelData": "No channel activity data found",
+    "commands": "Commands Sent"
   },
   "admin": {
     "usersTitle": "User Management",

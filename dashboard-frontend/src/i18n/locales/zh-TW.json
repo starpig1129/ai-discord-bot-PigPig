@@ -203,7 +203,10 @@
     "confirmDelete": "確認刪除",
     "deleteSuccess": "資料已成功刪除",
     "deleteFailed": "刪除失敗，請稍後再試",
-    "redirecting": "3 秒後將自動登出..."
+    "redirecting": "3 秒後將自動登出...",
+    "channelStats": "頻道活躍統計",
+    "noChannelData": "尚無頻道活動數據",
+    "commands": "指令發送數"
   },
   "admin": {
     "usersTitle": "使用者管理",
