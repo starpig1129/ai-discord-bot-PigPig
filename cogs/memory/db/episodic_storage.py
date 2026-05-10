@@ -133,3 +133,16 @@ class EpisodicStorage:
                 conn.commit()
         except Exception as e:
             await func.report_error(e, f"update_channel_memory_state failed for channel {channel_id}")
+
+    async def get_total_count(self) -> int:
+        """Return total number of channel memory states stored."""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT COUNT(*) as count FROM channel_memory_state"
+                )
+                row = cursor.fetchone()
+                return int(row["count"]) if row else 0
+        except Exception as e:
+            await func.report_error(e, "get_total_count failed")
+            return 0

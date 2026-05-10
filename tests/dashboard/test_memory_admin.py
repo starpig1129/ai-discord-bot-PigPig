@@ -56,3 +56,25 @@ async def test_get_users_count_returns_int():
         assert count == 5
     finally:
         os.unlink(db_path)
+# ---------- EpisodicStorage tests ----------
+
+@pytest.mark.asyncio
+async def test_episodic_get_total_count():
+    from cogs.memory.db.connection import DatabaseConnection
+    from cogs.memory.db.episodic_storage import EpisodicStorage
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+    try:
+        db = DatabaseConnection(db_path)
+        storage = EpisodicStorage(db)
+        await storage.initialize_channel_memory_state()
+        # Insert two channel states
+        await storage.update_channel_memory_state(111, 5, 999, None, None)
+        await storage.update_channel_memory_state(222, 3, 888, None, None)
+        count = await storage.get_total_count()
+        assert count == 2
+
+    finally:
+        os.unlink(db_path)
+
