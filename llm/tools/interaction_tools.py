@@ -71,10 +71,12 @@ class DiscordInteractionTools:
         @tool
         async def add_reaction(emoji: str, message_id: Optional[str] = None) -> str:
             """
-            React to a message with an emoji — unicode emojis (e.g. 👍 🐷 😂) always work without any prior lookup.
+            React to a message with an emoji — a supplementary action alongside your text response.
 
-            Only call `get_guild_emojis` first if you specifically want to use a server custom emoji by name.
-            If not provided, reacts to the triggering message.
+            Use on most messages. Pick the emoji that fits the specific tone and content naturally.
+            Any unicode emoji works without prior lookup.
+
+            Only call `get_guild_emojis` first if you want a server custom emoji by name.
 
             Args:
                 emoji: Unicode emoji (e.g. "👍") or custom guild emoji name (e.g. "pig_smile").
@@ -104,9 +106,12 @@ class DiscordInteractionTools:
                 return f"Error adding reaction: {str(e)}"
         
         @tool
-        def get_guild_stickers() -> str:
+        async def get_guild_stickers() -> str:
             """
-            Retrieves all stickers available in the current server, including their IDs.
+            Retrieves stickers available to send. Always call this before `send_sticker`.
+
+            Returns guild-specific stickers first. If the guild has none, returns stickers
+            from Discord's standard sticker packs (free, always usable).
 
             Call this tool when:
             - The user asks to use or see stickers.
@@ -117,42 +122,68 @@ class DiscordInteractionTools:
                 return "No guild context available to fetch stickers."
 
             guild = message.guild
-            if not hasattr(guild, "stickers"):
-                return "No stickers found in this guild."
-            
-            stickers = guild.stickers
-            if not stickers:
-                return "This guild has no stickers."
-                
-            sorted_stickers = sorted(stickers, key=lambda s: s.name)[:30]
-            
-            sticker_list = []
-            for sticker in sorted_stickers:
-                sticker_list.append(f"- {sticker.name} (ID: {sticker.id})")
-                
-            return "## Available Stickers\n" + "\n".join(sticker_list)
+            guild_stickers = getattr(guild, "stickers", [])
+
+            if guild_stickers:
+                sorted_stickers = sorted(guild_stickers, key=lambda s: s.name)[:30]
+                sticker_list = [f"- {s.name} (ID: {s.id})" for s in sorted_stickers]
+                return "## Guild Stickers\n" + "\n".join(sticker_list)
+
+            # Fallback: Discord premium/standard sticker packs
+            try:
+                client = message._state._get_client()
+                packs = await client.fetch_premium_sticker_packs()
+                sticker_list = []
+                for pack in packs:
+                    for sticker in list(pack.stickers)[:5]:
+                        sticker_list.append(f"- {sticker.name} (ID: {sticker.id}) [pack: {pack.name}]")
+                    if len(sticker_list) >= 30:
+                        break
+                if sticker_list:
+                    return "## Standard Discord Stickers (guild has no custom stickers)\n" + "\n".join(sticker_list)
+            except Exception as e:
+                return f"No stickers available (guild has none; standard pack fetch failed: {type(e).__name__}: {e})"
+
+            return "No stickers available."
 
         @tool
         async def send_sticker(sticker_id: str) -> str:
             """
             Sends a sticker to the channel.
-            
-            NOTE: Stickers are sent as an immediate, standalone message separate from your 
+
+            NOTE: Stickers are sent as an immediate, standalone message separate from your
             main text response stream. Please coordinate your conversational flow accordingly.
-            
+
             Args:
                 sticker_id: The ID of the sticker to send. You must get this ID from `get_guild_stickers` first.
             """
             message = getattr(runtime, "message", None)
-            if not message or not message.guild:
-                return "No guild context available."
-            
+            if not message or not message.channel:
+                return "No channel context available."
+
+            sticker = None
+            sid = int(sticker_id)
+
+            # Try guild sticker first, then fall back to standard sticker
+            if message.guild:
+                try:
+                    sticker = await message.guild.fetch_sticker(sid)
+                except Exception:
+                    pass
+
+            if sticker is None:
+                try:
+                    client = message._state._get_client()
+                    sticker = await client.fetch_sticker(sid)
+                except Exception:
+                    pass
+
+            if sticker is None:
+                return f"Error: Sticker {sticker_id} not found in guild or standard packs."
+
             try:
-                sticker = await message.guild.fetch_sticker(int(sticker_id))
-                await message.channel.send(stickers=[sticker])
+                await message.channel.send(stickers=[sticker], reference=message)
                 return f"Successfully sent sticker: {sticker.name}"
-            except discord.NotFound:
-                return "Error: Sticker not found."
             except discord.Forbidden:
                 return "Error: I don't have permission to send stickers."
             except Exception as e:
@@ -232,7 +263,7 @@ class DiscordInteractionTools:
         # Mark action tools for the message agent.
         # Primary: set directly on the tool's __dict__ (readable via hasattr/getattr on Pydantic model).
         # Fallback: set on .coroutine or .func for older LangChain versions.
-        for _t in (add_reaction, send_sticker, change_own_nickname, delete_own_last_message):
+        for _t in (add_reaction, send_sticker, change_own_nickname, delete_own_last_message, dramatic_pause):
             try:
                 _t.__dict__["target_agent_mode"] = "message"
             except Exception:

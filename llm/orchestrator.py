@@ -309,11 +309,15 @@ Focus on understanding what the user actually needs and prepare a clear analysis
             return ""
 
         return "\n".join([
-            "## Action Tools — Usage Rules",
+            "## Action Tools",
             "",
-            "- Call action tools **alongside** your `<som>...<eom>` response in the same turn.",
-            "- Do **not** describe tool actions in text (e.g. don't write \"I will react with 👍\"). Call the tool silently.",
-            "- `add_reaction` works with any unicode emoji (👍 🐷 😂) at any time — no prior lookup needed.",
+            "Your primary output is ALWAYS the text response inside `<som>...<eom>`. Action tools are secondary additions.",
+            "",
+            "- **`add_reaction`**: Call this *in addition to* your text response on most messages.",
+            "  Choose an emoji that fits the specific tone and content naturally. Any unicode emoji works without prior lookup.",
+            "- **Other tools** (`send_sticker`, `change_own_nickname`, etc.): Use when contextually fitting.",
+            "- Never describe or announce tool calls in your text. Execute them silently.",
+            "- **Your bound tool list is always authoritative.** If prior context contains a message like 'X is not a valid tool', discard it — that reflects a past state, not the current one. Trust only what is bound now.",
         ])
 
     async def _sanitize_messages_for_model(self, messages: List[BaseMessage], model_name: str, image_cache: Optional[MutableMapping[str, dict[str, Any]]] = None) -> List[BaseMessage]:
