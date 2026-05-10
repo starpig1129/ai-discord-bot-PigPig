@@ -9,6 +9,8 @@ import Config from './pages/admin/Config';
 import Guilds from './pages/admin/Guilds';
 import Logs from './pages/admin/Logs';
 import Update from './pages/admin/Update';
+import Users from './pages/admin/Users';
+
 import GuildLayout from './pages/admin/GuildLayout';
 import GuildOverview from './pages/admin/guild/Overview';
 import GuildChannels from './pages/admin/guild/Channels';
@@ -53,6 +55,8 @@ export default function App() {
             <Route path="/admin/guilds" element={<Guilds />} />
             <Route path="/admin/logs" element={<Logs />} />
             <Route path="/admin/update" element={<Update />} />
+            <Route path="/admin/users" element={<Users />} />
+
 
             {/* Server Admin routes — GuildLayout uses Outlet */}
             <Route path="/guild/:guildId" element={<GuildLayout />}>
