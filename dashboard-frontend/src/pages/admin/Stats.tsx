@@ -14,6 +14,7 @@ export default function Stats() {
   const [period, setPeriod] = useState('30d');
   const [globalStats, setGlobalStats] = useState<any>(null);
   const [modelStats, setModelStats] = useState<any>(null);
+  const [memoryStats, setMemoryStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,14 +22,17 @@ export default function Stats() {
     Promise.all([
       api.get(`/api/admin/stats/global?period=${period}`),
       api.get(`/api/admin/stats/models?period=${period}`),
+      api.get('/api/admin/stats/memory'),
     ])
-      .then(([g, m]) => {
+      .then(([g, m, mem]) => {
         setGlobalStats(g.data);
         setModelStats(m.data);
+        setMemoryStats(mem.data);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [period]);
+
 
   if (loading) {
     return (
@@ -176,6 +180,40 @@ export default function Stats() {
           </ResponsiveContainer>
         </motion.div>
       </div>
+
+      {/* Memory Stats */}
+      <motion.div
+        className="glass-card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+        style={{ padding: '1.5rem', marginTop: '1.5rem' }}
+      >
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>🧠 Memory System</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+          {[
+            { label: 'Users with Memory', value: memoryStats?.procedural_users ?? '—', icon: '👤' },
+            { label: 'Channel Segments',  value: memoryStats?.episodic_total ?? '—',   icon: '💾' },
+            { label: 'Vector Collections', value: memoryStats?.vector_collections ?? '—', icon: '🔮' },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{
+                padding: '1rem',
+                background: 'rgba(139,92,246,0.08)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid rgba(139,92,246,0.2)',
+              }}
+            >
+              <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                {item.icon} {item.label}
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </motion.div>
     </div>
+
   );
 }
