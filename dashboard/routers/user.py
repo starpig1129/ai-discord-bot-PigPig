@@ -229,6 +229,53 @@ async def get_episodic_memory(
     })
 
 
+# ── Per-Guild Episodic Deletion ───────────────────────────────────────
+
+@router.delete("/memory/episodic/{guild_id}")
+async def delete_episodic_by_guild(
+    guild_id: str,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> JSONResponse:
+    """Delete the authenticated user's episodic memory for a specific guild.
+
+    Removes only the ``user_stats`` row matching (user_id, guild_id).
+    Does not affect procedural memory or other guilds.
+
+    Args:
+        guild_id: Discord guild ID to delete episodic memory for.
+        user: Authenticated user payload (JWT).
+
+    Returns:
+        JSON confirming deletion.
+    """
+    user_id: str = user["sub"]
+
+    if not _PROCEDURAL_DB.exists():
+        raise HTTPException(status_code=404, detail="Memory database not found")
+
+    try:
+        async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
+            cursor = await db.execute(
+                "DELETE FROM user_stats WHERE user_id = ? AND guild_id = ?",
+                (user_id, guild_id),
+            )
+            await db.commit()
+            deleted = cursor.rowcount
+    except Exception as exc:
+        log.error(f"delete_episodic_by_guild failed for {user_id}/{guild_id}: {exc}")
+        raise HTTPException(status_code=503, detail="Memory database temporarily unavailable")
+
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="No episodic memory found for this guild")
+
+    log.info(f"Deleted episodic memory for user {user_id} in guild {guild_id}")
+    return JSONResponse({
+        "detail": "Episodic memory deleted for guild",
+        "user_id": user_id,
+        "guild_id": guild_id,
+    })
+
+
 # ── GDPR Delete ───────────────────────────────────────────────────────
 
 @router.delete("/memory")
