@@ -23,13 +23,27 @@ export default function GuildLayout() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [guild, setGuild] = useState<GuildInfo | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!guildId) return;
+    setError(false);
     api.get(`/api/guild/${guildId}/overview`)
       .then(({ data }) => setGuild(data))
-      .catch(() => navigate('/admin/guilds'));
-  }, [guildId, navigate]);
+      .catch(() => setError(true));
+  }, [guildId]);
+
+  if (error) return (
+    <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--color-text-muted)' }}>
+      <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚠️</div>
+      <p>無法載入伺服器資訊，請確認 Bot 是否在線或權限是否正確。</p>
+      <button onClick={() => navigate('/admin/guilds')} style={{
+        marginTop: '1rem', padding: '0.5rem 1.25rem', cursor: 'pointer',
+        borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)',
+        background: 'transparent', color: 'var(--color-text-secondary)',
+      }}>← 返回伺服器列表</button>
+    </div>
+  );
 
   if (!guild) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>

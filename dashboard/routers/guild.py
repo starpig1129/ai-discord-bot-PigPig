@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import yaml
 from pathlib import Path
 from typing import Any
 
@@ -246,6 +247,85 @@ async def update_channel(
 
 # ── System Prompt ─────────────────────────────────────────────────────
 
+_PROMPT_YAML = Path(ROOT_DIR) / "configs" / "prompt" / "message_agent.yaml"
+
+
+def _read_base_prompt_yaml() -> str:
+    """Assemble the human-readable base prompt from the YAML config.
+
+    Reads ``configs/prompt/message_agent.yaml`` and concatenates the
+    ``content`` fields of each non-base module in default order so the
+    dashboard can display it as a read-only reference.
+
+    Returns:
+        Combined prompt string (best-effort; empty string on error).
+    """
+    try:
+        if not _PROMPT_YAML.exists():
+            return ""
+        with open(_PROMPT_YAML, "r", encoding="utf-8") as f:
+            cfg: dict[str, Any] = yaml.safe_load(f) or {}
+
+        composition: dict[str, Any] = cfg.get("composition", {})
+        module_order: list[str] = composition.get("module_order", [
+            m for m in cfg.keys() if m not in ("metadata", "base", "composition")
+        ])
+
+        parts: list[str] = []
+        # Core instruction from base section
+        base = cfg.get("base", {})
+        if base.get("core_instruction"):
+            parts.append(base["core_instruction"].strip())
+
+        for mod_name in module_order:
+            if mod_name in ("base", "metadata", "composition"):
+                continue
+            mod = cfg.get(mod_name)
+            if isinstance(mod, dict):
+                content = mod.get("content", "")
+                if content:
+                    parts.append(content.strip())
+
+        return "\n\n".join(parts)
+    except Exception as exc:
+        log.warning(f"Failed to read base prompt YAML: {exc}")
+        return ""
+
+
+@router.get("/{guild_id}/prompt/effective")
+async def get_effective_prompt(
+    guild_id: str,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> JSONResponse:
+    """Return the currently *effective* system prompt for a guild.
+
+    The effective prompt is composed of:
+    1. The YAML base (``configs/prompt/message_agent.yaml``) as a
+       read-only reference.
+    2. The optional server-level override stored in ``channel_configs``.
+
+    Args:
+        guild_id: The target Discord guild ID.
+        user: Authenticated user payload.
+
+    Returns:
+        JSON with ``base_prompt`` and ``override`` fields.
+    """
+    require_guild_access(guild_id, user)
+
+    cfg = _read_guild_config(guild_id)
+    sp = cfg.get("system_prompts", {})
+    server_level: dict[str, Any] = sp.get("server_level", {})
+
+    return JSONResponse({
+        "guild_id": guild_id,
+        "base_prompt": _read_base_prompt_yaml(),
+        "override_enabled": bool(server_level.get("prompt")),
+        "override_prompt": server_level.get("prompt", server_level.get("content", "")),
+        "override_name": server_level.get("name", ""),
+    })
+
+
 @router.get("/{guild_id}/prompt")
 async def get_prompt(
     guild_id: str,
@@ -269,7 +349,8 @@ async def get_prompt(
     return JSONResponse({
         "guild_id": guild_id,
         "enabled": sp.get("enabled", False),
-        "prompt": server_level.get("content", ""),
+        # Bot's SystemPromptManager uses key 'prompt' (not 'content')
+        "prompt": server_level.get("prompt", server_level.get("content", "")),
         "prompt_name": server_level.get("name", ""),
     })
 
@@ -306,7 +387,8 @@ async def update_prompt(
 
     server_level = sp.setdefault("server_level", {})
     if "prompt" in body:
-        server_level["content"] = str(body["prompt"])
+        # Write as 'prompt' to match SystemPromptManager.set_server_prompt
+        server_level["prompt"] = str(body["prompt"])
     if "prompt_name" in body:
         server_level["name"] = str(body["prompt_name"])
 
@@ -315,6 +397,82 @@ async def update_prompt(
         f"Guild {guild_id} system prompt updated by user {user.get('sub')}"
     )
     return JSONResponse({"detail": "System prompt updated"})
+
+
+# ── Channel-level Prompt ──────────────────────────────────────────────
+
+@router.get("/{guild_id}/channels/{channel_id}/prompt")
+async def get_channel_prompt(
+    guild_id: str,
+    channel_id: str,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> JSONResponse:
+    """Return the system prompt config for a specific channel.
+
+    Args:
+        guild_id: The target Discord guild ID.
+        channel_id: The Discord channel ID.
+        user: Authenticated user payload.
+
+    Returns:
+        JSON with channel prompt text and enabled flag.
+    """
+    require_guild_access(guild_id, user)
+
+    cfg = _read_guild_config(guild_id)
+    channels: dict[str, Any] = cfg.get("system_prompts", {}).get("channels", {})
+    ch_cfg: dict[str, Any] = channels.get(channel_id, {})
+
+    return JSONResponse({
+        "channel_id": channel_id,
+        "enabled": ch_cfg.get("enabled", False),
+        "prompt": ch_cfg.get("prompt", ""),
+    })
+
+
+@router.put("/{guild_id}/channels/{channel_id}/prompt")
+async def update_channel_prompt(
+    guild_id: str,
+    channel_id: str,
+    request: Request,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> JSONResponse:
+    """Update system prompt for a specific channel.
+
+    Accepted body fields:
+        enabled (bool): Enable/disable channel-level override.
+        prompt (str): The channel-specific prompt content.
+
+    Args:
+        guild_id: The target Discord guild ID.
+        channel_id: The Discord channel ID.
+        request: FastAPI request.
+        user: Authenticated user payload.
+
+    Returns:
+        JSON confirmation.
+    """
+    require_guild_access(guild_id, user)
+
+    body: dict[str, Any] = await request.json()
+    cfg = _read_guild_config(guild_id)
+    sp = cfg.setdefault("system_prompts", {
+        "enabled": True,
+        "server_level": {},
+        "channels": {},
+        "permissions": {"allowed_roles": [], "allowed_users": [], "manage_server_prompts": []},
+    })
+    channels = sp.setdefault("channels", {})
+    ch_cfg = channels.setdefault(channel_id, {})
+
+    if "enabled" in body:
+        ch_cfg["enabled"] = bool(body["enabled"])
+    if "prompt" in body:
+        ch_cfg["prompt"] = str(body["prompt"])
+
+    _write_guild_config(guild_id, cfg)
+    log.info(f"Guild {guild_id} channel {channel_id} prompt updated by {user.get('sub')}")
+    return JSONResponse({"detail": "Channel prompt updated"})
 
 
 # ── Guild Stats ───────────────────────────────────────────────────────

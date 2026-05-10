@@ -140,7 +140,13 @@
     "promptNamePlaceholder": "e.g. Server Custom Prompt",
     "promptContent": "Prompt Content",
     "promptPlaceholder": "Enter system prompt...",
-    "activeUsers": "Active Users"
+    "activeUsers": "Active Users",
+    "channelPromptOverride": "Enable channel-specific prompt (overrides server level)",
+    "basePromptPreview": "Base YAML Prompt Preview",
+    "serverOverride": "Server-Level Override",
+    "hasCustomPrompt": "Custom Prompt Set",
+    "basePromptNote": "This is the bot's current default YAML prompt, assembled from modules. To edit the server-level override, switch to the \"Server Override\" tab.",
+    "overrideNote": "When enabled, the bot uses this content instead of the YAML default. Leave blank to continue using the YAML base prompt."
   },
   "user": {
     "profile": "Profile",

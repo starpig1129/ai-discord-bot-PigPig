@@ -140,7 +140,13 @@
     "promptNamePlaceholder": "例如：伺服器專屬 Prompt",
     "promptContent": "提示詞內容",
     "promptPlaceholder": "輸入系統提示詞...",
-    "activeUsers": "活躍使用者"
+    "activeUsers": "活躍使用者",
+    "channelPromptOverride": "啟用頻道專屬提示詞（覆寫伺服器層）",
+    "basePromptPreview": "Base YAML 提示詞預覽",
+    "serverOverride": "伺服器自訂覆寫",
+    "hasCustomPrompt": "已設自訂 Prompt",
+    "basePromptNote": "下方是 bot 目前使用的預設 YAML 提示詞，為按模組組合的結果。若要視沙伺服器總提示詞，請切換至「伺服器自訂覆寫」頁籤進行編輯。",
+    "overrideNote": "自訂覆寫啟用後，bot 會使用此處的內容取代 YAML 預設。如果留空則繼續使用 YAML 預設提示詞。"
   },
   "user": {
     "profile": "個人資料",
