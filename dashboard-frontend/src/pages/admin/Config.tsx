@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import api from '../../lib/api';
 
 const CONFIG_FILES = ['base', 'llm', 'memory', 'music'];
 
 export default function Config() {
+  const { t } = useTranslation();
   const [selectedFile, setSelectedFile] = useState('base');
   const [config, setConfig] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export default function Config() {
 
   return (
     <div>
-      <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '2rem' }}>⚙️ Configuration</h1>
+      <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '2rem' }}>⚙️ {t('config.title')}</h1>
 
       {/* File Tabs */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
@@ -75,7 +77,7 @@ export default function Config() {
       >
         {loading ? (
           <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>
-            Loading...
+            {t('common.loading')}
           </div>
         ) : (
           <>
@@ -120,7 +122,7 @@ export default function Config() {
                   disabled={saving}
                   style={{ opacity: saving ? 0.7 : 1 }}
                 >
-                  {saving ? 'Saving...' : '💾 Save'}
+                  {saving ? t('config.saving') : `💾 ${t('config.save')}`}
                 </button>
               </div>
             </div>

@@ -1,23 +1,26 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { type User, getAvatarUrl } from '../lib/auth';
+import { LANGUAGES } from '../i18n';
 
 interface SidebarProps {
   user: User;
   onLogout: () => void;
 }
 
-const NAV_ITEMS = [
-  { path: '/admin', label: 'Dashboard', icon: '📊' },
-  { path: '/admin/stats', label: 'Statistics', icon: '📈' },
-  { path: '/admin/guilds', label: 'Servers', icon: '🏠' },
-  { path: '/admin/config', label: 'Config', icon: '⚙️' },
-  { path: '/admin/logs', label: 'Logs', icon: '📝' },
-  { path: '/admin/update', label: 'Update', icon: '🔄' },
-];
-
 export default function Sidebar({ user, onLogout }: SidebarProps) {
   const location = useLocation();
+  const { t, i18n } = useTranslation();
+
+  const NAV_ITEMS = [
+    { path: '/admin',         label: t('nav.dashboard'), icon: '📊' },
+    { path: '/admin/stats',   label: t('nav.stats'),     icon: '📈' },
+    { path: '/admin/guilds',  label: t('nav.guilds'),    icon: '🏠' },
+    { path: '/admin/config',  label: t('nav.config'),    icon: '⚙️' },
+    { path: '/admin/logs',    label: t('nav.logs'),      icon: '📝' },
+    { path: '/admin/update',  label: t('nav.update'),    icon: '🔄' },
+  ];
 
   return (
     <motion.aside
@@ -38,10 +41,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
       }}
     >
       {/* Logo */}
-      <div style={{
-        padding: '1.5rem',
-        borderBottom: '1px solid var(--color-border)',
-      }}>
+      <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--color-border)' }}>
         <h1
           className="gradient-text"
           style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em' }}
@@ -90,6 +90,48 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
         })}
       </nav>
 
+      {/* Language Switcher */}
+      <div style={{
+        padding: '0.75rem 1.25rem',
+        borderTop: '1px solid var(--color-border)',
+        display: 'flex',
+        gap: '0.5rem',
+        alignItems: 'center',
+      }}>
+        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginRight: '0.25rem' }}>
+          {t('common.language')}
+        </span>
+        {LANGUAGES.map((lang) => (
+          <button
+            key={lang.code}
+            onClick={() => i18n.changeLanguage(lang.code)}
+            title={lang.label}
+            style={{
+              background: i18n.language === lang.code
+                ? 'rgba(59, 130, 246, 0.2)'
+                : 'transparent',
+              border: i18n.language === lang.code
+                ? '1px solid var(--color-accent-blue)'
+                : '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--color-text-primary)',
+              cursor: 'pointer',
+              fontSize: '0.75rem',
+              padding: '0.25rem 0.5rem',
+              transition: 'all var(--transition-fast)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+            }}
+          >
+            <span>{lang.flag}</span>
+            <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>
+              {lang.code === 'zh-TW' ? '中文' : 'EN'}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* User Profile */}
       <div style={{
         padding: '1rem 1.25rem',
@@ -137,7 +179,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
             fontSize: '1.1rem',
             padding: '0.25rem',
           }}
-          title="Logout"
+          title={t('common.logout')}
         >
           🚪
         </button>

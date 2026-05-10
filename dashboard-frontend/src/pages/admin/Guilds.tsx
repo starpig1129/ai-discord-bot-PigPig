@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import api from '../../lib/api';
 
 interface Guild {
@@ -11,6 +12,7 @@ interface Guild {
 }
 
 export default function Guilds() {
+  const { t } = useTranslation();
   const [guilds, setGuilds] = useState<Guild[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,9 +33,9 @@ export default function Guilds() {
 
   return (
     <div>
-      <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.5rem' }}>🏠 Servers</h1>
+      <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.5rem' }}>🏠 {t('guilds.title')}</h1>
       <p style={{ color: 'var(--color-text-secondary)', marginBottom: '2rem' }}>
-        {guilds.length} connected server{guilds.length !== 1 && 's'}
+        {guilds.length} {t('guilds.title').toLowerCase()}
       </p>
 
       <div style={{
@@ -93,7 +95,7 @@ export default function Guilds() {
                 {guild.name}
               </p>
               <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.125rem' }}>
-                👥 {(guild.member_count ?? 0).toLocaleString()} members
+                👥 {(guild.member_count ?? 0).toLocaleString()} {t('guilds.members')}
               </p>
             </div>
             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>

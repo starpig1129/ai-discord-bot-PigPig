@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import api from '../../lib/api';
 
 interface BotStatus {
@@ -32,6 +33,7 @@ const cardVariants = {
 };
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -56,23 +58,21 @@ export default function Dashboard() {
   }
 
   const cards = [
-    { label: 'Status', value: status?.status || 'offline', icon: '🟢', color: 'var(--color-accent-emerald)', isStatus: true },
-    { label: 'Latency', value: `${status?.latency_ms ?? 0}ms`, icon: '⚡', color: 'var(--color-accent-blue)' },
-    { label: 'Uptime', value: formatUptime(status?.uptime_seconds ?? 0), icon: '⏱️', color: 'var(--color-accent-violet)' },
-    { label: 'Servers', value: status?.guilds ?? 0, icon: '🏠', color: 'var(--color-accent-blue)' },
-    { label: 'Users', value: (status?.users ?? 0).toLocaleString(), icon: '👥', color: 'var(--color-accent-violet)' },
-    { label: 'Memory', value: `${status?.memory_mb ?? 0} MB`, icon: '💾', color: 'var(--color-accent-amber)' },
+    { label: t('dashboard.status'),  value: status?.status || 'offline', icon: '🟢', isStatus: true },
+    { label: t('dashboard.latency'), value: `${status?.latency_ms ?? 0}ms`, icon: '⚡' },
+    { label: t('dashboard.uptime'),  value: formatUptime(status?.uptime_seconds ?? 0), icon: '⏱️' },
+    { label: t('dashboard.guilds'),  value: status?.guilds ?? 0, icon: '🏠' },
+    { label: t('dashboard.users'),   value: (status?.users ?? 0).toLocaleString(), icon: '👥' },
+    { label: t('dashboard.memory'),  value: `${status?.memory_mb ?? 0} MB`, icon: '💾' },
   ];
 
   return (
     <div>
       {/* Header */}
       <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-          Welcome back 👋
-        </h1>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Welcome back 👋</h1>
         <p style={{ color: 'var(--color-text-secondary)', marginTop: '0.25rem' }}>
-          {status?.bot_name || 'PigPig'} is running smoothly
+          {status?.bot_name || 'PigPig'} · {t('dashboard.subtitle')}
         </p>
       </div>
 

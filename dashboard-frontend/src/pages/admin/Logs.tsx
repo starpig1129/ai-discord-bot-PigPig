@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useWebSocket, type LogEntry } from '../../hooks/useWebSocket';
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -11,6 +12,7 @@ const LEVEL_COLORS: Record<string, string> = {
 };
 
 export default function Logs() {
+  const { t } = useTranslation();
   const token = localStorage.getItem('access_token');
   const { logs, connected, sendFilter, clearLogs } = useWebSocket({
     url: '/ws/admin/logs',
@@ -43,11 +45,11 @@ export default function Logs() {
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 4rem)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>📝 Live Logs</h1>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>📝 {t('logs.title')}</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
             <span className={`status-dot ${connected ? 'online' : 'offline'}`} />
             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-              {connected ? 'Connected' : 'Disconnected'} · {logs.length} entries
+              {connected ? t('logs.connected') : t('logs.disconnected')} · {logs.length} entries
             </span>
           </div>
         </div>
@@ -66,7 +68,7 @@ export default function Logs() {
               outline: 'none',
             }}
           >
-            <option value="">All Levels</option>
+            <option value="">{t('logs.allLevels')}</option>
             {Object.keys(LEVEL_COLORS).map((l) => (
               <option key={l} value={l}>{l}</option>
             ))}
@@ -74,7 +76,7 @@ export default function Logs() {
 
           <input
             type="text"
-            placeholder="Guild ID filter..."
+            placeholder={t('logs.filterGuild') + '...'}
             value={guildFilter}
             onChange={(e) => handleGuildChange(e.target.value)}
             style={{
@@ -95,7 +97,7 @@ export default function Logs() {
               checked={autoScroll}
               onChange={(e) => setAutoScroll(e.target.checked)}
             />
-            Auto-scroll
+            {t('logs.autoScroll')}
           </label>
 
           <button
@@ -110,7 +112,7 @@ export default function Logs() {
               fontSize: '0.8125rem',
             }}
           >
-            Clear
+            {t('logs.clear')}
           </button>
         </div>
       </div>
@@ -132,7 +134,7 @@ export default function Logs() {
       >
         {filteredLogs.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', paddingTop: '3rem' }}>
-            {connected ? 'Waiting for log entries...' : 'Connecting to log stream...'}
+            {connected ? t('logs.empty') : t('logs.connecting')}
           </div>
         ) : (
           filteredLogs.map((entry: LogEntry, i: number) => (

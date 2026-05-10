@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import api from '../../lib/api';
 
 export default function Update() {
+  const { t } = useTranslation();
   const [checking, setChecking] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<any>(null);
@@ -22,7 +24,7 @@ export default function Update() {
   };
 
   const executeUpdate = async () => {
-    if (!confirm('Are you sure you want to update the bot?')) return;
+    if (!confirm(t('update.startUpdate') + '?')) return;
     setUpdating(true);
     setMessage(null);
     try {
@@ -37,7 +39,7 @@ export default function Update() {
 
   return (
     <div>
-      <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '2rem' }}>🔄 Update Management</h1>
+      <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '2rem' }}>🔄 {t('update.title')}</h1>
 
       <motion.div
         className="glass-card"
@@ -50,11 +52,11 @@ export default function Update() {
         {updateInfo && (
           <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--color-text-secondary)' }}>Current Version</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>{t('update.currentVersion')}</span>
               <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{updateInfo.current_version}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--color-text-secondary)' }}>Latest Version</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>{t('update.latestVersion')}</span>
               <span style={{
                 fontWeight: 600,
                 fontFamily: 'monospace',
@@ -72,7 +74,7 @@ export default function Update() {
                 color: 'var(--color-accent-emerald)',
                 fontSize: '0.8125rem',
               }}>
-                🎉 A new version is available!
+                🎉 {t('update.updateAvailable')}
               </div>
             )}
           </div>
@@ -102,7 +104,7 @@ export default function Update() {
             disabled={checking}
             style={{ opacity: checking ? 0.7 : 1 }}
           >
-            {checking ? 'Checking...' : '🔍 Check for Updates'}
+            {checking ? t('update.checking') : `🔍 ${t('update.checkUpdate')}`}
           </button>
           {updateInfo?.update_available && (
             <button
@@ -120,7 +122,7 @@ export default function Update() {
                 opacity: updating ? 0.7 : 1,
               }}
             >
-              {updating ? 'Updating...' : '🚀 Update Now'}
+              {updating ? t('update.updating') : `🚀 ${t('update.startUpdate')}`}
             </button>
           )}
         </div>

@@ -1,0 +1,108 @@
+{
+  "nav": {
+    "dashboard": "總覽",
+    "stats": "統計數據",
+    "config": "設定管理",
+    "guilds": "伺服器列表",
+    "logs": "即時日誌",
+    "update": "版本更新"
+  },
+  "login": {
+    "title": "PigPig 管理面板",
+    "subtitle": "使用 Discord 帳號登入以管理您的 Bot",
+    "button": "使用 Discord 登入",
+    "hint": "需要 Discord 帳號 · Bot Owner 權限"
+  },
+  "dashboard": {
+    "title": "總覽",
+    "subtitle": "Bot 即時狀態監控",
+    "status": "Bot 狀態",
+    "online": "線上",
+    "offline": "離線",
+    "guilds": "伺服器數量",
+    "users": "使用者數量",
+    "uptime": "運行時間",
+    "cpu": "CPU 使用率",
+    "memory": "記憶體使用",
+    "latency": "API 延遲",
+    "version": "版本",
+    "lastUpdated": "最後更新",
+    "refresh": "重新整理",
+    "loading": "載入中…",
+    "error": "載入失敗，請稍後再試"
+  },
+  "stats": {
+    "title": "統計數據",
+    "subtitle": "Bot 使用分析報告",
+    "messageTrend": "訊息趨勢",
+    "modelUsage": "模型使用分佈",
+    "responseTime": "回應時間分析",
+    "totalMessages": "總訊息數",
+    "avgResponse": "平均回應時間",
+    "ms": "毫秒",
+    "days": "天",
+    "period": "時間範圍",
+    "period7": "近 7 天",
+    "period30": "近 30 天",
+    "period90": "近 90 天"
+  },
+  "config": {
+    "title": "設定管理",
+    "subtitle": "編輯 Bot 設定檔",
+    "selectFile": "選擇設定檔",
+    "save": "儲存",
+    "saving": "儲存中…",
+    "saved": "已儲存",
+    "saveError": "儲存失敗",
+    "invalidJson": "JSON 格式錯誤，請修正後再儲存",
+    "warning": "⚠️ 直接修改設定可能影響 Bot 運作，請謹慎操作"
+  },
+  "guilds": {
+    "title": "伺服器列表",
+    "subtitle": "PigPig 目前連線的所有伺服器",
+    "members": "成員",
+    "id": "伺服器 ID",
+    "empty": "目前無伺服器資料",
+    "loading": "載入伺服器列表中…"
+  },
+  "logs": {
+    "title": "即時日誌",
+    "subtitle": "WebSocket 串流日誌監控",
+    "connected": "已連線",
+    "disconnected": "已斷線",
+    "connecting": "連線中…",
+    "filterLevel": "篩選等級",
+    "filterGuild": "伺服器 ID",
+    "allLevels": "全部等級",
+    "clear": "清除",
+    "autoScroll": "自動捲動",
+    "empty": "等待日誌資料…"
+  },
+  "update": {
+    "title": "版本更新",
+    "subtitle": "Bot 版本管理",
+    "currentVersion": "目前版本",
+    "latestVersion": "最新版本",
+    "checkUpdate": "檢查更新",
+    "checking": "檢查中…",
+    "upToDate": "已是最新版本",
+    "updateAvailable": "有新版本可用",
+    "startUpdate": "開始更新",
+    "updating": "更新中…",
+    "updateSuccess": "更新成功",
+    "updateFailed": "更新失敗",
+    "changelog": "更新日誌",
+    "unknownVersion": "未知版本"
+  },
+  "common": {
+    "loading": "載入中…",
+    "error": "發生錯誤",
+    "retry": "重試",
+    "logout": "登出",
+    "language": "語言",
+    "confirm": "確認",
+    "cancel": "取消",
+    "unknown": "未知",
+    "noData": "無資料"
+  }
+}

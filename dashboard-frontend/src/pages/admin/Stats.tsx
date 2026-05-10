@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, BarChart, Bar,
@@ -9,6 +10,7 @@ import api from '../../lib/api';
 const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#f43f5e', '#06b6d4'];
 
 export default function Stats() {
+  const { t } = useTranslation();
   const [period, setPeriod] = useState('30d');
   const [globalStats, setGlobalStats] = useState<any>(null);
   const [modelStats, setModelStats] = useState<any>(null);
@@ -36,18 +38,21 @@ export default function Stats() {
     );
   }
 
+  const periodLabels: Record<string, string> = {
+    '7d': t('stats.period7'), '30d': t('stats.period30'), '90d': t('stats.period90'),
+  };
   const summaryCards = [
-    { label: 'Total Messages', value: (globalStats?.total_messages ?? 0).toLocaleString(), icon: '💬', color: 'var(--color-accent-blue)' },
-    { label: 'LLM Calls', value: (globalStats?.total_llm_calls ?? 0).toLocaleString(), icon: '🤖', color: 'var(--color-accent-violet)' },
-    { label: 'Commands', value: (globalStats?.total_commands ?? 0).toLocaleString(), icon: '⌨️', color: 'var(--color-accent-emerald)' },
-    { label: 'Error Rate', value: `${globalStats?.error_rate ?? 0}%`, icon: '⚠️', color: 'var(--color-accent-rose)' },
-    { label: 'Avg Response', value: `${globalStats?.avg_response_ms ?? 0}ms`, icon: '⚡', color: 'var(--color-accent-amber)' },
+    { label: t('stats.totalMessages'), value: (globalStats?.total_messages ?? 0).toLocaleString(), icon: '💬' },
+    { label: 'LLM Calls',             value: (globalStats?.total_llm_calls ?? 0).toLocaleString(), icon: '🤖' },
+    { label: 'Commands',              value: (globalStats?.total_commands ?? 0).toLocaleString(), icon: '⌨️' },
+    { label: 'Error Rate',            value: `${globalStats?.error_rate ?? 0}%`, icon: '⚠️' },
+    { label: t('stats.avgResponse'),  value: `${globalStats?.avg_response_ms ?? 0}${t('stats.ms')}`, icon: '⚡' },
   ];
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>📈 Statistics</h1>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>📈 {t('stats.title')}</h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {['7d', '30d', '90d'].map((p) => (
             <button
@@ -65,7 +70,7 @@ export default function Stats() {
                 fontWeight: 500,
               }}
             >
-              {p}
+              {periodLabels[p] || p}
             </button>
           ))}
         </div>
@@ -98,7 +103,7 @@ export default function Stats() {
         transition={{ delay: 0.3 }}
         style={{ padding: '1.5rem', marginBottom: '1.5rem' }}
       >
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Message Trend</h2>
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>{t('stats.messageTrend')}</h2>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={globalStats?.daily_messages || []}>
             <defs>
@@ -132,7 +137,7 @@ export default function Stats() {
           transition={{ delay: 0.4 }}
           style={{ padding: '1.5rem' }}
         >
-          <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Model Usage</h2>
+          <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>{t('stats.modelUsage')}</h2>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
@@ -159,7 +164,7 @@ export default function Stats() {
           transition={{ delay: 0.5 }}
           style={{ padding: '1.5rem' }}
         >
-          <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Response Time by Model</h2>
+          <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>{t('stats.responseTime')}</h2>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={modelStats?.models || []} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />

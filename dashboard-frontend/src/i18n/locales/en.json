@@ -1,0 +1,108 @@
+{
+  "nav": {
+    "dashboard": "Overview",
+    "stats": "Statistics",
+    "config": "Config",
+    "guilds": "Servers",
+    "logs": "Live Logs",
+    "update": "Update"
+  },
+  "login": {
+    "title": "PigPig Dashboard",
+    "subtitle": "Sign in with your Discord account to manage your bot.",
+    "button": "Continue with Discord",
+    "hint": "Requires Discord account · Bot Owner access"
+  },
+  "dashboard": {
+    "title": "Overview",
+    "subtitle": "Real-time Bot Status",
+    "status": "Bot Status",
+    "online": "Online",
+    "offline": "Offline",
+    "guilds": "Servers",
+    "users": "Users",
+    "uptime": "Uptime",
+    "cpu": "CPU Usage",
+    "memory": "Memory",
+    "latency": "API Latency",
+    "version": "Version",
+    "lastUpdated": "Last Updated",
+    "refresh": "Refresh",
+    "loading": "Loading…",
+    "error": "Failed to load, please try again"
+  },
+  "stats": {
+    "title": "Statistics",
+    "subtitle": "Bot Usage Analytics",
+    "messageTrend": "Message Trend",
+    "modelUsage": "Model Usage",
+    "responseTime": "Response Time",
+    "totalMessages": "Total Messages",
+    "avgResponse": "Avg Response Time",
+    "ms": "ms",
+    "days": "days",
+    "period": "Period",
+    "period7": "Last 7 days",
+    "period30": "Last 30 days",
+    "period90": "Last 90 days"
+  },
+  "config": {
+    "title": "Configuration",
+    "subtitle": "Edit Bot Config Files",
+    "selectFile": "Select config file",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveError": "Save failed",
+    "invalidJson": "Invalid JSON — please fix errors before saving",
+    "warning": "⚠️ Editing config directly may affect bot operation. Proceed with caution."
+  },
+  "guilds": {
+    "title": "Servers",
+    "subtitle": "All servers PigPig is connected to",
+    "members": "members",
+    "id": "Server ID",
+    "empty": "No server data available",
+    "loading": "Loading servers…"
+  },
+  "logs": {
+    "title": "Live Logs",
+    "subtitle": "WebSocket Log Stream",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting…",
+    "filterLevel": "Filter Level",
+    "filterGuild": "Server ID",
+    "allLevels": "All Levels",
+    "clear": "Clear",
+    "autoScroll": "Auto-scroll",
+    "empty": "Waiting for log data…"
+  },
+  "update": {
+    "title": "Update",
+    "subtitle": "Bot Version Management",
+    "currentVersion": "Current Version",
+    "latestVersion": "Latest Version",
+    "checkUpdate": "Check for Updates",
+    "checking": "Checking…",
+    "upToDate": "Already up to date",
+    "updateAvailable": "Update Available",
+    "startUpdate": "Start Update",
+    "updating": "Updating…",
+    "updateSuccess": "Update Successful",
+    "updateFailed": "Update Failed",
+    "changelog": "Changelog",
+    "unknownVersion": "Unknown"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "logout": "Logout",
+    "language": "Language",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "unknown": "Unknown",
+    "noData": "No data"
+  }
+}
