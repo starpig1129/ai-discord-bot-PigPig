@@ -11,6 +11,10 @@ from typing import Any
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+import aiosqlite
+from pathlib import Path
+from fastapi import Query
+
 
 from addons.logging import get_logger
 from addons.tokens import tokens
@@ -187,3 +191,185 @@ async def execute_update(
     except Exception as e:
         log.error(f"Update execution failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── User Management (Bot Owner) ───────────────────────────────────────
+
+_PROCEDURAL_DB = Path(ROOT_DIR) / "data" / "memory" / "procedural.db"
+
+
+@router.get("/users")
+async def list_users(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    search: str = Query(default=""),
+    user: dict = Depends(require_owner),
+) -> JSONResponse:
+    """List all users with procedural memory data (Bot Owner only)."""
+    if not _PROCEDURAL_DB.exists():
+        return JSONResponse({"users": [], "total": 0})
+
+    try:
+        async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
+            db.row_factory = aiosqlite.Row
+            if search:
+                pattern = f"%{search}%"
+                cursor = await db.execute(
+                    """
+                    SELECT discord_id, discord_name, display_names, created_at,
+                           CASE WHEN procedural_memory IS NOT NULL THEN 1 ELSE 0 END as has_memory
+                    FROM users
+                    WHERE discord_name LIKE ? OR display_names LIKE ?
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (pattern, pattern, limit, offset),
+                )
+                count_cursor = await db.execute(
+                    "SELECT COUNT(*) FROM users WHERE discord_name LIKE ? OR display_names LIKE ?",
+                    (pattern, pattern),
+                )
+            else:
+                cursor = await db.execute(
+                    """
+                    SELECT discord_id, discord_name, display_names, created_at,
+                           CASE WHEN procedural_memory IS NOT NULL THEN 1 ELSE 0 END as has_memory
+                    FROM users
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                    """,
+                    (limit, offset),
+                )
+                count_cursor = await db.execute("SELECT COUNT(*) FROM users")
+
+            rows = await cursor.fetchall()
+            total = (await count_cursor.fetchone())[0]
+
+    except Exception as exc:
+        log.error(f"list_users failed: {exc}")
+        raise HTTPException(status_code=503, detail="Memory database unavailable")
+
+    import json as _json
+    users_out = []
+    for row in rows:
+        display_names = []
+        try:
+            display_names = _json.loads(row["display_names"] or "[]")
+        except Exception:
+            pass
+        users_out.append({
+            "discord_id": row["discord_id"],
+            "discord_name": row["discord_name"],
+            "display_names": display_names,
+            "created_at": row["created_at"],
+            "has_memory": bool(row["has_memory"]),
+        })
+
+    return JSONResponse({"users": users_out, "total": total, "limit": limit, "offset": offset})
+
+
+@router.get("/users/{user_id}")
+async def get_user_detail(
+    user_id: str,
+    user: dict = Depends(require_owner),
+) -> JSONResponse:
+    """Get full memory details for a specific user (Bot Owner only)."""
+    if not _PROCEDURAL_DB.exists():
+        raise HTTPException(status_code=404, detail="Memory database not found")
+
+    import json as _json
+
+    try:
+        async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
+            db.row_factory = aiosqlite.Row
+
+            user_cursor = await db.execute(
+                "SELECT discord_id, discord_name, display_names, procedural_memory, user_background, created_at "
+                "FROM users WHERE discord_id = ?",
+                (user_id,),
+            )
+            user_row = await user_cursor.fetchone()
+
+            stats_cursor = await db.execute(
+                "SELECT guild_id, total_messages, streak_days, last_active_at, first_message_at "
+                "FROM user_stats WHERE user_id = ? ORDER BY total_messages DESC",
+                (user_id,),
+            )
+            stats_rows = await stats_cursor.fetchall()
+
+    except Exception as exc:
+        log.error(f"get_user_detail failed for {user_id}: {exc}")
+        raise HTTPException(status_code=503, detail="Memory database unavailable")
+
+    if user_row is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    display_names = []
+    try:
+        display_names = _json.loads(user_row["display_names"] or "[]")
+    except Exception:
+        pass
+
+    guild_stats = [
+        {
+            "guild_id": row["guild_id"],
+            "total_messages": row["total_messages"],
+            "streak_days": row["streak_days"],
+            "last_active_at": row["last_active_at"],
+            "first_message_at": row["first_message_at"],
+        }
+        for row in stats_rows
+    ]
+
+    return JSONResponse({
+        "discord_id": user_row["discord_id"],
+        "discord_name": user_row["discord_name"],
+        "display_names": display_names,
+        "procedural_memory": user_row["procedural_memory"],
+        "user_background": user_row["user_background"],
+        "created_at": user_row["created_at"],
+        "guild_stats": guild_stats,
+    })
+
+
+@router.delete("/users/{user_id}/memory")
+async def admin_delete_user_memory(
+    user_id: str,
+    request: Request,
+    user: dict = Depends(require_owner),
+) -> JSONResponse:
+    """Delete all memory data for a specific user (Bot Owner only)."""
+    body: dict = await request.json()
+    if not body.get("confirm"):
+        raise HTTPException(status_code=400, detail="Requires {'confirm': true}")
+
+    deleted: dict[str, int] = {}
+    stats_db = Path(ROOT_DIR) / "data" / "stats" / "stats.db"
+
+    if _PROCEDURAL_DB.exists():
+        try:
+            async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
+                c = await db.execute("DELETE FROM users WHERE discord_id = ?", (user_id,))
+                deleted["procedural_users"] = c.rowcount
+                c = await db.execute("DELETE FROM user_stats WHERE user_id = ?", (user_id,))
+                deleted["user_stats"] = c.rowcount
+                await db.commit()
+        except Exception as exc:
+            log.error(f"admin_delete_user_memory failed for {user_id}: {exc}")
+            raise HTTPException(status_code=503, detail="Failed to delete user memory")
+
+    if stats_db.exists():
+        try:
+            async with aiosqlite.connect(str(stats_db)) as db:
+                c = await db.execute("DELETE FROM message_events WHERE user_id = ?", (user_id,))
+                deleted["message_events"] = c.rowcount
+                c = await db.execute("DELETE FROM command_events WHERE user_id = ?", (user_id,))
+                deleted["command_events"] = c.rowcount
+                await db.commit()
+        except Exception as exc:
+            log.warning(f"admin stats deletion failed for {user_id}: {exc}")
+
+    log.info(f"Admin GDPR deletion for user {user_id} by owner: {deleted}")
+    return JSONResponse({"detail": "User memory deleted", "user_id": user_id, "deleted_rows": deleted})
+
