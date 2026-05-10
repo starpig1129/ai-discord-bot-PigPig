@@ -825,6 +825,58 @@ class UserDataCog(commands.Cog):
             await interaction.followup.send(f"Failed to read knowledge: {e}", ephemeral=True)
 
     @knowledge_group.command(
+        name="save",
+        description="Save or update shared knowledge for this server or channel"
+    )
+    @app_commands.describe(
+        scope="Save knowledge for 'guild' (entire server) or 'channel' (this specific channel)",
+        content="The information to save or update",
+        category="Category of the knowledge (e.g., General, Rules, Lore) - defaults to 'general'"
+    )
+    @app_commands.choices(scope=[
+        app_commands.Choice(name="Guild (Server-wide)", value="guild"),
+        app_commands.Choice(name="Channel (Specific to this channel)", value="channel")
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def knowledge_save(
+        self,
+        interaction: discord.Interaction,
+        scope: app_commands.Choice[str],
+        content: str,
+        category: str = "general"
+    ) -> None:
+        """Handles /knowledge save command to save or update stored knowledge."""
+        if not self.lang_manager:
+            self.lang_manager = LanguageManager.get_instance(self.bot)
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+
+        target_type = scope.value
+        target_id = str(interaction.guild_id) if target_type == "guild" else str(interaction.channel_id)
+
+        if target_type == "guild" and not interaction.guild_id:
+            await interaction.followup.send("Guild knowledge is only available within a server.", ephemeral=True)
+            return
+
+        if not self.knowledge_storage:
+            await interaction.followup.send("Knowledge storage is not initialized.", ephemeral=True)
+            return
+
+        try:
+            result_msg = await self._save_knowledge_data(
+                target_type=target_type,
+                target_id=target_id,
+                content=content,
+                category=category,
+                context=interaction
+            )
+            await interaction.followup.send(result_msg, ephemeral=True)
+        except Exception as e:
+            self.logger.error(f"Failed to save {target_type} knowledge for {target_id}: {e}")
+            await interaction.followup.send(f"Failed to save knowledge: {e}", ephemeral=True)
+
+
+    @knowledge_group.command(
         name="clear",
         description="Clear the shared knowledge for this server or channel"
     )
