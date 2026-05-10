@@ -73,3 +73,12 @@ logging:
     selenium: "WARNING"
     discord: "INFO"
     WDM: "INFO"
+
+# Dashboard web interface settings
+dashboard:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8000
+  cors_origins:
+    - "http://localhost:5173"   # Vite dev server
+    - "http://localhost:3000"   # Alternative dev port

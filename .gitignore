@@ -56,3 +56,14 @@ qdrant_storage/
 
 configs/
 site
+
+# Dashboard frontend build artifacts
+dashboard-frontend/node_modules/
+dashboard-frontend/dist/
+dashboard-frontend/.vite/
+
+# Dashboard stats database
+data/stats/
+
+# Dashboard session / refresh token store (in-memory, no file — but exclude any future dumps)
+data/dashboard/

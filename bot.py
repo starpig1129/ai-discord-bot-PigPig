@@ -242,7 +242,19 @@ class PigPig(commands.Bot):
             
             if self.message_tracker:
                 await self.message_tracker.track_message(message)
-            
+
+            # Record message event for dashboard statistics
+            try:
+                dashboard_app = getattr(self, '_dashboard_app', None)
+                if dashboard_app and hasattr(dashboard_app.state, 'stats_collector'):
+                    await dashboard_app.state.stats_collector.record_message(
+                        guild_id=str(message.guild.id),
+                        user_id=str(message.author.id),
+                        channel_id=str(message.channel.id),
+                    )
+            except Exception:
+                pass  # Stats recording must never block message handling
+
             guild_id = str(message.guild.id)
             self.setup_logger_for_guild(guild_id)
             logger = self.loggers[guild_id]
@@ -459,6 +471,17 @@ class PigPig(commands.Bot):
         self.tree.on_error = on_tree_error
 
         await self.tree.sync()
+
+        # ── Dashboard server startup ──────────────────────────────────
+        try:
+            from dashboard.main import start_dashboard
+            await start_dashboard(self)
+        except Exception as e:
+            log.error(f"Failed to start dashboard: {e}")
+            try:
+                await func.report_error(e, "bot.py/setup_hook/start_dashboard")
+            except Exception:
+                pass
 
     async def on_ready(self):
         """Handle bot ready event.
@@ -702,6 +725,13 @@ class PigPig(commands.Bot):
             - Should be called before program termination
         """
         try:         
+            # Shutdown dashboard server gracefully
+            try:
+                from dashboard.main import stop_dashboard
+                await stop_dashboard(self)
+            except Exception:
+                pass
+
             # Close parent class (disconnect from Discord, etc.)
             await super().close()
 

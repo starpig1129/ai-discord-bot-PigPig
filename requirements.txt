@@ -51,3 +51,12 @@ torchvision==0.24.0
 # Documentation
 mkdocs>=1.6.0
 mkdocs-material>=9.5.0
+
+# Dashboard Backend
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+python-jose[cryptography]>=3.4.0
+aiosqlite>=0.21.0
+slowapi>=0.1.9
+httpx>=0.28.0
+psutil>=7.0.0
