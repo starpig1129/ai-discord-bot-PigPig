@@ -307,12 +307,26 @@ async def get_user_detail(
             try:
                 async with aiosqlite.connect(str(_EPISODIC_DB)) as edb:
                     edb.row_factory = aiosqlite.Row
-                    # Collect all top channel IDs across guilds
+                    # Resolve name-based top_channels keys to IDs for episodic enrichment
+                    bot = request.app.state.bot
                     all_channel_ids = set()
+                    
                     for srow in stats_rows:
                         try:
                             tc = _json.loads(srow["top_channels"] or "{}")
-                            all_channel_ids.update(tc.keys())
+                            gid = srow["guild_id"]
+                            
+                            # Cache guild channel map for resolution
+                            guild = bot.get_guild(int(gid))
+                            name_map = {}
+                            if guild:
+                                name_map = {c.name: str(c.id) for c in guild.channels}
+                                
+                            for key in tc.keys():
+                                if key.isdigit():
+                                    all_channel_ids.add(key)
+                                elif key in name_map:
+                                    all_channel_ids.add(name_map[key])
                         except:
                             continue
                     
@@ -343,12 +357,27 @@ async def get_user_detail(
 
     guild_stats = []
     for row in stats_rows:
+        # For memories dictionary, handle potential name keys using the same defensive logic
+        tc = {}
         try:
             tc = _json.loads(row["top_channels"] or "{}")
         except:
-            tc = {}
+            pass
             
-        memories = {cid: channel_memories[cid] for cid in tc.keys() if cid in channel_memories}
+        memories = {}
+        bot = request.app.state.bot
+        guild = bot.get_guild(int(row["guild_id"]))
+        name_map = {c.name: str(c.id) for c in guild.channels} if guild else {}
+        
+        for key in tc.keys():
+            cid = None
+            if key.isdigit():
+                cid = key
+            elif key in name_map:
+                cid = name_map[key]
+                
+            if cid and cid in channel_memories:
+                memories[key] = channel_memories[cid]
         
         guild_stats.append({
             "guild_id": row["guild_id"],
