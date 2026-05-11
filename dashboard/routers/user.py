@@ -222,9 +222,11 @@ async def get_episodic_memory(
         
         try:
             tc = json.loads(row["top_channels"] or "{}")
-            for cname in tc.keys():
-                if cname in name_map:
-                    all_target_channel_ids.add(name_map[cname])
+            for key in tc.keys():
+                if key.isdigit():
+                    all_target_channel_ids.add(key)
+                elif key in name_map:
+                    all_target_channel_ids.add(name_map[key])
         except:
             continue
 
@@ -382,6 +384,8 @@ async def delete_user_memory(
             async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
                 c = await db.execute("DELETE FROM users WHERE discord_id = ?", (user_id,))
                 deleted["procedural_users"] = c.rowcount
+                c = await db.execute("DELETE FROM user_stats WHERE user_id = ?", (user_id,))
+                deleted["user_stats"] = c.rowcount
                 await db.commit()
         except Exception as exc:
             log.error(f"Failed to delete procedural memory for {user_id}: {exc}")

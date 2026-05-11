@@ -93,11 +93,11 @@ class UserDataResponse(BaseModel):
         display_names: List of display names the user has used.
     """
     procedural_memory: Optional[str] = Field(
-        default='',
+        default=None,
         description="User's interaction preferences and conversation rules"
     )
     user_background: Optional[str] = Field(
-        default='',
+        default=None,
         description="User's interests, hobbies, and life background"
     )
     display_names: List[str] = Field(
@@ -277,8 +277,9 @@ class UserDataCog(commands.Cog):
             return False
         
         # Validate field types if present
-        if "user_background" in data and not isinstance(data["user_background"], list):
-            return False
+        if "user_background" in data and data["user_background"] is not None:
+            if not isinstance(data["user_background"], str):
+                return False
         
         if "display_names" in data and not isinstance(data["display_names"], list):
             return False
@@ -492,47 +493,47 @@ class UserDataCog(commands.Cog):
             guild_id = self._get_guild_id_from_context(context)
             self.logger.info(f"Initiating sequential knowledge update for {target_type} {target_id}...")
 
-        try:
-            if not self.knowledge_storage:
-                return "Knowledge storage not initialized."
+            try:
+                if not self.knowledge_storage:
+                    return "Knowledge storage not initialized."
 
-            existing = await self.knowledge_storage.get_knowledge(target_type, target_id)
-            
-            merged = await self._invoke_knowledge_merge_agent(
-                existing,
-                content,
-                target_type,
-                category
-            )
+                existing = await self.knowledge_storage.get_knowledge(target_type, target_id)
+                
+                merged = await self._invoke_knowledge_merge_agent(
+                    existing,
+                    content,
+                    target_type,
+                    category
+                )
 
-            self.logger.info(f"Saving merged {target_type} knowledge to database for {target_id}...")
-            success = await self.knowledge_storage.update_knowledge(target_type, target_id, merged)
-            
-            if success:
-                # Invalidate KnowledgeMemoryProvider cache
-                try:
-                    orchestrator = getattr(self.bot, "orchestrator", None)
-                    if orchestrator:
-                        provider = getattr(
-                            getattr(orchestrator, "context_manager", None),
-                            "knowledge_provider",
-                            None,
-                        )
-                        if provider and hasattr(provider, "invalidate"):
-                            await provider.invalidate(target_type, target_id)
-                except Exception as cache_err:
-                    self.logger.warning(f"Failed to invalidate knowledge cache for {target_type} {target_id}: {cache_err}")
+                self.logger.info(f"Saving merged {target_type} knowledge to database for {target_id}...")
+                success = await self.knowledge_storage.update_knowledge(target_type, target_id, merged)
+                
+                if success:
+                    # Invalidate KnowledgeMemoryProvider cache
+                    try:
+                        orchestrator = getattr(self.bot, "orchestrator", None)
+                        if orchestrator:
+                            provider = getattr(
+                                getattr(orchestrator, "context_manager", None),
+                                "knowledge_provider",
+                                None,
+                            )
+                            if provider and hasattr(provider, "invalidate"):
+                                await provider.invalidate(target_type, target_id)
+                    except Exception as cache_err:
+                        self.logger.warning(f"Failed to invalidate knowledge cache for {target_type} {target_id}: {cache_err}")
 
-                self.logger.info(f"Successfully persisted {target_type} knowledge.")
-                return f"Successfully updated {target_type} knowledge."
-            else:
-                self.logger.error(f"Failed to persist {target_type} knowledge to database.")
-                return f"Failed to persist {target_type} knowledge to database."
+                    self.logger.info(f"Successfully persisted {target_type} knowledge.")
+                    return f"Successfully updated {target_type} knowledge."
+                else:
+                    self.logger.error(f"Failed to persist {target_type} knowledge to database.")
+                    return f"Failed to persist {target_type} knowledge to database."
 
-        except Exception as e:
-            self.logger.error(f"Failed to save {target_type} knowledge for {target_id}: {e}")
-            await func.report_error(e, f"save_knowledge_data failed ({target_type}:{target_id})")
-            return f"Error: {str(e)}"
+            except Exception as e:
+                self.logger.error(f"Failed to save {target_type} knowledge for {target_id}: {e}")
+                await func.report_error(e, f"save_knowledge_data failed ({target_type}:{target_id})")
+                return f"Error: {str(e)}"
 
     async def _clear_knowledge_data(self, target_type: str, target_id: str) -> str:
         """Core logic for clearing guild/channel knowledge."""

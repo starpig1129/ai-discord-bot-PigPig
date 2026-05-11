@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import asyncio
 from collections import Counter
 from datetime import datetime, date
 from typing import Any, Dict, List, Optional, Set
@@ -80,80 +81,208 @@ class StatsStorage:
     async def get_user_stats(
         self, user_id: str, guild_id: str
     ) -> Optional[Dict[str, Any]]:
-        """Retrieve cumulative stats for a user in a guild.
-
-        Args:
-            user_id: Discord user snowflake ID.
-            guild_id: Discord guild snowflake ID.
-
-        Returns:
-            A dict with all stat columns, or None if no record exists.
-            JSON columns are returned as parsed Python dicts.
-        """
+        """Retrieve cumulative stats for a user in a guild."""
         try:
-            with self.db.get_connection() as conn:
-                cursor = conn.execute(
-                    "SELECT * FROM user_stats WHERE user_id = ? AND guild_id = ?",
-                    (user_id, guild_id),
-                )
-                row = cursor.fetchone()
-                if not row:
-                    return None
-                result = dict(row)
-                # Parse JSON text columns into dicts
-                for key in ("active_hours", "top_channels", "top_emojis", "top_words"):
-                    raw = result.get(key, "{}")
-                    try:
-                        result[key] = json.loads(raw) if raw else {}
-                    except (json.JSONDecodeError, TypeError):
-                        result[key] = {}
-                return result
+            return await asyncio.to_thread(self._get_user_stats_sync, user_id, guild_id)
         except Exception as e:
             await func.report_error(
                 e, f"get_user_stats failed (user={user_id}, guild={guild_id})"
             )
             return None
 
+    def _get_user_stats_sync(self, user_id: str, guild_id: str) -> Optional[Dict[str, Any]]:
+        with self.db.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM user_stats WHERE user_id = ? AND guild_id = ?",
+                (user_id, guild_id),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            
+            res = dict(row)
+            # Parse JSON columns
+            for col in ["active_hours", "top_channels", "top_emojis", "top_words"]:
+                if res.get(col):
+                    res[col] = _safe_json_load(res[col])
+            return res
+
     async def upsert_user_stats(
         self,
         user_id: str,
         guild_id: str,
         message_content: str,
-        channel_name: str,
+        channel_id: str,
         timestamp: str,
     ) -> None:
-        """Insert or update cumulative stats for a single message event.
-
-        This performs an atomic read-modify-write cycle:
-        1. Read existing row (if any).
-        2. Merge deltas into JSON columns in Python.
-        3. Write back via INSERT ... ON CONFLICT DO UPDATE.
-
-        Args:
-            user_id: Discord user snowflake ID.
-            guild_id: Discord guild snowflake ID.
-            message_content: The raw message text (used for jieba + emoji extraction).
-            channel_name: The channel name where the message was sent.
-            timestamp: ISO-8601 formatted timestamp string.
-        """
+        """Insert or update cumulative stats for a single message event."""
         try:
-            # Parse timestamp
-            try:
-                dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                dt = datetime.utcnow()
+            await asyncio.to_thread(
+                self._upsert_user_stats_sync,
+                user_id,
+                guild_id,
+                message_content,
+                channel_id,
+                timestamp,
+            )
+        except Exception as e:
+            await func.report_error(
+                e,
+                f"upsert_user_stats failed (user={user_id}, guild={guild_id})",
+            )
 
-            hour_key = str(dt.hour)
-            today_str = dt.strftime("%Y-%m-%d")
+    def _upsert_user_stats_sync(
+        self,
+        user_id: str,
+        guild_id: str,
+        message_content: str,
+        channel_id: str,
+        timestamp: str,
+    ) -> None:
+        # Parse timestamp
+        try:
+            dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            dt = datetime.utcnow()
 
-            # Extract emojis
-            emojis = _extract_emojis(message_content)
+        hour_key = str(dt.hour)
+        today_str = dt.strftime("%Y-%m-%d")
 
-            # Segment words with jieba
-            words = _segment_words(message_content)
+        # Extract emojis
+        emojis = _extract_emojis(message_content)
 
-            with self.db.get_connection() as conn:
-                # Read existing row
+        # Segment words with jieba
+        words = _segment_words(message_content)
+
+        with self.db.get_connection() as conn:
+            # Read existing row
+            cursor = conn.execute(
+                "SELECT * FROM user_stats WHERE user_id = ? AND guild_id = ?",
+                (user_id, guild_id),
+            )
+            existing = cursor.fetchone()
+
+            if existing:
+                row = dict(existing)
+                total = row.get("total_messages", 0) + 1
+
+                # Merge JSON fields
+                active_hours = _safe_json_load(row.get("active_hours", "{}"))
+                active_hours[hour_key] = active_hours.get(hour_key, 0) + 1
+
+                top_channels = _safe_json_load(row.get("top_channels", "{}"))
+                if channel_id:
+                    top_channels[channel_id] = (
+                        top_channels.get(channel_id, 0) + 1
+                    )
+
+                top_emojis = _safe_json_load(row.get("top_emojis", "{}"))
+                for em in emojis:
+                    top_emojis[em] = top_emojis.get(em, 0) + 1
+
+                top_words_dict = _safe_json_load(row.get("top_words", "{}"))
+                for w in words:
+                    top_words_dict[w] = top_words_dict.get(w, 0) + 1
+                top_words_dict = _trim_top_words(top_words_dict)
+
+                # Streak calculation
+                streak_last = row.get("streak_last_date")
+                streak_days = row.get("streak_days", 0)
+                streak_days, streak_last_date = _compute_streak(
+                    streak_days, streak_last, today_str
+                )
+
+                first_message_at = row.get("first_message_at") or timestamp
+
+                conn.execute(
+                    """
+                    UPDATE user_stats SET
+                        total_messages = ?,
+                        active_hours = ?,
+                        top_channels = ?,
+                        top_emojis = ?,
+                        top_words = ?,
+                        streak_days = ?,
+                        streak_last_date = ?,
+                        last_active_at = ?,
+                        first_message_at = ?
+                    WHERE user_id = ? AND guild_id = ?
+                    """,
+                    (
+                        total,
+                        json.dumps(active_hours, ensure_ascii=False),
+                        json.dumps(top_channels, ensure_ascii=False),
+                        json.dumps(top_emojis, ensure_ascii=False),
+                        json.dumps(top_words_dict, ensure_ascii=False),
+                        streak_days,
+                        streak_last_date,
+                        timestamp,
+                        first_message_at,
+                        user_id,
+                        guild_id,
+                    ),
+                )
+            else:
+                # First message ever for this user in this guild
+                active_hours = {hour_key: 1}
+                top_channels = {channel_id: 1} if channel_id else {}
+                top_emojis_dict = dict(Counter(emojis))
+                top_words_dict = dict(Counter(words))
+                top_words_dict = _trim_top_words(top_words_dict)
+
+                conn.execute(
+                    """
+                    INSERT INTO user_stats (
+                        user_id, guild_id, total_messages,
+                        active_hours, top_channels, top_emojis, top_words,
+                        streak_days, streak_last_date,
+                        last_active_at, first_message_at
+                    ) VALUES (?, ?, 1, ?, ?, ?, ?, 1, ?, ?, ?)
+                    """,
+                    (
+                        user_id,
+                        guild_id,
+                        json.dumps(active_hours, ensure_ascii=False),
+                        json.dumps(top_channels, ensure_ascii=False),
+                        json.dumps(top_emojis_dict, ensure_ascii=False),
+                        json.dumps(top_words_dict, ensure_ascii=False),
+                        today_str,
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+            conn.commit()
+
+    async def bulk_upsert_user_stats(self, records: List[Dict[str, Any]]) -> None:
+        """Insert or update cumulative stats for a batch of message events."""
+        if not records:
+            return
+
+        try:
+            await asyncio.to_thread(self._bulk_upsert_user_stats_sync, records)
+        except Exception as e:
+            await func.report_error(e, "bulk_upsert_user_stats failed")
+
+    def _bulk_upsert_user_stats_sync(self, records: List[Dict[str, Any]]) -> None:
+        with self.db.get_connection() as conn:
+            for rec in records:
+                user_id = rec["user_id"]
+                guild_id = rec["guild_id"]
+                message_content = rec["message_content"]
+                channel_id = rec["channel_id"]
+                timestamp = rec["timestamp"]
+
+                try:
+                    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                except (ValueError, AttributeError):
+                    dt = datetime.utcnow()
+
+                hour_key = str(dt.hour)
+                today_str = dt.strftime("%Y-%m-%d")
+
+                emojis = _extract_emojis(message_content)
+                words = _segment_words(message_content)
+
                 cursor = conn.execute(
                     "SELECT * FROM user_stats WHERE user_id = ? AND guild_id = ?",
                     (user_id, guild_id),
@@ -164,14 +293,13 @@ class StatsStorage:
                     row = dict(existing)
                     total = row.get("total_messages", 0) + 1
 
-                    # Merge JSON fields
                     active_hours = _safe_json_load(row.get("active_hours", "{}"))
                     active_hours[hour_key] = active_hours.get(hour_key, 0) + 1
 
                     top_channels = _safe_json_load(row.get("top_channels", "{}"))
-                    if channel_name:
-                        top_channels[channel_name] = (
-                            top_channels.get(channel_name, 0) + 1
+                    if channel_id:
+                        top_channels[channel_id] = (
+                            top_channels.get(channel_id, 0) + 1
                         )
 
                     top_emojis = _safe_json_load(row.get("top_emojis", "{}"))
@@ -183,7 +311,6 @@ class StatsStorage:
                         top_words_dict[w] = top_words_dict.get(w, 0) + 1
                     top_words_dict = _trim_top_words(top_words_dict)
 
-                    # Streak calculation
                     streak_last = row.get("streak_last_date")
                     streak_days = row.get("streak_days", 0)
                     streak_days, streak_last_date = _compute_streak(
@@ -221,9 +348,8 @@ class StatsStorage:
                         ),
                     )
                 else:
-                    # First message ever for this user in this guild
                     active_hours = {hour_key: 1}
-                    top_channels = {channel_name: 1} if channel_name else {}
+                    top_channels = {channel_id: 1} if channel_id else {}
                     top_emojis_dict = dict(Counter(emojis))
                     top_words_dict = dict(Counter(words))
                     top_words_dict = _trim_top_words(top_words_dict)
@@ -249,195 +375,52 @@ class StatsStorage:
                             timestamp,
                         ),
                     )
-                conn.commit()
-        except Exception as e:
-            await func.report_error(
-                e,
-                f"upsert_user_stats failed (user={user_id}, guild={guild_id})",
-            )
-
-    async def bulk_upsert_user_stats(self, records: List[Dict[str, Any]]) -> None:
-        """Insert or update cumulative stats for a batch of message events.
-
-        Args:
-            records: A list of dicts, each containing:
-                - user_id: str
-                - guild_id: str
-                - message_content: str
-                - channel_name: str
-                - timestamp: str
-        """
-        if not records:
-            return
-
-        try:
-            with self.db.get_connection() as conn:
-                for rec in records:
-                    user_id = rec["user_id"]
-                    guild_id = rec["guild_id"]
-                    message_content = rec["message_content"]
-                    channel_name = rec["channel_name"]
-                    timestamp = rec["timestamp"]
-
-                    try:
-                        dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-                    except (ValueError, AttributeError):
-                        dt = datetime.utcnow()
-
-                    hour_key = str(dt.hour)
-                    today_str = dt.strftime("%Y-%m-%d")
-
-                    emojis = _extract_emojis(message_content)
-                    words = _segment_words(message_content)
-
-                    cursor = conn.execute(
-                        "SELECT * FROM user_stats WHERE user_id = ? AND guild_id = ?",
-                        (user_id, guild_id),
-                    )
-                    existing = cursor.fetchone()
-
-                    if existing:
-                        row = dict(existing)
-                        total = row.get("total_messages", 0) + 1
-
-                        active_hours = _safe_json_load(row.get("active_hours", "{}"))
-                        active_hours[hour_key] = active_hours.get(hour_key, 0) + 1
-
-                        top_channels = _safe_json_load(row.get("top_channels", "{}"))
-                        if channel_name:
-                            top_channels[channel_name] = (
-                                top_channels.get(channel_name, 0) + 1
-                            )
-
-                        top_emojis = _safe_json_load(row.get("top_emojis", "{}"))
-                        for em in emojis:
-                            top_emojis[em] = top_emojis.get(em, 0) + 1
-
-                        top_words_dict = _safe_json_load(row.get("top_words", "{}"))
-                        for w in words:
-                            top_words_dict[w] = top_words_dict.get(w, 0) + 1
-                        top_words_dict = _trim_top_words(top_words_dict)
-
-                        streak_last = row.get("streak_last_date")
-                        streak_days = row.get("streak_days", 0)
-                        streak_days, streak_last_date = _compute_streak(
-                            streak_days, streak_last, today_str
-                        )
-
-                        first_message_at = row.get("first_message_at") or timestamp
-
-                        conn.execute(
-                            """
-                            UPDATE user_stats SET
-                                total_messages = ?,
-                                active_hours = ?,
-                                top_channels = ?,
-                                top_emojis = ?,
-                                top_words = ?,
-                                streak_days = ?,
-                                streak_last_date = ?,
-                                last_active_at = ?,
-                                first_message_at = ?
-                            WHERE user_id = ? AND guild_id = ?
-                            """,
-                            (
-                                total,
-                                json.dumps(active_hours, ensure_ascii=False),
-                                json.dumps(top_channels, ensure_ascii=False),
-                                json.dumps(top_emojis, ensure_ascii=False),
-                                json.dumps(top_words_dict, ensure_ascii=False),
-                                streak_days,
-                                streak_last_date,
-                                timestamp,
-                                first_message_at,
-                                user_id,
-                                guild_id,
-                            ),
-                        )
-                    else:
-                        active_hours = {hour_key: 1}
-                        top_channels = {channel_name: 1} if channel_name else {}
-                        top_emojis_dict = dict(Counter(emojis))
-                        top_words_dict = dict(Counter(words))
-                        top_words_dict = _trim_top_words(top_words_dict)
-
-                        conn.execute(
-                            """
-                            INSERT INTO user_stats (
-                                user_id, guild_id, total_messages,
-                                active_hours, top_channels, top_emojis, top_words,
-                                streak_days, streak_last_date,
-                                last_active_at, first_message_at
-                            ) VALUES (?, ?, 1, ?, ?, ?, ?, 1, ?, ?, ?)
-                            """,
-                            (
-                                user_id,
-                                guild_id,
-                                json.dumps(active_hours, ensure_ascii=False),
-                                json.dumps(top_channels, ensure_ascii=False),
-                                json.dumps(top_emojis_dict, ensure_ascii=False),
-                                json.dumps(top_words_dict, ensure_ascii=False),
-                                today_str,
-                                timestamp,
-                                timestamp,
-                            ),
-                        )
-                # Commit once at the end of the batch
-                conn.commit()
-        except Exception as e:
-            await func.report_error(e, "bulk_upsert_user_stats failed")
+            conn.commit()
 
     # ------------------------------------------------------------------
     # log_migration_state CRUD
     # ------------------------------------------------------------------
 
     async def get_migration_state(self, guild_id: str) -> Optional[str]:
-        """Get the last processed date for historical log migration.
-
-        Args:
-            guild_id: Discord guild snowflake ID.
-
-        Returns:
-            A date string in YYYYMMDD format, or None if no migration
-            has been performed for this guild yet.
-        """
+        """Get the last processed date for historical log migration."""
         try:
-            with self.db.get_connection() as conn:
-                cursor = conn.execute(
-                    "SELECT last_processed_date FROM log_migration_state WHERE guild_id = ?",
-                    (guild_id,),
-                )
-                row = cursor.fetchone()
-                return row["last_processed_date"] if row else None
+            return await asyncio.to_thread(self._get_migration_state_sync, guild_id)
         except Exception as e:
             await func.report_error(
                 e, f"get_migration_state failed (guild={guild_id})"
             )
             return None
 
-    async def set_migration_state(self, guild_id: str, date_str: str) -> None:
-        """Record the last processed date for historical log migration.
+    def _get_migration_state_sync(self, guild_id: str) -> Optional[str]:
+        with self.db.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT last_processed_date FROM log_migration_state WHERE guild_id = ?",
+                (guild_id,),
+            )
+            row = cursor.fetchone()
+            return row["last_processed_date"] if row else None
 
-        Args:
-            guild_id: Discord guild snowflake ID.
-            date_str: Date string in YYYYMMDD format.
-        """
+    async def set_migration_state(self, guild_id: str, date_str: str) -> None:
+        """Record the last processed date for historical log migration."""
         try:
-            with self.db.get_connection() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO log_migration_state (guild_id, last_processed_date)
-                    VALUES (?, ?)
-                    ON CONFLICT(guild_id) DO UPDATE SET
-                        last_processed_date = excluded.last_processed_date
-                    """,
-                    (guild_id, date_str),
-                )
-                conn.commit()
+            await asyncio.to_thread(self._set_migration_state_sync, guild_id, date_str)
         except Exception as e:
             await func.report_error(
                 e, f"set_migration_state failed (guild={guild_id})"
             )
+
+    def _set_migration_state_sync(self, guild_id: str, date_str: str) -> None:
+        with self.db.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO log_migration_state (guild_id, last_processed_date)
+                VALUES (?, ?)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                    last_processed_date = excluded.last_processed_date
+                """,
+                (guild_id, date_str),
+            )
+            conn.commit()
 
 
 # ======================================================================

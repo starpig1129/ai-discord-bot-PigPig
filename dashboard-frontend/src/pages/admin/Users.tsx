@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -42,7 +42,15 @@ export default function Users() {
   const [deleteMsg, setDeleteMsg] = useState('');
   const LIMIT = 50;
 
-  const timerRef = useRef<number | null>(null);
+   const timerRef = useRef<number | null>(null);
+   const msgTimerRef = useRef<number | null>(null);
+
+   useEffect(() => {
+     return () => {
+       if (timerRef.current) clearTimeout(timerRef.current);
+       if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
+     };
+   }, []);
   
   // Debounce search input
   const handleSearchChange = (val: string) => {
@@ -79,11 +87,15 @@ export default function Users() {
     try {
       await api.delete(`/api/admin/users/${userId}/memory`, { data: { confirm: true } });
       setDeleteMsg(t('admin.deleteSuccess', { id: userId }));
+      if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
+      msgTimerRef.current = setTimeout(() => setDeleteMsg(''), 5000);
       setDeleteConfirm(null);
       setSelectedUser(null);
       refetch();
     } catch {
       setDeleteMsg(t('admin.deleteFailed'));
+      if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
+      msgTimerRef.current = setTimeout(() => setDeleteMsg(''), 5000);
     }
   };
 

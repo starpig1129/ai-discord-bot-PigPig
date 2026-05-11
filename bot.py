@@ -445,6 +445,9 @@ class PigPig(commands.Bot):
             await self.episodic_storage.initialize_channel_memory_state()
         if getattr(memory_config, "enabled", True) and getattr(self, "vector_manager", None):
             await self.vector_manager.initialize()
+
+        if getattr(self, "stats_collector", None):
+            await self.stats_collector.initialize()
     
         if base_config.ipc_server.get("enable", False):
             await self.ipc.start()

@@ -6,7 +6,7 @@ All error reporting uses func.report_error per project rules.
 from __future__ import annotations
 
 import json
-
+import asyncio
 import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -28,33 +28,36 @@ class EpisodicStorage:
     async def initialize_channel_memory_state(self) -> None:
         """Initialize the channel_memory_state table in the database."""
         try:
-            with self.db.get_connection() as conn:
-                conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS channel_memory_state (
-                        channel_id INTEGER PRIMARY KEY,
-                        message_count INTEGER NOT NULL DEFAULT 0,
-                        start_message_id INTEGER NOT NULL DEFAULT 0,
-                        last_summary_timestamp REAL DEFAULT 0,
-                        last_summary_text TEXT
-                    )
-                    """
-                )
-                
-                # Attempt to add columns if they don't exist (migration)
-                try:
-                    conn.execute("ALTER TABLE channel_memory_state ADD COLUMN last_summary_timestamp REAL DEFAULT 0")
-                except sqlite3.OperationalError:
-                    pass
-
-                try:
-                    conn.execute("ALTER TABLE channel_memory_state ADD COLUMN last_summary_text TEXT")
-                except sqlite3.OperationalError:
-                    pass
-                    
-                conn.commit()
+            await asyncio.to_thread(self._initialize_channel_memory_state_sync)
         except Exception as e:
             await func.report_error(e, "initialize_channel_memory_state failed")
+
+    def _initialize_channel_memory_state_sync(self) -> None:
+        with self.db.get_connection() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS channel_memory_state (
+                    channel_id INTEGER PRIMARY KEY,
+                    message_count INTEGER NOT NULL DEFAULT 0,
+                    start_message_id INTEGER NOT NULL DEFAULT 0,
+                    last_summary_timestamp REAL DEFAULT 0,
+                    last_summary_text TEXT
+                )
+                """
+            )
+            
+            # Attempt to add columns if they don't exist (migration)
+            try:
+                conn.execute("ALTER TABLE channel_memory_state ADD COLUMN last_summary_timestamp REAL DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass
+
+            try:
+                conn.execute("ALTER TABLE channel_memory_state ADD COLUMN last_summary_text TEXT")
+            except sqlite3.OperationalError:
+                pass
+                
+            conn.commit()
 
     async def get_channel_memory_state(self, channel_id: int) -> Optional[Dict[str, int]]:
         """Get the memory state for a specific channel.
@@ -66,22 +69,25 @@ class EpisodicStorage:
             Optional[Dict[str, int]]: Dictionary with 'message_count' and 'start_message_id', or None if not found.
         """
         try:
-            with self.db.get_connection() as conn:
-                cursor = conn.execute(
-                    "SELECT message_count, start_message_id, last_summary_timestamp, last_summary_text FROM channel_memory_state WHERE channel_id = ?",
-                    (channel_id,)
-                )
-                row = cursor.fetchone()
-                if row:
-                    return {
-                        "message_count": int(row["message_count"]),
-                        "start_message_id": int(row["start_message_id"]),
-                        "last_summary_timestamp": float(row["last_summary_timestamp"]) if row["last_summary_timestamp"] else 0.0,
-                        "last_summary_text": str(row["last_summary_text"]) if row["last_summary_text"] else ""
-                    }
-                return None
+            return await asyncio.to_thread(self._get_channel_memory_state_sync, channel_id)
         except Exception as e:
             await func.report_error(e, f"get_channel_memory_state failed for channel {channel_id}")
+            return None
+
+    def _get_channel_memory_state_sync(self, channel_id: int) -> Optional[Dict[str, Any]]:
+        with self.db.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT message_count, start_message_id, last_summary_timestamp, last_summary_text FROM channel_memory_state WHERE channel_id = ?",
+                (channel_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "message_count": int(row["message_count"]),
+                    "start_message_id": int(row["start_message_id"]),
+                    "last_summary_timestamp": float(row["last_summary_timestamp"]) if row["last_summary_timestamp"] else 0.0,
+                    "last_summary_text": str(row["last_summary_text"]) if row["last_summary_text"] else ""
+                }
             return None
 
     async def update_channel_memory_state(
@@ -102,47 +108,63 @@ class EpisodicStorage:
             last_summary_text (Optional[str]): Text of last summary. If None, keeps existing value.
         """
         try:
-            with self.db.get_connection() as conn:
-                # Fetch existing values if not provided
-                current_timestamp = 0.0
-                current_text = ""
-                
-                if last_summary_timestamp is None or last_summary_text is None:
-                    cursor = conn.execute("SELECT last_summary_timestamp, last_summary_text FROM channel_memory_state WHERE channel_id = ?", (channel_id,))
-                    row = cursor.fetchone()
-                    if row:
-                        if last_summary_timestamp is None and row["last_summary_timestamp"]:
-                            current_timestamp = row["last_summary_timestamp"]
-                        if last_summary_text is None and row["last_summary_text"]:
-                            current_text = row["last_summary_text"]
-                
-                if last_summary_timestamp is not None:
-                    current_timestamp = last_summary_timestamp
-                
-                if last_summary_text is not None:
-                    current_text = last_summary_text
-
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO channel_memory_state
-                    (channel_id, message_count, start_message_id, last_summary_timestamp, last_summary_text)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (channel_id, message_count, start_message_id, current_timestamp, current_text)
-                )
-                conn.commit()
+            await asyncio.to_thread(
+                self._update_channel_memory_state_sync,
+                channel_id, message_count, start_message_id, last_summary_timestamp, last_summary_text
+            )
         except Exception as e:
             await func.report_error(e, f"update_channel_memory_state failed for channel {channel_id}")
+
+    def _update_channel_memory_state_sync(
+        self, 
+        channel_id: int, 
+        message_count: int, 
+        start_message_id: int,
+        last_summary_timestamp: Optional[float] = None,
+        last_summary_text: Optional[str] = None
+    ) -> None:
+        with self.db.get_connection() as conn:
+            # Fetch existing values if not provided
+            current_timestamp = 0.0
+            current_text = ""
+            
+            if last_summary_timestamp is None or last_summary_text is None:
+                cursor = conn.execute("SELECT last_summary_timestamp, last_summary_text FROM channel_memory_state WHERE channel_id = ?", (channel_id,))
+                row = cursor.fetchone()
+                if row:
+                    if last_summary_timestamp is None and row["last_summary_timestamp"]:
+                        current_timestamp = row["last_summary_timestamp"]
+                    if last_summary_text is None and row["last_summary_text"]:
+                        current_text = row["last_summary_text"]
+            
+            if last_summary_timestamp is not None:
+                current_timestamp = last_summary_timestamp
+            
+            if last_summary_text is not None:
+                current_text = last_summary_text
+
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO channel_memory_state
+                (channel_id, message_count, start_message_id, last_summary_timestamp, last_summary_text)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (channel_id, message_count, start_message_id, current_timestamp, current_text)
+            )
+            conn.commit()
 
     async def get_total_count(self) -> int:
         """Return total number of channel memory states stored."""
         try:
-            with self.db.get_connection() as conn:
-                cursor = conn.execute(
-                    "SELECT COUNT(*) as count FROM channel_memory_state"
-                )
-                row = cursor.fetchone()
-                return int(row["count"]) if row else 0
+            return await asyncio.to_thread(self._get_total_count_sync)
         except Exception as e:
             await func.report_error(e, "get_total_count failed")
             return 0
+
+    def _get_total_count_sync(self) -> int:
+        with self.db.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT COUNT(*) as count FROM channel_memory_state"
+            )
+            row = cursor.fetchone()
+            return int(row["count"]) if row else 0

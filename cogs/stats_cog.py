@@ -109,7 +109,7 @@ class StatsCog(commands.Cog):
                     user_id=user_id,
                     guild_id=guild_id,
                     message_content=content,
-                    channel_name=channel_name,
+                    channel_id=str(message.channel.id),
                     timestamp=timestamp,
                 )
             )
@@ -263,7 +263,7 @@ class StatsCog(commands.Cog):
                             "user_id": user_id,
                             "guild_id": guild_id,
                             "message_content": content,
-                            "channel_name": channel_name,
+                            "channel_id": channel_id,
                             "timestamp": timestamp_str,
                         })
 

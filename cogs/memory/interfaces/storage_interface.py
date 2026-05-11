@@ -41,6 +41,14 @@ class ProceduralStorageInterface(ABC):
     async def set_config(self, key: str, value: str) -> None:
         raise NotImplementedError
 
+    @abstractmethod
+    async def get_all_users(self, limit: int = 500, offset: int = 0) -> List["UserInfo"]:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_users_count(self) -> int:
+        raise NotImplementedError
+
 
 class EpisodicStorageInterface(ABC):
     """Interface for episodic (channel memory state) storage operations."""
