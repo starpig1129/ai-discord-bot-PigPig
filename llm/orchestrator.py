@@ -38,44 +38,7 @@ from llm.callbacks import ToolFeedbackCallbackHandler
 from llm.model_circuit_breaker import get_model_circuit_breaker
 
 
-class _SafeTyping:
-    """Typing indicator that backs off gracefully on 429 rate limits instead of retrying endlessly."""
-
-    _INTERVAL = 8.0  # seconds between keep-alive sends (Discord drops typing after ~10 s)
-    _BACKOFF = 30.0  # seconds to wait after a 429 before trying again
-
-    def __init__(self, channel: Any) -> None:
-        self._channel = channel
-        self._task: Optional[asyncio.Task] = None
-
-    async def _loop(self) -> None:
-        while True:
-            await asyncio.sleep(self._INTERVAL)
-            try:
-                await self._channel.trigger_typing()
-            except discord.HTTPException as exc:
-                if exc.status == 429:
-                    await asyncio.sleep(self._BACKOFF)
-                else:
-                    return
-            except Exception:
-                return
-
-    async def __aenter__(self) -> "_SafeTyping":
-        try:
-            await self._channel.trigger_typing()
-        except Exception:
-            pass
-        self._task = asyncio.create_task(self._loop())
-        return self
-
-    async def __aexit__(self, *_: Any) -> None:
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+from llm.utils.safe_typing import SafeTyping
 
 
 class DirectToolOutputMiddleware(AgentMiddleware):
@@ -471,7 +434,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
         guild_id = str(message.guild.id) if message.guild else "0"
 
         # Provide feedback to the user that the bot is processing
-        async with _SafeTyping(message.channel):
+        async with SafeTyping(message.channel):
             # Interrupt any active background memory tasks to prioritize this conversation
             if hasattr(bot, "message_tracker") and bot.message_tracker:
                 bot.message_tracker.interrupt_all()

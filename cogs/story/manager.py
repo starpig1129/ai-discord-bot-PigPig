@@ -25,6 +25,7 @@ from .state_manager import StoryStateManager
 from cogs.system_prompt.manager import SystemPromptManager
 from cogs.language_manager import LanguageManager
 from .ui.modals import InterventionModal
+from llm.utils.safe_typing import SafeTyping
 
 
 _ALLOWED_MENTIONS = discord.AllowedMentions(
@@ -406,7 +407,7 @@ class StoryManager:
             f"V5 Orchestrator: Processing message in c:{channel_id} w:{world.world_name}"
         )
 
-        async with cast(discord.TextChannel, message.channel).typing():
+        async with SafeTyping(message.channel):
             try:
                 # --- Step 1: Call GM Agent for a structured plan ---
                 intervention_text = self.interventions.pop(channel_id, None)
@@ -1065,7 +1066,7 @@ class StoryManager:
         world = db.get_world(story_instance.world_name)
         assert world is not None, "world must be found for story start"
 
-        async with cast(discord.TextChannel, interaction.channel).typing():
+        async with SafeTyping(interaction.channel):
             try:
                 # Build the prompt for the GM to start the story
                 characters = self.character_db.get_characters_by_ids(
