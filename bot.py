@@ -101,6 +101,7 @@ class PigPig(commands.Bot):
         self.state_manager = StateManager()
         self.ui_manager = UIManager(self)
 
+
         # Statistics Subsystem
         from dashboard.services.stats_collector import StatsCollector
         self.stats_collector = StatsCollector()
@@ -257,9 +258,8 @@ class PigPig(commands.Bot):
 
             # Record message event for dashboard statistics
             try:
-                dashboard_app = getattr(self, '_dashboard_app', None)
-                if dashboard_app and hasattr(dashboard_app.state, 'stats_collector'):
-                    await dashboard_app.state.stats_collector.record_message(
+                if hasattr(self, 'stats_collector') and self.stats_collector:
+                    await self.stats_collector.record_message(
                         guild_id=str(message.guild.id),
                         user_id=str(message.author.id),
                         channel_id=str(message.channel.id),
@@ -428,6 +428,9 @@ class PigPig(commands.Bot):
                     logger = getattr(self, "system_logger", log)
                     logger.error(f"Failed to load {module[:-3]}", exception=e)
                     logger.error(traceback.format_exc())
+
+        # Initialize Orchestrator after cogs are loaded so UserDataCog is available
+        self.orchestrator = Orchestrator(self)
 
         # Provide running event loop to storage (for thread-safe coroutine submission) if supported.
         if getattr(memory_config, "enabled", True) and getattr(self, "storage", None):

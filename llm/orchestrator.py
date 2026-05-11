@@ -591,7 +591,15 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             ),
                             timeout=_LLM_CALL_TIMEOUT_SECONDS,
                         )
-                        await self._record_llm_stats(guild_id, current_info_model, call_start, success=True)
+                        # Record LLM call statistics
+                        if hasattr(bot, 'stats_collector') and bot.stats_collector:
+                            duration_ms = (time.time() - call_start) * 1000
+                            await bot.stats_collector.record_llm_call(
+                                guild_id=guild_id,
+                                model_name=current_info_model,
+                                duration_ms=duration_ms,
+                                success=True
+                            )
                         
                         # Success!
                         if models_tried > 1:
@@ -735,7 +743,15 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             ),
                             timeout=180.0,  # Much larger total safety timeout
                         )
-                        await self._record_llm_stats(guild_id, current_model, call_start, success=True)
+                        # Record LLM call statistics
+                        if hasattr(bot, 'stats_collector') and bot.stats_collector:
+                            duration_ms = (time.time() - call_start) * 1000
+                            await bot.stats_collector.record_llm_call(
+                                guild_id=guild_id,
+                                model_name=current_model,
+                                duration_ms=duration_ms,
+                                success=True
+                            )
                         
                         # Success!
                         if models_tried > 1:
