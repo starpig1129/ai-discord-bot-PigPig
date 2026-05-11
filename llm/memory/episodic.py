@@ -50,6 +50,8 @@ class EpisodicMemoryProvider:
         self.cache_ttl = cache_ttl
         # key: (channel_id: str, query: str), value: (formatted_str: Optional[str], expire_at: float monotonic)
         self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
+        # key: (channel_id: str, query: str), value: asyncio.Event
+        self._pending_queries: Dict[Tuple[str, str], asyncio.Event] = {}
 
     async def get(self, message: discord.Message) -> Optional[str]:
         """Return formatted episodic context string, or None if nothing relevant.
@@ -83,6 +85,16 @@ class EpisodicMemoryProvider:
         if entry is not None and entry[1] > now:
             return entry[0]
 
+        # Handle cache stampede
+        if cache_key in self._pending_queries:
+            await self._pending_queries[cache_key].wait()
+            entry = self._cache.get(cache_key)
+            if entry is not None and entry[1] > time.monotonic():
+                return entry[0]
+
+        event = asyncio.Event()
+        self._pending_queries[cache_key] = event
+
         try:
             fragments = await vector_manager.store.search_memories_by_vector(
                 query_text=query,
@@ -91,6 +103,9 @@ class EpisodicMemoryProvider:
             )
         except Exception as e:
             await func.report_error(e, "EpisodicMemoryProvider.get: vector search failed")
+            # Unblock waiting tasks on failure
+            event.set()
+            self._pending_queries.pop(cache_key, None)
             return None
 
         if not fragments:
@@ -133,7 +148,8 @@ class EpisodicMemoryProvider:
             formatted_result = "\n".join(lines)
 
         # Update cache
-        expire_at = now + self.cache_ttl
+        expire_at = time.monotonic() + self.cache_ttl
+
         self._cache[cache_key] = (formatted_result, expire_at)
 
         # Prune expired items if cache is getting large
@@ -146,5 +162,23 @@ class EpisodicMemoryProvider:
                 oldest_key = next(iter(self._cache))
                 self._cache.pop(oldest_key, None)
 
+        # Unblock waiting tasks
+        event.set()
+        self._pending_queries.pop(cache_key, None)
+
         return formatted_result
 
+    async def invalidate(self, channel_id: str, query: Optional[str] = None) -> None:
+        """Invalidate cache entries for a specific channel (and optionally query).
+
+        Args:
+            channel_id: The Discord channel ID.
+            query: The specific query string, or None to clear all for the channel.
+        """
+        if query is not None:
+            self._cache.pop((channel_id, query), None)
+        else:
+            # Remove all entries matching the channel_id
+            keys_to_remove = [k for k in self._cache if k[0] == channel_id]
+            for k in keys_to_remove:
+                self._cache.pop(k, None)
