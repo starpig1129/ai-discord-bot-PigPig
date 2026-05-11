@@ -19,7 +19,6 @@ from addons.settings import MemoryConfig, prompt_config
 from addons.logging import get_logger
 from llm.model_manager import ModelManager
 from llm.model_circuit_breaker import get_model_circuit_breaker
-from langchain.chat_models import init_chat_model
 from langchain_ollama import ChatOllama
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
@@ -381,7 +380,7 @@ class EventSummarizationService:
                     log.debug(f"Episodic memory: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
                     
                     # Create the model instance with zero retries
-                    model_instance = init_chat_model(current_model)
+                    model_instance = ModelManager.init_model(current_model)
                     
                     from langchain_core.messages import SystemMessage
                     full_messages = [SystemMessage(content=system_prompt)] + message_list

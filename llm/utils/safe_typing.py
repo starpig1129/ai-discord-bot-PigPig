@@ -48,6 +48,12 @@ class SafeTyping:
                     try:
                         await self._channel.trigger_typing()
                         self._last_trigger[channel_id] = time.time()
+                    except AttributeError:
+                        logger.warning(
+                            f"Channel {channel_id} ({type(self._channel).__name__}) "
+                            "does not support typing indicator. Stopping loop."
+                        )
+                        break
                     except discord.HTTPException as exc:
                         if exc.status == 429:
                             logger.warning(f"Typing 429 for channel {channel_id}, backing off for {self._BACKOFF}s")
@@ -78,6 +84,8 @@ class SafeTyping:
                 try:
                     await self._channel.trigger_typing()
                     self._last_trigger[self._channel_id] = time.time()
+                except AttributeError:
+                    logger.debug(f"Channel {self._channel_id} does not support typing indicator.")
                 except Exception as e:
                     logger.debug(f"Initial typing trigger failed for channel {self._channel_id}: {e}")
 
