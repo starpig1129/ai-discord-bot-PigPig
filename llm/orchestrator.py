@@ -571,7 +571,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             model_specific_prompt += llm_config.reasoning_optimization_prompt
 
                         # Instantiate model with zero retries to ensure immediate fallback on quota exhaustion
-                        info_model_instance = init_chat_model(current_info_model, max_retries=0)
+                        info_model_instance = init_chat_model(current_info_model)
                         
                         info_agent = create_agent(
                             model=info_model_instance,
@@ -710,7 +710,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             model_specific_message_prompt += llm_config.reasoning_optimization_prompt
 
                         # Create agent with current model configured for zero retries
-                        message_model_instance = init_chat_model(current_model, max_retries=0)
+                        message_model_instance = init_chat_model(current_model)
                         
                         message_agent = create_agent(
                             model=message_model_instance,

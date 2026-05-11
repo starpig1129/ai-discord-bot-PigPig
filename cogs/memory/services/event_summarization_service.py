@@ -381,7 +381,7 @@ class EventSummarizationService:
                     log.debug(f"Episodic memory: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
                     
                     # Create the model instance with zero retries
-                    model_instance = init_chat_model(current_model, max_retries=0)
+                    model_instance = init_chat_model(current_model)
                     
                     from langchain_core.messages import SystemMessage
                     full_messages = [SystemMessage(content=system_prompt)] + message_list
@@ -493,7 +493,7 @@ class EventSummarizationService:
                 if not api_key:
                     from addons.tokens import tokens
                     api_key = getattr(tokens, "google_api_key", None)
-                return ChatGoogleGenerativeAI(model=model_id, google_api_key=api_key, temperature=0.1, max_retries=0)
+                return ChatGoogleGenerativeAI(model=model_id, google_api_key=api_key, temperature=0.1)
                 
             elif model_name.startswith("openai:"):
                 model_id = model_name.split(":", 1)[1]
