@@ -20,6 +20,8 @@ export function useWebSocket({ url, token, autoConnect = true }: UseWebSocketOpt
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<number | null>(null);
+  const connectRef = useRef<() => void>(undefined);
+
 
   const connect = useCallback(() => {
     if (!token) return;
@@ -27,6 +29,7 @@ export function useWebSocket({ url, token, autoConnect = true }: UseWebSocketOpt
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
+      if (wsRef.current !== ws) return;
       setConnected(true);
       if (reconnectRef.current) {
         clearTimeout(reconnectRef.current);
@@ -35,6 +38,7 @@ export function useWebSocket({ url, token, autoConnect = true }: UseWebSocketOpt
     };
 
     ws.onmessage = (event) => {
+      if (wsRef.current !== ws) return;
       try {
         const entry = JSON.parse(event.data) as LogEntry;
         setLogs((prev) => [...prev.slice(-499), entry]);
@@ -42,20 +46,35 @@ export function useWebSocket({ url, token, autoConnect = true }: UseWebSocketOpt
     };
 
     ws.onclose = () => {
+      if (wsRef.current !== ws) return;
       setConnected(false);
       // Auto-reconnect after 3 seconds
-      reconnectRef.current = window.setTimeout(connect, 3000);
+      reconnectRef.current = window.setTimeout(() => {
+        connectRef.current?.();
+      }, 3000);
     };
 
-    ws.onerror = () => ws.close();
+    ws.onerror = () => {
+      if (wsRef.current !== ws) return;
+      ws.close();
+    };
     wsRef.current = ws;
   }, [url, token]);
 
   useEffect(() => {
-    if (autoConnect) connect();
+    connectRef.current = connect;
+  }, [connect]);
+
+  useEffect(() => {
+    let timeoutId: number;
+    if (autoConnect) {
+      // Delay connection slightly to bypass React 18 Strict Mode immediate unmount
+      timeoutId = window.setTimeout(connect, 50);
+    }
     return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
       wsRef.current?.close();
-      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      if (reconnectRef.current) window.clearTimeout(reconnectRef.current);
     };
   }, [connect, autoConnect]);
 
