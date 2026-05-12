@@ -12,6 +12,7 @@ from datetime import timezone
 import discord
 from pydantic import BaseModel, Field
 from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
 
 from function import func
@@ -19,10 +20,6 @@ from addons.settings import MemoryConfig, prompt_config
 from addons.logging import get_logger
 from llm.model_manager import ModelManager
 from llm.model_circuit_breaker import get_model_circuit_breaker
-from langchain_ollama import ChatOllama
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
 
 log = get_logger(__name__)
 
@@ -380,7 +377,7 @@ class EventSummarizationService:
                     log.debug(f"Episodic memory: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
                     
                     # Create the model instance with zero retries
-                    model_instance = ModelManager.init_model(current_model)
+                    model_instance = init_chat_model(current_model, max_retries=0)
                     
                     from langchain_core.messages import SystemMessage
                     full_messages = [SystemMessage(content=system_prompt)] + message_list
@@ -476,34 +473,53 @@ class EventSummarizationService:
             LangChain chat model instance
         """
         try:
+            kwargs: Dict[str, Any] = {"temperature": 0.1}
+
             if model_name.startswith("ollama:"):
-                model_id = model_name.split(":", 1)[1]
                 # Default to localhost if not specified in config
                 base_url = getattr(self.settings, "ollama_base_url", "http://localhost:11434")
                 # Use num_retries=0 for Ollama to ensure fast fallback
-                kwargs = {"model": model_id, "base_url": base_url, "temperature": 0.1, "num_retries": 0}
+                kwargs.update({"base_url": base_url, "num_retries": 0})
                 if force_json:
                     kwargs["format"] = "json"
-                return ChatOllama(**kwargs)
             
             elif model_name.startswith("google_genai:"):
-                model_id = model_name.split(":", 1)[1]
                 api_key = getattr(self.settings, "google_api_key", None)
                 if not api_key:
-                    from addons.tokens import tokens
-                    api_key = getattr(tokens, "google_api_key", None)
-                return ChatGoogleGenerativeAI(model=model_id, google_api_key=api_key, temperature=0.1)
+                    try:
+                        from addons.tokens import tokens
+                        api_key = getattr(tokens, "google_api_key", None)
+                    except ImportError:
+                        pass
+                if api_key:
+                    kwargs["google_api_key"] = api_key
                 
             elif model_name.startswith("openai:"):
-                model_id = model_name.split(":", 1)[1]
-                return ChatOpenAI(model=model_id, temperature=0.1, max_retries=0)
+                api_key = getattr(self.settings, "openai_api_key", None)
+                if not api_key:
+                    try:
+                        from addons.tokens import tokens
+                        api_key = getattr(tokens, "openai_api_key", None)
+                    except ImportError:
+                        pass
+                if api_key:
+                    kwargs["api_key"] = api_key
+                kwargs["max_retries"] = 0
  
             elif model_name.startswith("anthropic:"):
-                model_id = model_name.split(":", 1)[1]
-                return ChatAnthropic(model=model_id, temperature=0.1, max_retries=0)
+                api_key = getattr(self.settings, "anthropic_api_key", None)
+                if not api_key:
+                    try:
+                        from addons.tokens import tokens
+                        api_key = getattr(tokens, "anthropic_api_key", None)
+                    except ImportError:
+                        pass
+                if api_key:
+                    kwargs["api_key"] = api_key
+                kwargs["max_retries"] = 0
             
-            else:
-                raise ValueError(f"Unknown model provider in: {model_name}")
+            # Use centralized init_chat_model
+            return init_chat_model(model_name, **kwargs)
                 
         except Exception as e:
             log.error(f"Failed to create LLM instance for {model_name}: {e}")

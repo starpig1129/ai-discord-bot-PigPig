@@ -3,6 +3,7 @@ import asyncio
 import discord
 
 from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
 
 from cogs.eat.db.db import DB
@@ -173,7 +174,7 @@ class EatDetailView(discord.ui.View):
                 if not circuit_breaker.is_available(current_model):
                     continue
                 try:
-                    model_instance = ModelManager.init_model(current_model)
+                    model_instance = init_chat_model(current_model, max_retries=0)
                     review_agent = create_agent(
                         model=model_instance,
                         tools=[],

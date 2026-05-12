@@ -48,6 +48,7 @@ from cogs.memory.users.manager import SQLiteUserManager
 from cogs.memory.users.models import UserInfo
 from cogs.memory.db.knowledge_storage import KnowledgeStorage
 from function import func
+from langchain.chat_models import init_chat_model
 from llm.model_manager import ModelManager
 from llm.utils.send_message import safe_edit_message
 
@@ -404,7 +405,7 @@ class UserDataCog(commands.Cog):
             # Directly use the model with structured output instead of creating a full agent
             # This avoids the overhead of creating prompt templates and multiple layers of agent logic
             # Setting max_retries=1 to prevent hanging during quota exhaustion; fallbacks will handle it
-            llm = ModelManager.init_model(model_id).with_structured_output(UserDataResponse)
+            llm = init_chat_model(model_id, max_retries=1).with_structured_output(UserDataResponse)
         except Exception as e:
             await func.report_error(e, "Failed to get user_data_model for merge")
             raise RuntimeError(f"Failed to get user_data_model: {e}") from e
@@ -455,7 +456,7 @@ class UserDataCog(commands.Cog):
         try:
             # Use 'user_data_model' as fallback or same model for consistency
             model_id, _ = ModelManager().get_model("user_data_model")
-            llm = ModelManager.init_model(model_id)
+            llm = init_chat_model(model_id, max_retries=1)
         except Exception as e:
             await func.report_error(e, "Failed to get model for knowledge merge")
             raise RuntimeError(f"Failed to get model: {e}") from e

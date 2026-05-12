@@ -11,6 +11,7 @@ logger = get_logger(server_id="Bot", source="llm.orchestrator")
 import discord
 from discord import Message
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain.chat_models import init_chat_model
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware, AgentMiddleware, hook_config
 
@@ -533,7 +534,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             model_specific_prompt += llm_config.reasoning_optimization_prompt
 
                         # Instantiate model with zero retries to ensure immediate fallback on quota exhaustion
-                        info_model_instance = ModelManager.init_model(current_info_model)
+                        info_model_instance = init_chat_model(current_info_model, max_retries=0)
                         
                         info_agent = create_agent(
                             model=info_model_instance,
@@ -672,7 +673,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             model_specific_message_prompt += llm_config.reasoning_optimization_prompt
 
                         # Create agent with current model configured for zero retries
-                        message_model_instance = ModelManager.init_model(current_model)
+                        message_model_instance = init_chat_model(current_model, max_retries=0)
                         
                         message_agent = create_agent(
                             model=message_model_instance,

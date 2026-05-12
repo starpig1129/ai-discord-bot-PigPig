@@ -118,27 +118,5 @@ class ModelManager:
             # 保留原始例外以便上層取得詳細錯誤資訊
             raise
 
-    @staticmethod
-    def init_model(model_name: str, **kwargs: Any) -> Any:
-        """Initializes a model safely, handling provider-specific parameter constraints.
-
-        Args:
-            model_name: The provider:model string.
-            **kwargs: Additional arguments for model initialization.
-
-        Returns:
-            An initialized LangChain chat model.
-        """
-        from langchain.chat_models import init_chat_model
-
-        # Google GenAI provider does not support 'max_retries' in its current integration
-        if model_name.startswith("google_genai:"):
-            # Strip max_retries if present to avoid TypeError
-            if "max_retries" in kwargs:
-                logger.debug(f"Stripping 'max_retries' from {model_name} initialization")
-                kwargs.pop("max_retries")
-
-        return init_chat_model(model_name, **kwargs)
-
 
 __all__ = ["ModelManager"]
