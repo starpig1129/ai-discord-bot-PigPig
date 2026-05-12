@@ -27,7 +27,7 @@ i18n
     detection: {
       order: ['localStorage', 'navigator'],
       lookupLocalStorage: 'pigpig_dashboard_lang',
-      cacheUserLanguage: true,
+      caches: ['localStorage'],
     },
     interpolation: {
       escapeValue: false, // React already escapes
