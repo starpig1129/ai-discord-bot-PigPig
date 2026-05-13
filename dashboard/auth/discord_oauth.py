@@ -44,8 +44,10 @@ def _get_redirect_uri(request: Request) -> str:
     Returns:
         Absolute callback URL string.
     """
-    # Use X-Forwarded headers if behind proxy, otherwise request base URL
+    # Use request base URL, but ensure localhost is used instead of 127.0.0.1 
+    # to match the strict exact-string whitelist in the Discord Developer Portal.
     base = str(request.base_url).rstrip("/")
+    base = base.replace("127.0.0.1", "localhost")
     return f"{base}/auth/discord/callback"
 
 

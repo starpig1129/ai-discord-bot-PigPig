@@ -191,6 +191,17 @@ class EventSummarizationService:
                 result = expected_model.model_validate(payload)
                 log.debug(f"{context}: Parsed from dict")
                 return result
+            elif isinstance(payload, list):
+                # List (LLM sometimes bypasses the top-level object and returns the inner list)
+                field_name = "fragments" # Fallback
+                if hasattr(expected_model, "model_fields") and expected_model.model_fields:
+                    field_name = next(iter(expected_model.model_fields.keys()))
+                elif hasattr(expected_model, "__fields__") and expected_model.__fields__:
+                    field_name = next(iter(expected_model.__fields__.keys()))
+                
+                result = expected_model.model_validate({field_name: payload})
+                log.debug(f"{context}: Parsed from list wrapped in dict key '{field_name}'")
+                return result
             elif hasattr(payload, "model_dump"):
                 # Pydantic v2 model
                 result = expected_model.model_validate(payload.model_dump())

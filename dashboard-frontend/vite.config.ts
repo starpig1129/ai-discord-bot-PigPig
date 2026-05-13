@@ -9,9 +9,10 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://127.0.0.1:8005',
-      // Proxy only specific auth endpoints — NOT /auth/discord/callback
-      // (that URL is handled by React Router /callback page)
+      // Proxy all auth endpoints to the backend. The backend handles the Discord
+      // callback and exchanges the code, then redirects to the frontend /callback
       '/auth/discord/login': 'http://127.0.0.1:8005',
+      '/auth/discord/callback': 'http://127.0.0.1:8005',
       '/auth/refresh': 'http://127.0.0.1:8005',
       '/auth/logout': 'http://127.0.0.1:8005',
       '/auth/me': 'http://127.0.0.1:8005',
