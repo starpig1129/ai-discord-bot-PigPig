@@ -50,6 +50,8 @@ class EpisodicMemoryProvider:
         self.cache_ttl = cache_ttl
         # key: (channel_id: str, query: str), value: (formatted_str: Optional[str], expire_at: float monotonic)
         self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
+        # Protect against cache stampedes for concurrent requests with the same key
+        self._pending_queries: Dict[Tuple[str, str], asyncio.Event] = {}
 
     async def get(self, message: discord.Message) -> Optional[str]:
         """Return formatted episodic context string, or None if nothing relevant.
@@ -83,68 +85,86 @@ class EpisodicMemoryProvider:
         if entry is not None and entry[1] > now:
             return entry[0]
 
+        # Prevent cache stampede
+        pending_event = self._pending_queries.get(cache_key)
+        if pending_event is not None:
+            await pending_event.wait()
+            entry = self._cache.get(cache_key)
+            if entry is not None and entry[1] > time.monotonic():
+                return entry[0]
+            # If wait finished but cache not updated, fall through to fetch (edge case)
+
+        # Register our event so others will wait
+        event = asyncio.Event()
+        self._pending_queries[cache_key] = event
+
         try:
-            fragments = await vector_manager.store.search_memories_by_vector(
-                query_text=query,
-                limit=self.top_k,
-                channel_id=channel_id,
-            )
-        except Exception as e:
-            await func.report_error(e, "EpisodicMemoryProvider.get: vector search failed")
-            return None
+            try:
+                fragments = await vector_manager.store.search_memories_by_vector(
+                    query_text=query,
+                    limit=self.top_k,
+                    channel_id=channel_id,
+                )
+            except Exception as e:
+                await func.report_error(e, "EpisodicMemoryProvider.get: vector search failed")
+                return None
 
-        if not fragments:
-            formatted_result = None
-        else:
-            lines = ["--- Relevant Past Memories ---"]
-            total_chars = len(lines[0])
+            if not fragments:
+                formatted_result = None
+            else:
+                lines = ["--- Relevant Past Memories ---"]
+                total_chars = len(lines[0])
 
-            for i, frag in enumerate(fragments, 1):
-                ts = frag.metadata.get("start_timestamp") or frag.metadata.get("timestamp")
-                jump_url = frag.metadata.get("jump_url")
+                for i, frag in enumerate(fragments, 1):
+                    ts = frag.metadata.get("start_timestamp") or frag.metadata.get("timestamp")
+                    jump_url = frag.metadata.get("jump_url")
 
-                # Build source label: prefer a Discord message link over plain timestamp
-                if jump_url and ts:
-                    try:
-                        unix_ts = int(float(ts))
-                        source_str = f" [[Source <t:{unix_ts}:R>]({jump_url})]"
-                    except Exception:
+                    # Build source label: prefer a Discord message link over plain timestamp
+                    if jump_url and ts:
+                        try:
+                            unix_ts = int(float(ts))
+                            source_str = f" [[Source <t:{unix_ts}:R>]({jump_url})]"
+                        except Exception:
+                            source_str = f" [[Source]({jump_url})]"
+                    elif jump_url:
                         source_str = f" [[Source]({jump_url})]"
-                elif jump_url:
-                    source_str = f" [[Source]({jump_url})]"
-                elif ts:
-                    try:
-                        unix_ts = int(float(ts))
-                        source_str = f" [<t:{unix_ts}:R>]"
-                    except Exception:
+                    elif ts:
+                        try:
+                            unix_ts = int(float(ts))
+                            source_str = f" [<t:{unix_ts}:R>]"
+                        except Exception:
+                            source_str = ""
+                    else:
                         source_str = ""
-                else:
-                    source_str = ""
 
-                entry_str = f"[memory #{i}] {frag.content}{source_str}"
+                    entry_str = f"[memory #{i}] {frag.content}{source_str}"
 
-                if total_chars + len(entry_str) + 1 > self.max_chars:
-                    break
-                lines.append(entry_str)
-                total_chars += len(entry_str) + 1
+                    if total_chars + len(entry_str) + 1 > self.max_chars:
+                        break
+                    lines.append(entry_str)
+                    total_chars += len(entry_str) + 1
 
-            lines.append("--- End Past Memories ---")
-            _LOGGER.debug(f"Injecting {len(lines) - 2} episodic fragments into context.")
-            formatted_result = "\n".join(lines)
+                lines.append("--- End Past Memories ---")
+                _LOGGER.debug(f"Injecting {len(lines) - 2} episodic fragments into context.")
+                formatted_result = "\n".join(lines)
 
-        # Update cache
-        expire_at = now + self.cache_ttl
-        self._cache[cache_key] = (formatted_result, expire_at)
+            # Update cache
+            expire_at = now + self.cache_ttl
+            self._cache[cache_key] = (formatted_result, expire_at)
 
-        # Prune expired items if cache is getting large
-        if len(self._cache) > self.max_cache_size:
-            now_insert = time.monotonic()
-            self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+            # Prune expired items if cache is getting large
+            if len(self._cache) > self.max_cache_size:
+                now_insert = time.monotonic()
+                self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
 
-            # If still over size, remove oldest via insertion order
-            while len(self._cache) > self.max_cache_size:
-                oldest_key = next(iter(self._cache))
-                self._cache.pop(oldest_key, None)
+                # If still over size, remove oldest via insertion order
+                while len(self._cache) > self.max_cache_size:
+                    oldest_key = next(iter(self._cache))
+                    self._cache.pop(oldest_key, None)
 
-        return formatted_result
+            return formatted_result
+        finally:
+            # Wake up any waiting tasks and clean up
+            event.set()
+            self._pending_queries.pop(cache_key, None)
 
