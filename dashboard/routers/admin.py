@@ -273,6 +273,7 @@ async def list_users(
 @router.get("/users/{user_id}")
 async def get_user_detail(
     user_id: str,
+    request: Request,
     user: dict = Depends(require_owner),
 ) -> JSONResponse:
     """Get full memory details for a specific user (Bot Owner only)."""
