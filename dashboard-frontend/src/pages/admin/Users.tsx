@@ -40,6 +40,7 @@ export default function Users() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   const LIMIT = 50;
 
    const timerRef = useRef<number | null>(null);
@@ -84,6 +85,7 @@ export default function Users() {
   };
 
   const handleDelete = async (userId: string) => {
+    setIsDeleting(true);
     try {
       await api.delete(`/api/admin/users/${userId}/memory`, { data: { confirm: true } });
       setDeleteMsg(t('admin.deleteSuccess', { id: userId }));
@@ -96,6 +98,8 @@ export default function Users() {
       setDeleteMsg(t('admin.deleteFailed'));
       if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
       msgTimerRef.current = setTimeout(() => setDeleteMsg(''), 5000);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -249,10 +253,20 @@ export default function Users() {
                     background: 'transparent', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
                   {t('common.cancel')}
                 </button>
-                <button onClick={() => handleDelete(deleteConfirm)}
-                  style={{ padding: '0.5rem 1rem', borderRadius: 'var(--radius-sm)', border: 'none',
-                    background: '#f43f5e', color: 'white', cursor: 'pointer', fontWeight: 600 }}>
-                  {t('admin.deleteUserMemory')}
+                <button
+                  onClick={() => handleDelete(deleteConfirm)}
+                  disabled={isDeleting}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: 'none',
+                    background: isDeleting ? 'rgba(244,63,94,0.5)' : '#f43f5e',
+                    color: 'white',
+                    cursor: isDeleting ? 'not-allowed' : 'pointer',
+                    fontWeight: 600,
+                    opacity: isDeleting ? 0.7 : 1,
+                  }}>
+                  {isDeleting ? '...' : t('admin.deleteUserMemory')}
                 </button>
               </div>
 
