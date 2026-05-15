@@ -106,6 +106,11 @@ async def start_dashboard(bot: "PigPig") -> None:
     # Initialize stats database
     await app.state.stats_collector.initialize()
 
+    # Initialize persistent refresh token store
+    from dashboard.auth import token_store as _token_store
+    await _token_store.initialize()
+    log.info("Refresh token store initialized")
+
     # Store reference on bot for graceful shutdown
     bot._dashboard_app = app
 

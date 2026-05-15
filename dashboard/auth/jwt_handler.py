@@ -15,6 +15,7 @@ from jose import JWTError, jwt
 
 from addons.logging import get_logger
 from addons.tokens import tokens
+from dashboard.auth import token_store
 
 log = get_logger(server_id="Bot", source=__name__)
 
@@ -28,8 +29,7 @@ _SECRET_KEY: str = getattr(tokens, "secret_key", None) or secrets.token_urlsafe(
 if not getattr(tokens, "secret_key", None):
     log.warning("DASHBOARD_SECRET_KEY not set in .env — using random key (all tokens invalidated on restart)")
 
-# In-memory refresh token store: {token_str: {"user_id": str, "exp": float}}
-_refresh_store: dict[str, dict[str, Any]] = {}
+# NOTE: In-memory refresh token store removed; persistence is handled by token_store (SQLite).
 
 
 def create_access_token(
@@ -65,7 +65,7 @@ def create_access_token(
 
 
 def create_refresh_token(user_id: str) -> str:
-    """Create a long-lived opaque refresh token.
+    """Create a long-lived opaque refresh token and schedule persistence.
 
     Args:
         user_id: Discord user ID.
@@ -74,11 +74,13 @@ def create_refresh_token(user_id: str) -> str:
         Opaque refresh token string.
     """
     token = secrets.token_urlsafe(48)
-    _refresh_store[token] = {
-        "user_id": user_id,
-        "exp": time.time() + REFRESH_TOKEN_EXPIRE_SECONDS,
-    }
-    _cleanup_expired_refresh_tokens()
+    exp = time.time() + REFRESH_TOKEN_EXPIRE_SECONDS
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(token_store.store(token, user_id, exp))
+    except RuntimeError:
+        pass
     return token
 
 
@@ -100,7 +102,7 @@ def verify_access_token(token: str) -> Optional[dict[str, Any]]:
 
 
 def verify_refresh_token(token: str) -> Optional[str]:
-    """Verify a refresh token and return the associated user_id.
+    """Sync shim — prefer verify_refresh_token_async in async contexts.
 
     Args:
         token: Opaque refresh token string.
@@ -108,27 +110,42 @@ def verify_refresh_token(token: str) -> Optional[str]:
     Returns:
         User ID if valid, or ``None``.
     """
-    entry = _refresh_store.get(token)
-    if entry is None:
+    import asyncio
+    try:
+        return asyncio.get_event_loop().run_until_complete(token_store.lookup(token))
+    except Exception:
         return None
-    if time.time() > entry["exp"]:
-        _refresh_store.pop(token, None)
-        return None
-    return entry["user_id"]
 
 
 def revoke_refresh_token(token: str) -> None:
-    """Revoke (delete) a refresh token.
+    """Sync shim — prefer revoke_refresh_token_async in async contexts.
 
     Args:
         token: Opaque refresh token to revoke.
     """
-    _refresh_store.pop(token, None)
+    import asyncio
+    try:
+        asyncio.get_event_loop().run_until_complete(token_store.revoke(token))
+    except Exception:
+        pass
 
 
-def _cleanup_expired_refresh_tokens() -> None:
-    """Remove expired entries from the in-memory refresh store."""
-    now = time.time()
-    expired = [k for k, v in _refresh_store.items() if now > v["exp"]]
-    for k in expired:
-        del _refresh_store[k]
+async def verify_refresh_token_async(token: str) -> str | None:
+    """Async verify using persistent store.
+
+    Args:
+        token: Opaque refresh token string.
+
+    Returns:
+        User ID if valid, or ``None``.
+    """
+    return await token_store.lookup(token)
+
+
+async def revoke_refresh_token_async(token: str) -> None:
+    """Async revoke using persistent store.
+
+    Args:
+        token: Opaque refresh token to revoke.
+    """
+    await token_store.revoke(token)

@@ -22,6 +22,8 @@ from dashboard.auth.jwt_handler import (
     verify_access_token,
     verify_refresh_token,
     revoke_refresh_token,
+    verify_refresh_token_async,
+    revoke_refresh_token_async,
 )
 
 log = get_logger(server_id="Bot", source=__name__)
@@ -213,7 +215,7 @@ async def refresh(request: Request) -> JSONResponse:
     if not refresh_tok:
         raise HTTPException(status_code=401, detail="Missing refresh token")
 
-    user_id = verify_refresh_token(refresh_tok)
+    user_id = await verify_refresh_token_async(refresh_tok)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
@@ -238,7 +240,7 @@ async def logout(request: Request) -> JSONResponse:
     """
     refresh_tok = request.cookies.get("refresh_token")
     if refresh_tok:
-        revoke_refresh_token(refresh_tok)
+        await revoke_refresh_token_async(refresh_tok)
 
     response = JSONResponse({"detail": "Logged out"})
     response.delete_cookie(key="refresh_token", path="/auth")
