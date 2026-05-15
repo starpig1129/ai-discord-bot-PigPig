@@ -36,12 +36,13 @@ export default function Dashboard() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchStatus = () => {
       api.get('/api/admin/status')
         .then(({ data }) => setStatus(data))
-        .catch(() => {})
+        .catch((err) => setError(err?.response?.data?.detail || err?.message || 'Failed to load status'))
         .finally(() => setLoading(false));
     };
     fetchStatus();
@@ -68,6 +69,19 @@ export default function Dashboard() {
 
   return (
     <div>
+      {error && (
+        <div style={{
+          padding: '0.75rem 1rem',
+          marginBottom: '1rem',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(244,63,94,0.1)',
+          border: '1px solid rgba(244,63,94,0.3)',
+          color: '#f43f5e',
+          fontSize: '0.875rem',
+        }}>
+          ⚠️ {error}
+        </div>
+      )}
       {/* Header */}
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Welcome back 👋</h1>

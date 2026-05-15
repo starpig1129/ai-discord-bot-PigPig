@@ -22,12 +22,13 @@ export default function GuildOverview() {
   const { t } = useTranslation();
   const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     setLoading(true);
     api.get(`/api/guild/${guildId}/overview`)
       .then(({ data }) => setData(data))
-      .catch(() => {})
+      .catch((err) => setError(err?.response?.data?.detail || err?.message || 'Failed to load guild overview'))
       .finally(() => setLoading(false));
   }, [guildId]);
 
@@ -47,6 +48,19 @@ export default function GuildOverview() {
 
   return (
     <div>
+      {error && (
+        <div style={{
+          padding: '0.75rem 1rem',
+          marginBottom: '1rem',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(244,63,94,0.1)',
+          border: '1px solid rgba(244,63,94,0.3)',
+          color: '#f43f5e',
+          fontSize: '0.875rem',
+        }}>
+          ⚠️ {error}
+        </div>
+      )}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',

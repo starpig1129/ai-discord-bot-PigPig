@@ -13,14 +13,15 @@ export default function UserMemory() {
   const { t } = useTranslation();
   const [procedural, setProcedural] = useState<ProceduralData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const p = await api.get('/api/user/memory/procedural');
         setProcedural(p.data);
-      } catch {
-        // errors handled by layout or silently
+      } catch (err: any) {
+        setError(err?.response?.data?.detail || err?.message || 'Failed to load memory data');
       } finally {
         setLoading(false);
       }
@@ -36,6 +37,19 @@ export default function UserMemory() {
 
   return (
     <div>
+      {error && (
+        <div style={{
+          padding: '0.75rem 1rem',
+          marginBottom: '1rem',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(244,63,94,0.1)',
+          border: '1px solid rgba(244,63,94,0.3)',
+          color: '#f43f5e',
+          fontSize: '0.875rem',
+        }}>
+          ⚠️ {error}
+        </div>
+      )}
       <motion.div className="glass-card" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ padding: '1.5rem' }}>
         {procedural?.procedural_memory ? (
           <>

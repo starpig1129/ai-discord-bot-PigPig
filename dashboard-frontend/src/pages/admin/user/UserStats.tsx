@@ -16,17 +16,31 @@ export default function UserStatsPage() {
   const [period, setPeriod] = useState('30d');
   const [data, setData] = useState<UserStatsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     setLoading(true);
     api.get(`/api/user/stats?period=${period}`)
       .then(({ data }) => setData(data))
-      .catch(() => {})
+      .catch((err) => setError(err?.response?.data?.detail || err?.message || 'Failed to load stats'))
       .finally(() => setLoading(false));
   }, [period]);
 
   return (
     <div>
+      {error && (
+        <div style={{
+          padding: '0.75rem 1rem',
+          marginBottom: '1rem',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(244,63,94,0.1)',
+          border: '1px solid rgba(244,63,94,0.3)',
+          color: '#f43f5e',
+          fontSize: '0.875rem',
+        }}>
+          ⚠️ {error}
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
         <h2 style={{ fontSize: '1.125rem', fontWeight: 600 }}>📊 {t('user.stats')}</h2>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
