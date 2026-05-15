@@ -138,6 +138,85 @@ async def get_procedural_memory(
     })
 
 
+# ── Update Procedural Memory ─────────────────────────────────────────
+
+@router.put("/memory/procedural")
+async def update_procedural_memory(
+    request: Request,
+    user: dict = Depends(get_current_user),
+) -> JSONResponse:
+    """Update the authenticated user's procedural memory and background.
+
+    Accepts PATCH semantics — only provided fields are updated.
+
+    Args:
+        request: FastAPI request containing JSON body with optional fields
+            ``procedural_memory`` and ``user_background``.
+        user: Authenticated user payload (JWT).
+
+    Returns:
+        JSON confirming the update with ``detail`` and ``user_id``.
+
+    Raises:
+        HTTPException: 400 if unknown fields or no valid fields provided.
+        HTTPException: 404 if the memory database or user record is not found.
+        HTTPException: 503 if the database operation fails.
+    """
+    body: dict = await request.json()
+
+    allowed = {"procedural_memory", "user_background"}
+    unknown = set(body.keys()) - allowed
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown fields: {sorted(unknown)}")
+
+    procedural_memory = body.get("procedural_memory")
+    user_background = body.get("user_background")
+
+    if procedural_memory is None and user_background is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide at least one of: procedural_memory, user_background",
+        )
+
+    user_id: str = user["sub"]
+
+    if not _PROCEDURAL_DB.exists():
+        raise HTTPException(status_code=404, detail="Memory database not found")
+
+    try:
+        async with aiosqlite.connect(str(_PROCEDURAL_DB)) as db:
+            cursor = await db.execute(
+                "SELECT discord_id FROM users WHERE discord_id = ?", (user_id,)
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="User memory record not found")
+
+            updates = []
+            params = []
+            if procedural_memory is not None:
+                updates.append("procedural_memory = ?")
+                params.append(procedural_memory)
+            if user_background is not None:
+                updates.append("user_background = ?")
+                params.append(user_background)
+
+            params.append(user_id)
+            await db.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE discord_id = ?",
+                params,
+            )
+            await db.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error(f"update_procedural_memory failed for {user_id}: {exc}")
+        raise HTTPException(status_code=503, detail="Memory database temporarily unavailable")
+
+    log.info(f"User {user_id} updated procedural memory")
+    return JSONResponse({"detail": "Memory updated", "user_id": user_id})
+
+
 # ── Episodic Memory ───────────────────────────────────────────────────
 
 @router.get("/memory/episodic")

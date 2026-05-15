@@ -209,7 +209,15 @@
     "deleteSuccess": "資料已成功刪除",
     "deleteFailed": "刪除失敗，請稍後再試",
     "redirecting": "3 秒後將自動登出...",
-    "commandsSent": "已送出指令數"
+    "commandsSent": "已送出指令數",
+    "editMemory": "編輯",
+    "editProcedural": "編輯程序記憶",
+    "editBackground": "編輯用戶背景",
+    "saveMemory": "儲存",
+    "cancelEdit": "取消",
+    "memorySaved": "記憶儲存成功",
+    "memoryPlaceholderProcedural": "輸入偏好、習慣、溝通風格...",
+    "memoryPlaceholderBackground": "輸入背景資訊、個人脈絡..."
   },
   "admin": {
     "usersTitle": "使用者管理",

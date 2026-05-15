@@ -209,7 +209,15 @@
     "deleteSuccess": "Data successfully deleted",
     "deleteFailed": "Deletion failed, please try again",
     "redirecting": "Redirecting in 3 seconds...",
-    "commandsSent": "Commands Sent"
+    "commandsSent": "Commands Sent",
+    "editMemory": "Edit",
+    "editProcedural": "Edit Procedural Memory",
+    "editBackground": "Edit User Background",
+    "saveMemory": "Save",
+    "cancelEdit": "Cancel",
+    "memorySaved": "Memory saved successfully",
+    "memoryPlaceholderProcedural": "Enter preferences, habits, communication style...",
+    "memoryPlaceholderBackground": "Enter background information, context..."
   },
   "admin": {
     "usersTitle": "User Management",
