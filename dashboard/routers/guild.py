@@ -36,8 +36,6 @@ _EPISODIC_DB = Path(ROOT_DIR) / "data" / "memory" / "episodic.db"
 _PROCEDURAL_DB = Path(ROOT_DIR) / "data" / "memory" / "procedural.db"
 
 from addons.settings import memory_config
-from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -638,6 +636,7 @@ async def update_channel_prompt(
 async def get_channel_memory(
     guild_id: str,
     channel_id: str,
+    request: Request,
     user: dict[str, Any] = Depends(get_current_user),
 ) -> JSONResponse:
     """Return the memory (episodic summary + knowledge + fragments) for a specific channel."""
@@ -676,42 +675,44 @@ async def get_channel_memory(
             log.error(f"Channel knowledge read failed for {channel_id}: {exc}")
 
     # 3. Fetch episodic fragments from Qdrant
-    if memory_config.enabled and memory_config.vector_store_type == "qdrant":
-        try:
-            # We initialize client here; in a production app, this would be a shared dependency.
-            client = QdrantClient(
-                url=memory_config.qdrant_url, 
-                api_key=memory_config.qdrant_api_key
-            )
-            
-            # Use scroll to get points matching the channel_id in metadata
-            # Note: channel_id in Qdrant metadata is stored as a string
-            points, _ = client.scroll(
-                collection_name=memory_config.qdrant_collection_name,
-                scroll_filter=Filter(
-                    must=[
-                        FieldCondition(key="metadata.channel_id", match=MatchValue(value=str(channel_id)))
-                    ]
-                ),
-                limit=50,
-                with_payload=True,
-                with_vectors=False
-            )
-            
-            for p in points:
-                payload = p.payload or {}
-                metadata = payload.get("metadata", {})
-                fragments.append({
-                    "id": metadata.get("fragment_id", str(p.id)),
-                    "content": metadata.get("summary", payload.get("page_content", "")),
-                    "timestamp": metadata.get("end_timestamp") or metadata.get("timestamp"),
-                })
-            
-            # Sort by timestamp descending (newest first)
-            fragments.sort(key=lambda x: x.get("timestamp") or 0, reverse=True)
-            
-        except Exception as exc:
-            log.error(f"Qdrant fragments read failed for {channel_id}: {exc}")
+    if getattr(memory_config, "enabled", False) and getattr(memory_config, "vector_store_type", "") == "qdrant":
+        qdrant_client = getattr(request.app.state, "qdrant_client", None)
+        if qdrant_client:
+            try:
+                from qdrant_client.models import Filter, FieldCondition, MatchValue
+                import asyncio
+
+                def _scroll_channel(client, collection, channel_id):
+                    points, _ = client.scroll(
+                        collection_name=collection,
+                        scroll_filter=Filter(
+                            must=[FieldCondition(
+                                key="metadata.channel_id",
+                                match=MatchValue(value=str(channel_id))
+                            )]
+                        ),
+                        limit=50,
+                        with_payload=True,
+                        with_vectors=False,
+                    )
+                    return points
+
+                points = await asyncio.to_thread(
+                    _scroll_channel,
+                    qdrant_client,
+                    memory_config.qdrant_collection_name,
+                    channel_id,
+                )
+                for p in points:
+                    payload = p.payload or {}
+                    metadata = payload.get("metadata", {})
+                    fragments.append({
+                        "id": metadata.get("fragment_id", str(p.id)),
+                        "content": metadata.get("summary", payload.get("page_content", "")),
+                        "timestamp": metadata.get("end_timestamp") or metadata.get("timestamp"),
+                    })
+            except Exception as exc:
+                log.warning(f"Qdrant episodic fetch failed for channel {channel_id}: {exc}")
 
     return JSONResponse({
         "channel_id": channel_id,

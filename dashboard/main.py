@@ -53,6 +53,24 @@ def create_app(bot: "PigPig") -> FastAPI:
     app.state.bot = bot
     app.state.stats_collector = bot.stats_collector
 
+    # Shared Qdrant client for dashboard routers (avoids per-request reconnect)
+    from addons.settings import memory_config
+    from addons.tokens import tokens as _tokens
+    if getattr(memory_config, "enabled", False) and getattr(memory_config, "vector_store_type", "") == "qdrant":
+        try:
+            from qdrant_client import QdrantClient as _QC
+            app.state.qdrant_client = _QC(
+                url=memory_config.qdrant_url,
+                api_key=getattr(_tokens, "vector_store_api_key", None),
+                timeout=60,
+            )
+            log.info("Shared Qdrant client initialized for dashboard")
+        except Exception as _e:
+            log.warning(f"Could not initialize shared Qdrant client: {_e}")
+            app.state.qdrant_client = None
+    else:
+        app.state.qdrant_client = None
+
     # ── CORS ──────────────────────────────────────────────────────────
     dashboard_cfg = getattr(base_config, "dashboard", {}) or {}
     cors_origins = dashboard_cfg.get("cors_origins", ["http://localhost:5173"])
