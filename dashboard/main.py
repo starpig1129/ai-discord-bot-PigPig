@@ -108,8 +108,11 @@ async def start_dashboard(bot: "PigPig") -> None:
 
     # Initialize persistent refresh token store
     from dashboard.auth import token_store as _token_store
-    await _token_store.initialize()
-    log.info("Refresh token store initialized")
+    try:
+        await _token_store.initialize()
+        log.info("Refresh token store initialized")
+    except Exception as exc:
+        log.error(f"Refresh token store initialization failed: {exc}")
 
     # Store reference on bot for graceful shutdown
     bot._dashboard_app = app

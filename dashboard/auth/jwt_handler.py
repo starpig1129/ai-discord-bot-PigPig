@@ -76,11 +76,18 @@ def create_refresh_token(user_id: str) -> str:
     token = secrets.token_urlsafe(48)
     exp = time.time() + REFRESH_TOKEN_EXPIRE_SECONDS
     import asyncio
+
+    def _log_store_error(task: asyncio.Task) -> None:
+        """Log any exceptions from the token store task."""
+        if task.exception():
+            log.error(f"Refresh token persist failed for user {user_id}: {task.exception()}")
+
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(token_store.store(token, user_id, exp))
+        task = loop.create_task(token_store.store(token, user_id, exp))
+        task.add_done_callback(_log_store_error)
     except RuntimeError:
-        pass
+        log.debug("No running event loop; token_store.store() not scheduled")
     return token
 
 

@@ -34,40 +34,80 @@ async def initialize() -> None:
 
 
 async def store(token: str, user_id: str, exp: float) -> None:
-    """Persist a new refresh token."""
-    async with aiosqlite.connect(str(_DB_PATH)) as db:
-        await db.execute(
-            "INSERT OR REPLACE INTO refresh_tokens (token, user_id, exp) VALUES (?, ?, ?)",
-            (token, user_id, exp),
-        )
-        await db.commit()
+    """Persist a new refresh token.
+
+    Args:
+        token: Refresh token string.
+        user_id: Discord user ID.
+        exp: Expiration timestamp (Unix time).
+
+    Raises:
+        Logs errors instead of raising to maintain fire-and-forget semantics.
+    """
+    try:
+        async with aiosqlite.connect(str(_DB_PATH)) as db:
+            await db.execute(
+                "INSERT OR REPLACE INTO refresh_tokens (token, user_id, exp) VALUES (?, ?, ?)",
+                (token, user_id, exp),
+            )
+            await db.commit()
+    except Exception as exc:
+        log.error(f"Failed to persist refresh token for user {user_id}: {exc}")
 
 
 async def lookup(token: str) -> str | None:
-    """Return user_id for a valid non-expired token, or None."""
-    async with aiosqlite.connect(str(_DB_PATH)) as db:
-        db.row_factory = aiosqlite.Row
-        cursor = await db.execute(
-            "SELECT user_id, exp FROM refresh_tokens WHERE token = ?", (token,)
-        )
-        row = await cursor.fetchone()
-    if row is None:
+    """Return user_id for a valid non-expired token, or None.
+
+    Args:
+        token: Refresh token string to look up.
+
+    Returns:
+        User ID if token is valid and not expired, None otherwise.
+    """
+    try:
+        async with aiosqlite.connect(str(_DB_PATH)) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT user_id, exp FROM refresh_tokens WHERE token = ?", (token,)
+            )
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+        if time.time() > row["exp"]:
+            await revoke(token)
+            return None
+        return row["user_id"]
+    except Exception as exc:
+        log.error(f"Failed to lookup refresh token: {exc}")
         return None
-    if time.time() > row["exp"]:
-        await revoke(token)
-        return None
-    return row["user_id"]
 
 
 async def revoke(token: str) -> None:
-    """Delete a single refresh token."""
-    async with aiosqlite.connect(str(_DB_PATH)) as db:
-        await db.execute("DELETE FROM refresh_tokens WHERE token = ?", (token,))
-        await db.commit()
+    """Delete a single refresh token.
+
+    Args:
+        token: Refresh token string to revoke.
+
+    Raises:
+        Logs errors instead of raising to allow graceful degradation.
+    """
+    try:
+        async with aiosqlite.connect(str(_DB_PATH)) as db:
+            await db.execute("DELETE FROM refresh_tokens WHERE token = ?", (token,))
+            await db.commit()
+    except Exception as exc:
+        log.error(f"Failed to revoke refresh token: {exc}")
 
 
 async def cleanup_expired() -> None:
-    """Purge all expired tokens from the database."""
-    async with aiosqlite.connect(str(_DB_PATH)) as db:
-        await db.execute("DELETE FROM refresh_tokens WHERE exp < ?", (time.time(),))
-        await db.commit()
+    """Purge all expired tokens from the database.
+
+    Raises:
+        Logs errors instead of raising to allow graceful degradation.
+    """
+    try:
+        async with aiosqlite.connect(str(_DB_PATH)) as db:
+            await db.execute("DELETE FROM refresh_tokens WHERE exp < ?", (time.time(),))
+            await db.commit()
+    except Exception as exc:
+        log.error(f"Failed to cleanup expired refresh tokens: {exc}")
