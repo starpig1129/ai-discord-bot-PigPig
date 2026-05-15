@@ -32,8 +32,6 @@ _PROCEDURAL_DB = Path(ROOT_DIR) / "data" / "memory" / "procedural.db"
 _EPISODIC_DB   = Path(ROOT_DIR) / "data" / "memory" / "episodic.db"
 
 from addons.settings import memory_config
-from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchAny
 
 
 # ── Personal Statistics ───────────────────────────────────────────────
