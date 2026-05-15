@@ -8,7 +8,7 @@ interface UserStatsData {
   total_commands: number;
   accurate_total_messages: number;
   guild_breakdown: { guild_id: string; guild_name?: string; messages: number }[];
-  channel_breakdown: { channel_name: string; messages: number; guild_name?: string }[];
+  channel_breakdown: { channel_name: string; messages: number; guild_name?: string; channel_id?: string }[];
 }
 
 export default function UserStatsPage() {
@@ -96,8 +96,8 @@ export default function UserStatsPage() {
                 <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>{t('user.noChannelData')}</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '400px', overflowY: 'auto', paddingRight: '0.5rem' }}>
-                  {data.channel_breakdown.map((entry, idx) => (
-                    <div key={`${entry.channel_name}-${idx}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--color-border)' }}>
+                  {data.channel_breakdown.map((entry) => (
+                    <div key={`${entry.channel_id ?? entry.guild_name}-${entry.channel_name}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--color-border)' }}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>#{entry.channel_name}</span>
                         <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{entry.guild_name}</span>

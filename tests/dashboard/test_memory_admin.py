@@ -4,7 +4,7 @@ import asyncio
 import tempfile
 import os
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 
 # ---------- helpers ----------
@@ -56,6 +56,8 @@ async def test_get_users_count_returns_int():
         assert count == 5
     finally:
         os.unlink(db_path)
+
+
 # ---------- EpisodicStorage tests ----------
 
 @pytest.mark.asyncio
@@ -94,3 +96,77 @@ async def test_user_manager_get_all_users():
         assert all(hasattr(u, "discord_id") for u in users)
     finally:
         os.unlink(db_path)
+
+
+# ---------- require_owner middleware tests (HTTP-level) ----------
+
+def _build_test_app(owner_payload: dict | None, user_payload: dict | None = None):
+    """Construct a minimal FastAPI app with the admin router and override dependencies."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from dashboard.routers import admin as admin_module
+    from dashboard.middleware.permission import require_owner, get_current_user
+
+    app = FastAPI()
+    app.include_router(admin_module.router)
+
+    # Provide a fake bot and stats_collector so route handlers don't crash
+    fake_bot = MagicMock()
+    fake_bot.guilds = []
+    fake_bot.is_ready.return_value = True
+    fake_bot.latency = 0.05
+    app.state.bot = fake_bot
+    app.state.stats_collector = MagicMock()
+
+    if owner_payload is not None:
+        app.dependency_overrides[get_current_user] = lambda: owner_payload
+        app.dependency_overrides[require_owner] = lambda: owner_payload
+    else:
+        # Simulate a general user that should be blocked by require_owner
+        async def _deny():
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Bot Owner access required")
+
+        app.dependency_overrides[require_owner] = _deny
+
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_require_owner_blocks_non_owner(user_token_payload):
+    """Non-owner requests to admin routes must receive HTTP 403."""
+    client = _build_test_app(owner_payload=None)
+    response = client.get("/api/admin/users")
+    assert response.status_code == 403
+    assert "403" in str(response.status_code)
+
+
+def test_admin_delete_user_memory_requires_confirm(owner_token_payload):
+    """DELETE /api/admin/users/{id}/memory without confirm body returns 400."""
+    client = _build_test_app(owner_payload=owner_token_payload)
+    # Patch the DB path so it doesn't try to open a real file
+    with patch("dashboard.routers.admin._PROCEDURAL_DB") as mock_db:
+        mock_db.exists.return_value = False
+        response = client.delete(
+            "/api/admin/users/test_user_id/memory",
+            json={"confirm": False},
+        )
+    assert response.status_code == 400
+
+
+def test_admin_delete_user_memory_success(owner_token_payload):
+    """DELETE /api/admin/users/{id}/memory with confirm=true deletes from DB."""
+    client = _build_test_app(owner_payload=owner_token_payload)
+    with (
+        patch("dashboard.routers.admin._PROCEDURAL_DB") as mock_pdb,
+        patch("dashboard.routers.admin.aiosqlite.connect") as mock_connect,
+    ):
+        mock_pdb.exists.return_value = False  # Skip actual DB calls; just test routing
+        response = client.delete(
+            "/api/admin/users/target_user/memory",
+            json={"confirm": True},
+        )
+    # With no DB file, the route skips deletion but still returns 200
+    assert response.status_code == 200
+    body = response.json()
+    assert body["user_id"] == "target_user"
+

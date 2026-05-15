@@ -13,16 +13,21 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
   const location = useLocation();
   const { t, i18n } = useTranslation();
 
+  const isOwner = user.role === 'owner';
+  const isAdmin = user.role === 'owner' || user.role === 'admin';
+
+  // Owner-only routes are hidden from admins and general users.
+  // Admin routes are hidden from general users.
   const NAV_ITEMS = [
-    { path: '/admin',         label: t('nav.dashboard'), icon: '📊' },
-    { path: '/admin/stats',   label: t('nav.stats'),     icon: '📈' },
-    { path: '/admin/guilds',  label: t('nav.guilds'),    icon: '🏠' },
-    { path: '/admin/config',  label: t('nav.config'),    icon: '⚙️' },
-    { path: '/admin/logs',    label: t('nav.logs'),      icon: '📝' },
-    { path: '/admin/update',  label: t('nav.update'),    icon: '🔄' },
-    { path: '/admin/users',   label: t('nav.users'),     icon: '👥' },
-    { path: '/me',            label: t('nav.myPortal'),  icon: '👤', divider: true },
-  ];
+    { path: '/admin',        label: t('nav.dashboard'), icon: '📊', show: isAdmin },
+    { path: '/admin/stats',  label: t('nav.stats'),     icon: '📈', show: isAdmin },
+    { path: '/admin/guilds', label: t('nav.guilds'),    icon: '🏠', show: isAdmin },
+    { path: '/admin/config', label: t('nav.config'),    icon: '⚙️', show: isOwner },
+    { path: '/admin/logs',   label: t('nav.logs'),      icon: '📝', show: isOwner },
+    { path: '/admin/update', label: t('nav.update'),    icon: '🔄', show: isOwner },
+    { path: '/admin/users',  label: t('nav.users'),     icon: '👥', show: isOwner },
+    { path: '/me',           label: t('nav.myPortal'),  icon: '👤', show: true, divider: true },
+  ].filter((item) => item.show);
 
   return (
     <motion.aside

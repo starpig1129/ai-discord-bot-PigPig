@@ -253,13 +253,15 @@ async def get_episodic_memory(
         except (json.JSONDecodeError, TypeError):
             tc = {}
         
-        # Build memories dict for this guild's top channels
+        # Build memories dict for this guild's top channels.
+        # Keys in top_channels may be either digit channel IDs or channel names,
+        # so resolve both cases to avoid silent empty results.
         mems = {}
         name_map = guild_channel_maps.get(gid, {})
-        for cname in tc.keys():
-            cid = name_map.get(cname)
+        for ckey in tc.keys():
+            cid = ckey if ckey.isdigit() else name_map.get(ckey)
             if cid and cid in channel_summaries:
-                mems[cname] = channel_summaries[cid]
+                mems[ckey] = channel_summaries[cid]
         
         # Resolve guild name
         guild = bot.get_guild(int(gid))
