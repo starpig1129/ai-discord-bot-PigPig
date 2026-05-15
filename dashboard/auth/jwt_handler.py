@@ -23,10 +23,10 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_SECONDS = 3600        # 1 hour
 REFRESH_TOKEN_EXPIRE_SECONDS = 7 * 86400  # 7 days
 
-# Use SERCET_KEY from .env; fall back to a random key (dev-only).
-_SECRET_KEY: str = getattr(tokens, "sercet_key", None) or secrets.token_urlsafe(64)
-if _SECRET_KEY == "DASHBOARD_SERCET_KEY":
-    log.warning("Using placeholder SERCET_KEY — replace before production!")
+# Use DASHBOARD_SECRET_KEY from .env; fall back to a random key (dev-only).
+_SECRET_KEY: str = getattr(tokens, "secret_key", None) or secrets.token_urlsafe(64)
+if not getattr(tokens, "secret_key", None):
+    log.warning("DASHBOARD_SECRET_KEY not set in .env — using random key (all tokens invalidated on restart)")
 
 # In-memory refresh token store: {token_str: {"user_id": str, "exp": float}}
 _refresh_store: dict[str, dict[str, Any]] = {}
