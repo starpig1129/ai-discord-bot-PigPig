@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import time
 import platform
 import psutil
@@ -89,6 +90,22 @@ async def list_guilds(
 
 _ALLOWED_CONFIGS = {"base", "llm", "memory", "music"}
 
+_CONFIG_ALLOWED_KEYS: dict[str, set[str]] = {
+    "base": {"prefix", "activity", "ipc_server", "version", "logging", "dashboard"},
+    "llm": {
+        "model_priorities", "google_search_agent",
+        "llm_call_timeout", "reasoning_optimization_prompt",
+    },
+    "memory": {
+        "enabled", "procedural_cache_ttl", "procedural_data_path", "episodic_data_path",
+        "vector_store_type", "qdrant_url", "qdrant_collection_name",
+        "embedding_provider", "embedding_model_name", "embedding_dim",
+        "ollama_url", "provider_options", "vector_search_k", "keyword_search_k",
+        "message_threshold", "time_threshold", "processing_concurrency", "processing_delay",
+    },
+    "music": {"music_temp_base", "ffmpeg", "youtube_cookies_path"},
+}
+
 
 def _config_path(file: str) -> str:
     """Resolve config file path from its base name."""
@@ -131,21 +148,6 @@ async def write_config(
     if not isinstance(config_data, dict):
         raise HTTPException(status_code=400, detail="'config' must be a JSON object (dict)")
 
-    _CONFIG_ALLOWED_KEYS: dict[str, set[str]] = {
-        "base": {"prefix", "activity", "ipc_server", "version", "logging", "dashboard"},
-        "llm": {
-            "model_priorities", "google_search_agent",
-            "llm_call_timeout", "reasoning_optimization_prompt",
-        },
-        "memory": {
-            "enabled", "procedural_cache_ttl", "procedural_data_path", "episodic_data_path",
-            "vector_store_type", "qdrant_url", "qdrant_collection_name",
-            "embedding_provider", "embedding_model_name", "embedding_dim",
-            "ollama_url", "provider_options", "vector_search_k", "keyword_search_k",
-            "message_threshold", "time_threshold", "processing_concurrency", "processing_delay",
-        },
-        "music": {"music_temp_base", "ffmpeg", "youtube_cookies_path"},
-    }
     allowed = _CONFIG_ALLOWED_KEYS.get(file, set())
     unknown = set(config_data.keys()) - allowed
     if unknown:
@@ -160,13 +162,32 @@ async def write_config(
     # This ensures unsubmitted keys (e.g. deeply nested fields not shown in the GUI) are preserved.
     existing: dict = {}
     if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            existing = yaml.safe_load(f) or {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                loaded = yaml.safe_load(f)
+                if isinstance(loaded, dict):
+                    existing = loaded
+        except OSError as exc:
+            log.warning(f"Could not read existing config '{file}.yaml': {exc}, starting fresh")
 
     existing.update(config_data)
 
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(existing, f, default_flow_style=False, allow_unicode=True)
+    try:
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                yaml.dump(existing, f, default_flow_style=False, allow_unicode=True)
+            os.replace(tmp_path, path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+    except OSError as exc:
+        log.error(f"Failed to write config '{file}.yaml': {exc}")
+        raise HTTPException(status_code=500, detail="Failed to write configuration file")
+
     log.info(f"Config '{file}.yaml' updated by user {user.get('sub')}")
     return JSONResponse({"detail": f"{file}.yaml updated successfully"})
 
