@@ -120,7 +120,7 @@ async def write_config(
     request: Request,
     user: dict = Depends(require_owner),
 ) -> JSONResponse:
-    """Write/update a YAML configuration file."""
+    """Write/update a YAML configuration file (merge-based: only submitted top-level keys are overwritten)."""
     if file not in _ALLOWED_CONFIGS:
         raise HTTPException(status_code=400, detail=f"Unknown config: {file}")
     body = await request.json()
@@ -128,31 +128,45 @@ async def write_config(
     if config_data is None:
         raise HTTPException(status_code=400, detail="Missing 'config' in request body")
 
-    # Validate: must be a dict
     if not isinstance(config_data, dict):
         raise HTTPException(status_code=400, detail="'config' must be a JSON object (dict)")
 
-    # Per-file top-level key whitelists
     _CONFIG_ALLOWED_KEYS: dict[str, set[str]] = {
-        "base":   {"bot_prefix", "ipc", "logging", "dashboard", "version"},
-        "llm":    {"task_models", "default_model", "fallback_chain", "circuit_breaker"},
-        "memory": {"enabled", "vector_store_type", "qdrant_url", "qdrant_collection_name",
-                   "embedding_provider", "embedding_model", "embedding_dim",
-                   "message_threshold", "time_threshold", "sqlite_db_path"},
-        "music":  {"ffmpeg_path", "ytdl_format", "volume"},
+        "base": {"prefix", "activity", "ipc_server", "version", "logging", "dashboard"},
+        "llm": {
+            "model_priorities", "google_search_agent",
+            "llm_call_timeout", "reasoning_optimization_prompt",
+        },
+        "memory": {
+            "enabled", "procedural_cache_ttl", "procedural_data_path", "episodic_data_path",
+            "vector_store_type", "qdrant_url", "qdrant_collection_name",
+            "embedding_provider", "embedding_model_name", "embedding_dim",
+            "ollama_url", "provider_options", "vector_search_k", "keyword_search_k",
+            "message_threshold", "time_threshold", "processing_concurrency", "processing_delay",
+        },
+        "music": {"music_temp_base", "ffmpeg", "youtube_cookies_path"},
     }
-    allowed = _CONFIG_ALLOWED_KEYS.get(file)
-    if allowed:
-        unknown = set(config_data.keys()) - allowed
-        if unknown:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown keys for config '{file}': {sorted(unknown)}. Allowed: {sorted(allowed)}",
-            )
+    allowed = _CONFIG_ALLOWED_KEYS.get(file, set())
+    unknown = set(config_data.keys()) - allowed
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown keys for config '{file}': {sorted(unknown)}. Allowed: {sorted(allowed)}",
+        )
 
     path = _config_path(file)
+
+    # Merge: read existing config, overwrite only the submitted top-level keys.
+    # This ensures unsubmitted keys (e.g. deeply nested fields not shown in the GUI) are preserved.
+    existing: dict = {}
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            existing = yaml.safe_load(f) or {}
+
+    existing.update(config_data)
+
     with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
+        yaml.dump(existing, f, default_flow_style=False, allow_unicode=True)
     log.info(f"Config '{file}.yaml' updated by user {user.get('sub')}")
     return JSONResponse({"detail": f"{file}.yaml updated successfully"})
 
