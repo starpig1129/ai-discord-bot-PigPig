@@ -166,3 +166,18 @@ class VectorStoreInterface(ABC):
         - Both provided: perform both searches and merge/deduplicate results.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    async def delete_vectors_by_user(self, user_id: str) -> int:
+        """Delete all vector fragments where user_id appears in metadata.author_ids.
+
+        Only administrators should call this — it removes shared conversation
+        segments, which affects channel memory continuity.
+
+        Args:
+            user_id: Discord user ID.
+
+        Returns:
+            Number of deleted points, or -1 if the store does not report a count.
+        """
+        raise NotImplementedError

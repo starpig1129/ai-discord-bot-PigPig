@@ -437,6 +437,18 @@ async def admin_delete_user_memory(
         except Exception as exc:
             log.warning(f"admin stats deletion failed for {user_id}: {exc}")
 
+    # Delete vectors from Qdrant (admin-only; affects channel memory continuity)
+    bot = request.app.state.bot
+    vector_manager = getattr(bot, "vector_manager", None)
+    if vector_manager and getattr(vector_manager, "store", None):
+        try:
+            await vector_manager.store.delete_vectors_by_user(user_id)
+            deleted["qdrant_vectors"] = -1  # count not available from Qdrant API
+            log.info(f"Qdrant vectors deleted for user {user_id}")
+        except Exception as exc:
+            log.warning(f"Qdrant vector deletion failed for {user_id}: {exc}")
+            deleted["qdrant_vectors"] = 0
+
     log.info(f"Admin GDPR deletion for user {user_id} by owner: {deleted}")
     return JSONResponse({"detail": "User memory deleted", "user_id": user_id, "deleted_rows": deleted})
 

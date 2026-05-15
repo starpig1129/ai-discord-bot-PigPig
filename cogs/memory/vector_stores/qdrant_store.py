@@ -401,6 +401,32 @@ class QdrantStore(VectorStoreInterface):
 
         return merged
 
+    async def delete_vectors_by_user(self, user_id: str) -> int:
+        """Delete all vectors where user_id appears in metadata.author_ids."""
+        from qdrant_client.models import Filter, FieldCondition, MatchAny, FilterSelector
+
+        def _do_delete() -> int:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=FilterSelector(
+                    filter=Filter(
+                        must=[
+                            FieldCondition(
+                                key="metadata.author_ids",
+                                match=MatchAny(any=[str(user_id)]),
+                            )
+                        ]
+                    )
+                ),
+            )
+            return -1  # Qdrant does not report deleted count
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _do_delete)
+        except Exception as e:
+            await self._report_error(e)
+            raise
+
     async def _report_error(self, error: Exception) -> None:
         """Helper to report errors."""
         try:
