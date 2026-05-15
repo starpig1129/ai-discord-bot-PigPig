@@ -1,5 +1,13 @@
 export type FieldType = 'text' | 'number' | 'boolean' | 'select' | 'array' | 'textarea';
 
+const BANNED_PATH_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function assertSafePathKey(key: string): void {
+  if (BANNED_PATH_KEYS.has(key)) {
+    throw new Error(`Unsafe path segment: "${key}"`);
+  }
+}
+
 export interface ConfigFieldDef {
   /** Dot-notation path into the config object, e.g. "dashboard.port" */
   path: string;
@@ -84,12 +92,6 @@ export const CONFIG_SCHEMAS: AllConfigSchemas = {
       path: 'google_search_agent',
       labelKey: 'config.fields.google_search_agent',
       type: 'text',
-      section: 'config.sections.llm_simple',
-    },
-    {
-      path: 'reasoning_optimization_prompt',
-      labelKey: 'config.fields.reasoning_prompt',
-      type: 'textarea',
       section: 'config.sections.llm_simple',
     },
     {
@@ -247,11 +249,14 @@ export const CONFIG_SCHEMAS: AllConfigSchemas = {
  * e.g. getNestedValue({a: {b: 1}}, "a.b") === 1
  */
 export function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
+  if (!path) throw new Error('path must be a non-empty string');
   return path.split('.').reduce(
-    (acc: unknown, key: string) =>
-      acc !== null && acc !== undefined && typeof acc === 'object'
+    (acc: unknown, key: string) => {
+      assertSafePathKey(key);
+      return acc !== null && acc !== undefined && typeof acc === 'object'
         ? (acc as Record<string, unknown>)[key]
-        : undefined,
+        : undefined;
+    },
     obj,
   );
 }
@@ -265,15 +270,18 @@ export function setNestedValue(
   path: string,
   value: unknown,
 ): Record<string, unknown> {
+  if (!path) throw new Error('path must be a non-empty string');
   const result = JSON.parse(JSON.stringify(obj)) as Record<string, unknown>;
   const keys = path.split('.');
   let cur: Record<string, unknown> = result;
   for (let i = 0; i < keys.length - 1; i++) {
+    assertSafePathKey(keys[i]);
     if (typeof cur[keys[i]] !== 'object' || cur[keys[i]] === null) {
       cur[keys[i]] = {};
     }
     cur = cur[keys[i]] as Record<string, unknown>;
   }
+  assertSafePathKey(keys[keys.length - 1]);
   cur[keys[keys.length - 1]] = value;
   return result;
 }
