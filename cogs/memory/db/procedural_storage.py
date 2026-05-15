@@ -354,5 +354,6 @@ class ProceduralStorage:
                 del self._user_cache[oldest]
             self._user_cache[user_id] = user_info
         except Exception as e:
-            # avoid awaiting in synchronous helper; spawn a task
-            asyncio.create_task(func.report_error(e, "cache update failed"))
+            # This runs in a thread — cannot await or create tasks
+            import logging as _logging
+            _logging.getLogger(__name__).exception("cache update failed: %s", e)
