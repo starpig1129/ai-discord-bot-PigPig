@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, Query
 from fastapi.responses import JSONResponse
 
 from addons.logging import get_logger
-from dashboard.middleware.permission import require_owner, require_admin, get_current_user
+from dashboard.middleware.permission import require_owner, get_current_user
 
 import aiosqlite
 from pathlib import Path
@@ -78,21 +78,6 @@ async def memory_stats(
     except Exception:
         pass
     return JSONResponse(result)
-
-
-@router.get("/guild/{guild_id}/stats")
-async def guild_stats(
-    guild_id: str,
-    request: Request,
-    period: str = Query(default="30d"),
-    user: dict = Depends(require_admin),
-) -> JSONResponse:
-    """Per-guild statistics (Server Admin or Owner)."""
-    from dashboard.middleware.permission import require_guild_access
-    require_guild_access(guild_id, user)
-    stats = _get_stats(request)
-    data = await stats.get_guild_stats(guild_id, period)
-    return JSONResponse(data)
 
 
 
