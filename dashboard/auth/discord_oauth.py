@@ -205,11 +205,8 @@ async def discord_callback(request: Request, code: Optional[str] = None) -> Resp
 async def refresh(request: Request) -> JSONResponse:
     """Refresh the JWT access token using the refresh token cookie.
 
-    Returns:
-        New access_token JSON.
-
-    Raises:
-        HTTPException: On invalid/missing refresh token.
+    Recalculates role and guild_ids from the bot's cached guild state
+    so server admins don't lose permissions after token expiry.
     """
     refresh_tok = request.cookies.get("refresh_token")
     if not refresh_tok:
@@ -219,14 +216,42 @@ async def refresh(request: Request) -> JSONResponse:
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    # Re-derive role (simplified — owner check only for now)
+    # Re-derive role and guild_ids from bot state (no Discord API call needed)
     bot_owner_id = str(getattr(tokens, "bot_owner_id", 0))
-    role = "owner" if user_id == bot_owner_id else "user"
+    bot = _get_bot(request)
+
+    if user_id == bot_owner_id:
+        role = "owner"
+        guild_ids = [str(g.id) for g in bot.guilds] if bot else []
+    elif bot:
+        guild_ids = []
+        admin_guild_ids = []
+        for guild in bot.guilds:
+            member = guild.get_member(int(user_id))
+            if member:
+                guild_ids.append(str(guild.id))
+                if member.guild_permissions.administrator:
+                    admin_guild_ids.append(str(guild.id))
+        role = "admin" if admin_guild_ids else "user"
+    else:
+        role = "user"
+        guild_ids = []
+
+    # Preserve avatar and username from old access token if present
+    old_auth = request.headers.get("Authorization", "")
+    avatar, username = "", ""
+    if old_auth.startswith("Bearer "):
+        old_payload = verify_access_token(old_auth[7:])
+        if old_payload:
+            avatar = old_payload.get("avatar", "")
+            username = old_payload.get("username", "")
 
     access_token = create_access_token(
         user_id=user_id,
         role=role,
-        guild_ids=[],  # Will be populated on next full login
+        guild_ids=guild_ids,
+        avatar=avatar,
+        username=username,
     )
     return JSONResponse({"access_token": access_token, "token_type": "Bearer"})
 
