@@ -31,7 +31,13 @@
     "lastUpdated": "Last Updated",
     "refresh": "Refresh",
     "loading": "Loading…",
-    "error": "Failed to load, please try again"
+    "error": "Failed to load, please try again",
+    "welcomeBack": "Welcome back 👋",
+    "quickActions": "Quick Actions",
+    "editConfig": "Edit Config",
+    "viewLogs": "View Logs",
+    "manageBots": "Manage Bot",
+    "viewStats": "View Stats"
   },
   "stats": {
     "title": "Statistics",
@@ -217,7 +223,8 @@
     "cancelEdit": "Cancel",
     "memorySaved": "Memory saved successfully",
     "memoryPlaceholderProcedural": "Enter preferences, habits, communication style...",
-    "memoryPlaceholderBackground": "Enter background information, context..."
+    "memoryPlaceholderBackground": "Enter background information, context...",
+    "activeOnServers": "Active on servers"
   },
   "admin": {
     "usersTitle": "User Management",

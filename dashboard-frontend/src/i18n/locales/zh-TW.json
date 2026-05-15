@@ -31,7 +31,13 @@
     "lastUpdated": "最後更新",
     "refresh": "重新整理",
     "loading": "載入中…",
-    "error": "載入失敗，請稍後再試"
+    "error": "載入失敗，請稍後再試",
+    "welcomeBack": "歡迎回來 👋",
+    "quickActions": "快速操作",
+    "editConfig": "編輯設定",
+    "viewLogs": "查看日誌",
+    "manageBots": "管理機器人",
+    "viewStats": "查看統計"
   },
   "stats": {
     "title": "統計數據",
@@ -217,7 +223,8 @@
     "cancelEdit": "取消",
     "memorySaved": "記憶儲存成功",
     "memoryPlaceholderProcedural": "輸入偏好、習慣、溝通風格...",
-    "memoryPlaceholderBackground": "輸入背景資訊、個人脈絡..."
+    "memoryPlaceholderBackground": "輸入背景資訊、個人脈絡...",
+    "activeOnServers": "活躍伺服器數"
   },
   "admin": {
     "usersTitle": "使用者管理",

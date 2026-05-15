@@ -84,7 +84,7 @@ export default function Dashboard() {
       )}
       {/* Header */}
       <div style={{ marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>Welcome back 👋</h1>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{t('dashboard.welcomeBack')}</h1>
         <p style={{ color: 'var(--color-text-secondary)', marginTop: '0.25rem' }}>
           {status?.bot_name || 'PigPig'} · {t('dashboard.subtitle')}
         </p>
@@ -146,16 +146,16 @@ export default function Dashboard() {
         transition={{ delay: 0.6, duration: 0.5 }}
         style={{ padding: '1.5rem' }}
       >
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Quick Actions</h2>
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>{t('dashboard.quickActions')}</h2>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <a href="/admin/config" className="btn-gradient" style={{ textDecoration: 'none' }}>
-            ⚙️ Edit Config
+            ⚙️ {t('dashboard.editConfig')}
           </a>
           <a href="/admin/logs" className="btn-gradient" style={{ textDecoration: 'none' }}>
-            📝 View Logs
+            📝 {t('dashboard.viewLogs')}
           </a>
           <a href="/admin/stats" className="btn-gradient" style={{ textDecoration: 'none' }}>
-            📈 View Stats
+            📈 {t('dashboard.viewStats')}
           </a>
         </div>
       </motion.div>

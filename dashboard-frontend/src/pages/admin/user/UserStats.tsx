@@ -62,14 +62,14 @@ export default function UserStatsPage() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
             {[
-              { 
-                label: period === 'all' ? t('stats.totalMessages') : `Messages (${period})`, 
-                value: (data.total_messages ?? 0).toLocaleString(), 
+              {
+                label: period === 'all' ? t('stats.totalMessages') : `Messages (${period})`,
+                value: (data.total_messages ?? 0).toLocaleString(),
                 icon: '💬',
                 accurate: period !== 'all' ? data.accurate_total_messages : null
               },
               { label: t('user.commands'), value: (data.total_commands ?? 0).toLocaleString(), icon: '⌨️' },
-              { label: t('guild.activeUsers').replace('Active', 'Active on'), value: (data.guild_breakdown?.length || 0) + ' servers', icon: '🏠' },
+              { label: t('user.activeOnServers'), value: `${data.guild_breakdown?.length || 0}`, icon: '🏠' },
             ].map((card, i) => (
               <motion.div key={`${card.label}-${i}`} className="glass-card"
                 initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
