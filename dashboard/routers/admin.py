@@ -127,6 +127,29 @@ async def write_config(
     config_data = body.get("config")
     if config_data is None:
         raise HTTPException(status_code=400, detail="Missing 'config' in request body")
+
+    # Validate: must be a dict
+    if not isinstance(config_data, dict):
+        raise HTTPException(status_code=400, detail="'config' must be a JSON object (dict)")
+
+    # Per-file top-level key whitelists
+    _CONFIG_ALLOWED_KEYS: dict[str, set[str]] = {
+        "base":   {"bot_prefix", "ipc", "logging", "dashboard", "version"},
+        "llm":    {"task_models", "default_model", "fallback_chain", "circuit_breaker"},
+        "memory": {"enabled", "vector_store_type", "qdrant_url", "qdrant_collection_name",
+                   "embedding_provider", "embedding_model", "embedding_dim",
+                   "message_threshold", "time_threshold", "sqlite_db_path"},
+        "music":  {"ffmpeg_path", "ytdl_format", "volume"},
+    }
+    allowed = _CONFIG_ALLOWED_KEYS.get(file)
+    if allowed:
+        unknown = set(config_data.keys()) - allowed
+        if unknown:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown keys for config '{file}': {sorted(unknown)}. Allowed: {sorted(allowed)}",
+            )
+
     path = _config_path(file)
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
