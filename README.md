@@ -83,7 +83,10 @@ Rename the `.env Example` file to `.env` and fill in the required values.
 TOKEN=XXXXXXXXXXXXXXXXXXXXXXXX.XXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXX
 CLIENT_ID=123456789012345678
 CLIENT_SECRET_ID=XXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXX
-SERCET_KEY=DASHBOARD_SERCET_KEY
+
+# --- Dashboard Secret ---
+# Generate with: python3 -c "import secrets; print(secrets.token_urlsafe(64))"
+DASHBOARD_SECRET_KEY=<generate-a-random-64-char-secret>
 
 # --- Bot Configuration ---
 BOT_OWNER_ID=123456789012345678
@@ -106,8 +109,8 @@ CONFIG_ROOT="/path/to/your/config"
 | --------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `TOKEN`               | **(Required)** Your Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications). |
 | `CLIENT_ID`           | **(Required)** Your bot's client ID from the Developer Portal.                                             |
-| `CLIENT_SECRET_ID`    | *(Optional)* Your bot's client secret, used for specific API interactions.                                 |
-| `SERCET_KEY`          | *(Optional)* A secret key for dashboard authentication.                                                    |
+| `CLIENT_SECRET_ID`    | **(Required)** Your bot's client secret, used for Discord OAuth2 login on the dashboard.                   |
+| `DASHBOARD_SECRET_KEY` | **(Required)** A random secret for signing dashboard JWT tokens. Generate with `python3 -c "import secrets; print(secrets.token_urlsafe(64))"`. |
 | `BOT_OWNER_ID`        | **(Required)** Your Discord User ID. Grants owner-level privileges and is required for the auto-update system. |
 | `BUG_REPORT_CHANNEL_ID` | *(Optional)* A Discord channel ID where error messages and bug reports will be sent.                       |
 | `MODEL_NAME`          | The default local multi-modal model to use.                                                                |

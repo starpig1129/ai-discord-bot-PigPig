@@ -65,5 +65,6 @@ dashboard-frontend/.vite/
 # Dashboard stats database
 data/stats/
 
-# Dashboard session / refresh token store (in-memory, no file — but exclude any future dumps)
+# Dashboard session / refresh-token SQLite store
 data/dashboard/
+data/auth/
