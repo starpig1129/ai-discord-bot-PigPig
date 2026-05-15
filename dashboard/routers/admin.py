@@ -405,6 +405,7 @@ async def get_user_detail(
         
         guild_stats.append({
             "guild_id": row["guild_id"],
+            "guild_name": guild.name if guild else f"Unknown ({row['guild_id']})",
             "total_messages": row["total_messages"],
             "streak_days": row["streak_days"],
             "last_active_at": row["last_active_at"],

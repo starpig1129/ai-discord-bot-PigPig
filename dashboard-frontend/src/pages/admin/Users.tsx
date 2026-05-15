@@ -22,6 +22,7 @@ interface UserDetail {
   created_at: string | null;
   guild_stats: {
     guild_id: string;
+    guild_name?: string;
     total_messages: number;
     streak_days: number;
     last_active_at: string | null;
@@ -348,6 +349,7 @@ export default function Users() {
                     {selectedUser.guild_stats.map((gs) => (
                       <div key={gs.guild_id} style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.15)',
                         borderRadius: 'var(--radius-md)', marginBottom: '0.5rem', fontSize: '0.8125rem' }}>
+                        <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{gs.guild_name || gs.guild_id}</div>
                         <div style={{ fontFamily: 'monospace', color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{gs.guild_id}</div>
                         <div style={{ display: 'flex', gap: '1rem', marginTop: '0.375rem', flexWrap: 'wrap' }}>
                           <span>💬 {gs.total_messages} {t('admin.messages')}</span>
