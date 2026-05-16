@@ -49,8 +49,9 @@ function TextareaField({ def, value, onChange }: Props) {
 
   return (
     <div>
-      <label style={LABEL_STYLE}>{t(def.labelKey)}</label>
+      <label htmlFor={def.path} style={LABEL_STYLE}>{t(def.labelKey)}</label>
       <textarea
+        id={def.path}
         value={raw}
         onChange={(e) => setRaw(e.target.value)}
         onBlur={handleBlur}
@@ -78,8 +79,8 @@ export function ConfigFormField({ def, value, onChange }: Props) {
   if (def.readOnly) {
     return (
       <div>
-        <label style={LABEL_STYLE}>{t(def.labelKey)}</label>
-        <div style={{ ...BASE_INPUT, opacity: 0.5, cursor: 'not-allowed' }}>
+        <label htmlFor={def.path} style={LABEL_STYLE}>{t(def.labelKey)}</label>
+        <div id={def.path} style={{ ...BASE_INPUT, opacity: 0.5, cursor: 'not-allowed' }}>
           {String(value ?? '')}
         </div>
       </div>
@@ -90,9 +91,11 @@ export function ConfigFormField({ def, value, onChange }: Props) {
     const checked = Boolean(value);
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.375rem 0' }}>
-        <span style={LABEL_STYLE}>{t(def.labelKey)}</span>
+        <label htmlFor={def.path} style={LABEL_STYLE}>{t(def.labelKey)}</label>
         <button
+          id={def.path}
           onClick={() => onChange(def.path, !checked)}
+          aria-pressed={checked}
           title={checked ? t('common.yes') : t('common.no')}
           style={{
             width: '3rem',
@@ -127,8 +130,9 @@ export function ConfigFormField({ def, value, onChange }: Props) {
   if (def.type === 'select') {
     return (
       <div>
-        <label style={LABEL_STYLE}>{t(def.labelKey)}</label>
+        <label htmlFor={def.path} style={LABEL_STYLE}>{t(def.labelKey)}</label>
         <select
+          id={def.path}
           value={String(value ?? '')}
           onChange={(e) => onChange(def.path, e.target.value)}
           style={{ ...BASE_INPUT, cursor: 'pointer' }}
@@ -146,8 +150,9 @@ export function ConfigFormField({ def, value, onChange }: Props) {
   if (def.type === 'number') {
     return (
       <div>
-        <label style={LABEL_STYLE}>{t(def.labelKey)}</label>
+        <label htmlFor={def.path} style={LABEL_STYLE}>{t(def.labelKey)}</label>
         <input
+          id={def.path}
           type="number"
           value={value !== undefined && value !== null ? String(value) : ''}
           min={def.min}
@@ -162,25 +167,26 @@ export function ConfigFormField({ def, value, onChange }: Props) {
   }
 
   if (def.type === 'array') {
-    const items: string[] = Array.isArray(value) ? (value as string[]) : [];
+    const rawItems: string[] = Array.isArray(value) ? (value as string[]) : [];
+    // Map raw strings to stable-id objects for React reconciliation
+    const items = rawItems.map((val, i) => ({ id: `item-${i}-${val}`, val }));
     return (
       <div>
-        <label style={LABEL_STYLE}>{t(def.labelKey)}</label>
+        <label htmlFor={def.path} style={LABEL_STYLE}>{t(def.labelKey)}</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-          {items.map((item, i) => (
-            <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {items.map(({ id, val }, i) => (
+            <div key={id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <input
                 type="text"
-                value={item}
+                value={val}
                 onChange={(e) => {
-                  const next = [...items];
-                  next[i] = e.target.value;
+                  const next = rawItems.map((v, j) => (j === i ? e.target.value : v));
                   onChange(def.path, next);
                 }}
                 style={{ ...BASE_INPUT, flex: 1 }}
               />
               <button
-                onClick={() => onChange(def.path, items.filter((_, j) => j !== i))}
+                onClick={() => onChange(def.path, rawItems.filter((_, j) => j !== i))}
                 style={{
                   padding: '0.375rem 0.625rem',
                   background: 'rgba(239,68,68,0.15)',
@@ -198,7 +204,7 @@ export function ConfigFormField({ def, value, onChange }: Props) {
             </div>
           ))}
           <button
-            onClick={() => onChange(def.path, [...items, ''])}
+            onClick={() => onChange(def.path, [...rawItems, ''])}
             style={{
               alignSelf: 'flex-start',
               padding: '0.375rem 0.875rem',
@@ -220,8 +226,9 @@ export function ConfigFormField({ def, value, onChange }: Props) {
   // default: text
   return (
     <div>
-      <label style={LABEL_STYLE}>{t(def.labelKey)}</label>
+      <label htmlFor={def.path} style={LABEL_STYLE}>{t(def.labelKey)}</label>
       <input
+        id={def.path}
         type="text"
         value={String(value ?? '')}
         onChange={(e) => onChange(def.path, e.target.value)}
