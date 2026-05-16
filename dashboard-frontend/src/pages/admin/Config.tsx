@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import api from '../../lib/api';
@@ -15,6 +15,13 @@ export default function Config() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (messageTimerRef.current !== null) clearTimeout(messageTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -22,7 +29,10 @@ export default function Config() {
     api
       .get(`/api/admin/config/${selectedFile}`)
       .then(({ data }) => setConfigData((data.config as Record<string, unknown>) ?? {}))
-      .catch(() => setConfigData({}))
+      .catch(() => {
+        setConfigData({});
+        setMessage({ text: t('config.loadError'), type: 'error' });
+      })
       .finally(() => setLoading(false));
   }, [selectedFile]);
 
@@ -43,7 +53,8 @@ export default function Config() {
       setMessage({ text: detail, type: 'error' });
     } finally {
       setSaving(false);
-      setTimeout(() => setMessage(null), 4000);
+      if (messageTimerRef.current !== null) clearTimeout(messageTimerRef.current);
+      messageTimerRef.current = setTimeout(() => setMessage(null), 4000);
     }
   };
 
