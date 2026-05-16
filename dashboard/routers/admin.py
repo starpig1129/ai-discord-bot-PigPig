@@ -94,13 +94,14 @@ _CONFIG_ALLOWED_KEYS: dict[str, set[str]] = {
     "base": {"prefix", "activity", "ipc_server", "version", "logging", "dashboard"},
     "llm": {
         "model_priorities", "google_search_agent",
-        "llm_call_timeout", "reasoning_optimization_prompt",
+        "llm_call_timeout", "reasoning_optimization_prompt", "ollama_url",
     },
     "memory": {
         "enabled", "procedural_cache_ttl", "procedural_data_path", "episodic_data_path",
-        "vector_store_type", "qdrant_url", "qdrant_collection_name",
+        "vector_store_type", "qdrant_url", "qdrant_api_key", "qdrant_collection_name",
         "embedding_provider", "embedding_model_name", "embedding_dim",
         "ollama_url", "provider_options", "vector_search_k", "keyword_search_k",
+        "fetch_batch_size", "process_batch_size",
         "message_threshold", "time_threshold", "processing_concurrency", "processing_delay",
     },
     "music": {"music_temp_base", "ffmpeg", "youtube_cookies_path"},
