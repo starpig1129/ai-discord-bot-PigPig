@@ -71,6 +71,7 @@ function TextareaField({ def, value, onChange }: Props) {
 
 export function ConfigFormField({ def, value, onChange }: Props) {
   const { t } = useTranslation();
+  const idsRef = useRef<string[]>([]);
 
   if (def.type === 'textarea') {
     return <TextareaField def={def} value={value} onChange={onChange} />;
@@ -169,7 +170,6 @@ export function ConfigFormField({ def, value, onChange }: Props) {
   if (def.type === 'array') {
     const rawItems: string[] = Array.isArray(value) ? (value as string[]) : [];
     // Stable IDs stored in a ref: regenerate only when array length changes
-    const idsRef = useRef<string[]>([]);
     if (idsRef.current.length !== rawItems.length) {
       idsRef.current = rawItems.map((_, i) =>
         idsRef.current[i] ?? crypto.randomUUID()
