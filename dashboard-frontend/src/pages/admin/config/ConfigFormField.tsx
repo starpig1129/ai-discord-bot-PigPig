@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ConfigFieldDef } from './configSchema';
 
@@ -168,14 +168,21 @@ export function ConfigFormField({ def, value, onChange }: Props) {
 
   if (def.type === 'array') {
     const rawItems: string[] = Array.isArray(value) ? (value as string[]) : [];
-    // Map raw strings to stable-id objects for React reconciliation
-    const items = rawItems.map((val, i) => ({ id: `item-${i}-${val}`, val }));
+    // Stable IDs stored in a ref: regenerate only when array length changes
+    const idsRef = useRef<string[]>([]);
+    if (idsRef.current.length !== rawItems.length) {
+      idsRef.current = rawItems.map((_, i) =>
+        idsRef.current[i] ?? crypto.randomUUID()
+      );
+    }
+    const ids = idsRef.current;
+
     return (
       <div>
         <label htmlFor={def.path} style={LABEL_STYLE}>{t(def.labelKey)}</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-          {items.map(({ id, val }, i) => (
-            <div key={id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {rawItems.map((val, i) => (
+            <div key={ids[i]} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <input
                 type="text"
                 value={val}
@@ -186,7 +193,10 @@ export function ConfigFormField({ def, value, onChange }: Props) {
                 style={{ ...BASE_INPUT, flex: 1 }}
               />
               <button
-                onClick={() => onChange(def.path, rawItems.filter((_, j) => j !== i))}
+                onClick={() => {
+                  idsRef.current = ids.filter((_, j) => j !== i);
+                  onChange(def.path, rawItems.filter((_, j) => j !== i));
+                }}
                 style={{
                   padding: '0.375rem 0.625rem',
                   background: 'rgba(239,68,68,0.15)',
@@ -204,7 +214,10 @@ export function ConfigFormField({ def, value, onChange }: Props) {
             </div>
           ))}
           <button
-            onClick={() => onChange(def.path, [...rawItems, ''])}
+            onClick={() => {
+              idsRef.current = [...ids, crypto.randomUUID()];
+              onChange(def.path, [...rawItems, '']);
+            }}
             style={{
               alignSelf: 'flex-start',
               padding: '0.375rem 0.875rem',
