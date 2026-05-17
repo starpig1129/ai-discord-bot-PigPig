@@ -433,22 +433,48 @@ class PigPig(commands.Bot):
             logger = getattr(self, "system_logger", log)
             guild_id_str = str(interaction.guild_id) if interaction.guild_id else "0"
 
+            logger.error(f"Error in slash command '{interaction.command.name if interaction.command else 'Unknown'}': {error}")
+            logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+
+            await func.report_error(error, f"on_tree_error: {interaction.command.name if interaction.command else 'Unknown'}")
+
+            lang_manager = self.get_cog("LanguageManager")
+
+            # Handle specific expected errors first
             if isinstance(error, discord.app_commands.CommandOnCooldown):
-                error_msg = f"⏳ 此指令冷卻中，請再等候 {error.retry_after:.1f} 秒。(Command on cooldown. Please wait {error.retry_after:.1f}s.)"
+                if lang_manager:
+                    try:
+                        error_msg = lang_manager.translate(guild_id_str, "errors", "cooldown")
+                        if error_msg:
+                            error_msg = error_msg.format(retry_after=round(error.retry_after, 1))
+                        else:
+                            error_msg = f"⏳ 請稍後再試。此指令還在冷卻中，需等待 {error.retry_after:.1f} 秒。(Command on cooldown)"
+                    except Exception:
+                        error_msg = f"⏳ 請稍後再試。此指令還在冷卻中，需等待 {error.retry_after:.1f} 秒。(Command on cooldown)"
+                else:
+                    error_msg = f"⏳ 此指令冷卻中，請再等候 {error.retry_after:.1f} 秒。(Command on cooldown. Please wait {error.retry_after:.1f}s.)"
+
             elif isinstance(error, discord.app_commands.MissingPermissions):
-                error_msg = "🚫 您沒有足夠的權限執行此指令。(You do not have permission to execute this command.)"
+                if lang_manager:
+                    try:
+                        error_msg = lang_manager.translate(guild_id_str, "errors", "permission_denied")
+                        if not error_msg:
+                            error_msg = "❌ 你沒有權限使用此指令。(Permission denied)"
+                    except Exception:
+                        error_msg = "❌ 你沒有權限使用此指令。(Permission denied)"
+                else:
+                    error_msg = "🚫 您沒有足夠的權限執行此指令。(You do not have permission to execute this command.)"
+
             elif isinstance(error, discord.app_commands.BotMissingPermissions):
                 error_msg = "🤖 機器人缺少必要的權限來執行此指令。(The bot is missing necessary permissions to execute this command.)"
-            else:
-                logger.error(f"Error in slash command '{interaction.command.name if interaction.command else 'Unknown'}': {error}")
-                logger.error("".join(traceback.format_exception(type(error), error, error.__traceback__)))
-                await func.report_error(error, f"on_tree_error: {interaction.command.name if interaction.command else 'Unknown'}")
 
-                # Send a user-friendly error message
-                lang_manager = self.get_cog("LanguageManager")
+            else:
+                # Send a general user-friendly error message
                 if lang_manager:
                     try:
                         error_msg = lang_manager.translate(guild_id_str, "system", "general", "errors", "unexpected_error")
+                        if not error_msg:
+                            error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
                     except Exception:
                         error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
                 else:
