@@ -78,6 +78,25 @@ class VectorizationService:
                 logger.info(f"Storing {len(fragments)} memory fragments in vector database")
                 await store.add_memories(fragments)
                 logger.info("Successfully stored memory fragments in vector database")
+
+                # Invalidate episodic memory cache for affected channels
+                orchestrator = getattr(self.bot, "orchestrator", None)
+                if orchestrator:
+                    context_manager = getattr(orchestrator, "context_manager", None)
+                    if context_manager:
+                        episodic_provider = getattr(context_manager, "episodic_provider", None)
+                        if episodic_provider and hasattr(episodic_provider, "invalidate"):
+                            affected_channels = set()
+                            for frag in fragments:
+                                cid = frag.metadata.get("channel_id")
+                                if cid:
+                                    affected_channels.add(str(cid))
+                            for cid in affected_channels:
+                                try:
+                                    episodic_provider.invalidate(cid)
+                                except Exception as e:
+                                    logger.warning(f"Failed to invalidate episodic cache for channel {cid}: {e}")
+
             except Exception as e:
                 await func.report_error(e, "vector_store_add_memories_failed")
                 return
