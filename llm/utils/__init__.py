@@ -3,6 +3,11 @@
 This file ensures the llm.utils package is importable.
 """
 
-from . import send_message, media
+try:
+    from . import send_message, media
+except ImportError:
+    pass
 
-__all__ = ["send_message", "media"]
+from . import embed_processor
+
+__all__ = ["send_message", "media", "embed_processor"]
