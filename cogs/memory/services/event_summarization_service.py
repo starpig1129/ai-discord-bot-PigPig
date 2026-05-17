@@ -165,7 +165,22 @@ class EventSummarizationService:
                 log.debug(f"{context}: Payload already correct type")
                 return payload
             
-            # Step 3: Convert based on payload type
+            # Step 3: Handle Google GenAI "parts" format (list of dicts with type: thinking/text)
+            if isinstance(payload, list) and len(payload) > 0 and isinstance(payload[0], dict) and "type" in payload[0]:
+                log.debug(f"{context}: Detected Google GenAI multi-part response")
+                text_content = ""
+                for part in payload:
+                    part_type = part.get("type")
+                    if part_type == "text":
+                        text_content += part.get("text", "")
+                    elif part_type == "thinking":
+                        log.debug(f"{context}: Skipping thinking part")
+                
+                if text_content:
+                    # Treat the extracted text as a potential JSON string
+                    return self._extract_structured_response(text_content, expected_model, context)
+
+            # Step 4: Convert based on payload type
             if isinstance(payload, str):
                 # JSON string
                 try:
@@ -411,7 +426,8 @@ class EventSummarizationService:
                             fallback_messages.append(HumanMessage(content=(
                                 f"YOUR PREVIOUS ATTEMPT FAILED. "
                                 f"YOU MUST OUTPUT STRICTLY AND ONLY VALID JSON MATCHING THIS EXACT SCHEMA:\n{schema_str}\n"
-                                f"NO MARKDOWN (e.g., no ```json), NO HEADERS (e.g., no ---), NO THOUGHTS. ONLY A RAW JSON OBJECT."
+                                f"DO NOT include any thinking process, do not use <think> blocks, do not include any 'thinking' type parts. "
+                                f"NO MARKDOWN (e.g., no ```json), NO HEADERS (e.g., no ---). ONLY A RAW JSON OBJECT."
                             )))
                             
                             # Manually invoke the model to get raw output

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import time
 import platform
 import psutil
@@ -89,6 +90,23 @@ async def list_guilds(
 
 _ALLOWED_CONFIGS = {"base", "llm", "memory", "music"}
 
+_CONFIG_ALLOWED_KEYS: dict[str, set[str]] = {
+    "base": {"prefix", "activity", "ipc_server", "version", "logging", "dashboard"},
+    "llm": {
+        "model_priorities", "google_search_agent",
+        "llm_call_timeout", "reasoning_optimization_prompt", "ollama_url",
+    },
+    "memory": {
+        "enabled", "procedural_cache_ttl", "procedural_data_path", "episodic_data_path",
+        "vector_store_type", "qdrant_url", "qdrant_api_key", "qdrant_collection_name",
+        "embedding_provider", "embedding_model_name", "embedding_dim",
+        "ollama_url", "provider_options", "vector_search_k", "keyword_search_k",
+        "fetch_batch_size", "process_batch_size",
+        "message_threshold", "time_threshold", "processing_concurrency", "processing_delay",
+    },
+    "music": {"music_temp_base", "ffmpeg", "youtube_cookies_path"},
+}
+
 
 def _config_path(file: str) -> str:
     """Resolve config file path from its base name."""
@@ -120,7 +138,7 @@ async def write_config(
     request: Request,
     user: dict = Depends(require_owner),
 ) -> JSONResponse:
-    """Write/update a YAML configuration file."""
+    """Write/update a YAML configuration file (merge-based: only submitted top-level keys are overwritten)."""
     if file not in _ALLOWED_CONFIGS:
         raise HTTPException(status_code=400, detail=f"Unknown config: {file}")
     body = await request.json()
@@ -128,31 +146,49 @@ async def write_config(
     if config_data is None:
         raise HTTPException(status_code=400, detail="Missing 'config' in request body")
 
-    # Validate: must be a dict
     if not isinstance(config_data, dict):
         raise HTTPException(status_code=400, detail="'config' must be a JSON object (dict)")
 
-    # Per-file top-level key whitelists
-    _CONFIG_ALLOWED_KEYS: dict[str, set[str]] = {
-        "base":   {"bot_prefix", "ipc", "logging", "dashboard", "version"},
-        "llm":    {"task_models", "default_model", "fallback_chain", "circuit_breaker"},
-        "memory": {"enabled", "vector_store_type", "qdrant_url", "qdrant_collection_name",
-                   "embedding_provider", "embedding_model", "embedding_dim",
-                   "message_threshold", "time_threshold", "sqlite_db_path"},
-        "music":  {"ffmpeg_path", "ytdl_format", "volume"},
-    }
-    allowed = _CONFIG_ALLOWED_KEYS.get(file)
-    if allowed:
-        unknown = set(config_data.keys()) - allowed
-        if unknown:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown keys for config '{file}': {sorted(unknown)}. Allowed: {sorted(allowed)}",
-            )
+    allowed = _CONFIG_ALLOWED_KEYS.get(file, set())
+    unknown = set(config_data.keys()) - allowed
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown keys for config '{file}': {sorted(unknown)}. Allowed: {sorted(allowed)}",
+        )
 
     path = _config_path(file)
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
+
+    # Merge: read existing config, overwrite only the submitted top-level keys.
+    # This ensures unsubmitted keys (e.g. deeply nested fields not shown in the GUI) are preserved.
+    existing: dict = {}
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                loaded = yaml.safe_load(f)
+                if isinstance(loaded, dict):
+                    existing = loaded
+        except OSError as exc:
+            log.warning(f"Could not read existing config '{file}.yaml': {exc}, starting fresh")
+
+    existing.update(config_data)
+
+    try:
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                yaml.dump(existing, f, default_flow_style=False, allow_unicode=True)
+            os.replace(tmp_path, path)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+    except OSError as exc:
+        log.error(f"Failed to write config '{file}.yaml': {exc}")
+        raise HTTPException(status_code=500, detail="Failed to write configuration file")
+
     log.info(f"Config '{file}.yaml' updated by user {user.get('sub')}")
     return JSONResponse({"detail": f"{file}.yaml updated successfully"})
 
