@@ -438,15 +438,43 @@ class PigPig(commands.Bot):
 
             await func.report_error(error, f"on_tree_error: {interaction.command.name if interaction.command else 'Unknown'}")
 
-            # Send a user-friendly error message
             lang_manager = self.get_cog("LanguageManager")
-            if lang_manager:
-                try:
-                    error_msg = lang_manager.translate(guild_id_str, "system", "general", "errors", "unexpected_error")
-                except Exception:
-                    error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
+
+            # Handle specific expected errors first
+            if isinstance(error, discord.app_commands.CommandOnCooldown):
+                if lang_manager:
+                    try:
+                        error_msg = lang_manager.translate(guild_id_str, "errors", "cooldown")
+                        if error_msg:
+                            error_msg = error_msg.format(retry_after=round(error.retry_after, 1))
+                        else:
+                            error_msg = f"⏳ 請稍後再試。此指令還在冷卻中，需等待 {error.retry_after:.1f} 秒。(Command on cooldown)"
+                    except Exception:
+                        error_msg = f"⏳ 請稍後再試。此指令還在冷卻中，需等待 {error.retry_after:.1f} 秒。(Command on cooldown)"
+                else:
+                    error_msg = f"⏳ 請稍後再試。此指令還在冷卻中，需等待 {error.retry_after:.1f} 秒。(Command on cooldown)"
+
+            elif isinstance(error, discord.app_commands.MissingPermissions):
+                if lang_manager:
+                    try:
+                        error_msg = lang_manager.translate(guild_id_str, "errors", "permission_denied")
+                        if not error_msg:
+                            error_msg = "❌ 你沒有權限使用此指令。(Permission denied)"
+                    except Exception:
+                        error_msg = "❌ 你沒有權限使用此指令。(Permission denied)"
+                else:
+                    error_msg = "❌ 你沒有權限使用此指令。(Permission denied)"
             else:
-                error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
+                # Send a general user-friendly error message
+                if lang_manager:
+                    try:
+                        error_msg = lang_manager.translate(guild_id_str, "system", "general", "errors", "unexpected_error")
+                        if not error_msg:
+                            error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
+                    except Exception:
+                        error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
+                else:
+                    error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
 
             try:
                 if not interaction.response.is_done():
