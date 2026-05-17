@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from addons.settings import attachment_config
+
 if TYPE_CHECKING:
     import discord
 
@@ -23,8 +25,6 @@ def process_embed(embed: "discord.Embed") -> list[dict]:
         ``content_parts`` format. Each dict has at minimum a ``"type"`` key
         with value ``"text"`` or ``"image_url"``.
     """
-    from addons.settings import attachment_config
-
     if not attachment_config.embeds.enabled:
         return []
 
