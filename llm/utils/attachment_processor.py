@@ -119,6 +119,7 @@ async def _process_pdf(data: bytes, filename: str) -> list[dict]:
 
     cfg = attachment_config.pdf
 
+    preview = None
     try:
         info = pdfinfo_from_bytes(data)
         total_pages: int = int(info.get("Pages", 0))
@@ -140,21 +141,24 @@ async def _process_pdf(data: bytes, filename: str) -> list[dict]:
     else:
         half = max_p // 2
         front = list(range(half))
-        back = list(range(total_pages - half, total_pages))
+        back = list(range(total_pages - (max_p - half), total_pages))
         selected_indices = front + back
         truncated = True
 
-    pages = convert_from_bytes(data, dpi=dpi, fmt="jpeg")
+    # Reuse preview render when fallback already used dpi=72 and target DPI is also 72
+    if preview is not None and dpi == 72:
+        pages = preview
+    else:
+        pages = convert_from_bytes(data, dpi=dpi, fmt="jpeg")
 
     parts: list[dict] = []
 
     if truncated and cfg.notify_truncated:
-        half = max_p // 2
         parts.append({
             "type": "text",
             "text": (
                 f"[System: PDF truncated — showing {len(selected_indices)} of {total_pages} pages "
-                f"(pages 1-{half} and {total_pages - half + 1}-{total_pages})]"
+                f"(pages 1-{half} and {total_pages - (max_p - half) + 1}-{total_pages})]"
             ),
         })
 
@@ -162,6 +166,8 @@ async def _process_pdf(data: bytes, filename: str) -> list[dict]:
         if i < len(pages):
             parts.append(_pil_to_content_part(pages[i].convert("RGB")))
 
+    if not parts:
+        return [{"type": "text", "text": f"[PDF processing returned no pages: {filename}]"}]
     return parts
 
 
