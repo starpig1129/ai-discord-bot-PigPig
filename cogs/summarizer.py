@@ -140,7 +140,7 @@ class SummarizerCog(commands.Cog):
 
             # Initialize Agent
             model_name, fallback = ModelManager().get_model("summarize_model")
-            model_instance = init_chat_model(model_name, max_retries=1)
+            model_instance = init_chat_model(model_name, max_retries=0)
             
             summarize_agent = create_agent(
                 model=model_instance,

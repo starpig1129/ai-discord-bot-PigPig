@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List, Tuple
+from typing import List, Tuple, Any
 from addons.logging import get_logger
 
 logger = get_logger(server_id="Bot", source="llm.model_manager")

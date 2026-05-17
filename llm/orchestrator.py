@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import time
 from typing import Any, List, MutableMapping, Optional
 import re
 
@@ -37,44 +38,7 @@ from llm.callbacks import ToolFeedbackCallbackHandler
 from llm.model_circuit_breaker import get_model_circuit_breaker
 
 
-class _SafeTyping:
-    """Typing indicator that backs off gracefully on 429 rate limits instead of retrying endlessly."""
-
-    _INTERVAL = 8.0  # seconds between keep-alive sends (Discord drops typing after ~10 s)
-    _BACKOFF = 30.0  # seconds to wait after a 429 before trying again
-
-    def __init__(self, channel: Any) -> None:
-        self._channel = channel
-        self._task: Optional[asyncio.Task] = None
-
-    async def _loop(self) -> None:
-        while True:
-            await asyncio.sleep(self._INTERVAL)
-            try:
-                await self._channel.trigger_typing()
-            except discord.HTTPException as exc:
-                if exc.status == 429:
-                    await asyncio.sleep(self._BACKOFF)
-                else:
-                    return
-            except Exception:
-                return
-
-    async def __aenter__(self) -> "_SafeTyping":
-        try:
-            await self._channel.trigger_typing()
-        except Exception:
-            pass
-        self._task = asyncio.create_task(self._loop())
-        return self
-
-    async def __aexit__(self, *_: Any) -> None:
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+from llm.utils.safe_typing import SafeTyping
 
 
 class DirectToolOutputMiddleware(AgentMiddleware):
@@ -145,12 +109,14 @@ class Orchestrator:
                 cache_ttl=memory_config.episodic_cache_ttl
             )
 
+        self.bot = bot
         self.context_manager = ContextManager(
             short_term_provider=short_term_provider,
             procedural_provider=procedural_provider,
             episodic_provider=episodic_provider,
             knowledge_provider=knowledge_provider,
         )
+
 
     def _build_info_agent_prompt(self, bot_id: int, message: Message) -> str:
         """
@@ -468,7 +434,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
         guild_id = str(message.guild.id) if message.guild else "0"
 
         # Provide feedback to the user that the bot is processing
-        async with _SafeTyping(message.channel):
+        async with SafeTyping(message.channel):
             # Interrupt any active background memory tasks to prioritize this conversation
             if hasattr(bot, "message_tracker") and bot.message_tracker:
                 bot.message_tracker.interrupt_all()
@@ -580,6 +546,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         sanitized_messages = await self._sanitize_messages_for_model(messages_for_info_agent, current_info_model, image_cache)
 
                         # Execute info_agent to process user message and tools
+                        call_start = time.time()
                         info_result = await asyncio.wait_for(
                             info_agent.ainvoke(
                                 {"messages": sanitized_messages},
@@ -587,6 +554,15 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             ),
                             timeout=_LLM_CALL_TIMEOUT_SECONDS,
                         )
+                        # Record LLM call statistics
+                        if hasattr(bot, 'stats_collector') and bot.stats_collector:
+                            duration_ms = (time.time() - call_start) * 1000
+                            await bot.stats_collector.record_llm_call(
+                                guild_id=guild_id,
+                                model_name=current_info_model,
+                                duration_ms=duration_ms,
+                                success=True
+                            )
                         
                         # Success!
                         if models_tried > 1:
@@ -717,6 +693,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         remaining_models = [m for m in model_priority_list[model_index + 1:] if circuit_breaker.is_available(m)]
                         is_last_available = len(remaining_models) == 0
                         
+                        call_start = time.time()
                         message_result = await asyncio.wait_for(
                             send_message(
                                 bot,
@@ -729,6 +706,15 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             ),
                             timeout=180.0,  # Much larger total safety timeout
                         )
+                        # Record LLM call statistics
+                        if hasattr(bot, 'stats_collector') and bot.stats_collector:
+                            duration_ms = (time.time() - call_start) * 1000
+                            await bot.stats_collector.record_llm_call(
+                                guild_id=guild_id,
+                                model_name=current_model,
+                                duration_ms=duration_ms,
+                                success=True
+                            )
                         
                         # Success!
                         if models_tried > 1:

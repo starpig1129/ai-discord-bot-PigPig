@@ -15,7 +15,7 @@ class TOKENS:
         self.token = os.getenv("TOKEN")
         self.client_id = os.getenv("CLIENT_ID")
         self.client_secret_id = os.getenv("CLIENT_SECRET_ID")
-        self.sercet_key = os.getenv("SERCET_KEY")
+        self.secret_key = os.getenv("DASHBOARD_SECRET_KEY")
         raw_bug_report_channel_id = os.getenv("BUG_REPORT_CHANNEL_ID")
         self.bug_report_channel_id = int(raw_bug_report_channel_id) if raw_bug_report_channel_id not in (None, "") else None
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", None)
@@ -45,7 +45,7 @@ class TOKENS:
             "TOKEN": self.token,
             "CLIENT_ID": self.client_id,
             "CLIENT_SECRET_ID": self.client_secret_id,
-            "SERCET_KEY": self.sercet_key,
+            "DASHBOARD_SECRET_KEY": self.secret_key,
             "BUG_REPORT_CHANNEL_ID": os.getenv("BUG_REPORT_CHANNEL_ID"),
             "BOT_OWNER_ID": os.getenv("BOT_OWNER_ID"),
         }

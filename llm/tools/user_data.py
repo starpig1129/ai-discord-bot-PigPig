@@ -214,8 +214,10 @@ class UserMemoryTools:
                                         "User not in DB. Initializing basic record.",
                                         extra={"target_id": target_id}
                                     )
-                                    # Use discord ID for initialization, ignore display name
-                                    await user_mgr.update_user_activity(str(effective_id), str(effective_id))
+                                    # Use discord name and nickname for initialization
+                                    discord_name = getattr(fetched, "name", str(effective_id))
+                                    nickname = getattr(fetched, "display_name", None)
+                                    await user_mgr.update_user_activity(str(effective_id), discord_name, nickname)
                                     exists = True
                                 else:
                                     logger.warning(f"Refusing to initialize {effective_id}: Not a valid Discord ID.")
@@ -360,9 +362,10 @@ class UserMemoryTools:
                         )
                         effective_id = user_id
     
-                # Get the display_name for storage. Prefer cache (get_user) and fall back to fetch_user.
+                # Get the names for storage. Prefer cache (get_user) and fall back to fetch_user.
                 bot = get_bot()
-                display_name = f"User_{effective_id}"
+                discord_name = f"User_{effective_id}"
+                nickname = None
                 if bot:
                     try:
                         fetched_user = None
@@ -393,26 +396,28 @@ class UserMemoryTools:
                                     logger.warning(f"Failed to fetch user {int_id}: {e}")
 
                         if fetched_user:
-                            display_name = getattr(fetched_user, "display_name", getattr(fetched_user, "name", display_name))
+                            discord_name = getattr(fetched_user, "name", discord_name)
+                            nickname = getattr(fetched_user, "display_name", None)
                     except Exception as e:
                         logger.warning(f"Display name resolution error: {e}")
     
                 # Debug details about what will be saved
                 logger.debug(
                     "save_user_memory inputs",
-                    extra={"user_id": effective_id, "display_name": display_name, "memory_length": len(memory_to_save)}
+                    extra={"user_id": effective_id, "discord_name": discord_name, "nickname": nickname, "memory_length": len(memory_to_save)}
                 )
     
                 # Call the internal method from UserDataCog with correct parameter order:
                 # (user_id: str, display_name: str, user_data: str, context)
                 result_msg = await cog._save_user_data(
                     str(effective_id),
-                    display_name,
+                    discord_name,
                     memory_to_save,
                     cast(
                         Union[discord.Interaction, discord.Message],
                         getattr(runtime, "message", None)
                     ),
+                    nickname=nickname
                 )
 
                 # Invalidate ProceduralMemoryProvider cache so the next request

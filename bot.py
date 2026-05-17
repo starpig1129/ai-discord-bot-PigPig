@@ -101,6 +101,11 @@ class PigPig(commands.Bot):
         self.state_manager = StateManager()
         self.ui_manager = UIManager(self)
 
+
+        # Statistics Subsystem
+        from dashboard.services.stats_collector import StatsCollector
+        self.stats_collector = StatsCollector()
+
         # Memory subsystem (instantiate only when enabled)
         if getattr(memory_config, "enabled", True):
             # lazy import to avoid loading memory modules when disabled
@@ -119,18 +124,18 @@ class PigPig(commands.Bot):
             # assign storages explicitly
             self.procedural_storage = ProceduralStorage(db_conn_procedural)
             self.episodic_storage = EpisodicStorage(db_conn_episodic)
- 
+
             # Initialize managers/services with the appropriate storage
             self.user_manager = SQLiteUserManager(storage=self.procedural_storage)
             self.vector_manager = VectorManager(bot=self, settings=memory_config)
             self.message_tracker = MessageTracker(bot=self, storage=self.episodic_storage, settings=memory_config)
         else:
             # keep attributes for compatibility but do not initialize subsystems
-            self.storage = None
+            self.procedural_storage = None
+            self.episodic_storage = None
             self.user_manager = None
-            self.db_manager = None
-            self.message_tracker = None
             self.vector_manager = None
+            self.message_tracker = None
         
         self.status_cycle = cycle([
             (discord.ActivityType.listening, "大家的聲音"),
@@ -243,6 +248,25 @@ class PigPig(commands.Bot):
             if self.message_tracker:
                 await self.message_tracker.track_message(message)
             
+            # Update user activity and names in background
+            if hasattr(self, 'user_manager') and self.user_manager:
+                asyncio.create_task(self.user_manager.update_user_activity(
+                    str(message.author.id), 
+                    message.author.name, 
+                    message.author.display_name
+                ))
+
+            # Record message event for dashboard statistics
+            try:
+                if hasattr(self, 'stats_collector') and self.stats_collector:
+                    await self.stats_collector.record_message(
+                        guild_id=str(message.guild.id),
+                        user_id=str(message.author.id),
+                        channel_id=str(message.channel.id),
+                    )
+            except Exception:
+                pass  # Stats recording must never block message handling
+
             guild_id = str(message.guild.id)
             self.setup_logger_for_guild(guild_id)
             logger = self.loggers[guild_id]
@@ -405,8 +429,9 @@ class PigPig(commands.Bot):
                     logger.error(f"Failed to load {module[:-3]}", exception=e)
                     logger.error(traceback.format_exc())
 
-        # Initialize core services
+        # Initialize Orchestrator after cogs are loaded so UserDataCog is available
         self.orchestrator = Orchestrator(self)
+
         # Provide running event loop to storage (for thread-safe coroutine submission) if supported.
         if getattr(memory_config, "enabled", True) and getattr(self, "storage", None):
             try:
@@ -420,6 +445,9 @@ class PigPig(commands.Bot):
             await self.episodic_storage.initialize_channel_memory_state()
         if getattr(memory_config, "enabled", True) and getattr(self, "vector_manager", None):
             await self.vector_manager.initialize()
+
+        if getattr(self, "stats_collector", None):
+            await self.stats_collector.initialize()
     
         if base_config.ipc_server.get("enable", False):
             await self.ipc.start()
@@ -491,6 +519,17 @@ class PigPig(commands.Bot):
         self.tree.on_error = on_tree_error
 
         await self.tree.sync()
+
+        # ── Dashboard server startup ──────────────────────────────────
+        try:
+            from dashboard.main import start_dashboard
+            await start_dashboard(self)
+        except Exception as e:
+            log.error(f"Failed to start dashboard: {e}")
+            try:
+                await func.report_error(e, "bot.py/setup_hook/start_dashboard")
+            except Exception:
+                pass
 
     async def on_ready(self):
         """Handle bot ready event.
@@ -610,6 +649,7 @@ class PigPig(commands.Bot):
 
         await func.report_error(sys.exc_info()[1], f"on_error event: {event_method}")
 
+
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         """Handle errors in command execution.
         
@@ -658,7 +698,7 @@ class PigPig(commands.Bot):
             lang_manager = self.get_cog("LanguageManager")
             if lang_manager:
                 try:
-                    error_msg = lang_manager.translate(guild_id_str, "system", "general", "errors", "unexpected_error")
+                    error_msg = lang_manager.translate(guild_id_str, "system", "errors", "unexpected")
                 except Exception:
                     error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
             else:
@@ -734,6 +774,13 @@ class PigPig(commands.Bot):
             - Should be called before program termination
         """
         try:         
+            # Shutdown dashboard server gracefully
+            try:
+                from dashboard.main import stop_dashboard
+                await stop_dashboard(self)
+            except Exception:
+                pass
+
             # Close parent class (disconnect from Discord, etc.)
             await super().close()
 

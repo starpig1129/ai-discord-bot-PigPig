@@ -524,6 +524,29 @@ class LoggerAdapter:
             else:
                 print("enqueue error:", e)
 
+        # Broadcast to WebSocket dashboard if possible
+        try:
+            from dashboard.websocket.log_streamer import log_streamer
+            obj = {
+                "timestamp": timestamp,
+                "level": level.upper(),
+                "source": self.source,
+                "server_id": self.server_id,
+                "channel_or_file": str(channel_or_file),
+                "user_id": str(user_id) if user_id is not None else "",
+                "action": str(action),
+                "message": str(full_message),
+                "trace_id": str(trace_id) if trace_id is not None else None,
+                "extra": extra,
+            }
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(log_streamer.broadcast(obj))
+            except RuntimeError:
+                pass # not in an async loop thread
+        except Exception:
+            pass
+
         # Render to console if enabled
         try:
             console_cfg = CONFIG.get("console", {})

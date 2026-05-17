@@ -1,0 +1,225 @@
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, BarChart, Bar,
+} from 'recharts';
+import api from '../../lib/api';
+
+const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#f43f5e', '#06b6d4'];
+
+export default function Stats() {
+  const { t } = useTranslation();
+  const [period, setPeriod] = useState('30d');
+  const [globalStats, setGlobalStats] = useState<any>(null);
+  const [modelStats, setModelStats] = useState<any>(null);
+  const [memoryStats, setMemoryStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.get(`/api/admin/stats/global?period=${period}`),
+      api.get(`/api/admin/stats/models?period=${period}`),
+      api.get('/api/admin/stats/memory'),
+    ])
+      .then(([g, m, mem]) => {
+        setGlobalStats(g.data);
+        setModelStats(m.data);
+        setMemoryStats(mem.data);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [period]);
+
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+        <div className="animate-pulse-glow" style={{ fontSize: '2rem' }}>📈</div>
+      </div>
+    );
+  }
+
+  const periodLabels: Record<string, string> = {
+    '7d': t('stats.period7'), 
+    '30d': t('stats.period30'), 
+    '90d': t('stats.period90'),
+    'all': t('stats.periodAll'),
+  };
+  const summaryCards = globalStats ? [
+    { 
+      label: period === 'all' ? t('stats.totalMessages') : `${t('stats.totalMessages')} (${period})`, 
+      value: (globalStats?.total_messages ?? 0).toLocaleString(), 
+      icon: '💬' 
+    },
+    { label: 'LLM Calls',             value: (globalStats?.total_llm_calls ?? 0).toLocaleString(), icon: '🤖' },
+    { label: 'Commands',              value: (globalStats?.total_commands ?? 0).toLocaleString(), icon: '⌨️' },
+    { label: 'Error Rate',            value: `${globalStats?.error_rate ?? 0}%`, icon: '⚠️' },
+    { label: t('stats.avgResponse'),  value: `${globalStats?.avg_response_ms ?? 0}${t('stats.ms')}`, icon: '⚡' },
+  ] : [];
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>📈 {t('stats.title')}</h1>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {['7d', '30d', '90d', 'all'].map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid',
+                borderColor: period === p ? 'var(--color-accent-blue)' : 'var(--color-border)',
+                background: period === p ? 'rgba(59,130,246,0.15)' : 'transparent',
+                color: period === p ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
+                cursor: 'pointer',
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+              }}
+            >
+              {periodLabels[p] || p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+        {summaryCards.map((card, i) => (
+          <motion.div
+            key={card.label}
+            className="glass-card"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08 }}
+            style={{ padding: '1.25rem' }}
+          >
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+              {card.icon} {card.label}
+            </div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{card.value}</div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Message Trend Chart */}
+      <motion.div
+        className="glass-card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        style={{ padding: '1.5rem', marginBottom: '1.5rem' }}
+      >
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>{t('stats.messageTrend')}</h2>
+        <ResponsiveContainer width="100%" height={300}>
+          <AreaChart data={globalStats?.daily_messages || []}>
+            <defs>
+              <linearGradient id="colorMessages" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
+            <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} />
+            <YAxis stroke="#64748b" fontSize={12} tickLine={false} />
+            <Tooltip
+              contentStyle={{
+                background: '#1e293b',
+                border: '1px solid rgba(148,163,184,0.2)',
+                borderRadius: '0.5rem',
+                color: '#f1f5f9',
+              }}
+            />
+            <Area type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} fill="url(#colorMessages)" />
+          </AreaChart>
+        </ResponsiveContainer>
+      </motion.div>
+
+      {/* Model Usage */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+        <motion.div
+          className="glass-card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          style={{ padding: '1.5rem' }}
+        >
+          <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>{t('stats.modelUsage')}</h2>
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie
+                data={(modelStats?.models || []).map((m: any) => ({ name: m.model, value: m.calls }))}
+                innerRadius={60}
+                outerRadius={90}
+                paddingAngle={3}
+                dataKey="value"
+              >
+                {(modelStats?.models || []).map((_: any, i: number) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.5rem', color: '#f1f5f9' }} />
+              <Legend wrapperStyle={{ color: '#94a3b8', fontSize: '0.75rem' }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </motion.div>
+
+        <motion.div
+          className="glass-card"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          style={{ padding: '1.5rem' }}
+        >
+          <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>{t('stats.responseTime')}</h2>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={modelStats?.models || []} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
+              <XAxis type="number" stroke="#64748b" fontSize={12} />
+              <YAxis type="category" dataKey="model" stroke="#64748b" fontSize={11} width={120} />
+              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.5rem', color: '#f1f5f9' }} />
+              <Bar dataKey="avg_response_ms" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </motion.div>
+      </div>
+
+      <motion.div
+        className="glass-card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+        style={{ padding: '1.5rem', marginTop: '1.5rem' }}
+      >
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>🧠 {t('admin.memorySystem')}</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+          {[
+            { label: t('admin.users'), value: memoryStats?.procedural_users ?? '—', icon: '👤' },
+            { label: t('admin.channelSegments'),  value: memoryStats?.episodic_total ?? '—',   icon: '💾' },
+            { label: t('admin.vectorCollections'), value: memoryStats?.vector_collections ?? '—', icon: '🔮' },
+          ].map((item) => (
+
+            <div
+              key={item.label}
+              style={{
+                padding: '1rem',
+                background: 'rgba(139,92,246,0.08)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid rgba(139,92,246,0.2)',
+              }}
+            >
+              <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                {item.icon} {item.label}
+              </div>
+              <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+
+  );
+}

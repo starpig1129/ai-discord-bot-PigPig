@@ -64,6 +64,14 @@ class BaseConfig:
         self.ipc_server: dict = data.get("ipc_server", {})
         self.version: str = data.get("version", "")
 
+        # Dashboard web interface settings
+        self.dashboard: dict = data.get("dashboard", {
+            "enabled": True,
+            "host": "0.0.0.0",
+            "port": 8005,
+            "cors_origins": ["http://localhost:5173"],
+        })
+
         # Logging configuration schema (merge defaults with provided values).
         # The resulting `self.logging` is a plain dict so other modules (e.g. addons.logging_manager)
         # can shallow-merge it with their defaults.
