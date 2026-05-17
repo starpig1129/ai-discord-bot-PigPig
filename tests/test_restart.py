@@ -28,6 +28,16 @@ fake_logging.get_logger = lambda **kwargs: _DummyLogger()
 
 fake_settings = types.ModuleType("addons.settings")
 fake_settings.base_config = {}
+# Carry forward any real symbols already loaded into addons.settings so that
+# subsequent test modules that import e.g. AttachmentConfig or attachment_config
+# at function scope still receive valid objects (tests/conftest.py pre-loads the
+# real module, and test_context_manager.py similarly snapshots before overwriting).
+_prior_settings = sys.modules.get("addons.settings")
+for _attr in ("AttachmentConfig", "attachment_config", "memory_config",
+              "llm_config", "update_config", "music_config", "prompt_config"):
+    _val = getattr(_prior_settings, _attr, None)
+    if _val is not None:
+        setattr(fake_settings, _attr, _val)
 
 fake_addons.logging = fake_logging
 fake_addons.settings = fake_settings

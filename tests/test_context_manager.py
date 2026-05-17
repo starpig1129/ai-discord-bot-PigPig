@@ -47,10 +47,32 @@ class _DummyLogger:
 fake_logging = types.ModuleType("addons.logging")
 fake_logging.get_logger = lambda **kwargs: _DummyLogger()
 
+# Snapshot real addons.settings attributes before this module overwrites
+# sys.modules["addons.settings"] with a lightweight stub.  The real module is
+# guaranteed to already be cached (tests/conftest.py pre-loads it).  We carry
+# these real objects forward so that test modules collected after this one —
+# e.g. test_embed_processor.py (module-level import of attachment_config) and
+# test_procedural_memory.py (module-level import of memory_config) — continue
+# to receive valid, non-stub values even though sys.modules["addons.settings"]
+# will point to our fake.
+_real_settings = sys.modules.get("addons.settings")
+_real_attachment_config = getattr(_real_settings, "attachment_config", None)
+_real_AttachmentConfig = getattr(_real_settings, "AttachmentConfig", None)
+_real_memory_config = getattr(_real_settings, "memory_config", None)
+
 fake_settings = types.ModuleType("addons.settings")
 fake_settings.base_config = {}
 fake_settings.llm_config = types.SimpleNamespace(llm_call_timeout=60)
 fake_settings.memory_config = types.SimpleNamespace(enabled=True, procedural_cache_ttl=300.0)
+# Propagate real symbols that other test modules import at collection time.
+# Use the real value when available; fall back to the stub for memory_config
+# so this file's own behaviour is unchanged when running standalone.
+if _real_attachment_config is not None:
+    fake_settings.attachment_config = _real_attachment_config
+if _real_AttachmentConfig is not None:
+    fake_settings.AttachmentConfig = _real_AttachmentConfig
+if _real_memory_config is not None:
+    fake_settings.memory_config = _real_memory_config
 
 fake_addons = types.ModuleType("addons")
 fake_addons.logging = fake_logging
