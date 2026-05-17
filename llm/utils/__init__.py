@@ -8,6 +8,9 @@ try:
 except ImportError:
     pass
 
-from . import embed_processor
+try:
+    from . import embed_processor
+except ImportError:
+    pass
 
 __all__ = ["send_message", "media", "embed_processor"]

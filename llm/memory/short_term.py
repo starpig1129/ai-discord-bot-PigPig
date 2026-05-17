@@ -83,29 +83,20 @@ class ShortTermMemoryProvider:
                     content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> <eom>  [{ ' | '.join(content_suffix)}]"})
 
                 if msg.attachments:
-                    for attachment in msg.attachments:
-                        if attachment.content_type:
-                            if attachment.content_type.startswith('image/'):
-                                # Standard LangChain format for both Gemini and Ollama
-                                content_parts.append({
-                                    "type": "image_url",
-                                    "image_url": {"url": attachment.url}
-                                })
-                            elif attachment.content_type.startswith('video/'):
-                                content_parts.append({
-                                    "type": "text",
-                                    "text": f"[Video Attachment: {attachment.filename}]"
-                                })
-                            elif attachment.content_type == 'application/pdf':
-                                content_parts.append({
-                                    "type": "text",
-                                    "text": f"[PDF Attachment: {attachment.filename}]"
-                                })
-                            elif attachment.content_type.startswith('audio/'):
-                                content_parts.append({
-                                    "type": "text",
-                                    "text": f"[Audio Attachment: {attachment.filename}]"
-                                })
+                    from llm.utils.attachment_processor import process_attachment
+                    from addons.settings import attachment_config as _att_cfg
+                    if _att_cfg.enabled:
+                        for attachment in msg.attachments:
+                            parts = await process_attachment(attachment)
+                            content_parts.extend(parts)
+
+                if msg.embeds:
+                    from llm.utils.embed_processor import process_embed
+                    from addons.settings import attachment_config as _att_cfg
+                    if _att_cfg.embeds.enabled:
+                        for embed in msg.embeds:
+                            parts = process_embed(embed)
+                            content_parts.extend(parts)
 
                 # Create message (using list format for content)
                 # Add explicit speaker identification to help LLM distinguish between users
