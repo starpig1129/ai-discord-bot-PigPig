@@ -1,0 +1,26 @@
+# base_configs/attachments.yaml
+attachments:
+  enabled: true
+
+  image:
+    enabled: true
+    max_dimension: 2048
+
+  pdf:
+    enabled: true
+    max_pages: 20
+    dpi_full: 150
+    dpi_medium: 100
+    dpi_compressed: 72
+    threshold_full: 5
+    threshold_medium: 15
+    notify_truncated: true
+
+  video:
+    enabled: true
+    max_frames: 16
+    min_interval_sec: 2.0
+
+  embeds:
+    enabled: true
+    include_images: true

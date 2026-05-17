@@ -346,6 +346,51 @@ class MemoryConfig:
         self.processing_concurrency: int = int(data.get("processing_concurrency", 1))
         self.processing_delay: float = float(data.get("processing_delay", 30.0))
 
+class _AttachmentImageConfig:
+    def __init__(self, data: dict) -> None:
+        self.enabled: bool = bool(data.get("enabled", True))
+        self.max_dimension: int = int(data.get("max_dimension", 2048))
+
+
+class _AttachmentPdfConfig:
+    def __init__(self, data: dict) -> None:
+        self.enabled: bool = bool(data.get("enabled", True))
+        self.max_pages: int = int(data.get("max_pages", 20))
+        self.dpi_full: int = int(data.get("dpi_full", 150))
+        self.dpi_medium: int = int(data.get("dpi_medium", 100))
+        self.dpi_compressed: int = int(data.get("dpi_compressed", 72))
+        self.threshold_full: int = int(data.get("threshold_full", 5))
+        self.threshold_medium: int = int(data.get("threshold_medium", 15))
+        self.notify_truncated: bool = bool(data.get("notify_truncated", True))
+
+
+class _AttachmentVideoConfig:
+    def __init__(self, data: dict) -> None:
+        self.enabled: bool = bool(data.get("enabled", True))
+        self.max_frames: int = int(data.get("max_frames", 16))
+        self.min_interval_sec: float = float(data.get("min_interval_sec", 2.0))
+
+
+class _AttachmentEmbedsConfig:
+    def __init__(self, data: dict) -> None:
+        self.enabled: bool = bool(data.get("enabled", True))
+        self.include_images: bool = bool(data.get("include_images", True))
+
+
+class AttachmentConfig:
+    """Configuration for attachment and embed processing (base_configs/attachments.yaml)."""
+
+    def __init__(self, path: str = "base_configs/attachments.yaml") -> None:
+        self.path = path
+        data = _load_yaml_file(path)
+        cfg = data.get("attachments", {})
+        self.enabled: bool = bool(cfg.get("enabled", True))
+        self.image = _AttachmentImageConfig(cfg.get("image", {}))
+        self.pdf = _AttachmentPdfConfig(cfg.get("pdf", {}))
+        self.video = _AttachmentVideoConfig(cfg.get("video", {}))
+        self.embeds = _AttachmentEmbedsConfig(cfg.get("embeds", {}))
+
+
 try:
     base_config = BaseConfig(f"{CONFIG_ROOT}/base.yaml")
 except Exception as e:
@@ -422,6 +467,15 @@ except Exception as e:
     except Exception:
         logger.error(f"Error initializing MemoryConfig: {e}")
     memory_config = MemoryConfig(f"{CONFIG_ROOT}/memory.yaml")
+try:
+    attachment_config = AttachmentConfig(f"{CONFIG_ROOT}/attachments.yaml")
+except Exception as e:
+    try:
+        from function import func
+        asyncio.create_task(func.report_error(e, "addons/settings.py/module_init"))
+    except Exception:
+        logger.error(f"Error initializing AttachmentConfig: {e}")
+    attachment_config = AttachmentConfig(f"{CONFIG_ROOT}/attachments.yaml")
 __all__ = [
     "BaseConfig",
     "base_config",
@@ -435,4 +489,6 @@ __all__ = [
     "prompt_config",
     "MemoryConfig",
     "memory_config",
+    "AttachmentConfig",
+    "attachment_config",
 ]
