@@ -33,6 +33,10 @@ class ShortTermMemoryProvider:
         The returned order is oldest -> newest.
         """
         try:
+            from llm.utils.attachment_processor import process_attachment
+            from llm.utils.embed_processor import process_embed
+            from addons.settings import attachment_config as _att_cfg
+
             history = [
                 msg async for msg in message.channel.history(limit=self.limit)
             ]
@@ -44,7 +48,6 @@ class ShortTermMemoryProvider:
                 content_suffix = []
 
                 content_prefix = f"{msg.author.name} | UserID:{msg.author.id} | MessageID:{msg.id}"
-                                # Include embed count if present
 
                 # Include reactions
                 if msg.reactions:
@@ -82,21 +85,15 @@ class ShortTermMemoryProvider:
                 else:
                     content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> <eom>  [{ ' | '.join(content_suffix)}]"})
 
-                if msg.attachments:
-                    from llm.utils.attachment_processor import process_attachment
-                    from addons.settings import attachment_config as _att_cfg
-                    if _att_cfg.enabled:
-                        for attachment in msg.attachments:
-                            parts = await process_attachment(attachment)
-                            content_parts.extend(parts)
+                if msg.attachments and _att_cfg.enabled:
+                    for attachment in msg.attachments:
+                        parts = await process_attachment(attachment)
+                        content_parts.extend(parts)
 
-                if msg.embeds:
-                    from llm.utils.embed_processor import process_embed
-                    from addons.settings import attachment_config as _att_cfg
-                    if _att_cfg.embeds.enabled:
-                        for embed in msg.embeds:
-                            parts = process_embed(embed)
-                            content_parts.extend(parts)
+                if msg.embeds and _att_cfg.embeds.enabled:
+                    for embed in msg.embeds:
+                        parts = process_embed(embed)
+                        content_parts.extend(parts)
 
                 # Create message (using list format for content)
                 # Add explicit speaker identification to help LLM distinguish between users
