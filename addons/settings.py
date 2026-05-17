@@ -380,7 +380,7 @@ class _AttachmentEmbedsConfig:
 class AttachmentConfig:
     """Configuration for attachment and embed processing (base_configs/attachments.yaml)."""
 
-    def __init__(self, path: str = "base_configs/attachments.yaml") -> None:
+    def __init__(self, path: str = "config/attachments.yaml") -> None:
         self.path = path
         data = _load_yaml_file(path)
         cfg = data.get("attachments", {})
