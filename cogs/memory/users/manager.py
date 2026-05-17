@@ -35,14 +35,21 @@ class SQLiteUserManager:
         """Retrieve multiple users concurrently (storage handles caching)."""
         result: Dict[str, UserInfo] = {}
         try:
-            coros = [self.storage.get_user_info(uid) for uid in user_ids]
-            rows = await asyncio.gather(*coros, return_exceptions=True)
-            for uid, row in zip(user_ids, rows):
-                if isinstance(row, Exception):
-                    await func.report_error(row, f"get_user_info failed for {uid}")
-                    continue
-                if isinstance(row, UserInfo):
-                    result[uid] = row
+            if hasattr(self.storage, "get_users_info"):
+                # Use batched optimized method if available (avoids N+1 queries)
+                batch_results = await getattr(self.storage, "get_users_info")(user_ids)
+                for uid, info in batch_results.items():
+                    result[uid] = info
+            else:
+                # Fallback to concurrent gather approach
+                coros = [self.storage.get_user_info(uid) for uid in user_ids]
+                rows = await asyncio.gather(*coros, return_exceptions=True)
+                for uid, row in zip(user_ids, rows):
+                    if isinstance(row, Exception):
+                        await func.report_error(row, f"get_user_info failed for {uid}")
+                        continue
+                    if isinstance(row, UserInfo):
+                        result[uid] = row
         except Exception as e:
             await func.report_error(e, "Failed to retrieve multiple users")
         return result

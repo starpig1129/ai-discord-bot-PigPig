@@ -84,6 +84,75 @@ class ProceduralStorage:
             self._update_cache(discord_id, user_info)
             return user_info
 
+    async def get_users_info(self, discord_ids: List[str]) -> Dict[str, UserInfo]:
+        """Fetch multiple users efficiently using a single SQL query."""
+        if not discord_ids:
+            return {}
+
+        results: Dict[str, UserInfo] = {}
+        missing_ids = []
+
+        for discord_id in discord_ids:
+            if discord_id in self._user_cache:
+                results[discord_id] = self._user_cache[discord_id]
+            else:
+                missing_ids.append(discord_id)
+
+        if not missing_ids:
+            return results
+
+        try:
+            with self.db.get_connection() as conn:
+                placeholders = ",".join("?" * len(missing_ids))
+                cursor = conn.execute(
+                    f"""
+                    SELECT discord_id, discord_name, display_names,
+                           procedural_memory, user_background, created_at
+                    FROM users
+                    WHERE discord_id IN ({placeholders})
+                    """,
+                    tuple(missing_ids),
+                )
+
+                rows = cursor.fetchall()
+                for row in rows:
+                    discord_id = str(row["discord_id"])
+
+                    display_names = []
+                    if row["display_names"]:
+                        try:
+                            display_names = json.loads(row["display_names"])
+                            if not isinstance(display_names, list):
+                                display_names = [str(display_names)]
+                        except Exception:
+                            display_names = [row["display_names"]]
+
+                    created_at = None
+                    if row["created_at"]:
+                        try:
+                            created_at = datetime.fromisoformat(row["created_at"])
+                        except Exception:
+                            try:
+                                created_at = datetime.fromtimestamp(float(row["created_at"]))
+                            except Exception:
+                                created_at = None
+
+                    user_info = UserInfo(
+                        discord_id=discord_id,
+                        discord_name=row["discord_name"] or "",
+                        display_names=display_names,
+                        procedural_memory=row["procedural_memory"],
+                        user_background=row["user_background"],
+                        created_at=created_at,
+                    )
+
+                    self._update_cache(discord_id, user_info)
+                    results[discord_id] = user_info
+
+        except Exception as e:
+            await func.report_error(e, f"get_users_info failed for {len(missing_ids)} users")
+        return results
+
     async def update_user_data(
         self,
         discord_id: str,
