@@ -274,6 +274,23 @@
     "memoryPlaceholderBackground": "Enter background information, context...",
     "activeOnServers": "Active on servers"
   },
+  "notFound": {
+    "title": "PigPig Got Lost!",
+    "subtitle": "Oops… PigPig wandered off into the digital void. This page doesn't exist or has been moved.",
+    "goHome": "Take Me Home",
+    "memeTitle": "A meme while you're lost",
+    "refresh": "Another One 🎲",
+    "memeError": "Meme failed to load — the universe is glitching"
+  },
+  "forbidden": {
+    "title": "You Shall Not Pass!",
+    "subtitle": "PigPig got bounced at the door. 🔒 This area is restricted to Bot Owners only.",
+    "goHome": "Take Me Home",
+    "goBack": "Go Back",
+    "memeTitle": "Consolation meme for the rejected",
+    "refresh": "Another One 🎲",
+    "memeError": "Even the meme is forbidden here"
+  },
   "admin": {
     "usersTitle": "User Management",
     "usersWithMemory": "users with memory data",

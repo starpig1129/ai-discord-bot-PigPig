@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { type ReactNode } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -10,6 +11,8 @@ import Guilds from './pages/admin/Guilds';
 import Logs from './pages/admin/Logs';
 import Update from './pages/admin/Update';
 import Users from './pages/admin/Users';
+import NotFound from './pages/NotFound';
+import Forbidden from './pages/Forbidden';
 
 import GuildLayout from './pages/admin/GuildLayout';
 import GuildOverview from './pages/admin/guild/Overview';
@@ -22,6 +25,7 @@ import UserMemory from './pages/admin/user/Memory';
 import UserStatsPage from './pages/admin/user/UserStats';
 import DeleteData from './pages/admin/user/DeleteData';
 import { useAuth } from './hooks/useAuth';
+import { getStoredUser } from './lib/auth';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,6 +42,12 @@ function UserPortalWrapper() {
   return <UserPortal user={user} />;
 }
 
+function RequireOwner({ children }: { children: ReactNode }) {
+  const stored = getStoredUser();
+  if (!stored || stored.role !== 'owner') return <Forbidden />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -51,11 +61,11 @@ export default function App() {
             {/* Admin (Bot Owner) routes */}
             <Route path="/admin" element={<Dashboard />} />
             <Route path="/admin/stats" element={<Stats />} />
-            <Route path="/admin/config" element={<Config />} />
+            <Route path="/admin/config" element={<RequireOwner><Config /></RequireOwner>} />
             <Route path="/admin/guilds" element={<Guilds />} />
-            <Route path="/admin/logs" element={<Logs />} />
-            <Route path="/admin/update" element={<Update />} />
-            <Route path="/admin/users" element={<Users />} />
+            <Route path="/admin/logs" element={<RequireOwner><Logs /></RequireOwner>} />
+            <Route path="/admin/update" element={<RequireOwner><Update /></RequireOwner>} />
+            <Route path="/admin/users" element={<RequireOwner><Users /></RequireOwner>} />
 
 
             {/* Server Admin routes — GuildLayout uses Outlet */}
@@ -75,8 +85,8 @@ export default function App() {
             </Route>
           </Route>
 
-          {/* Catch-all redirect */}
-          <Route path="*" element={<Navigate to="/admin" replace />} />
+          {/* Catch-all: show 404 page */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

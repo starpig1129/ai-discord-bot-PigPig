@@ -274,6 +274,23 @@
     "memoryPlaceholderBackground": "輸入背景資訊、個人脈絡...",
     "activeOnServers": "活躍伺服器數"
   },
+  "notFound": {
+    "title": "PigPig 迷路了！",
+    "subtitle": "糟糕… PigPig 跑進了數位虛空。這個頁面不存在或已經被搬走了。",
+    "goHome": "帶我回家",
+    "memeTitle": "迷路時來看個梗圖",
+    "refresh": "換一張 🎲",
+    "memeError": "連梗圖都載入失敗，宇宙在故障"
+  },
+  "forbidden": {
+    "title": "你不能通過！",
+    "subtitle": "PigPig 被擋在門外了。🔒 此區域僅限 Bot Owner 進入。",
+    "goHome": "帶我回家",
+    "goBack": "返回",
+    "memeTitle": "給被拒絕的你一張安慰梗圖",
+    "refresh": "換一張 🎲",
+    "memeError": "連梗圖都被禁止存取了"
+  },
   "admin": {
     "usersTitle": "使用者管理",
     "usersWithMemory": "個使用者擁有記憶資料",
