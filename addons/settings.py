@@ -385,6 +385,7 @@ class AttachmentConfig:
         data = _load_yaml_file(path)
         cfg = data.get("attachments", {})
         self.enabled: bool = bool(cfg.get("enabled", True))
+        self.max_download_bytes: int = int(cfg.get("max_download_bytes", 52428800))
         self.image = _AttachmentImageConfig(cfg.get("image", {}))
         self.pdf = _AttachmentPdfConfig(cfg.get("pdf", {}))
         self.video = _AttachmentVideoConfig(cfg.get("video", {}))

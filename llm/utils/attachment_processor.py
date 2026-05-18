@@ -81,6 +81,20 @@ def _resize_if_needed(img: Image.Image, max_dim: int) -> Image.Image:
     return img
 
 
+def _decode_image(data: bytes, max_dimension: int) -> Image.Image:
+    """Synchronously decode and resize an image; intended for thread-pool execution.
+
+    Args:
+        data: Raw image file bytes.
+        max_dimension: Maximum allowed value for the longest image side.
+
+    Returns:
+        RGB PIL Image, resized if necessary.
+    """
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    return _resize_if_needed(img, max_dimension)
+
+
 async def _process_image(data: bytes) -> list[dict]:
     """Decode raw image bytes, optionally resize, and encode as a content part.
 
@@ -91,9 +105,58 @@ async def _process_image(data: bytes) -> list[dict]:
         A single-element list containing an ``image_url`` content part.
     """
     cfg = attachment_config.image
-    img = Image.open(io.BytesIO(data)).convert("RGB")
-    img = _resize_if_needed(img, cfg.max_dimension)
+    img = await asyncio.to_thread(_decode_image, data, cfg.max_dimension)
     return [_pil_to_content_part(img)]
+
+
+def _render_pdf(data: bytes, cfg: object) -> tuple[list, bool, list[int], int, int]:
+    """Synchronously render PDF pages to PIL Images; intended for thread-pool execution.
+
+    Args:
+        data: Raw PDF file bytes.
+        cfg: ``_AttachmentPdfConfig`` instance with rendering parameters.
+
+    Returns:
+        Tuple of ``(pages, truncated, selected_indices, half, total_pages)`` where
+        *pages* is a list of PIL Images for the selected page range and *half* is
+        the count of front pages used when truncation occurred.
+    """
+    from pdf2image import convert_from_bytes, pdfinfo_from_bytes
+
+    preview = None
+    try:
+        info = pdfinfo_from_bytes(data)
+        total_pages: int = int(info.get("Pages", 0))
+    except Exception:
+        preview = convert_from_bytes(data, dpi=72, fmt="jpeg")
+        total_pages = len(preview)
+
+    if total_pages <= cfg.threshold_full:
+        dpi = cfg.dpi_full
+    elif total_pages <= cfg.threshold_medium:
+        dpi = cfg.dpi_medium
+    else:
+        dpi = cfg.dpi_compressed
+
+    max_p = cfg.max_pages
+    if total_pages <= max_p:
+        selected_indices = list(range(total_pages))
+        truncated = False
+        half = 0
+    else:
+        half = max_p // 2
+        front = list(range(half))
+        back = list(range(total_pages - (max_p - half), total_pages))
+        selected_indices = front + back
+        truncated = True
+
+    # Reuse preview render when fallback already used dpi=72 and target DPI is also 72
+    if preview is not None and dpi == 72:
+        pages = preview
+    else:
+        pages = convert_from_bytes(data, dpi=dpi, fmt="jpeg")
+
+    return pages, truncated, selected_indices, half, total_pages
 
 
 async def _process_pdf(data: bytes, filename: str) -> list[dict]:
@@ -115,42 +178,13 @@ async def _process_pdf(data: bytes, filename: str) -> list[dict]:
         List of content parts — optionally a leading ``text`` truncation notice
         followed by one ``image_url`` part per selected page.
     """
-    from pdf2image import convert_from_bytes, pdfinfo_from_bytes
-
     cfg = attachment_config.pdf
 
-    preview = None
-    try:
-        info = pdfinfo_from_bytes(data)
-        total_pages: int = int(info.get("Pages", 0))
-    except Exception:
-        preview = convert_from_bytes(data, dpi=72, fmt="jpeg")
-        total_pages = len(preview)
-
-    if total_pages <= cfg.threshold_full:
-        dpi = cfg.dpi_full
-    elif total_pages <= cfg.threshold_medium:
-        dpi = cfg.dpi_medium
-    else:
-        dpi = cfg.dpi_compressed
+    pages, truncated, selected_indices, half, total_pages = await asyncio.to_thread(
+        _render_pdf, data, cfg
+    )
 
     max_p = cfg.max_pages
-    if total_pages <= max_p:
-        selected_indices = list(range(total_pages))
-        truncated = False
-    else:
-        half = max_p // 2
-        front = list(range(half))
-        back = list(range(total_pages - (max_p - half), total_pages))
-        selected_indices = front + back
-        truncated = True
-
-    # Reuse preview render when fallback already used dpi=72 and target DPI is also 72
-    if preview is not None and dpi == 72:
-        pages = preview
-    else:
-        pages = convert_from_bytes(data, dpi=dpi, fmt="jpeg")
-
     parts: list[dict] = []
 
     if truncated and cfg.notify_truncated:
@@ -171,23 +205,17 @@ async def _process_pdf(data: bytes, filename: str) -> list[dict]:
     return parts
 
 
-async def _process_video(data: bytes, filename: str) -> list[dict]:
-    """Sample key frames from a video and encode each as a content part.
-
-    Frames are sampled at least ``min_interval_sec`` seconds apart.  If the
-    resulting candidate count exceeds ``max_frames`` the candidates are
-    uniformly subsampled.
+def _decode_video(data: bytes, cfg: object) -> list[Image.Image]:
+    """Synchronously decode video key frames; intended for thread-pool execution.
 
     Args:
         data: Raw video file bytes.
-        filename: Original filename (used in log context).
+        cfg: ``_AttachmentVideoConfig`` instance with frame-sampling parameters.
 
     Returns:
-        List of ``image_url`` content parts, one per sampled frame.
+        List of RGB PIL Images, one per sampled frame.
     """
     from decord import VideoReader, cpu
-
-    cfg = attachment_config.video
 
     with io.BytesIO(data) as f:
         vr = VideoReader(f, ctx=cpu(0))
@@ -205,11 +233,26 @@ async def _process_video(data: bytes, filename: str) -> list[dict]:
 
         frames = vr.get_batch(indices).asnumpy()
 
-    parts = []
-    for frame in frames:
-        img = Image.fromarray(frame.astype("uint8")).convert("RGB")
-        parts.append(_pil_to_content_part(img))
-    return parts
+    return [Image.fromarray(frame.astype("uint8")).convert("RGB") for frame in frames]
+
+
+async def _process_video(data: bytes, filename: str) -> list[dict]:
+    """Sample key frames from a video and encode each as a content part.
+
+    Frames are sampled at least ``min_interval_sec`` seconds apart.  If the
+    resulting candidate count exceeds ``max_frames`` the candidates are
+    uniformly subsampled.
+
+    Args:
+        data: Raw video file bytes.
+        filename: Original filename (used in log context).
+
+    Returns:
+        List of ``image_url`` content parts, one per sampled frame.
+    """
+    cfg = attachment_config.video
+    pil_frames = await asyncio.to_thread(_decode_video, data, cfg)
+    return [_pil_to_content_part(img) for img in pil_frames]
 
 
 async def process_attachment(attachment: "discord.Attachment") -> list[dict]:
@@ -233,6 +276,17 @@ async def process_attachment(attachment: "discord.Attachment") -> list[dict]:
 
     content_type = attachment.content_type or ""
     filename = attachment.filename
+
+    max_bytes: int = attachment_config.max_download_bytes
+    attachment_size = getattr(attachment, "size", None)
+    if isinstance(attachment_size, (int, float)) and attachment_size > max_bytes:
+        return [{
+            "type": "text",
+            "text": (
+                f"[Attachment too large: {filename} "
+                f"({attachment_size} bytes, limit {max_bytes})]"
+            ),
+        }]
 
     try:
         if content_type.startswith("image/") and attachment_config.image.enabled:

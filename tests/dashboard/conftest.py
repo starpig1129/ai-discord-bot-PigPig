@@ -28,14 +28,27 @@ def _stub_module(name: str, **attrs: object) -> types.ModuleType:
 
 
 # -- addons.settings --------------------------------------------------------
+# Snapshot real symbols from the already-loaded module (if present) so that
+# tests collected *after* this conftest — e.g. test_attachment_config.py
+# (imports AttachmentConfig) and test_embed_processor.py (imports
+# attachment_config) — continue to receive valid, non-stub values even
+# though sys.modules["addons.settings"] will point to our lightweight stub.
+_real_settings = sys.modules.get("addons.settings")
+_real_attachment_config = getattr(_real_settings, "attachment_config", None)
+_real_AttachmentConfig = getattr(_real_settings, "AttachmentConfig", None)
+_real_memory_config = getattr(_real_settings, "memory_config", None)
+_real_update_config = getattr(_real_settings, "update_config", None)
+
 _memory_cfg = MagicMock()
 _memory_cfg.qdrant.host = "localhost"
 _memory_cfg.qdrant.port = 6333
 
 _settings_mod = _stub_module(
     "addons.settings",
-    memory_config=_memory_cfg,
-    update_config=MagicMock(),
+    memory_config=_real_memory_config if _real_memory_config is not None else _memory_cfg,
+    update_config=_real_update_config if _real_update_config is not None else MagicMock(),
+    attachment_config=_real_attachment_config if _real_attachment_config is not None else MagicMock(),
+    AttachmentConfig=_real_AttachmentConfig if _real_AttachmentConfig is not None else MagicMock(),
 )
 # Ensure parent package is also registered
 sys.modules.setdefault("addons", _stub_module("addons"))

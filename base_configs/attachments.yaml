@@ -1,6 +1,7 @@
 # base_configs/attachments.yaml
 attachments:
   enabled: true
+  max_download_bytes: 52428800  # 50 MB
 
   image:
     enabled: true
