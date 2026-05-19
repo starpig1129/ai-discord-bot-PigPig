@@ -33,6 +33,8 @@ class ProceduralMemoryProvider:
         # key: user_id (str), value: (UserInfo, expire_at: float monotonic)
         self._cache: Dict[str, Tuple[UserInfo, float]] = {}
         self._lock = asyncio.Lock()
+        # prevents cache stampedes
+        self._pending_queries: Dict[str, asyncio.Event] = {}
 
     async def get(self, user_ids: List[str]) -> ProceduralMemory:
         """Fetch procedural memory with per-user TTL cache.
@@ -49,40 +51,65 @@ class ProceduralMemoryProvider:
         if not user_ids or not self.user_manager:
             return ProceduralMemory(user_info={})
 
-        now = time.monotonic()
         result: Dict[str, UserInfo] = {}
         missing_ids: List[str] = []
+        my_events: Dict[str, asyncio.Event] = {}
 
-        async with self._lock:
-            for uid in user_ids:
-                entry = self._cache.get(uid)
-                if entry is not None and entry[1] > now:
-                    result[uid] = entry[0]
-                else:
-                    missing_ids.append(uid)
+        try:
+            while True:
+                events_to_wait = []
+                async with self._lock:
+                    now = time.monotonic()
+                    for uid in user_ids:
+                        if uid in result or uid in missing_ids:
+                            continue
 
-        if missing_ids:
-            try:
-                fetched: Dict[str, UserInfo] = await self.user_manager.get_multiple_users(
-                    [str(uid) for uid in missing_ids]
-                )
-            except Exception as e:
-                await func.report_error(e, "ProceduralMemoryProvider.get failed while fetching users")
-                fetched = {}
+                        event = self._pending_queries.get(uid)
+                        if event:
+                            events_to_wait.append(event)
+                            continue
 
-            expire_at = time.monotonic() + memory_config.procedural_cache_ttl
-            async with self._lock:
-                for uid, info in fetched.items():
-                    self._cache[uid] = (info, expire_at)
-                    result[uid] = info
+                        entry = self._cache.get(uid)
+                        if entry is not None and entry[1] > now:
+                            result[uid] = entry[0]
+                        else:
+                            missing_ids.append(uid)
+                            new_event = asyncio.Event()
+                            self._pending_queries[uid] = new_event
+                            my_events[uid] = new_event
 
-                if len(self._cache) > self.max_cache_size:
-                    now_insert = time.monotonic()
-                    self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+                if not events_to_wait:
+                    break
 
-                    while len(self._cache) > self.max_cache_size:
-                        oldest_key = next(iter(self._cache))
-                        self._cache.pop(oldest_key)
+                for e in events_to_wait:
+                    await e.wait()
+
+            if missing_ids:
+                try:
+                    fetched: Dict[str, UserInfo] = await self.user_manager.get_multiple_users(
+                        [str(uid) for uid in missing_ids]
+                    )
+                except Exception as e:
+                    await func.report_error(e, "ProceduralMemoryProvider.get failed while fetching users")
+                    fetched = {}
+
+                expire_at = time.monotonic() + memory_config.procedural_cache_ttl
+                async with self._lock:
+                    for uid, info in fetched.items():
+                        self._cache[uid] = (info, expire_at)
+                        result[uid] = info
+
+                    if len(self._cache) > self.max_cache_size:
+                        now_insert = time.monotonic()
+                        self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+
+                        while len(self._cache) > self.max_cache_size:
+                            oldest_key = next(iter(self._cache))
+                            self._cache.pop(oldest_key)
+        finally:
+            for uid, event in my_events.items():
+                self._pending_queries.pop(uid, None)
+                event.set()
 
         return ProceduralMemory(user_info=result)
 
@@ -97,3 +124,6 @@ class ProceduralMemoryProvider:
         """
         async with self._lock:
             self._cache.pop(str(user_id), None)
+            event = self._pending_queries.pop(str(user_id), None)
+            if event:
+                event.set()
