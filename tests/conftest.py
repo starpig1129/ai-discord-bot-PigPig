@@ -15,3 +15,20 @@
 # importable.
 
 import addons.settings  # noqa: F401  — side-effect: caches real module
+
+import sys
+import unittest.mock
+
+# Create a mock discord module that has the required types for other modules to import
+mock_discord = unittest.mock.MagicMock()
+mock_discord.AllowedMentions = unittest.mock.MagicMock
+mock_discord.Message = unittest.mock.MagicMock
+mock_discord.Embed = unittest.mock.MagicMock
+mock_discord.File = unittest.mock.MagicMock
+mock_discord.Colour = unittest.mock.MagicMock
+mock_discord.Color = unittest.mock.MagicMock
+
+# Do not overwrite if discord is already in sys.modules,
+# but our mock helps when tests bypass loading real discord.py
+if 'discord' not in sys.modules:
+    sys.modules['discord'] = mock_discord
