@@ -34,6 +34,7 @@ class KnowledgeMemoryProvider:
         # key: (type, target_id), value: (content, expire_at)
         self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
         self._lock = asyncio.Lock()
+        self._pending_queries: Dict[Tuple[str, str], asyncio.Event] = {}
 
     async def get(self, guild_id: Optional[str], channel_id: str) -> KnowledgeMemory:
         """Fetch knowledge for the current guild and channel.
@@ -57,37 +58,58 @@ class KnowledgeMemoryProvider:
         )
 
     async def _get_single(self, target_type: str, target_id: str) -> Optional[str]:
-        """Internal helper with TTL cache."""
-        now = time.monotonic()
+        """Internal helper with TTL cache and thundering herd protection."""
         cache_key = (target_type, target_id)
-        
-        async with self._lock:
-            entry = self._cache.get(cache_key)
-            if entry is not None and entry[1] > now:
-                return entry[0]
-        
-        # Cache miss
+
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                entry = self._cache.get(cache_key)
+                if entry is not None and entry[1] > now:
+                    return entry[0]
+
+                event = self._pending_queries.get(cache_key)
+                if not event:
+                    event = asyncio.Event()
+                    self._pending_queries[cache_key] = event
+                    break # We are the one to fetch it
+
+            # Wait for the pending query to complete outside the lock
+            await event.wait()
+
         try:
-            content = await self.storage.get_knowledge(target_type, target_id)
-        except Exception as e:
-            await func.report_error(e, f"KnowledgeMemoryProvider fetch failed ({target_type}:{target_id})")
-            content = None
-            
-        # Update cache
-        expire_at = now + getattr(memory_config, "knowledge_cache_ttl", 300) # Default 5 mins
-        async with self._lock:
-            self._cache[cache_key] = (content, expire_at)
-            
-            # Prune cache if needed
-            if len(self._cache) > self.max_cache_size:
-                self._cache = {k: v for k, v in self._cache.items() if v[1] > now}
-                while len(self._cache) > self.max_cache_size:
-                    oldest_key = next(iter(self._cache))
-                    self._cache.pop(oldest_key)
-                    
-        return content
+            # Cache miss - fetch from DB
+            try:
+                content = await self.storage.get_knowledge(target_type, target_id)
+            except Exception as e:
+                await func.report_error(e, f"KnowledgeMemoryProvider fetch failed ({target_type}:{target_id})")
+                content = None
+
+            # Update cache
+            now = time.monotonic()
+            expire_at = now + getattr(memory_config, "knowledge_cache_ttl", 300) # Default 5 mins
+            async with self._lock:
+                self._cache[cache_key] = (content, expire_at)
+
+                # Prune cache if needed
+                if len(self._cache) > self.max_cache_size:
+                    now_insert = time.monotonic()
+                    self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+                    while len(self._cache) > self.max_cache_size:
+                        oldest_key = next(iter(self._cache))
+                        self._cache.pop(oldest_key)
+
+            return content
+        finally:
+            async with self._lock:
+                if self._pending_queries.get(cache_key) is event:
+                    self._pending_queries.pop(cache_key, None)
+            event.set()
 
     async def invalidate(self, target_type: str, target_id: str) -> None:
         """Invalidate cache for a specific target."""
         async with self._lock:
             self._cache.pop((target_type, target_id), None)
+            event = self._pending_queries.pop((target_type, target_id), None)
+            if event:
+                event.set()
