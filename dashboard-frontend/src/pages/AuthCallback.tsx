@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
   const handled = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (handled.current) return;
@@ -15,8 +16,6 @@ export default function AuthCallback() {
     const accessToken = params.get('access_token');
 
     if (code) {
-      // New SPA flow: Discord redirected here with ?code=
-      // POST the code to backend to exchange for JWT
       const redirectUri = `${window.location.origin}/callback`;
       api
         .post('/auth/discord/exchange', { code, redirect_uri: redirectUri })
@@ -25,11 +24,14 @@ export default function AuthCallback() {
           localStorage.setItem('user', JSON.stringify(data.user));
           navigate('/admin', { replace: true });
         })
-        .catch(() => {
-          navigate('/login', { replace: true });
+        .catch((err) => {
+          const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error';
+          const status = err?.response?.status ?? 'Network error';
+          console.error('[AuthCallback] exchange failed', status, detail);
+          setError(`Login failed (${status}): ${detail}`);
+          setTimeout(() => navigate('/login', { replace: true }), 4000);
         });
     } else if (accessToken) {
-      // Legacy flow fallback: token passed directly in URL
       localStorage.setItem('access_token', accessToken);
       navigate('/admin', { replace: true });
     } else {
@@ -37,6 +39,27 @@ export default function AuthCallback() {
       navigate(stored ? '/admin' : '/login', { replace: true });
     }
   }, [navigate]);
+
+  if (error) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--color-bg-primary)',
+        flexDirection: 'column',
+        gap: '1rem',
+        color: 'white',
+        padding: '2rem',
+        textAlign: 'center',
+      }}>
+        <div style={{ fontSize: '3rem' }}>⚠️</div>
+        <p style={{ color: '#f87171', fontWeight: 600 }}>{error}</p>
+        <p style={{ opacity: 0.5, fontSize: '0.875rem' }}>Redirecting to login…</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{
