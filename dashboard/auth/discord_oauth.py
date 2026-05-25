@@ -156,8 +156,11 @@ async def discord_exchange(request: Request) -> JSONResponse:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         if token_resp.status_code != 200:
+            discord_error = token_resp.json().get("error", "unknown") if "application/json" in token_resp.headers.get("content-type", "") else token_resp.text
             log.error(f"Discord token exchange failed: {token_resp.text}")
-            raise HTTPException(status_code=502, detail="Discord token exchange failed")
+            # Use 400 so Cloudflare tunnel passes the response through with CORS headers.
+            # 502 from origin causes CF edge to replace the response with its own error page.
+            raise HTTPException(status_code=400, detail=f"Discord auth failed: {discord_error}")
         token_data = token_resp.json()
         discord_access_token = token_data["access_token"]
 
@@ -166,7 +169,7 @@ async def discord_exchange(request: Request) -> JSONResponse:
             headers={"Authorization": f"Bearer {discord_access_token}"},
         )
         if user_resp.status_code != 200:
-            raise HTTPException(status_code=502, detail="Failed to fetch Discord user info")
+            raise HTTPException(status_code=400, detail="Failed to fetch Discord user info")
         user_data = user_resp.json()
 
         guilds_resp = await client.get(
@@ -257,7 +260,7 @@ async def discord_callback(request: Request, code: Optional[str] = None) -> Resp
 
         if token_resp.status_code != 200:
             log.error(f"Discord token exchange failed: {token_resp.text}")
-            raise HTTPException(status_code=502, detail="Discord token exchange failed")
+            raise HTTPException(status_code=400, detail="Discord token exchange failed")
 
         token_data = token_resp.json()
         discord_access_token = token_data["access_token"]
@@ -268,7 +271,7 @@ async def discord_callback(request: Request, code: Optional[str] = None) -> Resp
             headers={"Authorization": f"Bearer {discord_access_token}"},
         )
         if user_resp.status_code != 200:
-            raise HTTPException(status_code=502, detail="Failed to fetch Discord user info")
+            raise HTTPException(status_code=400, detail="Failed to fetch Discord user info")
         user_data = user_resp.json()
 
         # Fetch user guilds
