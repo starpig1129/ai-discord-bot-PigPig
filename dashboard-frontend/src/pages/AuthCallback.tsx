@@ -1,33 +1,40 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../lib/api';
 
-/**
- * OAuth callback handler — extracts access_token from the URL query parameters
- * (provided by backend redirect) and redirects to admin dashboard.
- */
 export default function AuthCallback() {
   const navigate = useNavigate();
+  const handled = useRef(false);
 
   useEffect(() => {
+    if (handled.current) return;
+    handled.current = true;
+
     const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
     const accessToken = params.get('access_token');
 
-    if (accessToken) {
-      // First invocation: token is in URL — store it and navigate
+    if (code) {
+      // New SPA flow: Discord redirected here with ?code=
+      // POST the code to backend to exchange for JWT
+      const redirectUri = `${window.location.origin}/callback`;
+      api
+        .post('/auth/discord/exchange', { code, redirect_uri: redirectUri })
+        .then(({ data }) => {
+          localStorage.setItem('access_token', data.access_token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          navigate('/admin', { replace: true });
+        })
+        .catch(() => {
+          navigate('/login', { replace: true });
+        });
+    } else if (accessToken) {
+      // Legacy flow fallback: token passed directly in URL
       localStorage.setItem('access_token', accessToken);
-      console.log('[AuthCallback] Token stored, navigating to /admin');
       navigate('/admin', { replace: true });
     } else {
-      // Second invocation (React StrictMode double-invoke) or direct visit:
-      // check if token was already stored by the first invocation
       const stored = localStorage.getItem('access_token');
-      if (stored) {
-        console.log('[AuthCallback] Token already in storage, navigating to /admin');
-        navigate('/admin', { replace: true });
-      } else {
-        console.warn('[AuthCallback] No token found — redirecting to /login');
-        navigate('/login', { replace: true });
-      }
+      navigate(stored ? '/admin' : '/login', { replace: true });
     }
   }, [navigate]);
 
@@ -47,4 +54,3 @@ export default function AuthCallback() {
     </div>
   );
 }
-

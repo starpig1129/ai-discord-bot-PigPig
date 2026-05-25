@@ -2,8 +2,10 @@
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
 
-export function loginWithDiscord(): void {
-  window.location.href = `${API_BASE}/auth/discord/login`;
+export async function loginWithDiscord(): Promise<void> {
+  const res = await fetch(`${API_BASE}/auth/discord/authorize-url`);
+  const { url } = await res.json() as { url: string };
+  window.location.href = url;
 }
 
 export function logout(): void {

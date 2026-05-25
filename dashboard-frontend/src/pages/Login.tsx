@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { loginWithDiscord } from '../lib/auth';
@@ -5,6 +6,16 @@ import { loginWithDiscord } from '../lib/auth';
 
 export default function Login() {
   const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin() {
+    setLoading(true);
+    try {
+      await loginWithDiscord();
+    } catch {
+      setLoading(false);
+    }
+  }
   return (
     <div style={{
       minHeight: '100vh',
@@ -79,7 +90,8 @@ export default function Login() {
         <motion.button
           whileHover={{ scale: 1.02, y: -2 }}
           whileTap={{ scale: 0.98 }}
-          onClick={loginWithDiscord}
+          onClick={handleLogin}
+          disabled={loading}
           style={{
             width: '100%',
             padding: '0.875rem 1.5rem',

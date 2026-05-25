@@ -84,6 +84,114 @@ async def discord_login(request: Request) -> RedirectResponse:
     return RedirectResponse(url)
 
 
+@router.get("/discord/authorize-url")
+async def discord_authorize_url() -> JSONResponse:
+    """Return the Discord OAuth2 authorization URL as JSON.
+
+    The frontend redirects the browser to Discord without ever visiting
+    the backend domain — keeps api-pigpig.spkuan.cc invisible to users.
+    """
+    dashboard_cfg = getattr(base_config, "dashboard", {})
+    cors_origins = dashboard_cfg.get("cors_origins", ["http://localhost:5173"])
+    frontend_url = cors_origins[0].rstrip("/")
+    redirect_uri = f"{frontend_url}/callback"
+    params = {
+        "client_id": tokens.client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": SCOPES,
+    }
+    url = f"{DISCORD_AUTHORIZE_URL}?{urlencode(params)}"
+    return JSONResponse({"url": url})
+
+
+@router.post("/discord/exchange")
+async def discord_exchange(request: Request) -> JSONResponse:
+    """Exchange a Discord authorization code for a JWT.
+
+    Called by the frontend /callback page after Discord redirects back
+    with ?code=. The browser never visits the backend domain.
+    """
+    body = await request.json()
+    code: Optional[str] = body.get("code")
+    redirect_uri: Optional[str] = body.get("redirect_uri")
+    if not code or not redirect_uri:
+        raise HTTPException(status_code=400, detail="Missing code or redirect_uri")
+
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(
+            DISCORD_TOKEN_URL,
+            data={
+                "client_id": tokens.client_id,
+                "client_secret": tokens.client_secret_id,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        if token_resp.status_code != 200:
+            log.error(f"Discord token exchange failed: {token_resp.text}")
+            raise HTTPException(status_code=502, detail="Discord token exchange failed")
+        token_data = token_resp.json()
+        discord_access_token = token_data["access_token"]
+
+        user_resp = await client.get(
+            f"{DISCORD_API_BASE}/users/@me",
+            headers={"Authorization": f"Bearer {discord_access_token}"},
+        )
+        if user_resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Failed to fetch Discord user info")
+        user_data = user_resp.json()
+
+        guilds_resp = await client.get(
+            f"{DISCORD_API_BASE}/users/@me/guilds",
+            headers={"Authorization": f"Bearer {discord_access_token}"},
+        )
+        guild_ids: list[str] = []
+        if guilds_resp.status_code == 200:
+            guild_ids = [str(g["id"]) for g in guilds_resp.json()]
+
+    user_id = str(user_data["id"])
+    bot_owner_id = str(getattr(tokens, "bot_owner_id", 0))
+    role = "owner" if user_id == bot_owner_id else "user"
+
+    bot = _get_bot(request)
+    admin_guild_ids: list[str] = []
+    if bot and role != "owner":
+        for gid in guild_ids:
+            guild = bot.get_guild(int(gid))
+            if guild:
+                member = guild.get_member(int(user_id))
+                if member and member.guild_permissions.administrator:
+                    admin_guild_ids.append(gid)
+        if admin_guild_ids:
+            role = "admin"
+
+    username = user_data.get("username", "")
+    avatar = user_data.get("avatar", "")
+    access_token = create_access_token(
+        user_id=user_id, role=role, guild_ids=guild_ids,
+        avatar=avatar, username=username,
+    )
+    refresh_token = create_refresh_token(user_id=user_id)
+    log.info(f"Dashboard login: user={username} ({user_id}), role={role}")
+
+    response = JSONResponse({
+        "access_token": access_token,
+        "user": {
+            "id": user_id, "username": username, "avatar": avatar,
+            "role": role, "guild_ids": guild_ids, "admin_guild_ids": admin_guild_ids,
+        },
+    })
+    response.set_cookie(
+        key="refresh_token", value=refresh_token,
+        httponly=True, secure=True, samesite="none",
+        max_age=7 * 86400, path="/auth",
+    )
+    return response
+
+
 @router.get("/discord/callback")
 async def discord_callback(request: Request, code: Optional[str] = None) -> Response:
     """Handle the Discord OAuth2 callback.
