@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../lib/api';
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -17,16 +18,28 @@ export default function AuthCallback() {
 
     if (code) {
       const redirectUri = `${window.location.origin}/callback`;
-      api
-        .post('/auth/discord/exchange', { code, redirect_uri: redirectUri })
-        .then(({ data }) => {
+      // Use plain fetch without credentials to avoid CF bot-management cookie validation (403).
+      // The exchange endpoint creates a new session and doesn't need existing cookies.
+      fetch(`${API_BASE}/auth/discord/exchange`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, redirect_uri: redirectUri }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw Object.assign(new Error(body.detail ?? res.statusText), { status: res.status });
+          }
+          return res.json();
+        })
+        .then((data) => {
           localStorage.setItem('access_token', data.access_token);
           localStorage.setItem('user', JSON.stringify(data.user));
           navigate('/admin', { replace: true });
         })
         .catch((err) => {
-          const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error';
-          const status = err?.response?.status ?? 'Network error';
+          const detail = (err as { message?: string }).message ?? 'Unknown error';
+          const status = (err as { status?: number }).status ?? 'Network error';
           console.error('[AuthCallback] exchange failed', status, detail);
           setError(`Login failed (${status}): ${detail}`);
           setTimeout(() => navigate('/login', { replace: true }), 4000);
