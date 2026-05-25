@@ -158,3 +158,27 @@ body {
 .animate-slide-up {
   animation: slide-up 0.5s ease-out forwards;
 }
+
+/* ── Responsive utilities ──────────────────────────────────────────── */
+
+/* Prevent content overflow on all screen sizes */
+img, svg, video {
+  max-width: 100%;
+}
+
+/* Prevent page-level horizontal scroll on mobile */
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+  }
+
+  /* Smaller heading on very small screens */
+  h1 {
+    font-size: clamp(1.25rem, 5vw, 1.75rem) !important;
+  }
+
+  /* Glass card hover lift disabled on touch — avoid stuck hover state */
+  .glass-card:hover {
+    transform: none;
+  }
+}

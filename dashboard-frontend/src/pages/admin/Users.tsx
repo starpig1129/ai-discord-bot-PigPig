@@ -144,7 +144,8 @@ export default function Users() {
 
       {/* User Table */}
       <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+        <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', minWidth: 600 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
               {[t('user.discordId'), t('user.discordName'), t('user.nicknames'), t('dashboard.lastUpdated'), t('user.memory'), ''].map((h) => (
@@ -206,6 +207,7 @@ export default function Users() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pagination */}

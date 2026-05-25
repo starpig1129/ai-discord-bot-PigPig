@@ -5,6 +5,7 @@ import { useOutletContext } from 'react-router-dom';
 import api from '../../../lib/api';
 import ModuleCard from '../../../components/prompt/ModuleCard';
 import type { PromptModule } from '../../../components/prompt/ModuleCard';
+import { useIsMobile } from '../../../hooks/useIsMobile';
 interface Channel {
   id: string;
   name: string;
@@ -459,6 +460,7 @@ function DetailPanel({ channel, guildId, onChannelUpdate }: DetailPanelProps) {
 export default function GuildChannels() {
   const { guildId } = useOutletContext<GuildContext>();
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [data, setData] = useState<ChannelData | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingMode, setSavingMode] = useState(false);
@@ -510,104 +512,146 @@ export default function GuildChannels() {
 
   const selectedChannel = data.channels.find(c => c.id === selectedId) ?? null;
 
-  return (
-    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', height: '100%' }}>
-
-      {/* ── Left: channel selector ──────────────────────────────────── */}
-      <div style={{
-        width: 240, flexShrink: 0,
-        display: 'flex', flexDirection: 'column', gap: '0.875rem',
-        position: 'sticky', top: 0,
-      }}>
-        {/* Global mode pill selector */}
-        <div className="glass-card" style={{ padding: '0.875rem' }}>
-          <p style={{
-            fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase',
-            letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: '0.6rem',
-          }}>
-            {t('guild.globalMode')}
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            {MODES.map(mode => (
-              <motion.button
-                key={mode}
-                onClick={() => updateGuildMode(mode)}
-                disabled={savingMode}
-                whileHover={!savingMode && data.guild_mode !== mode ? { backgroundColor: 'rgba(255, 255, 255, 0.05)' } : undefined}
-                style={{
-                  padding: '0.4rem 0.75rem', textAlign: 'left',
-                  borderRadius: 'var(--radius-sm)', border: '1px solid',
-                  borderColor: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'transparent',
-                  background: data.guild_mode === mode ? 'rgba(59,130,246,0.12)' : 'transparent',
-                  color: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
-                  cursor: savingMode ? 'not-allowed' : 'pointer', fontSize: '0.8125rem', fontWeight: data.guild_mode === mode ? 600 : 400,
-                  opacity: savingMode ? 0.7 : 1, transition: 'all 0.15s',
-                }}
-              >
-                {data.guild_mode === mode ? '● ' : '○ '}{t(`guild.mode_${mode}`)}
-              </motion.button>
-            ))}
-          </div>
-        </div>
-
-        {/* Channel list */}
-        <div style={{
-          display: 'flex', flexDirection: 'column', gap: '0.625rem',
-          maxHeight: 'calc(100vh - 260px)', overflowY: 'auto',
-          paddingRight: '0.25rem',
+  // ── Shared: channel list panel ────────────────────────────────────
+  const channelListPanel = (
+    <div style={{
+      width: isMobile ? '100%' : 240,
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '0.875rem',
+      position: isMobile ? 'static' : 'sticky',
+      top: 0,
+    }}>
+      {/* Global mode pill selector */}
+      <div className="glass-card" style={{ padding: '0.875rem' }}>
+        <p style={{
+          fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: '0.6rem',
         }}>
-          {Object.entries(grouped).map(([category, channels]) => (
-            <div key={category}>
-              <p style={{
-                fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase',
-                letterSpacing: '0.09em', color: 'var(--color-text-muted)',
-                marginBottom: '0.35rem', paddingLeft: '0.5rem',
-              }}>
-                {category}
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                {channels.map(ch => {
-                  const isActive = ch.id === selectedId;
-                  const hasBadge = ch.in_whitelist || ch.in_blacklist || ch.auto_response;
-                  return (
-                    <button
-                      key={ch.id}
-                      onClick={() => setSelectedId(ch.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.4rem',
-                        padding: '0.5rem 0.75rem', width: '100%', textAlign: 'left',
-                        borderRadius: 'var(--radius-md)',
-                        border: '1px solid',
-                        borderColor: isActive ? 'rgba(139,92,246,0.4)' : 'transparent',
-                        background: isActive ? 'rgba(139,92,246,0.1)' : 'transparent',
-                        color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                        cursor: 'pointer', fontSize: '0.8125rem',
-                        fontWeight: isActive ? 600 : 400,
-                        transition: 'all 0.12s',
-                      }}
-                    >
-                      <span style={{ color: isActive ? 'var(--color-accent-violet)' : 'var(--color-text-muted)', fontSize: '0.9rem' }}>#</span>
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {ch.name}
-                      </span>
-                      {hasBadge && (
-                        <span style={{
-                          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                          background: ch.in_blacklist ? 'var(--color-accent-rose)'
-                            : ch.in_whitelist ? 'var(--color-accent-emerald)'
-                            : 'var(--color-accent-blue)',
-                        }} />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {t('guild.globalMode')}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+          {MODES.map(mode => (
+            <motion.button
+              key={mode}
+              onClick={() => updateGuildMode(mode)}
+              disabled={savingMode}
+              whileHover={!savingMode && data.guild_mode !== mode ? { backgroundColor: 'rgba(255, 255, 255, 0.05)' } : undefined}
+              style={{
+                padding: '0.4rem 0.75rem', textAlign: 'left',
+                borderRadius: 'var(--radius-sm)', border: '1px solid',
+                borderColor: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'transparent',
+                background: data.guild_mode === mode ? 'rgba(59,130,246,0.12)' : 'transparent',
+                color: data.guild_mode === mode ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
+                cursor: savingMode ? 'not-allowed' : 'pointer', fontSize: '0.8125rem', fontWeight: data.guild_mode === mode ? 600 : 400,
+                opacity: savingMode ? 0.7 : 1, transition: 'all 0.15s',
+              }}
+            >
+              {data.guild_mode === mode ? '● ' : '○ '}{t(`guild.mode_${mode}`)}
+            </motion.button>
           ))}
         </div>
       </div>
 
-      {/* ── Right: detail panel ─────────────────────────────────────── */}
+      {/* Channel list */}
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: '0.625rem',
+        maxHeight: isMobile ? 'none' : 'calc(100vh - 260px)',
+        overflowY: isMobile ? 'visible' : 'auto',
+        paddingRight: '0.25rem',
+      }}>
+        {Object.entries(grouped).map(([category, channels]) => (
+          <div key={category}>
+            <p style={{
+              fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '0.09em', color: 'var(--color-text-muted)',
+              marginBottom: '0.35rem', paddingLeft: '0.5rem',
+            }}>
+              {category}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              {channels.map(ch => {
+                const isActive = ch.id === selectedId;
+                const hasBadge = ch.in_whitelist || ch.in_blacklist || ch.auto_response;
+                return (
+                  <button
+                    key={ch.id}
+                    onClick={() => setSelectedId(ch.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.4rem',
+                      padding: '0.5rem 0.75rem', width: '100%', textAlign: 'left',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid',
+                      borderColor: isActive ? 'rgba(139,92,246,0.4)' : 'transparent',
+                      background: isActive ? 'rgba(139,92,246,0.1)' : 'transparent',
+                      color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                      cursor: 'pointer', fontSize: '0.8125rem',
+                      fontWeight: isActive ? 600 : 400,
+                      transition: 'all 0.12s',
+                    }}
+                  >
+                    <span style={{ color: isActive ? 'var(--color-accent-violet)' : 'var(--color-text-muted)', fontSize: '0.9rem' }}>#</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ch.name}
+                    </span>
+                    {hasBadge && (
+                      <span style={{
+                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                        background: ch.in_blacklist ? 'var(--color-accent-rose)'
+                          : ch.in_whitelist ? 'var(--color-accent-emerald)'
+                          : 'var(--color-accent-blue)',
+                      }} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── Mobile: show list OR detail (not both) ─────────────────────────
+  if (isMobile) {
+    if (selectedChannel) {
+      return (
+        <div>
+          <button
+            onClick={() => setSelectedId(null)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+              background: 'transparent',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--color-text-secondary)',
+              cursor: 'pointer',
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              marginBottom: '1rem',
+              width: '100%',
+            }}
+          >
+            ← {t('common.back')}
+          </button>
+          <DetailPanel
+            channel={selectedChannel}
+            guildId={guildId}
+            onChannelUpdate={(updated) => handleChannelUpdate(selectedChannel.id, updated)}
+          />
+        </div>
+      );
+    }
+    return channelListPanel;
+  }
+
+  // ── Desktop: side-by-side ──────────────────────────────────────────
+  return (
+    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', height: '100%' }}>
+      {channelListPanel}
+
+      {/* Right: detail panel */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <AnimatePresence mode="wait">
           {selectedChannel ? (

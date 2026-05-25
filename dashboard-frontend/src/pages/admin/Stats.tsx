@@ -6,11 +6,13 @@ import {
   PieChart, Pie, Cell, Legend, BarChart, Bar,
 } from 'recharts';
 import api from '../../lib/api';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#f43f5e', '#06b6d4'];
 
 export default function Stats() {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [period, setPeriod] = useState('30d');
   const [globalStats, setGlobalStats] = useState<any>(null);
   const [modelStats, setModelStats] = useState<any>(null);
@@ -42,16 +44,16 @@ export default function Stats() {
   }
 
   const periodLabels: Record<string, string> = {
-    '7d': t('stats.period7'), 
-    '30d': t('stats.period30'), 
+    '7d': t('stats.period7'),
+    '30d': t('stats.period30'),
     '90d': t('stats.period90'),
     'all': t('stats.periodAll'),
   };
   const summaryCards = globalStats ? [
-    { 
-      label: period === 'all' ? t('stats.totalMessages') : `${t('stats.totalMessages')} (${period})`, 
-      value: (globalStats?.total_messages ?? 0).toLocaleString(), 
-      icon: '💬' 
+    {
+      label: period === 'all' ? t('stats.totalMessages') : `${t('stats.totalMessages')} (${period})`,
+      value: (globalStats?.total_messages ?? 0).toLocaleString(),
+      icon: '💬'
     },
     { label: 'LLM Calls',             value: (globalStats?.total_llm_calls ?? 0).toLocaleString(), icon: '🤖' },
     { label: 'Commands',              value: (globalStats?.total_commands ?? 0).toLocaleString(), icon: '⌨️' },
@@ -61,9 +63,17 @@ export default function Stats() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      {/* Header: stacks on mobile */}
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'center',
+        gap: isMobile ? '1rem' : 0,
+        marginBottom: '2rem',
+      }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700 }}>📈 {t('stats.title')}</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           {['7d', '30d', '90d', 'all'].map((p) => (
             <button
               key={p}
@@ -87,7 +97,12 @@ export default function Stats() {
       </div>
 
       {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+        gap: '1rem',
+        marginBottom: '2rem',
+      }}>
         {summaryCards.map((card, i) => (
           <motion.div
             key={card.label}
@@ -114,7 +129,7 @@ export default function Stats() {
         style={{ padding: '1.5rem', marginBottom: '1.5rem' }}
       >
         <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>{t('stats.messageTrend')}</h2>
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height={isMobile ? 200 : 300}>
           <AreaChart data={globalStats?.daily_messages || []}>
             <defs>
               <linearGradient id="colorMessages" x1="0" y1="0" x2="0" y2="1">
@@ -138,8 +153,12 @@ export default function Stats() {
         </ResponsiveContainer>
       </motion.div>
 
-      {/* Model Usage */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+      {/* Model Usage — stacks on mobile */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gap: '1.5rem',
+      }}>
         <motion.div
           className="glass-card"
           initial={{ opacity: 0, y: 20 }}
@@ -179,7 +198,7 @@ export default function Stats() {
             <BarChart data={modelStats?.models || []} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
               <XAxis type="number" stroke="#64748b" fontSize={12} />
-              <YAxis type="category" dataKey="model" stroke="#64748b" fontSize={11} width={120} />
+              <YAxis type="category" dataKey="model" stroke="#64748b" fontSize={11} width={isMobile ? 80 : 120} />
               <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.5rem', color: '#f1f5f9' }} />
               <Bar dataKey="avg_response_ms" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -195,13 +214,12 @@ export default function Stats() {
         style={{ padding: '1.5rem', marginTop: '1.5rem' }}
       >
         <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>🧠 {t('admin.memorySystem')}</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1rem' }}>
           {[
             { label: t('admin.users'), value: memoryStats?.procedural_users ?? '—', icon: '👤' },
             { label: t('admin.channelSegments'),  value: memoryStats?.episodic_total ?? '—',   icon: '💾' },
             { label: t('admin.vectorCollections'), value: memoryStats?.vector_collections ?? '—', icon: '🔮' },
           ].map((item) => (
-
             <div
               key={item.label}
               style={{
@@ -220,6 +238,5 @@ export default function Stats() {
         </div>
       </motion.div>
     </div>
-
   );
 }

@@ -3,21 +3,23 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { type User, getAvatarUrl } from '../lib/auth';
 import { LANGUAGES } from '../i18n';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface SidebarProps {
   user: User;
   onLogout: () => void;
+  isMobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export default function Sidebar({ user, onLogout }: SidebarProps) {
+export default function Sidebar({ user, onLogout, isMobileOpen = false, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const { t, i18n } = useTranslation();
+  const isMobile = useIsMobile();
 
   const isOwner = user.role === 'owner';
   const isAdmin = user.role === 'owner' || user.role === 'admin';
 
-  // Owner-only routes are hidden from admins and general users.
-  // Admin routes are hidden from general users.
   const NAV_ITEMS = [
     { path: '/admin',        label: t('nav.dashboard'), icon: '📊', show: isAdmin },
     { path: '/admin/stats',  label: t('nav.stats'),     icon: '📈', show: isAdmin },
@@ -32,7 +34,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
   return (
     <motion.aside
       initial={{ x: -260 }}
-      animate={{ x: 0 }}
+      animate={{ x: isMobile ? (isMobileOpen ? 0 : -260) : 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       style={{
         width: 260,
@@ -47,21 +49,46 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
         zIndex: 40,
       }}
     >
-      {/* Logo */}
-      <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--color-border)' }}>
-        <h1
-          className="gradient-text"
-          style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em' }}
-        >
-          🐷 PigPig
-        </h1>
-        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-          Dashboard
-        </p>
+      {/* Logo + mobile close button */}
+      <div style={{
+        padding: '1.5rem',
+        borderBottom: '1px solid var(--color-border)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <div>
+          <h1
+            className="gradient-text"
+            style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em' }}
+          >
+            🐷 PigPig
+          </h1>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+            Dashboard
+          </p>
+        </div>
+        {isMobile && (
+          <button
+            onClick={onMobileClose}
+            aria-label="Close menu"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              fontSize: '1.25rem',
+              padding: '0.25rem',
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav style={{ flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+      <nav style={{ flex: 1, padding: '1rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem', overflowY: 'auto' }}>
         {NAV_ITEMS.map((item) => {
           const isActive = location.pathname === item.path ||
             (item.path !== '/admin' && location.pathname.startsWith(item.path));
@@ -72,6 +99,7 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
               )}
               <NavLink
                 to={item.path}
+                onClick={isMobile ? onMobileClose : undefined}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
