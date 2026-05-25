@@ -101,6 +101,8 @@ async def discord_authorize_url(request: Request) -> JSONResponse:
     referer = request.headers.get("referer")
     origin = request.headers.get("origin")
 
+    log.info(f"[authorize-url] Received query_origin={query_origin}, referer={referer}, origin={origin}")
+
     dashboard_cfg = getattr(base_config, "dashboard", {})
     cors_origins = dashboard_cfg.get("cors_origins", ["http://localhost:5173"])
     frontend_url = cors_origins[0]
@@ -112,6 +114,15 @@ async def discord_authorize_url(request: Request) -> JSONResponse:
         parsed = urlparse(referer)
         target_origin = f"{parsed.scheme}://{parsed.netloc}"
 
+    # Fallback for production: if referer is missing/stripped but request is secure,
+    # default to the first secure origin in cors_origins.
+    if not target_origin and (request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"):
+        for o in cors_origins:
+            if o.startswith("https://"):
+                target_origin = o
+                log.info(f"[authorize-url] Fallback triggered, selected secure origin={target_origin}")
+                break
+
     if target_origin:
         cleaned_origins = [o.rstrip("/") for o in cors_origins]
         cleaned_target = target_origin.rstrip("/")
@@ -120,6 +131,8 @@ async def discord_authorize_url(request: Request) -> JSONResponse:
 
     frontend_url = frontend_url.rstrip("/")
     redirect_uri = f"{frontend_url}/callback"
+    log.info(f"[authorize-url] Resolved target_origin={target_origin}, frontend_url={frontend_url}, redirect_uri={redirect_uri}")
+
     params = {
         "client_id": tokens.client_id,
         "redirect_uri": redirect_uri,
@@ -137,87 +150,103 @@ async def discord_exchange(request: Request) -> JSONResponse:
     Called by the frontend /callback page after Discord redirects back
     with ?code=. The browser never visits the backend domain.
     """
-    body = await request.json()
-    code: Optional[str] = body.get("code")
-    redirect_uri: Optional[str] = body.get("redirect_uri")
-    if not code or not redirect_uri:
-        raise HTTPException(status_code=400, detail="Missing code or redirect_uri")
+    log.info("[discord_exchange] Exchange request initiated")
+    try:
+        body = await request.json()
+        code: Optional[str] = body.get("code")
+        redirect_uri: Optional[str] = body.get("redirect_uri")
+        log.info(f"[discord_exchange] Received code={'present' if code else 'missing'}, redirect_uri={redirect_uri}")
 
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post(
-            DISCORD_TOKEN_URL,
-            data={
-                "client_id": tokens.client_id,
-                "client_secret": tokens.client_secret_id,
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
+        if not code or not redirect_uri:
+            return JSONResponse(status_code=400, content={"detail": "Missing code or redirect_uri"})
+
+        async with httpx.AsyncClient() as client:
+            log.info(f"[discord_exchange] Posting to Discord token URL: {DISCORD_TOKEN_URL}")
+            token_resp = await client.post(
+                DISCORD_TOKEN_URL,
+                data={
+                    "client_id": tokens.client_id,
+                    "client_secret": tokens.client_secret_id,
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            log.info(f"[discord_exchange] Discord token response status: {token_resp.status_code}")
+            if token_resp.status_code != 200:
+                discord_error = token_resp.json().get("error", "unknown") if "application/json" in token_resp.headers.get("content-type", "") else token_resp.text
+                log.error(f"Discord token exchange failed: {token_resp.text}")
+                # Return JSONResponse directly instead of raising HTTPException to guarantee
+                # that FastAPI's CORSMiddleware processes the response and adds CORS headers.
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": f"Discord auth failed: {discord_error}"}
+                )
+            token_data = token_resp.json()
+            discord_access_token = token_data["access_token"]
+
+            user_resp = await client.get(
+                f"{DISCORD_API_BASE}/users/@me",
+                headers={"Authorization": f"Bearer {discord_access_token}"},
+            )
+            if user_resp.status_code != 200:
+                return JSONResponse(status_code=400, content={"detail": "Failed to fetch Discord user info"})
+            user_data = user_resp.json()
+
+            guilds_resp = await client.get(
+                f"{DISCORD_API_BASE}/users/@me/guilds",
+                headers={"Authorization": f"Bearer {discord_access_token}"},
+            )
+            guild_ids: list[str] = []
+            if guilds_resp.status_code == 200:
+                guild_ids = [str(g["id"]) for g in guilds_resp.json()]
+
+        user_id = str(user_data["id"])
+        bot_owner_id = str(getattr(tokens, "bot_owner_id", 0))
+        role = "owner" if user_id == bot_owner_id else "user"
+
+        bot = _get_bot(request)
+        admin_guild_ids: list[str] = []
+        if bot and role != "owner":
+            for gid in guild_ids:
+                guild = bot.get_guild(int(gid))
+                if guild:
+                    member = guild.get_member(int(user_id))
+                    if member and member.guild_permissions.administrator:
+                        admin_guild_ids.append(gid)
+            if admin_guild_ids:
+                role = "admin"
+
+        username = user_data.get("username", "")
+        avatar = user_data.get("avatar", "")
+        access_token = create_access_token(
+            user_id=user_id, role=role, guild_ids=guild_ids,
+            avatar=avatar, username=username,
+        )
+        refresh_token = create_refresh_token(user_id=user_id)
+        log.info(f"Dashboard login success: user={username} ({user_id}), role={role}")
+
+        response = JSONResponse({
+            "access_token": access_token,
+            "user": {
+                "id": user_id, "username": username, "avatar": avatar,
+                "role": role, "guild_ids": guild_ids, "admin_guild_ids": admin_guild_ids,
             },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        })
+        response.set_cookie(
+            key="refresh_token", value=refresh_token,
+            httponly=True, secure=True, samesite="none",
+            max_age=7 * 86400, path="/auth",
         )
-        if token_resp.status_code != 200:
-            discord_error = token_resp.json().get("error", "unknown") if "application/json" in token_resp.headers.get("content-type", "") else token_resp.text
-            log.error(f"Discord token exchange failed: {token_resp.text}")
-            # Use 400 so Cloudflare tunnel passes the response through with CORS headers.
-            # 502 from origin causes CF edge to replace the response with its own error page.
-            raise HTTPException(status_code=400, detail=f"Discord auth failed: {discord_error}")
-        token_data = token_resp.json()
-        discord_access_token = token_data["access_token"]
-
-        user_resp = await client.get(
-            f"{DISCORD_API_BASE}/users/@me",
-            headers={"Authorization": f"Bearer {discord_access_token}"},
+        return response
+    except Exception as e:
+        log.exception(f"Unhandled exception in discord_exchange: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal server error: {str(e)}"}
         )
-        if user_resp.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to fetch Discord user info")
-        user_data = user_resp.json()
 
-        guilds_resp = await client.get(
-            f"{DISCORD_API_BASE}/users/@me/guilds",
-            headers={"Authorization": f"Bearer {discord_access_token}"},
-        )
-        guild_ids: list[str] = []
-        if guilds_resp.status_code == 200:
-            guild_ids = [str(g["id"]) for g in guilds_resp.json()]
-
-    user_id = str(user_data["id"])
-    bot_owner_id = str(getattr(tokens, "bot_owner_id", 0))
-    role = "owner" if user_id == bot_owner_id else "user"
-
-    bot = _get_bot(request)
-    admin_guild_ids: list[str] = []
-    if bot and role != "owner":
-        for gid in guild_ids:
-            guild = bot.get_guild(int(gid))
-            if guild:
-                member = guild.get_member(int(user_id))
-                if member and member.guild_permissions.administrator:
-                    admin_guild_ids.append(gid)
-        if admin_guild_ids:
-            role = "admin"
-
-    username = user_data.get("username", "")
-    avatar = user_data.get("avatar", "")
-    access_token = create_access_token(
-        user_id=user_id, role=role, guild_ids=guild_ids,
-        avatar=avatar, username=username,
-    )
-    refresh_token = create_refresh_token(user_id=user_id)
-    log.info(f"Dashboard login: user={username} ({user_id}), role={role}")
-
-    response = JSONResponse({
-        "access_token": access_token,
-        "user": {
-            "id": user_id, "username": username, "avatar": avatar,
-            "role": role, "guild_ids": guild_ids, "admin_guild_ids": admin_guild_ids,
-        },
-    })
-    response.set_cookie(
-        key="refresh_token", value=refresh_token,
-        httponly=True, secure=True, samesite="none",
-        max_age=7 * 86400, path="/auth",
-    )
-    return response
 
 
 @router.get("/discord/callback")
