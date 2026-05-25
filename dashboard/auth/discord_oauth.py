@@ -85,15 +85,40 @@ async def discord_login(request: Request) -> RedirectResponse:
 
 
 @router.get("/discord/authorize-url")
-async def discord_authorize_url() -> JSONResponse:
+async def discord_authorize_url(request: Request) -> JSONResponse:
     """Return the Discord OAuth2 authorization URL as JSON.
 
-    The frontend redirects the browser to Discord without ever visiting
-    the backend domain — keeps api-pigpig.spkuan.cc invisible to users.
+    Dynamically resolves the frontend origin to ensure the OAuth2 redirect
+    URI matches the origin from which the user initiated the login.
+
+    Args:
+        request: The current FastAPI request.
+
+    Returns:
+        JSONResponse containing the Discord authorization URL.
     """
+    query_origin = request.query_params.get("origin")
+    referer = request.headers.get("referer")
+    origin = request.headers.get("origin")
+
     dashboard_cfg = getattr(base_config, "dashboard", {})
     cors_origins = dashboard_cfg.get("cors_origins", ["http://localhost:5173"])
-    frontend_url = cors_origins[0].rstrip("/")
+    frontend_url = cors_origins[0]
+
+    # Dynamically match requested origin against allowed cors_origins
+    target_origin = query_origin or origin
+    if not target_origin and referer:
+        from urllib.parse import urlparse
+        parsed = urlparse(referer)
+        target_origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    if target_origin:
+        cleaned_origins = [o.rstrip("/") for o in cors_origins]
+        cleaned_target = target_origin.rstrip("/")
+        if cleaned_target in cleaned_origins:
+            frontend_url = target_origin
+
+    frontend_url = frontend_url.rstrip("/")
     redirect_uri = f"{frontend_url}/callback"
     params = {
         "client_id": tokens.client_id,
