@@ -4,10 +4,11 @@ const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
 
 // In dev, baseURL is '' so Vite proxy handles routing.
 // In production, set VITE_API_BASE_URL to the backend public URL (e.g. https://api.example.com).
+// withCredentials is NOT set globally — it causes Cloudflare to return 403
+// on cross-origin requests. Only /auth/refresh needs credentials (cookie).
 const api = axios.create({
   baseURL: apiBase,
   headers: { 'Content-Type': 'application/json' },
-  withCredentials: true,
 });
 
 // JWT interceptor — attach token from localStorage
