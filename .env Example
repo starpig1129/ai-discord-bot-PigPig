@@ -18,3 +18,8 @@ VECTOR_STORE_API_KEY = XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 CONFIG_ROOT="configs" #if not set, use default "./base_configs"
 
+# --- Dashboard Frontend (Cloudflare Pages) ---
+# Backend public URL exposed via Cloudflare Tunnel (no trailing slash)
+# Leave empty for local dev — Vite proxy handles routing automatically
+VITE_API_BASE_URL=https://api-pigpig.spkuan.cc
+

@@ -25,7 +25,13 @@ export function useWebSocket({ url, token, autoConnect = true }: UseWebSocketOpt
 
   const connect = useCallback(() => {
     if (!token) return;
-    const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}${url}?token=${token}`;
+    // In production VITE_API_BASE_URL points to the backend (e.g. https://api.example.com).
+    // Derive wss:// from https://, ws:// from http://, fallback to same-host for dev.
+    const apiBase = import.meta.env.VITE_API_BASE_URL as string | undefined;
+    const wsOrigin = apiBase
+      ? apiBase.replace(/^http/, 'ws').replace(/\/$/, '')
+      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+    const wsUrl = `${wsOrigin}${url}?token=${token}`;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
