@@ -15,3 +15,8 @@
 # importable.
 
 import addons.settings  # noqa: F401  — side-effect: caches real module
+import discord
+from unittest.mock import MagicMock
+
+# Create partial discord mock attributes needed during test collection
+discord.AllowedMentions = MagicMock()
