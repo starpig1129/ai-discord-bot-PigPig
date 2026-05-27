@@ -51,11 +51,12 @@ class YTMusic(commands.Cog):
     ])
     async def mode(self, interaction: discord.Interaction, mode: app_commands.Choice[str]):
         """播放模式命令"""
+        await interaction.response.defer(thinking=True)
         guild_id = interaction.guild.id
         if not self.lang_manager: # Ensure lang_manager is loaded
              self.lang_manager = self.bot.get_cog("LanguageManager")
              if not self.lang_manager:
-                 await interaction.response.send_message("Language manager not loaded.", ephemeral=True)
+                 await interaction.edit_original_response(content="Language manager not loaded.")
                  return
  
          # Localize choices (name is already localized by decorator, but value needs translation for response)
@@ -66,7 +67,7 @@ class YTMusic(commands.Cog):
 
         title = self.lang_manager.translate(str(guild_id), "commands", "mode", "responses", "success", mode=mode_name)
         embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
-        await interaction.response.send_message(embed=embed)
+        await interaction.edit_original_response(embed=embed)
         message = await interaction.original_response()
         state = self.state_manager.get_state(interaction.guild.id)
         state.ui_messages.append(message)
@@ -74,11 +75,12 @@ class YTMusic(commands.Cog):
     @app_commands.command(name="shuffle", description="切換隨機播放")
     async def shuffle(self, interaction: discord.Interaction):
         """隨機播放命令"""
+        await interaction.response.defer(thinking=True)
         guild_id = interaction.guild.id
         if not self.lang_manager: # Ensure lang_manager is loaded
              self.lang_manager = self.bot.get_cog("LanguageManager")
              if not self.lang_manager:
-                 await interaction.response.send_message("Language manager not loaded.", ephemeral=True)
+                 await interaction.edit_original_response(content="Language manager not loaded.")
                  return
  
         is_shuffle = self.queue_manager.toggle_shuffle(guild_id)
@@ -86,7 +88,7 @@ class YTMusic(commands.Cog):
         status = self.lang_manager.translate(str(guild_id), "commands", "shuffle", "responses", status_key)
         title = self.lang_manager.translate(str(guild_id), "commands", "shuffle", "responses", "success", status=status)
         embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
-        await interaction.response.send_message(embed=embed)
+        await interaction.edit_original_response(embed=embed)
         message = await interaction.original_response()
         state = self.state_manager.get_state(interaction.guild.id)
         state.ui_messages.append(message)
