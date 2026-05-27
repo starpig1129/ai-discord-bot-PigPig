@@ -33,7 +33,8 @@ class KnowledgeMemoryProvider:
         self.max_cache_size = max_cache_size
         # key: (type, target_id), value: (content, expire_at)
         self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
-        self._lock = asyncio.Lock()
+        # key: (type, target_id), value: asyncio.Event
+        self._pending_queries: Dict[Tuple[str, str], asyncio.Event] = {}
 
     async def get(self, guild_id: Optional[str], channel_id: str) -> KnowledgeMemory:
         """Fetch knowledge for the current guild and channel.
@@ -45,11 +46,17 @@ class KnowledgeMemoryProvider:
         Returns:
             KnowledgeMemory object containing both levels of knowledge.
         """
-        guild_knowledge = None
+        # Fetch both levels concurrently
+        tasks = []
         if guild_id:
-            guild_knowledge = await self._get_single("guild", guild_id)
+            tasks.append(self._get_single("guild", guild_id))
+        else:
+            async def null_task(): return None
+            tasks.append(null_task())
             
-        channel_knowledge = await self._get_single("channel", channel_id)
+        tasks.append(self._get_single("channel", channel_id))
+
+        guild_knowledge, channel_knowledge = await asyncio.gather(*tasks)
         
         return KnowledgeMemory(
             guild_knowledge=guild_knowledge,
@@ -57,37 +64,53 @@ class KnowledgeMemoryProvider:
         )
 
     async def _get_single(self, target_type: str, target_id: str) -> Optional[str]:
-        """Internal helper with TTL cache."""
-        now = time.monotonic()
+        """Internal helper with TTL cache and thundering herd protection."""
         cache_key = (target_type, target_id)
         
-        async with self._lock:
+        while True:
+            now = time.monotonic()
+
             entry = self._cache.get(cache_key)
             if entry is not None and entry[1] > now:
                 return entry[0]
-        
-        # Cache miss
-        try:
-            content = await self.storage.get_knowledge(target_type, target_id)
-        except Exception as e:
-            await func.report_error(e, f"KnowledgeMemoryProvider fetch failed ({target_type}:{target_id})")
-            content = None
             
-        # Update cache
-        expire_at = now + getattr(memory_config, "knowledge_cache_ttl", 300) # Default 5 mins
-        async with self._lock:
-            self._cache[cache_key] = (content, expire_at)
+            if cache_key in self._pending_queries:
+                await self._pending_queries[cache_key].wait()
+                continue
             
-            # Prune cache if needed
-            if len(self._cache) > self.max_cache_size:
-                self._cache = {k: v for k, v in self._cache.items() if v[1] > now}
-                while len(self._cache) > self.max_cache_size:
-                    oldest_key = next(iter(self._cache))
-                    self._cache.pop(oldest_key)
+            # Cache miss and no pending query, become the active fetcher
+            event = asyncio.Event()
+            self._pending_queries[cache_key] = event
+
+            try:
+                try:
+                    content = await self.storage.get_knowledge(target_type, target_id)
+                except Exception as e:
+                    await func.report_error(e, f"KnowledgeMemoryProvider fetch failed ({target_type}:{target_id})")
+                    content = None
                     
-        return content
+                expire_at = time.monotonic() + getattr(memory_config, "knowledge_cache_ttl", 300) # Default 5 mins
+
+                self._cache[cache_key] = (content, expire_at)
+
+                # Prune cache if needed
+                if len(self._cache) > self.max_cache_size:
+                    now_insert = time.monotonic()
+                    self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+                    while len(self._cache) > self.max_cache_size:
+                        oldest_key = next(iter(self._cache))
+                        self._cache.pop(oldest_key, None)
+
+                return content
+            finally:
+                self._pending_queries.pop(cache_key, None)
+                event.set()
 
     async def invalidate(self, target_type: str, target_id: str) -> None:
         """Invalidate cache for a specific target."""
-        async with self._lock:
-            self._cache.pop((target_type, target_id), None)
+        cache_key = (target_type, target_id)
+        self._cache.pop(cache_key, None)
+
+        event = self._pending_queries.pop(cache_key, None)
+        if event:
+            event.set()
