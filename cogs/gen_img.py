@@ -221,7 +221,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
 
         # Slash command still uses immediate reply but supports attachments (base64 → discord.File)
         if "error" in result:
-            await interaction.followup.send(result["error"])
+            await interaction.edit_original_response(content=result["error"])
         else:
             files = []
             attachments = result.get("attachments") or []
@@ -236,9 +236,9 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
                     self.logger.error(f"Slash reply conversion failed: {e}")
             content = result.get("content")
             if files:
-                await interaction.followup.send(content=content, files=files)
+                await interaction.edit_original_response(content=content, attachments=files)
             else:
-                await interaction.followup.send(content=content)
+                await interaction.edit_original_response(content=content)
 
     def _image_to_base64(self, image: Image.Image) -> str:
         """Convert a PIL Image to a base64-encoded string"""
