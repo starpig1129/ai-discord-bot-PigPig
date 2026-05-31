@@ -15,3 +15,27 @@
 # importable.
 
 import addons.settings  # noqa: F401  — side-effect: caches real module
+
+import sys
+from unittest.mock import MagicMock
+
+# Create a full mock for the discord module during test collection if it isn't
+# already fully initialized. We do this to ensure that AllowedMentions, Embed,
+# Color, etc. exist before modules like llm.utils.send_message try to use them.
+import discord
+discord.AllowedMentions = MagicMock()
+discord.Embed = MagicMock()
+discord.Color = MagicMock()
+discord.Colour = MagicMock()
+discord.File = MagicMock()
+discord.Message = MagicMock()
+
+if "discord.abc" not in sys.modules:
+    sys.modules["discord.abc"] = MagicMock()
+    discord.abc = sys.modules["discord.abc"]
+
+if "discord.errors" not in sys.modules:
+    discord_errors = MagicMock()
+    discord_errors.NotFound = Exception
+    sys.modules["discord.errors"] = discord_errors
+    discord.errors = discord_errors
