@@ -33,6 +33,7 @@ class ProceduralMemoryProvider:
         # key: user_id (str), value: (UserInfo, expire_at: float monotonic)
         self._cache: Dict[str, Tuple[UserInfo, float]] = {}
         self._lock = asyncio.Lock()
+        self._pending_queries: Dict[str, asyncio.Event] = {}
 
     async def get(self, user_ids: List[str]) -> ProceduralMemory:
         """Fetch procedural memory with per-user TTL cache.
@@ -49,17 +50,35 @@ class ProceduralMemoryProvider:
         if not user_ids or not self.user_manager:
             return ProceduralMemory(user_info={})
 
-        now = time.monotonic()
+        unique_ids = list(set(user_ids))
         result: Dict[str, UserInfo] = {}
-        missing_ids: List[str] = []
 
-        async with self._lock:
-            for uid in user_ids:
-                entry = self._cache.get(uid)
-                if entry is not None and entry[1] > now:
-                    result[uid] = entry[0]
-                else:
-                    missing_ids.append(uid)
+        while True:
+            missing_ids: List[str] = []
+            pending_events: List[asyncio.Event] = []
+
+            async with self._lock:
+                now = time.monotonic()
+                for uid in unique_ids:
+                    entry = self._cache.get(uid)
+                    if entry is not None and entry[1] > now:
+                        result[uid] = entry[0]
+                    elif uid in self._pending_queries:
+                        pending_events.append(self._pending_queries[uid])
+                    else:
+                        missing_ids.append(uid)
+
+                if pending_events:
+                    pass
+                elif missing_ids:
+                    for uid in missing_ids:
+                        self._pending_queries[uid] = asyncio.Event()
+
+            if pending_events:
+                await asyncio.gather(*(event.wait() for event in pending_events))
+                continue
+
+            break
 
         if missing_ids:
             try:
@@ -71,18 +90,26 @@ class ProceduralMemoryProvider:
                 fetched = {}
 
             expire_at = time.monotonic() + memory_config.procedural_cache_ttl
-            async with self._lock:
-                for uid, info in fetched.items():
-                    self._cache[uid] = (info, expire_at)
-                    result[uid] = info
 
-                if len(self._cache) > self.max_cache_size:
-                    now_insert = time.monotonic()
-                    self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+            try:
+                async with self._lock:
+                    for uid, info in fetched.items():
+                        self._cache[uid] = (info, expire_at)
+                        result[uid] = info
 
-                    while len(self._cache) > self.max_cache_size:
-                        oldest_key = next(iter(self._cache))
-                        self._cache.pop(oldest_key)
+                    if len(self._cache) > self.max_cache_size:
+                        now_insert = time.monotonic()
+                        self._cache = {k: v for k, v in self._cache.items() if v[1] > now_insert}
+
+                        while len(self._cache) > self.max_cache_size:
+                            oldest_key = next(iter(self._cache))
+                            self._cache.pop(oldest_key)
+            finally:
+                async with self._lock:
+                    for uid in missing_ids:
+                        event = self._pending_queries.pop(uid, None)
+                        if event:
+                            event.set()
 
         return ProceduralMemory(user_info=result)
 
@@ -97,3 +124,6 @@ class ProceduralMemoryProvider:
         """
         async with self._lock:
             self._cache.pop(str(user_id), None)
+            event = self._pending_queries.pop(str(user_id), None)
+            if event:
+                event.set()
