@@ -33,7 +33,7 @@ class KnowledgeMemoryProvider:
         self.max_cache_size = max_cache_size
         # key: (type, target_id), value: (content, expire_at)
         self._cache: Dict[Tuple[str, str], Tuple[Optional[str], float]] = {}
-        self._lock = asyncio.Lock()
+        self._pending_queries: Dict[Tuple[str, str], asyncio.Event] = {}
 
     async def get(self, guild_id: Optional[str], channel_id: str) -> KnowledgeMemory:
         """Fetch knowledge for the current guild and channel.
@@ -45,37 +45,50 @@ class KnowledgeMemoryProvider:
         Returns:
             KnowledgeMemory object containing both levels of knowledge.
         """
-        guild_knowledge = None
         if guild_id:
-            guild_knowledge = await self._get_single("guild", guild_id)
-            
-        channel_knowledge = await self._get_single("channel", channel_id)
+            guild_knowledge, channel_knowledge = await asyncio.gather(
+                self._get_single("guild", guild_id),
+                self._get_single("channel", channel_id)
+            )
+        else:
+            guild_knowledge = None
+            channel_knowledge = await self._get_single("channel", channel_id)
         
         return KnowledgeMemory(
             guild_knowledge=guild_knowledge,
             channel_knowledge=channel_knowledge
         )
-
     async def _get_single(self, target_type: str, target_id: str) -> Optional[str]:
         """Internal helper with TTL cache."""
-        now = time.monotonic()
         cache_key = (target_type, target_id)
         
-        async with self._lock:
+        while True:
+            now = time.monotonic()
             entry = self._cache.get(cache_key)
             if entry is not None and entry[1] > now:
                 return entry[0]
+
+            if cache_key in self._pending_queries:
+                await self._pending_queries[cache_key].wait()
+                continue
+
+            break
+
+        event = asyncio.Event()
+        self._pending_queries[cache_key] = event
         
-        # Cache miss
         try:
-            content = await self.storage.get_knowledge(target_type, target_id)
-        except Exception as e:
-            await func.report_error(e, f"KnowledgeMemoryProvider fetch failed ({target_type}:{target_id})")
-            content = None
+            # Cache miss
+            try:
+                content = await self.storage.get_knowledge(target_type, target_id)
+            except Exception as e:
+                await func.report_error(e, f"KnowledgeMemoryProvider fetch failed ({target_type}:{target_id})")
+                content = None
+
+            # Update cache
+            now = time.monotonic()
+            expire_at = now + getattr(memory_config, "knowledge_cache_ttl", 300) # Default 5 mins
             
-        # Update cache
-        expire_at = now + getattr(memory_config, "knowledge_cache_ttl", 300) # Default 5 mins
-        async with self._lock:
             self._cache[cache_key] = (content, expire_at)
             
             # Prune cache if needed
@@ -85,9 +98,14 @@ class KnowledgeMemoryProvider:
                     oldest_key = next(iter(self._cache))
                     self._cache.pop(oldest_key)
                     
-        return content
-
+            return content
+        finally:
+            self._pending_queries.pop(cache_key, None)
+            event.set()
     async def invalidate(self, target_type: str, target_id: str) -> None:
         """Invalidate cache for a specific target."""
-        async with self._lock:
-            self._cache.pop((target_type, target_id), None)
+        cache_key = (target_type, target_id)
+        self._cache.pop(cache_key, None)
+        event = self._pending_queries.pop(cache_key, None)
+        if event:
+            event.set()
