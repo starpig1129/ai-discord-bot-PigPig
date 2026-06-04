@@ -180,7 +180,7 @@ class MathCalculatorCog(commands.Cog):
                 transformations=transformations,
                 evaluate=True,
                 local_dict=local_dict,
-                global_dict={},  # Disable global_dict for safety
+                global_dict={'__builtins__': {}},  # Disable global_dict for safety
             )
 
             # Check for undefined functions
