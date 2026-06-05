@@ -103,6 +103,7 @@
       "embedding_model": "Embedding Model",
       "embedding_dim": "Embedding Dimensions",
       "ollama_url": "Ollama URL",
+      "vllm_url": "vLLM URL",
       "vector_search_k": "Vector Search Results (k)",
       "keyword_search_k": "Keyword Search Results (k)",
       "msg_threshold": "Message Trigger Threshold",

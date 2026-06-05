@@ -530,7 +530,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         
                         # Apply thought-budget control prompt for reasoning models
                         model_specific_prompt = full_info_prompt
-                        if any(x in current_info_model.lower() for x in ["ollama", "deepseek", "gemma", "r1"]):
+                        if any(x in current_info_model.lower() for x in ["ollama", "vllm", "deepseek", "gemma", "r1"]):
                             model_specific_prompt += llm_config.reasoning_optimization_prompt
 
                         # Instantiate model with zero retries to ensure immediate fallback on quota exhaustion
@@ -669,7 +669,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                         
                         # Apply thought-budget control prompt for reasoning models
                         model_specific_message_prompt = full_message_prompt
-                        if any(x in current_model.lower() for x in ["ollama", "deepseek", "gemma", "r1"]):
+                        if any(x in current_model.lower() for x in ["ollama", "vllm", "deepseek", "gemma", "r1"]):
                             model_specific_message_prompt += llm_config.reasoning_optimization_prompt
 
                         # Create agent with current model configured for zero retries

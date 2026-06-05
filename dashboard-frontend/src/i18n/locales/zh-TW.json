@@ -103,6 +103,7 @@
       "embedding_model": "嵌入模型",
       "embedding_dim": "嵌入維度",
       "ollama_url": "Ollama URL",
+      "vllm_url": "vLLM URL",
       "vector_search_k": "向量搜尋結果數（k）",
       "keyword_search_k": "關鍵字搜尋結果數（k）",
       "msg_threshold": "訊息觸發閾值",

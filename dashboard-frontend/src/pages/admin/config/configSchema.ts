@@ -95,6 +95,12 @@ export const CONFIG_SCHEMAS: AllConfigSchemas = {
       section: 'config.sections.llm_simple',
     },
     {
+      path: 'vllm_url',
+      labelKey: 'config.fields.vllm_url',
+      type: 'text',
+      section: 'config.sections.llm_simple',
+    },
+    {
       path: 'model_priorities',
       labelKey: 'config.fields.model_priorities',
       type: 'textarea',
@@ -158,6 +164,12 @@ export const CONFIG_SCHEMAS: AllConfigSchemas = {
     {
       path: 'ollama_url',
       labelKey: 'config.fields.ollama_url',
+      type: 'text',
+      section: 'config.sections.embedding',
+    },
+    {
+      path: 'vllm_url',
+      labelKey: 'config.fields.vllm_url',
       type: 'text',
       section: 'config.sections.embedding',
     },

@@ -163,6 +163,7 @@ class LLMConfig:
         self.data: dict = _load_yaml_file(path)
         self.model_priorities: list = self.data.get("model_priorities", [])
         self.google_search_agent: str = self.data.get("google_search_agent", "gemini-2.0-flash")
+        self.vllm_url: Optional[str] = self.data.get("vllm_url", self.data.get("ollama_url", "http://localhost:11434"))
         # Ollama server URL (defaults to localhost:11434)
         self.ollama_url: Optional[str] = self.data.get("ollama_url", "http://localhost:11434")
         self.llm_call_timeout: float = float(self.data.get("llm_call_timeout", 60))
@@ -328,7 +329,8 @@ class MemoryConfig:
         self.vector_search_k: int = data.get("vector_search_k", 5)
         self.keyword_search_k: int = data.get("keyword_search_k", 5)
 
-        # Ollama provider options
+        # Ollama/vLLM provider options
+        self.vllm_url: Optional[str] = data.get("vllm_url", data.get("ollama_url", "http://localhost:11434"))
         self.ollama_url: Optional[str] = data.get("ollama_url", "http://localhost:11434")
         # Generic provider options bag for future extensions
         self.provider_options: dict = data.get("provider_options", {})
