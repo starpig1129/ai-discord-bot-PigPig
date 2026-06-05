@@ -512,7 +512,10 @@ class PigPig(commands.Bot):
                 if not interaction.response.is_done():
                     await interaction.response.send_message(error_msg, ephemeral=True)
                 else:
-                    await interaction.followup.send(error_msg, ephemeral=True)
+                    try:
+                        await interaction.edit_original_response(content=error_msg, view=None)
+                    except discord.NotFound:
+                        await interaction.followup.send(error_msg, ephemeral=True)
             except Exception as send_e:
                 logger.error(f"Failed to send slash command error message: {send_e}")
 
