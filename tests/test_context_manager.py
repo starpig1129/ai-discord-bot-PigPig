@@ -11,6 +11,21 @@ async def _noop_report_error(*args, **kwargs):
 # Lightweight stubs for optional external dependencies used by ContextManager
 fake_discord = types.ModuleType("discord")
 fake_discord.Message = object
+class _FakeAllowedMentions:
+    def __init__(self, **kwargs):
+        pass
+fake_discord.AllowedMentions = _FakeAllowedMentions
+fake_discord.Embed = object
+fake_discord.Colour = object
+fake_discord.File = object
+class _FakeDiscordErrors:
+    class NotFound(Exception):
+        pass
+class _FakeDiscordABC:
+    class Messageable:
+        pass
+fake_discord.errors = _FakeDiscordErrors
+fake_discord.abc = _FakeDiscordABC
 sys.modules.setdefault("discord", fake_discord)
 
 fake_langchain_messages = types.ModuleType("langchain_core.messages")
