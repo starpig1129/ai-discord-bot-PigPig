@@ -145,12 +145,16 @@ class HelpCog(commands.Cog):
                     "no_commands",
                     default="目前沒有可用的指令。"
                 )
-                await interaction.followup.send(fallback, ephemeral=True)
+                await interaction.edit_original_response(content=fallback)
                 return
 
             # Discord allows up to 10 embeds per message; send in batches if needed
-            for start in range(0, len(embeds), 10):
-                await interaction.followup.send(embeds=embeds[start:start + 10])
+            for i, start in enumerate(range(0, len(embeds), 10)):
+                batch = embeds[start:start + 10]
+                if i == 0:
+                    await interaction.edit_original_response(embeds=batch)
+                else:
+                    await interaction.followup.send(embeds=batch)
 
         except Exception as e:
             log.exception("Error building help response")
@@ -162,7 +166,7 @@ class HelpCog(commands.Cog):
                 "error_message",
                 default="生成指令列表時發生錯誤，請稍後再試。"
             )
-            await interaction.followup.send(fallback_error, ephemeral=True)
+            await interaction.edit_original_response(content=fallback_error)
 
 async def setup(bot):
     await bot.add_cog(HelpCog(bot))
