@@ -1,3 +1,4 @@
+import discord
 # tests/conftest.py
 #
 # This conftest pre-loads the real addons.settings module before any test
