@@ -15,3 +15,4 @@
 # importable.
 
 import addons.settings  # noqa: F401  — side-effect: caches real module
+import discord # noqa: F401 - side-effect: cache real module
