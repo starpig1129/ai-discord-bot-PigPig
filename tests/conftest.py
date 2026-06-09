@@ -14,4 +14,5 @@
 # real attachment/memory symbols (see that file) so downstream modules remain
 # importable.
 
+import discord
 import addons.settings  # noqa: F401  — side-effect: caches real module
