@@ -1,17 +1,36 @@
-# tests/conftest.py
-#
-# This conftest pre-loads the real addons.settings module before any test
-# module is collected. Without this, test files that install lightweight
-# sys.modules stubs for addons.settings (e.g. test_bot_info_tool.py via
-# setdefault) would install a sparse fake before the real module is cached,
-# causing ImportError for symbols like attachment_config or memory_config in
-# subsequently-collected test modules.
-#
-# Loading the real module here guarantees sys.modules["addons.settings"] holds
-# the genuine object when test_bot_info_tool.py's setdefault calls execute,
-# so those calls become no-ops.  test_context_manager.py still unconditionally
-# overwrites the entry with its own stub, but that stub is enriched with the
-# real attachment/memory symbols (see that file) so downstream modules remain
-# importable.
+import sys
+import unittest.mock
 
-import addons.settings  # noqa: F401  — side-effect: caches real module
+# Create a robust discord module mock *before* any other imports
+mock_discord = unittest.mock.MagicMock()
+
+class MockAllowedMentions:
+    def __init__(self, **kwargs):
+        pass
+
+class MockEmbed:
+    def __init__(self, **kwargs):
+        pass
+
+class MockColour:
+    @classmethod
+    def red(cls): return cls()
+    @classmethod
+    def green(cls): return cls()
+
+class MockFile:
+    def __init__(self, fp, filename=None):
+        pass
+
+mock_discord.AllowedMentions = MockAllowedMentions
+mock_discord.Embed = MockEmbed
+mock_discord.Colour = MockColour
+mock_discord.File = MockFile
+mock_discord.abc.Messageable = unittest.mock.MagicMock()
+mock_discord.errors.NotFound = Exception
+
+# Only cache the module if it doesn't already exist to avoid clobbering tests that need the real one
+if 'discord' not in sys.modules:
+    sys.modules['discord'] = mock_discord
+
+import addons.settings
