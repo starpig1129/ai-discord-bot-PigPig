@@ -1,5 +1,6 @@
 from typing import List, Any
 import re
+import asyncio
 
 import discord
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -41,6 +42,21 @@ class ShortTermMemoryProvider:
                 msg async for msg in message.channel.history(limit=self.limit)
             ]
             history.reverse()
+
+            attachment_map = {}
+            if _att_cfg.enabled:
+                attachments_to_process = []
+                for msg in history:
+                    attachments_to_process.extend(msg.attachments)
+
+                if attachments_to_process:
+                    tasks = [process_attachment(att) for att in attachments_to_process]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for att, res in zip(attachments_to_process, results):
+                        if isinstance(res, Exception):
+                            attachment_map[att.id] = [{"type": "text", "text": f"[Attachment processing failed: {getattr(att, 'filename', 'unknown')}]"}]
+                        else:
+                            attachment_map[att.id] = res
 
             result: List[BaseMessage] = []
             for msg in history:
@@ -87,8 +103,9 @@ class ShortTermMemoryProvider:
 
                 if msg.attachments and _att_cfg.enabled:
                     for attachment in msg.attachments:
-                        parts = await process_attachment(attachment)
-                        content_parts.extend(parts)
+                        parts = attachment_map.get(attachment.id, [])
+                        if parts:
+                            content_parts.extend(parts)
 
                 if msg.embeds and _att_cfg.embeds.enabled:
                     for embed in msg.embeds:
