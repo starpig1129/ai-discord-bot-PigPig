@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Any
 import re
 
@@ -42,8 +43,36 @@ class ShortTermMemoryProvider:
             ]
             history.reverse()
 
+            # Collect all attachment processing tasks upfront to process concurrently
+            attachment_tasks = []
+            attachment_task_indices = []  # Maps task index back to (msg_index, attachment)
+
+            for msg_idx, msg in enumerate(history):
+                if msg.attachments and _att_cfg.enabled:
+                    for attachment in msg.attachments:
+                        attachment_tasks.append(process_attachment(attachment))
+                        attachment_task_indices.append(msg_idx)
+
+            # Execute all attachment tasks concurrently
+            processed_attachments_by_msg = {i: [] for i in range(len(history))}
+            if attachment_tasks:
+                results = await asyncio.gather(*attachment_tasks, return_exceptions=True)
+                for i, result_parts in enumerate(results):
+                    msg_idx = attachment_task_indices[i]
+                    if isinstance(result_parts, Exception):
+                        # On failure, we could log it. process_attachment is meant to handle
+                        # its own exceptions and return a fallback text part, but just in case:
+                        from addons.logging import get_logger
+                        log = get_logger(source=__name__, server_id="system")
+                        log.warning(f"Attachment processing raised exception: {result_parts}")
+                        processed_attachments_by_msg[msg_idx].extend(
+                            [{"type": "text", "text": "[Attachment processing failed]"}]
+                        )
+                    else:
+                        processed_attachments_by_msg[msg_idx].extend(result_parts)
+
             result: List[BaseMessage] = []
-            for msg in history:
+            for msg_idx, msg in enumerate(history):
                 content_parts = []
                 content_suffix = []
 
@@ -85,10 +114,8 @@ class ShortTermMemoryProvider:
                 else:
                     content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> <eom>  [{ ' | '.join(content_suffix)}]"})
 
-                if msg.attachments and _att_cfg.enabled:
-                    for attachment in msg.attachments:
-                        parts = await process_attachment(attachment)
-                        content_parts.extend(parts)
+                # Add concurrently processed attachments
+                content_parts.extend(processed_attachments_by_msg[msg_idx])
 
                 if msg.embeds and _att_cfg.embeds.enabled:
                     for embed in msg.embeds:
