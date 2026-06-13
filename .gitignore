@@ -67,4 +67,4 @@ data/stats/
 
 # Dashboard session / refresh-token SQLite store
 data/dashboard/
-data/auth/
+data/auth/docs/
