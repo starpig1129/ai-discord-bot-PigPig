@@ -1,5 +1,6 @@
 from typing import List, Any
 import re
+import asyncio
 
 import discord
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -41,6 +42,25 @@ class ShortTermMemoryProvider:
                 msg async for msg in message.channel.history(limit=self.limit)
             ]
             history.reverse()
+
+            attachment_tasks = []
+            attachment_mapping = []
+            for msg in history:
+                if msg.attachments and _att_cfg.enabled:
+                    for attachment in msg.attachments:
+                        attachment_tasks.append(process_attachment(attachment))
+                        attachment_mapping.append(msg.id)
+
+            attachment_results = {}
+            if attachment_tasks:
+                results = await asyncio.gather(*attachment_tasks, return_exceptions=True)
+                for msg_id, res in zip(attachment_mapping, results):
+                    if msg_id not in attachment_results:
+                        attachment_results[msg_id] = []
+                    if isinstance(res, Exception):
+                        attachment_results[msg_id].extend([{"type": "text", "text": f"[Attachment processing failed: {type(res).__name__}]"}])
+                    else:
+                        attachment_results[msg_id].extend(res)
 
             result: List[BaseMessage] = []
             for msg in history:
@@ -85,10 +105,8 @@ class ShortTermMemoryProvider:
                 else:
                     content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> <eom>  [{ ' | '.join(content_suffix)}]"})
 
-                if msg.attachments and _att_cfg.enabled:
-                    for attachment in msg.attachments:
-                        parts = await process_attachment(attachment)
-                        content_parts.extend(parts)
+                if msg.id in attachment_results:
+                    content_parts.extend(attachment_results[msg.id])
 
                 if msg.embeds and _att_cfg.embeds.enabled:
                     for embed in msg.embeds:
