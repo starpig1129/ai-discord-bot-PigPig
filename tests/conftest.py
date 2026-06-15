@@ -15,3 +15,20 @@
 # importable.
 
 import addons.settings  # noqa: F401  — side-effect: caches real module
+
+import sys
+try:
+    import discord
+except ImportError:
+    from unittest.mock import MagicMock
+    mock_discord = MagicMock()
+    mock_discord.AllowedMentions = MagicMock()
+    mock_discord.Embed = MagicMock()
+    mock_discord.Colour = MagicMock()
+    mock_discord.Message = MagicMock()
+    mock_discord.File = MagicMock()
+    mock_discord.abc = MagicMock()
+    mock_discord.abc.Messageable = MagicMock()
+    mock_discord.errors = MagicMock()
+    mock_discord.errors.NotFound = Exception
+    sys.modules['discord'] = mock_discord
