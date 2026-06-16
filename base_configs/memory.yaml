@@ -10,12 +10,13 @@ qdrant_url: http://localhost:6333 # Qdrant HTTP endpoint
 qdrant_collection_name: discord_bot_memory
 
 # Embedding provider selection
-# available providers: base, openai, huggingface, ollama, google
+# available providers: base, openai, huggingface, ollama, google, vllm
 embedding_provider: google
 embedding_model_name: gemini-embedding-001
 embedding_dim: 3072
 
 ollama_url: http://localhost:11434
+vllm_url: http://127.0.0.1:8182
 
 # Provider options map for advanced configuration (optional)
 provider_options:
