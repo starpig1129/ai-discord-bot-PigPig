@@ -11,7 +11,6 @@ logger = get_logger(server_id="Bot", source="llm.orchestrator")
 import discord
 from discord import Message
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
-from langchain.chat_models import init_chat_model
 from langchain.agents import create_agent
 from langchain.agents.middleware import ModelCallLimitMiddleware, AgentMiddleware, hook_config
 
@@ -19,6 +18,7 @@ from llm.model_manager import ModelManager
 from llm.tools_factory import get_tools
 from llm.schema import OrchestratorResponse, OrchestratorRequest
 from llm.utils.send_message import send_message, safe_edit_message
+from llm.utils.model_init import create_model_instance
 from function import func
 from addons.settings import llm_config, prompt_config
 
@@ -534,7 +534,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             model_specific_prompt += llm_config.reasoning_optimization_prompt
 
                         # Instantiate model with zero retries to ensure immediate fallback on quota exhaustion
-                        info_model_instance = init_chat_model(current_info_model, max_retries=0)
+                        info_model_instance = create_model_instance(current_info_model, max_retries=0)
                         
                         info_agent = create_agent(
                             model=info_model_instance,
@@ -673,7 +673,7 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                             model_specific_message_prompt += llm_config.reasoning_optimization_prompt
 
                         # Create agent with current model configured for zero retries
-                        message_model_instance = init_chat_model(current_model, max_retries=0)
+                        message_model_instance = create_model_instance(current_model, max_retries=0)
                         
                         message_agent = create_agent(
                             model=message_model_instance,

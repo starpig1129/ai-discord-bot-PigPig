@@ -20,6 +20,7 @@ from addons.settings import MemoryConfig, prompt_config
 from addons.logging import get_logger
 from llm.model_manager import ModelManager
 from llm.model_circuit_breaker import get_model_circuit_breaker
+from llm.utils.model_init import create_model_instance
 
 log = get_logger(__name__)
 
@@ -403,7 +404,7 @@ class EventSummarizationService:
                     log.debug(f"Episodic memory: trying model {current_model} ({model_index + 1}/{len(model_priority_list)})")
                     
                     # Create the model instance with zero retries
-                    model_instance = init_chat_model(current_model, max_retries=0)
+                    model_instance = create_model_instance(current_model, max_retries=0)
                     
                     from langchain_core.messages import SystemMessage
                     full_messages = [SystemMessage(content=system_prompt)] + message_list
@@ -509,7 +510,13 @@ class EventSummarizationService:
                 kwargs.update({"base_url": base_url, "num_retries": 0})
                 if force_json:
                     kwargs["format"] = "json"
-            
+
+            elif model_name.startswith("vllm:"):
+                # vLLM exposes an OpenAI-compatible API; route through the openai provider
+                vllm_base_url = getattr(self.settings, "vllm_url", "http://localhost:8181")
+                model_name = f"openai:{model_name[len('vllm:'):]}"
+                kwargs.update({"base_url": f"{vllm_base_url}/v1", "api_key": "EMPTY", "max_retries": 0})
+
             elif model_name.startswith("google_genai:"):
                 api_key = getattr(self.settings, "google_api_key", None)
                 if not api_key:

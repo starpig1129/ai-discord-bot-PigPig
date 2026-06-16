@@ -7,12 +7,12 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
 from function import func
 from llm.model_manager import ModelManager
+from llm.utils.model_init import create_model_instance
 from .language_manager import LanguageManager
 
 log = get_logger(source=__name__, server_id="system")
@@ -140,7 +140,7 @@ class SummarizerCog(commands.Cog):
 
             # Initialize Agent
             model_name, fallback = ModelManager().get_model("summarize_model")
-            model_instance = init_chat_model(model_name, max_retries=0)
+            model_instance = create_model_instance(model_name, max_retries=0)
             
             summarize_agent = create_agent(
                 model=model_instance,

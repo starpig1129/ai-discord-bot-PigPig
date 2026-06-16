@@ -3,13 +3,13 @@ import asyncio
 import discord
 
 from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
 
 from cogs.eat.db.db import DB
 from cogs.eat.embeds import eatEmbed, browseEmbed, loadingEmbed
 from function import func
 from llm.model_manager import ModelManager
+from llm.utils.model_init import create_model_instance
 from llm.model_circuit_breaker import get_model_circuit_breaker
 from llm.utils.send_message import safe_edit_message
 from addons.logging import get_logger
@@ -174,7 +174,7 @@ class EatDetailView(discord.ui.View):
                 if not circuit_breaker.is_available(current_model):
                     continue
                 try:
-                    model_instance = init_chat_model(current_model, max_retries=0)
+                    model_instance = create_model_instance(current_model, max_retries=0)
                     review_agent = create_agent(
                         model=model_instance,
                         tools=[],
