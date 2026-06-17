@@ -43,6 +43,32 @@ class ShortTermMemoryProvider:
             history.reverse()
 
             result: List[BaseMessage] = []
+
+            # 1. Collect all attachment processing tasks across all messages
+            attachment_tasks = []
+            if _att_cfg.enabled:
+                for msg in history:
+                    if msg.attachments:
+                        for attachment in msg.attachments:
+                            attachment_tasks.append(process_attachment(attachment))
+
+            # 2. Process attachments concurrently
+            attachment_results = []
+            if attachment_tasks:
+                import asyncio
+                # Use return_exceptions=True so one failure doesn't crash the whole batch
+                raw_results = await asyncio.gather(*attachment_tasks, return_exceptions=True)
+                for res in raw_results:
+                    if isinstance(res, Exception):
+                        from addons.logging import get_logger
+                        log = get_logger(source=__name__, server_id="system")
+                        log.warning(f"Attachment processing failed during gather: {res}")
+                        attachment_results.append([{"type": "text", "text": "[Attachment processing failed]"}])
+                    else:
+                        attachment_results.append(res)
+
+            attachment_result_iter = iter(attachment_results)
+
             for msg in history:
                 content_parts = []
                 content_suffix = []
@@ -86,9 +112,12 @@ class ShortTermMemoryProvider:
                     content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> <eom>  [{ ' | '.join(content_suffix)}]"})
 
                 if msg.attachments and _att_cfg.enabled:
-                    for attachment in msg.attachments:
-                        parts = await process_attachment(attachment)
-                        content_parts.extend(parts)
+                    for _ in msg.attachments:
+                        try:
+                            parts = next(attachment_result_iter)
+                            content_parts.extend(parts)
+                        except StopIteration:
+                            pass
 
                 if msg.embeds and _att_cfg.embeds.enabled:
                     for embed in msg.embeds:
