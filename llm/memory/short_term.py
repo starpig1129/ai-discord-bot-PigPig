@@ -42,6 +42,27 @@ class ShortTermMemoryProvider:
             ]
             history.reverse()
 
+            # Pre-fetch all attachments concurrently
+            attachment_tasks = []
+            task_mapping = []  # To map task index back to msg.id
+            if _att_cfg.enabled:
+                for msg in history:
+                    if msg.attachments:
+                        for att in msg.attachments:
+                            attachment_tasks.append(process_attachment(att))
+                            task_mapping.append(msg.id)
+
+            attachment_results_by_msg = {}
+            if attachment_tasks:
+                import asyncio
+                results = await asyncio.gather(*attachment_tasks, return_exceptions=True)
+                for msg_id, res in zip(task_mapping, results):
+                    if not isinstance(res, Exception) and isinstance(res, list):
+                        attachment_results_by_msg.setdefault(msg_id, []).extend(res)
+                    else:
+                        # Fallback or log error could go here if process_attachment didn't handle it
+                        pass
+
             result: List[BaseMessage] = []
             for msg in history:
                 content_parts = []
@@ -85,10 +106,8 @@ class ShortTermMemoryProvider:
                 else:
                     content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> <eom>  [{ ' | '.join(content_suffix)}]"})
 
-                if msg.attachments and _att_cfg.enabled:
-                    for attachment in msg.attachments:
-                        parts = await process_attachment(attachment)
-                        content_parts.extend(parts)
+                if _att_cfg.enabled and msg.id in attachment_results_by_msg:
+                    content_parts.extend(attachment_results_by_msg[msg.id])
 
                 if msg.embeds and _att_cfg.embeds.enabled:
                     for embed in msg.embeds:
