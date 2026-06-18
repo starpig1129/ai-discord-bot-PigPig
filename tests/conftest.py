@@ -1,3 +1,6 @@
+import sys
+import discord
+sys.modules["discord"] = discord
 # tests/conftest.py
 #
 # This conftest pre-loads the real addons.settings module before any test
