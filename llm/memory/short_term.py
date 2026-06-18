@@ -33,6 +33,7 @@ class ShortTermMemoryProvider:
         The returned order is oldest -> newest.
         """
         try:
+            import asyncio
             from llm.utils.attachment_processor import process_attachment
             from llm.utils.embed_processor import process_embed
             from addons.settings import attachment_config as _att_cfg
@@ -42,8 +43,32 @@ class ShortTermMemoryProvider:
             ]
             history.reverse()
 
-            result: List[BaseMessage] = []
-            for msg in history:
+            # Pre-gather all attachment processing tasks concurrently
+            attachment_tasks = []
+            attachment_mapping = [] # to keep track of which msg index and which attachment index
+
+            if _att_cfg.enabled:
+                for i, msg in enumerate(history):
+                    if msg.attachments:
+                        for attachment in msg.attachments:
+                            attachment_tasks.append(process_attachment(attachment))
+                            attachment_mapping.append(i)
+
+            attachment_results_flat = []
+            if attachment_tasks:
+                attachment_results_flat = await asyncio.gather(*attachment_tasks, return_exceptions=True)
+
+            # Group the results back to message indices
+            attachment_results_by_msg = {i: [] for i in range(len(history))}
+            for msg_idx, result in zip(attachment_mapping, attachment_results_flat):
+                if isinstance(result, Exception):
+                    # Should not normally happen if process_attachment handles its own exceptions, but just in case
+                    attachment_results_by_msg[msg_idx].append([{"type": "text", "text": f"[Attachment processing failed: {result}]"}])
+                else:
+                    attachment_results_by_msg[msg_idx].append(result)
+
+            result_msgs: List[BaseMessage] = []
+            for i, msg in enumerate(history):
                 content_parts = []
                 content_suffix = []
 
@@ -85,9 +110,8 @@ class ShortTermMemoryProvider:
                 else:
                     content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> <eom>  [{ ' | '.join(content_suffix)}]"})
 
-                if msg.attachments and _att_cfg.enabled:
-                    for attachment in msg.attachments:
-                        parts = await process_attachment(attachment)
+                if _att_cfg.enabled and attachment_results_by_msg[i]:
+                    for parts in attachment_results_by_msg[i]:
                         content_parts.extend(parts)
 
                 if msg.embeds and _att_cfg.embeds.enabled:
@@ -98,15 +122,15 @@ class ShortTermMemoryProvider:
                 # Create message (using list format for content)
                 # Add explicit speaker identification to help LLM distinguish between users
                 if msg.author.bot:
-                    result.append(AIMessage(content=content_parts))
+                    result_msgs.append(AIMessage(content=content_parts))
                 else:
                     # Include 'name' parameter to make speaker identity explicit
-                    result.append(HumanMessage(
+                    result_msgs.append(HumanMessage(
                         content=content_parts,
                         name=f"{msg.author.name}_{msg.author.id}"
                     ))
 
-            return result
+            return result_msgs
         except Exception as e:
             await func.report_error(e)
             return []
