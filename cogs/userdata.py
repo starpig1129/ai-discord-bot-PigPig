@@ -741,7 +741,7 @@ class UserDataCog(commands.Cog):
             action='save'
         )
         
-        await interaction.followup.send(result, ephemeral=True)
+        await interaction.edit_original_response(content=result)
 
     @memory_group.command(
         name="clear",
@@ -765,7 +765,7 @@ class UserDataCog(commands.Cog):
             action='clear'
         )
 
-        await interaction.followup.send(result, ephemeral=True)
+        await interaction.edit_original_response(content=result)
 
     @memory_group.command(
         name="show",
@@ -789,7 +789,7 @@ class UserDataCog(commands.Cog):
             action='read'
         )
         
-        await interaction.followup.send(result, ephemeral=True)
+        await interaction.edit_original_response(content=result)
 
     @knowledge_group.command(
         name="show",
@@ -813,22 +813,22 @@ class UserDataCog(commands.Cog):
         target_id = str(interaction.guild_id) if target_type == "guild" else str(interaction.channel_id)
 
         if target_type == "guild" and not interaction.guild_id:
-            await interaction.followup.send("Guild knowledge is only available within a server.", ephemeral=True)
+            await interaction.edit_original_response(content="Guild knowledge is only available within a server.")
             return
 
         if not self.knowledge_storage:
-            await interaction.followup.send("Knowledge storage is not initialized.", ephemeral=True)
+            await interaction.edit_original_response(content="Knowledge storage is not initialized.")
             return
 
         try:
             content = await self.knowledge_storage.get_knowledge(target_type, target_id)
             if content:
-                await interaction.followup.send(f"Current {target_type} knowledge:\n\n{content}", ephemeral=True)
+                await interaction.edit_original_response(content=f"Current {target_type} knowledge:\n\n{content}")
             else:
-                await interaction.followup.send(f"There is no {target_type} knowledge currently stored.", ephemeral=True)
+                await interaction.edit_original_response(content=f"There is no {target_type} knowledge currently stored.")
         except Exception as e:
             self.logger.error(f"Failed to read {target_type} knowledge for {target_id}: {e}")
-            await interaction.followup.send(f"Failed to read knowledge: {e}", ephemeral=True)
+            await interaction.edit_original_response(content=f"Failed to read knowledge: {e}")
 
     @knowledge_group.command(
         name="save",
@@ -861,11 +861,11 @@ class UserDataCog(commands.Cog):
         target_id = str(interaction.guild_id) if target_type == "guild" else str(interaction.channel_id)
 
         if target_type == "guild" and not interaction.guild_id:
-            await interaction.followup.send("Guild knowledge is only available within a server.", ephemeral=True)
+            await interaction.edit_original_response(content="Guild knowledge is only available within a server.")
             return
 
         if not self.knowledge_storage:
-            await interaction.followup.send("Knowledge storage is not initialized.", ephemeral=True)
+            await interaction.edit_original_response(content="Knowledge storage is not initialized.")
             return
 
         try:
@@ -876,10 +876,10 @@ class UserDataCog(commands.Cog):
                 category=category,
                 context=interaction
             )
-            await interaction.followup.send(result_msg, ephemeral=True)
+            await interaction.edit_original_response(content=result_msg)
         except Exception as e:
             self.logger.error(f"Failed to save {target_type} knowledge for {target_id}: {e}")
-            await interaction.followup.send(f"Failed to save knowledge: {e}", ephemeral=True)
+            await interaction.edit_original_response(content=f"Failed to save knowledge: {e}")
 
 
     @knowledge_group.command(
@@ -905,11 +905,11 @@ class UserDataCog(commands.Cog):
         target_id = str(interaction.guild_id) if target_type == "guild" else str(interaction.channel_id)
 
         if target_type == "guild" and not interaction.guild_id:
-            await interaction.followup.send("Guild knowledge is only available within a server.", ephemeral=True)
+            await interaction.edit_original_response(content="Guild knowledge is only available within a server.")
             return
 
         if not self.knowledge_storage:
-            await interaction.followup.send("Knowledge storage is not initialized.", ephemeral=True)
+            await interaction.edit_original_response(content="Knowledge storage is not initialized.")
             return
 
         try:
@@ -929,12 +929,12 @@ class UserDataCog(commands.Cog):
                 except Exception as cache_err:
                     self.logger.warning(f"Failed to invalidate knowledge cache for {target_type} {target_id}: {cache_err}")
 
-                await interaction.followup.send(f"Successfully cleared {target_type} knowledge.", ephemeral=True)
+                await interaction.edit_original_response(content=f"Successfully cleared {target_type} knowledge.")
             else:
-                await interaction.followup.send(f"There was no {target_type} knowledge to clear or an error occurred.", ephemeral=True)
+                await interaction.edit_original_response(content=f"There was no {target_type} knowledge to clear or an error occurred.")
         except Exception as e:
             self.logger.error(f"Failed to clear {target_type} knowledge for {target_id}: {e}")
-            await interaction.followup.send(f"Failed to clear knowledge: {e}", ephemeral=True)
+            await interaction.edit_original_response(content=f"Failed to clear knowledge: {e}")
 
     async def manage_user_data(
         self,
