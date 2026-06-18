@@ -1,5 +1,6 @@
 from typing import List, Any
 import re
+import asyncio
 
 import discord
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -86,9 +87,16 @@ class ShortTermMemoryProvider:
                     content_parts.append({"type": "text", "text": f"[{content_prefix}] <som> <eom>  [{ ' | '.join(content_suffix)}]"})
 
                 if msg.attachments and _att_cfg.enabled:
-                    for attachment in msg.attachments:
-                        parts = await process_attachment(attachment)
-                        content_parts.extend(parts)
+                    tasks = [process_attachment(att) for att in msg.attachments]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for res in results:
+                        if isinstance(res, Exception):
+                            from addons.logging import get_logger
+                            log = get_logger(source=__name__, server_id="system")
+                            log.warning(f"Attachment processing failed: {res}")
+                            content_parts.append({"type": "text", "text": f"[Attachment processing failed: {res}]"})
+                        else:
+                            content_parts.extend(res)
 
                 if msg.embeds and _att_cfg.embeds.enabled:
                     for embed in msg.embeds:
