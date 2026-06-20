@@ -500,8 +500,8 @@ class PigPig(commands.Bot):
                 # Send a general user-friendly error message
                 if lang_manager:
                     try:
-                        error_msg = lang_manager.translate(guild_id_str, "system", "general", "errors", "unexpected_error")
-                        if not error_msg:
+                        error_msg = lang_manager.translate(guild_id_str, "system", "errors", "unexpected")
+                        if not error_msg or error_msg.startswith("[Translation not found"):
                             error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"
                     except Exception:
                         error_msg = "❌ 抱歉，執行此指令時發生未預期的錯誤。(An unexpected error occurred.)"

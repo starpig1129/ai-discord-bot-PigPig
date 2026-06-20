@@ -229,7 +229,7 @@ class LanguageManager(commands.Cog):
                 return None
         return current
 
-    def translate(self, guild_id: str, *keys, **kwargs) -> str:
+    def translate(self, guild_id: str, *keys: str, **kwargs: Any) -> str:
         """Translate specified text.
         
         Standard calling convention:
@@ -257,6 +257,9 @@ class LanguageManager(commands.Cog):
             if not hasattr(self, 'translations') or not self.translations:
                 return keys[-1] if keys else "LOADING..."
             
+            # Extract internal control parameters
+            report_missing = kwargs.pop('_report_missing', True)
+            
             # Get language
             lang = self.get_server_lang(str(guild_id))
             
@@ -275,7 +278,8 @@ class LanguageManager(commands.Cog):
             
             # Get translation data for the language
             if lang not in self.translations:
-                self._log_missing_translation(guild_id, lang, list(keys))
+                if report_missing:
+                    self._log_missing_translation(guild_id, lang, list(keys))
                 return f"[Translation not found: {'.'.join(keys)}]"
             
             # Traverse nested dictionary
@@ -283,7 +287,8 @@ class LanguageManager(commands.Cog):
             
             # Check results
             if result is None:
-                self._log_missing_translation(guild_id, lang, list(keys))
+                if report_missing:
+                    self._log_missing_translation(guild_id, lang, list(keys))
                 return f"[Translation not found: {'.'.join(keys)}]"
             
             if not isinstance(result, str):

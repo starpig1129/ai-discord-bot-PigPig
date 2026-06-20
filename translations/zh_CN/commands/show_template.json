@@ -1,0 +1,6 @@
+{
+    "description": "显示日程表模板",
+    "responses": {
+        "file_sent": "日程表模板已作为文件发送！"
+    }
+}

@@ -21,7 +21,7 @@ class HelpCog(commands.Cog):
     def _translate(self, guild_id: str, *keys: str, default: str) -> str:
         """Helper to translate with a safe fallback when keys are missing."""
         if self.lang_manager:
-            translated = self.lang_manager.translate(guild_id, *keys)
+            translated = self.lang_manager.translate(guild_id, *keys, _report_missing=False)
             if translated and not translated.startswith("[Translation not found"):
                 return translated
         return default

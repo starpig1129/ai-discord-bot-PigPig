@@ -1,0 +1,6 @@
+{
+    "description": "Show the schedule template",
+    "responses": {
+        "file_sent": "The schedule template has been sent as a file!"
+    }
+}

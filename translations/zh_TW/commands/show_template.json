@@ -1,0 +1,6 @@
+{
+    "description": "顯示行程表範本",
+    "responses": {
+        "file_sent": "行程表範本已作為檔案發送！"
+    }
+}

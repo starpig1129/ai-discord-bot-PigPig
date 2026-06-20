@@ -5,10 +5,10 @@ import yaml
 from datetime import datetime
 import pytz
 import os
-import os
 from typing import Optional
 from .language_manager import LanguageManager
 from addons.logging import get_logger
+from function import func
 
 logger = get_logger(server_id="Bot", source="schedule")
 
@@ -340,10 +340,21 @@ class ScheduleManager(commands.Cog):
             yaml.dump(schedule_data, f, allow_unicode=True)
 
     @app_commands.command(name="show_template", description="顯示行程表範本")
-    async def show_template_command(self, interaction: discord.Interaction):
+    async def show_template_command(self, interaction: discord.Interaction) -> None:
+        guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
         with open(os.path.join(self.schedule_dir, "template.yaml"), "r", encoding='utf-8') as f:
             template = f.read()
-        await interaction.response.send_message(f"```yaml\n{template}\n```")
+            
+        message_content = f"```yaml\n{template}\n```"
+        if len(message_content) > 2000:
+            import io
+            file = discord.File(io.StringIO(template), filename="template.yaml")
+            success_msg = self.lang_manager.translate(
+                guild_id, "commands", "show_template", "responses", "file_sent"
+            ) if self.lang_manager else "行程表範本已作為檔案發送！"
+            await interaction.response.send_message(content=success_msg, file=file)
+        else:
+            await interaction.response.send_message(message_content)
 
 
 async def setup(bot):

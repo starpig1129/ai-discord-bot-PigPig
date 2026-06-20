@@ -8,7 +8,8 @@
     "responses": {
         "no_messages": "No human conversation messages found within the specified range to summarize.",
         "preparing": "📝 Preparing summary...",
-        "error": "❌ Oops, an unexpected error occurred. Please contact the administrator.\n`{error}`"
+        "error": "❌ Oops, an unexpected error occurred. Please contact the administrator.\n`{error}`",
+        "bot_forbidden": "❌ The bot lacks permission to read this channel or its message history."
     },
     "embed": {
         "title": "📄 Conversation Summary",

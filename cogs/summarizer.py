@@ -65,7 +65,7 @@ class SummarizerCog(commands.Cog):
         persona="Set AI's persona for the summary (e.g., A professional clerk)",
         only_me="Whether only you can see this summary (default False)"
     )
-    async def summarize(self, interaction: discord.Interaction, limit: int = 100, persona: Optional[str] = None, only_me: bool = False):
+    async def summarize(self, interaction: discord.Interaction, limit: int = 100, persona: Optional[str] = None, only_me: bool = False) -> None:
         """Analyze and summarize recent channel conversation history using an AI agent."""
         guild_id = str(interaction.guild_id) if interaction.guild_id else "0"
         
@@ -203,6 +203,11 @@ class SummarizerCog(commands.Cog):
                     continuation_embed.set_footer(text=cont_footer)
                     await interaction.followup.send(embed=continuation_embed)
 
+        except discord.Forbidden:
+            error_text = self.lang_manager.translate(
+                guild_id, "commands", "summarize", "responses", "bot_forbidden"
+            ) if self.lang_manager else "❌ 機器人缺少讀取此頻道或讀取訊息歷史紀錄的權限。(The bot is missing permission to read this channel or its message history.)"
+            await interaction.followup.send(error_text, ephemeral=True)
         except Exception as e:
             await func.report_error(e, "summarizing channel")
             error_text = self.lang_manager.translate(guild_id, "commands", "summarize", "responses", "error", error=str(e)) if self.lang_manager else f"Error: {e}"
