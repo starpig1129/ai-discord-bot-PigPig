@@ -89,7 +89,7 @@ class InternetSearchCog(commands.Cog):
             app_commands.Choice(name="eat", value="eat"),
         ]
     )
-    async def search_command(self, interaction: discord.Interaction, type: Optional[app_commands.Choice[str]] = None, query: str = ''):
+    async def search_command(self, interaction: discord.Interaction, type: Optional[app_commands.Choice[str]] = None, query: str = '') -> None:
         """Slash command wrapper for internet_search.
     
         Delegates to internet_search and returns the textual result if available.
@@ -168,9 +168,19 @@ class InternetSearchCog(commands.Cog):
                     await func.report_error(notify_err, f"search_command confirmation send failed: {notify_err}")
                     pass
         except Exception as e:
-            await func.report_error(e, f"search_command: {e}")
+            is_blocked = "CAPTCHA triggered" in str(e) or "Google blocked the request" in str(e)
+            if not is_blocked:
+                await func.report_error(e, f"search_command: {e}")
             try:
-                await interaction.followup.send(content=f"Search failed: {e}")
+                if is_blocked:
+                    blocked_msg = self.lang_manager.translate(
+                        guild_id, "commands", "internet_search", "errors", "blocked_by_google"
+                    ) if self.lang_manager else "❌ 搜尋服務暫時不可用，請稍後再試。(Search service is temporarily unavailable, please try again later.)"
+                    if blocked_msg.startswith("[Translation not found"):
+                        blocked_msg = "❌ 搜尋服務暫時不可用，請稍後再試。(Search service is temporarily unavailable, please try again later.)"
+                    await interaction.followup.send(content=blocked_msg)
+                else:
+                    await interaction.followup.send(content=f"Search failed: {e}")
             except Exception:
                 pass
 

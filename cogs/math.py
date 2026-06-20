@@ -28,7 +28,7 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
     implicit_multiplication_application,
 )
-from typing import Optional
+from typing import Optional, Any
 import re
 import unicodedata
 from .language_manager import LanguageManager
@@ -183,9 +183,24 @@ class MathCalculatorCog(commands.Cog):
                 global_dict={'__builtins__': {}},  # Disable global_dict for safety
             )
 
+            # Define helper functions to process Python tuples/lists recursively
+            def check_has(expr: Any, *args: Any) -> bool:
+                """Recursively check if a SymPy expression or container of expressions contains targets."""
+                if isinstance(expr, (list, tuple, set)):
+                    return any(check_has(item, *args) for item in expr)
+                if hasattr(expr, 'has'):
+                    return bool(expr.has(*args))
+                return False
+
+            def eval_numerical(expr: Any, prec: int) -> Any:
+                """Recursively evaluate a SymPy expression or container of expressions numerically."""
+                if isinstance(expr, (list, tuple, set)):
+                    return type(expr)(eval_numerical(item, prec) for item in expr)
+                return sympy.N(expr, prec)
+
             # Check for undefined functions
             from sympy.core.function import UndefinedFunction
-            if sympy_expr.has(UndefinedFunction):
+            if check_has(sympy_expr, UndefinedFunction):
                 error_message = self.lang_manager.translate(
                     guild_id, "commands", "math", "responses", "error_undefined_function"
                 ) if self.lang_manager else "Error: Expression contains undefined functions."
@@ -193,14 +208,14 @@ class MathCalculatorCog(commands.Cog):
 
             # Check for unsupported elements
             unsafe_types = (sympy.Symbol, sympy.Function)
-            if sympy_expr.has(*unsafe_types):
+            if check_has(sympy_expr, *unsafe_types):
                 error_message = self.lang_manager.translate(
                     guild_id, "commands", "math", "responses", "error_unsupported_elements"
                 ) if self.lang_manager else "Error: Expression contains unsupported elements."
                 return error_message
 
             # Calculate result with 15 digits of precision
-            result = sympy.N(sympy_expr, 15)
+            result = eval_numerical(sympy_expr, 15)
 
             # Format result string
             result_str = str(result)

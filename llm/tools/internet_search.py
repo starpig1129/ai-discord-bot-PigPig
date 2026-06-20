@@ -155,8 +155,12 @@ class InternetSearchTools:
                 return f"[provider={used_provider} duration={duration:.2f}s] Search for '{query}' ({search_type}) completed successfully."
             except Exception as e:  # pragma: no cover - external IO
                 duration = time.time() - start_ts
-                await func.report_error(e, f"Internet search for '{query}' of type '{search_type}' failed after {duration:.2f}s")
+                is_blocked = "CAPTCHA triggered" in str(e) or "Google blocked the request" in str(e)
+                if not is_blocked:
+                    await func.report_error(e, f"Internet search for '{query}' of type '{search_type}' failed after {duration:.2f}s")
                 logger.error("Internet search tool failed", exception=e)
+                if is_blocked:
+                    return "Search failed: The search service is temporarily blocked by Google (CAPTCHA triggered). Please inform the user or switch topics."
                 return f"An unexpected error occurred during the search: {e}"
 
         return [internet_search]

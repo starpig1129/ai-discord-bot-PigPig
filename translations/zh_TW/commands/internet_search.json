@@ -34,7 +34,8 @@
             "image_download_failed": "圖片下載失敗",
             "image_element_not_found": "無法找到圖片元素或跳轉URL元素",
             "eat_no_food": "沒有這種食物喔",
-            "eat_system_error": "原本想推薦你吃 {keyword}，但很抱歉系統出錯了QQ: {error}"
+            "eat_system_error": "原本想推薦你吃 {keyword}，但很抱歉系統出錯了QQ: {error}",
+            "blocked_by_google": "❌ 搜尋服務暫時不可用，請稍後再試。"
         },
         "ai": {
             "system_prompt": "你是一位網路研究員。請針對使用者的查詢進行啟用了 Grounding 的網路搜尋，並彙整出精簡且準確的答案。優先使用官方且最新的來源。直接以 Discord Markdown 格式回傳最終輸出，並包含以下區塊：\n\n**回答：** 一個簡短的段落。\n\n**重點：** 最多 5 個精簡要點的列舉清單。\n\n請務必以繁體中文回答。",
