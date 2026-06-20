@@ -138,15 +138,18 @@ class InternetSearchCog(commands.Cog):
                 chunks = _split_markdown(result, limit=1900)
                 try:
                     if not chunks:
-                        await interaction.followup.send(content=result[:1900])
+                        await interaction.edit_original_response(content=result[:1900])
                     else:
-                        for chunk in chunks:
-                            await interaction.followup.send(content=chunk)
+                        for i, chunk in enumerate(chunks):
+                            if i == 0:
+                                await interaction.edit_original_response(content=chunk)
+                            else:
+                                await interaction.followup.send(content=chunk)
                 except Exception as send_err:
                     await func.report_error(send_err, f"search_command send followup failed: {send_err}")
                     try:
                         short = (result[:1900] + "...") if len(result) > 1900 else result
-                        await interaction.followup.send(content=short)
+                        await interaction.edit_original_response(content=short)
                     except Exception:
                         pass
             else:
@@ -163,14 +166,14 @@ class InternetSearchCog(commands.Cog):
                         ) if self.lang_manager else f"Search for '{query}' completed."
                         if len(confirmation) > 1900:
                             confirmation = confirmation[:1897] + "..."
-                        await interaction.followup.send(content=confirmation)
+                        await interaction.edit_original_response(content=confirmation)
                 except Exception as notify_err:
                     await func.report_error(notify_err, f"search_command confirmation send failed: {notify_err}")
                     pass
         except Exception as e:
             await func.report_error(e, f"search_command: {e}")
             try:
-                await interaction.followup.send(content=f"Search failed: {e}")
+                await interaction.edit_original_response(content=f"Search failed: {e}")
             except Exception:
                 pass
 
