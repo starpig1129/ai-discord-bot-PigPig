@@ -18,5 +18,6 @@
         }
     },
     "now_playing": "🎵 正在播放",
-    "uploader": "👤 上传频道"
+    "uploader": "👤 上传频道",
+    "more_songs": "... 还有 {count} 首歌曲"
 }

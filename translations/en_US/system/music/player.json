@@ -18,5 +18,6 @@
         }
     },
     "now_playing": "🎵 Now Playing",
-    "uploader": "👤 Uploader"
+    "uploader": "👤 Uploader",
+    "more_songs": "... and {count} more songs"
 }

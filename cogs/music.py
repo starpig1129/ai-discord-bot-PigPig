@@ -751,7 +751,19 @@ class YTMusic(commands.Cog):
             for i, item in enumerate(queue_items, 1):
                 duration = item.get("duration", 0)
                 minutes, seconds = divmod(float(duration), 60)
-                text += f"{i}. {item['title']} | {int(minutes):02d}:{int(seconds):02d}\n"
+                line = f"{i}. {item['title']} | {int(minutes):02d}:{int(seconds):02d}\n"
+                
+                # Check if adding the current line exceeds embed field limit (1024 chars).
+                # Keep a 100 character buffer for the "more songs" localized suffix.
+                if len(text) + len(line) + 100 > 1024:
+                    remaining_count = len(queue_items) - i + 1
+                    more_songs_text = self.lang_manager.translate(
+                        guild_id_str, "system", "music", "player", "more_songs", count=remaining_count
+                    )
+                    text += more_songs_text
+                    break
+                
+                text += line
         
         return text if text.strip() else self.lang_manager.translate(guild_id_str, "system", "music", "player", "queue_empty")
 

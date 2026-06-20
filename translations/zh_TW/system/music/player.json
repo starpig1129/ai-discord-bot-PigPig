@@ -18,5 +18,6 @@
         }
     },
     "now_playing": "🎵 正在播放",
-    "uploader": "👤 上傳頻道"
+    "uploader": "👤 上傳頻道",
+    "more_songs": "... 還有 {count} 首歌曲"
 }
