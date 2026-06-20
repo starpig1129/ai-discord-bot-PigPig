@@ -184,11 +184,11 @@ class QueueManager:
                         break
                 
                 if not bot_song_removed:
-                    logger.warning(f"Queue is full and no bot songs to remove (guild_id: {guild_id}). Cannot add song.")
+                    logger.info(f"Queue is full and no bot songs to remove (guild_id: {guild_id}). Cannot add song.")
                     return False
             else:
                 # Bot add: Queue is full, fail immediately
-                logger.warning(f"Queue is full (guild_id: {guild_id}); bot cannot add song.")
+                logger.info(f"Queue is full (guild_id: {guild_id}); bot cannot add song.")
                 return False
 
         # 4. Determine insertion point
@@ -235,7 +235,7 @@ class QueueManager:
                     break
             
             if not bot_song_removed:
-                logger.warning(f"Queue is full and no bot songs to remove (guild_id: {guild_id}). Cannot add song.")
+                logger.info(f"Queue is full and no bot songs to remove (guild_id: {guild_id}). Cannot add song.")
                 return False
 
         # 3. Add song to the front of the queue (use appendleft for efficiency)

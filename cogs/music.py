@@ -175,6 +175,11 @@ class YTMusic(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
             
+        # Attribute ownership to the user for all playlist items
+        if video_infos:
+            for video_info in video_infos:
+                video_info['added_by'] = interaction.user.id
+            
         # Add initial songs to queue
         queue_size = self.queue_manager.get_queue(interaction.guild.id).qsize()
         songs_to_add = min(5 - queue_size, len(video_infos))
