@@ -119,12 +119,12 @@ class GifTools(commands.Cog):
         gifs = await self.search_gif(query)
         if gifs:
             gif_url = random.choice(gifs)
-            await interaction.followup.send(gif_url)
+            await interaction.edit_original_response(content=gif_url)
         else:
             not_found_message = self.lang_manager.translate(
                 guild_id, "commands", "search_gif", "responses", "not_found"
             ) if self.lang_manager else "找不到相關的 GIF。"
-            await interaction.followup.send(not_found_message)
+            await interaction.edit_original_response(content=not_found_message)
 
     async def get_gif_url(self, query: str, guild_id: str = "0") -> str:
         """取得隨機一個符合搜尋條件的 GIF URL。
