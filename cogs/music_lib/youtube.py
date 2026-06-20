@@ -271,7 +271,7 @@ class YouTubeManager:
         try:
             await asyncio.to_thread(os.makedirs, folder, exist_ok=True)
             output_template = os.path.join(folder, '%(id)s')
-            
+
             if not await asyncio.to_thread(os.access, folder, os.W_OK):
                 log.error(f"無法寫入下載目錄: {folder}")
                 return None, "無法寫入下載目錄"
@@ -284,18 +284,18 @@ class YouTubeManager:
                     return None, "磁碟空間不足"
             except Exception as e:
                 log.error(f"檢查磁碟空間失敗: {e}")
-                
+
             ytdlp_config = self.ffmpeg_config.get('ytdlp_options', {})
             http_headers = self.ffmpeg_config.get('http_headers', {})
-            
-            ydl_opts = {
+            cookies_path = self.settings.youtube_cookies_path
+
+            base_opts = {
                 'format': 'bestaudio/best',
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': self.ffmpeg_config.get('audio_codec', 'mp3'),
                     'preferredquality': self.ffmpeg_config.get('audio_quality', '192'),
                 }],
-                'playlist_items': '1-50',
                 'outtmpl': output_template,
                 'noplaylist': True,
                 'quiet': False,
@@ -317,179 +317,169 @@ class YouTubeManager:
                     'User-Agent': http_headers.get('user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.81 Safari/537.36'),
                     'Accept': http_headers.get('accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
                     'Accept-Language': http_headers.get('accept_language', 'en-us,en;q=0.5'),
-                    'Sec-Fetch-Mode': http_headers.get('sec_fetch_mode', 'navigate')
-                },
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android_music', 'android', 'ios', 'web'],
-                        'player_skip': ['webpage'],
-                    }
+                    'Sec-Fetch-Mode': http_headers.get('sec_fetch_mode', 'navigate'),
                 },
                 'hls_prefer_native': True,
                 'external_downloader_args': {
                     'ffmpeg': self._build_postprocessor_args()
-                }
+                },
             }
 
-            cookies_path = self.settings.youtube_cookies_path
             if os.path.exists(cookies_path):
                 log.info(f"使用 Cookies 檔案: {cookies_path}")
-                ydl_opts['cookiefile'] = cookies_path
+                base_opts['cookiefile'] = cookies_path
+
+            # Each strategy creates a fresh YoutubeDL instance so extractor_args
+            # actually take effect (modifying opts on an existing instance is a no-op).
+            player_client_strategies = [
+                ['android_music', 'android', 'ios', 'web'],
+                ['android_music'],
+                ['ios'],
+            ]
 
             log.info(f"[音樂] 開始下載 (伺服器 ID: {interaction.guild.id}): {url} 到 {folder}")
 
-            async def extract_info():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    return await asyncio.to_thread(ydl.extract_info, url, download=False)
-            
-            info_dict = await extract_info()
-            is_live = info_dict.get('is_live', False)
+            last_error = None
+            info_dict = None
 
-            if is_live:
-                log.info(f"[音樂] 偵測到直播影片 (伺服器 ID: {interaction.guild.id}): {url}")
-                
-                best_audio_url = None
-                if 'formats' in info_dict:
-                    audio_formats = [f for f in info_dict['formats'] 
-                                   if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
-                    if audio_formats:
-                        best_audio = max(audio_formats, key=lambda x: x.get('abr', 0))
-                        best_audio_url = best_audio.get('url')
-                    else:
-                        video_formats = [f for f in info_dict['formats'] 
-                                       if f.get('url') and f.get('acodec') != 'none']
-                        if video_formats:
-                            best_format = min(video_formats, key=lambda x: x.get('height', 9999))
-                            best_audio_url = best_format.get('url')
-                
-                video_info = {
-                    "file_path": None,
-                    "title": info_dict.get('title', '未知標題'),
-                    "url": info_dict.get('webpage_url', url),
-                    "stream_url": best_audio_url or info_dict.get('url'),
-                    "duration": 0,
-                    "video_id": info_dict.get('id', '未知ID'),
-                    "author": info_dict.get('uploader', '未知上傳者'),
-                    "views": info_dict.get('view_count', 0),
-                    "requester": interaction.user,
-                    "user_avatar": interaction.user.avatar.url,
-                    "is_live": True
+            for strategy_idx, player_clients in enumerate(player_client_strategies):
+                ydl_opts = {
+                    **base_opts,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': player_clients,
+                            'player_skip': ['webpage'],
+                        }
+                    },
                 }
-                return video_info, None
 
-            if info_dict.get('duration', 0) > self.time_limit:
-                log.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
-                return None, "影片時長過長！超過 30 分鐘"
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
-                    log.info(f"[音樂] 正在開始下載 (伺服器 ID: {interaction.guild.id}): {url}")
-                    
-                    max_retries = 3
-                    retry_count = 0
-                    last_error = None
-                    
-                    while retry_count < max_retries:
-                        try:
-                            await asyncio.to_thread(ydl.download, [url])
-                            log.info(f"[音樂] 下載完成 (伺服器 ID: {interaction.guild.id}): {url}")
-                            break
-                        except yt_dlp.utils.DownloadError as e:
-                            error_msg = str(e).lower()
-                            
-                            if 'signature' in error_msg or '403' in error_msg:
-                                log.warning(f"[音樂] 簽名提取失敗，嘗試使用 Android 客戶端...")
-                                ydl_opts['extractor_args'] = {
-                                    'youtube': {'player_client': ['android_music']}
-                                }
-                                retry_count += 1
-                                await asyncio.sleep(2)
-                                continue
-                            
-                            elif 'timeout' in error_msg or 'connection' in error_msg:
-                                retry_count += 1
-                                if retry_count >= max_retries:
-                                    return None, "網絡連接超時，請稍後再試"
-                                log.warning(f"[音樂] 網絡錯誤，重試 {retry_count}/{max_retries}")
-                                await asyncio.sleep(5)
-                                continue
-                            
-                            elif 'not available' in error_msg or 'blocked' in error_msg:
-                                return None, "此影片在您的地區不可用"
-                            
-                            else:
-                                last_error = e
-                                retry_count += 1
-                                if retry_count >= max_retries:
-                                    raise last_error
-                                await asyncio.sleep(2)
-                                
-                        except Exception as e:
-                            last_error = e
-                            retry_count += 1
-                            if retry_count >= max_retries:
-                                raise last_error
-                            log.warning(f"[音樂] 下載失敗，重試 {retry_count}/{max_retries}: {str(e)}")
-                            await asyncio.sleep(2)
-                    
-                    file_path = os.path.join(folder, f"{info_dict['id']}.mp3")
-                    exists = await asyncio.to_thread(os.path.exists, file_path)
-                    if not exists:
-                        raise Exception("輸出檔案不存在")
-                    
-                    size = await asyncio.to_thread(os.path.getsize, file_path)
-                    if size == 0:
-                        raise Exception("輸出檔案為空")
+                    # Single context: probe info and download in one YoutubeDL instance.
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info_dict = await asyncio.to_thread(ydl.extract_info, url, download=False)
+                        is_live = info_dict.get('is_live', False)
 
-                    try:
-                        ffmpeg_path = self.ffmpeg_config.get('location', '/usr/bin/ffmpeg')
-                        await asyncio.to_thread(
-                            lambda: subprocess.run(
-                                [ffmpeg_path, '-v', 'error', '-i', file_path, '-f', 'null', '-'],
-                                check=True, capture_output=True
-                            )
-                        )
-                    except subprocess.CalledProcessError as e:
-                        raise Exception(f"檔案不是有效的 MP3 格式: {e.stderr.decode()}")
+                        if is_live:
+                            log.info(f"[音樂] 偵測到直播影片 (伺服器 ID: {interaction.guild.id}): {url}")
+                            best_audio_url = None
+                            if 'formats' in info_dict:
+                                audio_formats = [f for f in info_dict['formats']
+                                                 if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
+                                if audio_formats:
+                                    best_audio = max(audio_formats, key=lambda x: x.get('abr', 0))
+                                    best_audio_url = best_audio.get('url')
+                                else:
+                                    video_formats = [f for f in info_dict['formats']
+                                                     if f.get('url') and f.get('acodec') != 'none']
+                                    if video_formats:
+                                        best_format = min(video_formats, key=lambda x: x.get('height', 9999))
+                                        best_audio_url = best_format.get('url')
 
-                    video_info = {
-                        "file_path": file_path,
-                        "title": info_dict.get('title', '未知標題'),
-                        "url": info_dict.get('webpage_url', url),
-                        "stream_url": None,
-                        "duration": info_dict.get('duration', 0),
-                        "video_id": info_dict.get('id', '未知ID'),
-                        "author": info_dict.get('uploader', '未知上傳者'),
-                        "views": info_dict.get('view_count', 0),
-                        "requester": interaction.user,
-                        "user_avatar": interaction.user.avatar.url,
-                        "is_live": False
-                    }
+                            return {
+                                "file_path": None,
+                                "title": info_dict.get('title', '未知標題'),
+                                "url": info_dict.get('webpage_url', url),
+                                "stream_url": best_audio_url or info_dict.get('url'),
+                                "duration": 0,
+                                "video_id": info_dict.get('id', '未知ID'),
+                                "author": info_dict.get('uploader', '未知上傳者'),
+                                "views": info_dict.get('view_count', 0),
+                                "requester": interaction.user,
+                                "user_avatar": interaction.user.avatar.url,
+                                "is_live": True,
+                            }, None
 
-                    return video_info, None
+                        if info_dict.get('duration', 0) > self.time_limit:
+                            log.info(f"[音樂] 伺服器 ID: {interaction.guild.id}, 影片時長過長！")
+                            return None, "影片時長過長！超過 30 分鐘"
 
-                except Exception as e:
-                    log.error(f"[音樂] 下載過程發生錯誤: {str(e)}")
-                    try:
-                        partial_file = os.path.join(folder, f"{info_dict['id']}")
-                        
-                        async def clean_file(path):
-                            if await asyncio.to_thread(os.path.exists, path):
-                                await asyncio.to_thread(os.remove, path)
-                        
-                        await asyncio.gather(
-                            clean_file(partial_file),
-                            clean_file(f"{partial_file}.mp3")
-                        )
-                    except Exception as cleanup_error:
-                        log.error(f"[音樂] 無法清理部分下載檔案: {str(cleanup_error)}")
-                    raise
+                        log.info(f"[音樂] 正在下載 (策略 {strategy_idx + 1}/{len(player_client_strategies)}, 伺服器 ID: {interaction.guild.id}): {url}")
+                        await asyncio.to_thread(ydl.download, [url])
+                        log.info(f"[音樂] 下載完成 (伺服器 ID: {interaction.guild.id}): {url}")
+                        break  # Success — exit strategy loop
+
+                except yt_dlp.utils.DownloadError as e:
+                    error_msg = str(e).lower()
+
+                    if 'not available' in error_msg or 'blocked' in error_msg:
+                        return None, "此影片在您的地區不可用"
+
+                    if 'timeout' in error_msg or 'connection' in error_msg:
+                        last_error = e
+                        log.warning(f"[音樂] 網絡錯誤，重試下一個策略...")
+                        await asyncio.sleep(5)
+                        continue
+
+                    if 'signature' in error_msg or '403' in error_msg:
+                        last_error = e
+                        log.warning(f"[音樂] 策略 {player_clients} 簽名提取失敗，切換到下一個客戶端...")
+                        await asyncio.sleep(2)
+                        continue
+
+                    last_error = e
+                    log.warning(f"[音樂] 策略 {player_clients} 下載失敗: {e}")
+                    await asyncio.sleep(2)
+                    if strategy_idx < len(player_client_strategies) - 1:
+                        continue
+                    raise last_error
+
+            if info_dict is None:
+                raise last_error or Exception("所有策略均下載失敗")
+
+            # Validate the output file
+            file_path = os.path.join(folder, f"{info_dict['id']}.mp3")
+            if not await asyncio.to_thread(os.path.exists, file_path):
+                raise Exception("輸出檔案不存在")
+            if await asyncio.to_thread(os.path.getsize, file_path) == 0:
+                raise Exception("輸出檔案為空")
+
+            try:
+                ffmpeg_path = self.ffmpeg_config.get('location', '/usr/bin/ffmpeg')
+                await asyncio.to_thread(
+                    lambda: subprocess.run(
+                        [ffmpeg_path, '-v', 'error', '-i', file_path, '-f', 'null', '-'],
+                        check=True, capture_output=True,
+                    )
+                )
+            except subprocess.CalledProcessError as e:
+                raise Exception(f"檔案不是有效的 MP3 格式: {e.stderr.decode()}")
+
+            return {
+                "file_path": file_path,
+                "title": info_dict.get('title', '未知標題'),
+                "url": info_dict.get('webpage_url', url),
+                "stream_url": None,
+                "duration": info_dict.get('duration', 0),
+                "video_id": info_dict.get('id', '未知ID'),
+                "author": info_dict.get('uploader', '未知上傳者'),
+                "views": info_dict.get('view_count', 0),
+                "requester": interaction.user,
+                "user_avatar": interaction.user.avatar.url,
+                "is_live": False,
+            }, None
 
         except yt_dlp.utils.DownloadError as e:
             log.error(f"[音樂] yt-dlp 下載錯誤: {e}")
+            # Clean up partial files if info_dict was obtained
+            if info_dict:
+                try:
+                    partial = os.path.join(folder, f"{info_dict['id']}")
+                    for path in (partial, f"{partial}.mp3"):
+                        if await asyncio.to_thread(os.path.exists, path):
+                            await asyncio.to_thread(os.remove, path)
+                except Exception as cleanup_err:
+                    log.error(f"[音樂] 清理部分下載檔案失敗: {cleanup_err}")
             return None, f"下載失敗: {str(e)}"
         except Exception as e:
             log.error(f"[音樂] 下載失敗: {e}")
+            if info_dict:
+                try:
+                    partial = os.path.join(folder, f"{info_dict['id']}")
+                    for path in (partial, f"{partial}.mp3"):
+                        if await asyncio.to_thread(os.path.exists, path):
+                            await asyncio.to_thread(os.remove, path)
+                except Exception as cleanup_err:
+                    log.error(f"[音樂] 清理部分下載檔案失敗: {cleanup_err}")
             return None, "下載失敗，請稍後再試"
 
     def get_thumbnail_url(self, video_id):

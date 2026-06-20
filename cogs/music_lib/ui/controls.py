@@ -175,7 +175,7 @@ class MusicControlView(discord.ui.View):
         try:
             if self._is_updating:
                 return
-            
+
             self._is_updating = True
             await self.update_button_state()
             update_interval = 5
@@ -186,18 +186,27 @@ class MusicControlView(discord.ui.View):
             try:
                 while True:
                     voice_client = self.get_voice_client()
-                    if not voice_client or not voice_client.is_playing():
+                    if not voice_client or not voice_client.is_connected():
                         await self.update_button_state()
                         break
-                    
+
+                    # When paused, wait without advancing position or updating UI
+                    if voice_client.is_paused():
+                        await asyncio.sleep(1)
+                        continue
+
+                    if not voice_client.is_playing():
+                        await self.update_button_state()
+                        break
+
                     self.current_position += 1
                     if self.current_position > duration:
                         await self.update_button_state()
                         break
-                        
+
                     current_time = asyncio.get_event_loop().time()
-                    
-                    # Refresh message periodically
+
+                    # Refresh message periodically to keep it at the bottom of chat
                     if current_time - last_message_refresh >= message_refresh_interval:
                         try:
                             new_message = await self.message.channel.send(embed=self.current_embed, view=self)
@@ -207,14 +216,19 @@ class MusicControlView(discord.ui.View):
                         except Exception as e:
                             log.error(f"刷新訊息失敗: {e}")
                             break
-                    
-                    # Update progress bar
+
+                    # Update progress bar every update_interval seconds
                     if current_time - last_update >= update_interval:
                         if self.current_embed and self.message:
                             try:
                                 progress_bar = ProgressDisplay.create_progress_bar(self.current_position, duration)
-                                self.current_embed.set_field_at(3, name="🎵 播放進度", value=progress_bar, inline=False)
-                                
+                                progress_field_name = self._translate_music("player", "progress")
+                                # Find the progress field by name to avoid hardcoded index
+                                for idx, field in enumerate(self.current_embed.fields):
+                                    if field.name == progress_field_name or field.name == "🎵 播放進度":
+                                        self.current_embed.set_field_at(idx, name=progress_field_name, value=progress_bar, inline=False)
+                                        break
+
                                 await self.message.edit(embed=self.current_embed, view=self)
                                 last_update = current_time
                             except discord.errors.HTTPException as e:
@@ -233,7 +247,7 @@ class MusicControlView(discord.ui.View):
                                         break
                                 else:
                                     log.error(f"更新進度條位置失敗: {e}")
-                    
+
                     await asyncio.sleep(1)
             finally:
                 self._is_updating = False

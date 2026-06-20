@@ -15,17 +15,18 @@ class ProgressDisplay:
         Returns:
             str: Formatted progress bar with timestamps
         """
+        if total <= 0:
+            bar = "─" * length
+            return f"`00:00` ┃{bar}┃ `00:00`"
+
         filled = int(length * current / total)
-        # Using more aesthetic characters for the progress bar
         bar = "━" * filled + "─" * (length - filled)
-        # Add a slider character at the current position
         if filled < length:
             bar = bar[:filled] + "⚪" + bar[filled+1:]
-        
+
         minutes_current, seconds_current = divmod(current, 60)
         minutes_total, seconds_total = divmod(total, 60)
-        
-        # Format with emojis and better spacing
+
         return f"`{int(minutes_current):02d}:{int(seconds_current):02d}` ┃{bar}┃ `{int(minutes_total):02d}:{int(seconds_total):02d}`"
 
     @staticmethod

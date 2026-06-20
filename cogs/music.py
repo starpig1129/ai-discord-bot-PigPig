@@ -35,13 +35,10 @@ class YTMusic(commands.Cog):
         self.disconnect_timers = {}
 
     async def setup_hook(self):
-        """Initialize async components and LanguageManager"""
+        """Initialize async components and LanguageManager."""
         self.youtube = await YouTubeManager.create()
-        # Ensure LanguageManager is loaded after bot setup
-        await asyncio.sleep(1) # Small delay to ensure bot is ready
+        # Attempt early load; each command also lazy-loads if this returns None.
         self.lang_manager = self.bot.get_cog("LanguageManager")
-        if not self.lang_manager:
-            logger.error("LanguageManager cog not found!")
 
     @app_commands.command(name="mode", description="設置播放模式 (不循環/清單循環/單曲循環)")
     @app_commands.choices(mode=[
@@ -350,9 +347,10 @@ class YTMusic(commands.Cog):
             self.state_manager.update_state(interaction.guild.id, current_message=message)
             
             voice_client.play(audio_source)
-            # For single loop, the loop is handled by play_next, not the player loop
-            if not song.get('is_live') and self.queue_manager.get_play_mode(interaction.guild.id) != PlayMode.LOOP_SINGLE:
-                self.bot.loop.create_task(self._player_loop(interaction, song))
+            if not song.get('is_live'):
+                self.state_manager.cancel_player_loop(interaction.guild.id)
+                task = self.bot.loop.create_task(self._player_loop(interaction, song))
+                self.state_manager.update_state(interaction.guild.id, player_loop_task=task)
         except Exception as e:
             await func.report_error(e, "handling single loop")
             await self.play_next(interaction, force_new=True)
@@ -420,10 +418,12 @@ class YTMusic(commands.Cog):
             music_cog=self
         )
         self.state_manager.update_state(interaction.guild.id, current_message=message, current_song=song, last_played_song=song)
-        
+
         voice_client.play(audio_source)
         if not song.get('is_live'):
-            self.bot.loop.create_task(self._player_loop(interaction, song))
+            self.state_manager.cancel_player_loop(interaction.guild.id)
+            task = self.bot.loop.create_task(self._player_loop(interaction, song))
+            self.state_manager.update_state(interaction.guild.id, player_loop_task=task)
 
     async def _handle_after_play(self, interaction: discord.Interaction, song: dict):
         """Handle cleanup after song finishes playing"""
@@ -455,8 +455,8 @@ class YTMusic(commands.Cog):
                     guild_id,
                     count=5 - queue.qsize()
                 )
-                for song in next_songs:
-                    await self.queue_manager.add_to_queue(guild_id, song)
+                for next_song_item in next_songs:
+                    await self.queue_manager.add_to_queue(guild_id, next_song_item)
                 
                 # Enforce autoplay limit after adding new songs
                 await self.queue_manager.enforce_autoplay_limit(guild_id)
@@ -611,15 +611,11 @@ class YTMusic(commands.Cog):
 
         if voice_client.is_playing():
             voice_client.pause()
-            view.stop_progress_updater()
             await self._start_disconnect_timer(guild_id)
             await view.update_embed(interaction, self.lang_manager.translate(str(guild_id), "system", "music", "controls", "paused", user=interaction.user.name))
         elif voice_client.is_paused():
             voice_client.resume()
             await self._cancel_disconnect_timer(guild_id)
-            state = self.state_manager.get_state(guild_id)
-            if state.current_song:
-                view.start_progress_updater(state.current_song["duration"])
             await view.update_embed(interaction, self.lang_manager.translate(str(guild_id), "system", "music", "controls", "resumed", user=interaction.user.name))
         
         await view.update_button_state()
@@ -816,7 +812,8 @@ class YTMusic(commands.Cog):
         # Clean up the view
         await self.ui_manager.cleanup_view(guild_id)
 
-        # Clear queue and state
+        # Cancel any running player loop and clear queue and state
+        self.state_manager.cancel_player_loop(guild_id)
         self.queue_manager.clear_queue(guild_id)
         self.state_manager.update_state(guild_id, current_song=None, last_played_song=None, current_message=None, current_view=None, ui_messages=[])
         logger.info(f"[音樂] 伺服器 ID: {guild_id}, 已清理語音會話。")
@@ -899,12 +896,10 @@ class YTMusic(commands.Cog):
                     logger.info(f"[音樂] 伺服器 ID: {member.guild.id}, 頻道內無人，自動暫停播放。")
                     voice_client.pause()
                     await self._start_disconnect_timer(member.guild.id)
-                    
-                    # Update UI if possible
+
+                    # Update UI button state (progress updater handles paused state on its own)
                     view = self.ui_manager.get_current_view(member.guild.id)
                     if view:
-                        view.stop_progress_updater()
-                        # We can't send an interaction here, but we can update the buttons
                         await view.update_button_state()
 
             else:
@@ -915,13 +910,9 @@ class YTMusic(commands.Cog):
                         logger.info(f"[音樂] 伺服器 ID: {member.guild.id}, 有使用者加入，自動恢復播放。")
                         voice_client.resume()
                         await self._cancel_disconnect_timer(member.guild.id)
-                        
-                        # Update UI
+
                         view = self.ui_manager.get_current_view(member.guild.id)
                         if view:
-                            state = self.state_manager.get_state(member.guild.id)
-                            if state.current_song:
-                                view.start_progress_updater(state.current_song["duration"])
                             await view.update_button_state()
 
     async def _create_dummy_interaction(self, channel, guild, original_interaction):

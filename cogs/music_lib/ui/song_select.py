@@ -140,9 +140,10 @@ class SongSelectMenu(discord.ui.Select):
 
             # Add song to queue
             guild_id = interaction.guild.id
-            queue = view.player.queue_manager.get_queue(guild_id)
-            
-            if queue.qsize() >= 5:
+            queue_manager = view.player.queue_manager
+            queue = queue_manager.get_queue(guild_id)
+
+            if queue.qsize() >= queue_manager.MAX_QUEUE_SIZE:
                 embed = discord.Embed(
                     title=self.view_parent._translate_music("select", "queue_full"),
                     description=self.view_parent._translate_music("select", "wait_message"),
