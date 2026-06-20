@@ -1,3 +1,6 @@
+import sys
+import discord
+sys.modules["discord"] = discord
 # tests/conftest.py
 #
 # This conftest pre-loads the real addons.settings module before any test
@@ -15,3 +18,6 @@
 # importable.
 
 import addons.settings  # noqa: F401  — side-effect: caches real module
+import sys
+import discord
+sys.modules['discord'] = discord
