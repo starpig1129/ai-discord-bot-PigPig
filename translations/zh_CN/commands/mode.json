@@ -1,5 +1,10 @@
 {
+    "choices": {
+        "no_loop": "不循环",
+        "loop_queue": "列表循环",
+        "loop_single": "单曲循环"
+    },
     "responses": {
-        "success": "模式切换成功。"
+        "success": "已将播放模式设置为 {mode}。"
     }
 }
