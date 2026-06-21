@@ -3,7 +3,7 @@
 import asyncio
 import discord
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 from function import func
 from addons.settings import MemoryConfig
@@ -88,11 +88,11 @@ class MessageTracker:
                 if new_message_count >= self.settings.message_threshold:
                     # Log threshold reached and trigger async task
                     logger.info(f"Message threshold reached for channel {channel_id} (count: {new_message_count}), triggering memory processing")
-                    # Ensure channel is a TextChannel before passing to _process_channel_memory
-                    if isinstance(message.channel, discord.TextChannel):
+                    # Ensure channel is a valid messageable channel before passing to _schedule_processing
+                    if isinstance(message.channel, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread)):
                         self._schedule_processing(message.channel)
                     else:
-                        logger.warning(f"Skipping memory processing for non-text channel {channel_id}")
+                        logger.warning(f"Skipping memory processing for unsupported channel {channel_id}")
                 else:
                     # Check time threshold
                     last_summary_timestamp = channel_state.get('last_summary_timestamp', 0.0)
@@ -102,13 +102,13 @@ class MessageTracker:
                     
                     if current_time - last_summary_timestamp > time_threshold and new_message_count > 0:
                          logger.info(f"Time threshold reached for channel {channel_id} (last: {last_summary_timestamp}), triggering memory processing")
-                         if isinstance(message.channel, discord.TextChannel):
+                         if isinstance(message.channel, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread)):
                             self._schedule_processing(message.channel)
                 
         except Exception as e:
             await func.report_error(e, f"Failed to track message {message.id}")
 
-    def _schedule_processing(self, channel: discord.TextChannel):
+    def _schedule_processing(self, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread]):
         """
         Schedules channel memory processing with a debounce delay.
         This prevents the background LLM task from competing with 
@@ -154,7 +154,7 @@ class MessageTracker:
             logger.info("High-priority message detected: Interrupting active background memory processing.")
             self._active_summarization_task.cancel()
 
-    async def _process_channel_memory(self, channel: discord.TextChannel):
+    async def _process_channel_memory(self, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread]):
         """
         Processes memory for a channel when threshold is reached.
         
@@ -260,6 +260,16 @@ class MessageTracker:
             
             # Log successful update of channel memory state
             logger.info(f"Successfully updated memory state for channel {channel.id}, new start_message_id: {messages_to_process[-1].id}")
+            
+            # If the number of retrieved messages equals the fetch limit, it indicates
+            # that there are likely more historical messages remaining in this channel.
+            # We schedule another processing cycle to automatically drain the queue.
+            if len(messages) == fetch_limit:
+                logger.info(
+                    f"Retrieved maximum batch size ({fetch_limit}) for channel {channel.id}. "
+                    "More historical messages may remain. Scheduling next draining batch."
+                )
+                self._schedule_processing(channel)
             
         except asyncio.CancelledError:
             logger.info(f"Memory processing for channel {channel.id} was interrupted to prioritize user conversation.")

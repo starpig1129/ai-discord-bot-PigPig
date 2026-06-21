@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from addons.logging import get_logger
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, List, Any
+from typing import TYPE_CHECKING, Optional, List, Any, Union
 
 import discord
 from discord import app_commands
@@ -92,7 +92,7 @@ class EpisodicMemoryService(commands.Cog):
             await interaction.response.send_message(starting_text, ephemeral=True)
 
             channel = interaction.channel
-            if not channel or not isinstance(channel, discord.TextChannel):
+            if not channel or not isinstance(channel, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread)):
                 not_channel_text = self._translate_text(lang_manager, guild_id, "commands", "memory", "force_update", "not_text_channel")
                 await interaction.edit_original_response(content=not_channel_text)
                 return

@@ -6,7 +6,7 @@ import os
 import time
 from addons.logging import get_logger
 from datetime import datetime
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any, Tuple, Union
 from .language_manager import LanguageManager
 from addons.tokens import tokens
 from function import func
@@ -130,7 +130,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="Default (Follow Server Settings)", value="default"),
         app_commands.Choice(name="Story Mode", value="story")
     ])
-    async def set_channel_mode(self, interaction: discord.Interaction, channel: discord.TextChannel, mode: app_commands.Choice[str]):
+    async def set_channel_mode(self, interaction: discord.Interaction, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], mode: app_commands.Choice[str]):
         """Configure a specific mode override for a single channel."""
         if not await self.check_admin_permissions(interaction, defer=True):
             return
@@ -175,7 +175,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="Whitelist", value="whitelist"),
         app_commands.Choice(name="Blacklist", value="blacklist")
     ])
-    async def add_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
+    async def add_channel_command(self, interaction: discord.Interaction, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], list_type: app_commands.Choice[str]):
         """Add a channel to the server's whitelist or blacklist."""
         if not await self.check_admin_permissions(interaction, defer=True):
             return
@@ -218,7 +218,7 @@ class ChannelManager(commands.Cog):
         app_commands.Choice(name="Whitelist", value="whitelist"),
         app_commands.Choice(name="Blacklist", value="blacklist")
     ])
-    async def remove_channel_command(self, interaction: discord.Interaction, channel: discord.TextChannel, list_type: app_commands.Choice[str]):
+    async def remove_channel_command(self, interaction: discord.Interaction, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], list_type: app_commands.Choice[str]):
         """Remove a channel from the server's whitelist or blacklist."""
         if not await self.check_admin_permissions(interaction, defer=True):
             return
@@ -257,7 +257,7 @@ class ChannelManager(commands.Cog):
             await interaction.followup.send(not_found_message, ephemeral=True)
 
     @app_commands.command(name="auto_response", description="Set channel auto-response")
-    async def auto_response_command(self, interaction: discord.Interaction, channel: discord.TextChannel, enabled: bool):
+    async def auto_response_command(self, interaction: discord.Interaction, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], enabled: bool):
         """Enable or disable automatic bot responses in a specific channel."""
         if not await self.check_admin_permissions(interaction, defer=True):
             return
@@ -277,7 +277,7 @@ class ChannelManager(commands.Cog):
         
         await interaction.followup.send(success_message, ephemeral=True)
 
-    def is_allowed_channel(self, channel: discord.TextChannel, guild_id: str) -> Tuple[bool, bool, Optional[str]]:
+    def is_allowed_channel(self, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], guild_id: str) -> Tuple[bool, bool, Optional[str]]:
         """
         Determine if the bot is allowed to respond in a channel and get its effective mode.
 
