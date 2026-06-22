@@ -5,7 +5,6 @@ import yt_dlp
 import discord
 import random
 import re
-from typing import Optional, Any, Dict, List, Set
 from youtube_search import YoutubeSearch
 from addons.settings import music_config
 from addons.logging import get_logger
@@ -142,17 +141,7 @@ class YouTubeManager:
             log.error(f"YouTube 搜尋失敗: {e}")
             return []
 
-    async def download_playlist(self, url: str, folder: str, interaction: discord.Interaction) -> tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
-        """Download a YouTube playlist.
-
-        Args:
-            url: The YouTube playlist URL.
-            folder: The destination folder path.
-            interaction: The Discord interaction object.
-
-        Returns:
-            A tuple of (video_infos, error_message).
-        """
+    async def download_playlist(self, url, folder, interaction):
         try:
             await asyncio.to_thread(os.makedirs, folder, exist_ok=True)
             output_template = os.path.join(folder, '%(id)s.mp3')
@@ -203,7 +192,7 @@ class YouTubeManager:
                         "author": entry.get('uploader', '未知上傳者'),
                         "views": entry.get('view_count', 0),
                         "requester": interaction.user,
-                        "user_avatar": interaction.user.display_avatar.url,
+                        "user_avatar": interaction.user.avatar.url,
                         "file_path": None,
                         "is_live": entry.get('is_live', False)
                     }
@@ -224,16 +213,7 @@ class YouTubeManager:
             log.error(f"[音樂] 播放清單下載失敗: {e}")
             return None, "播放清單下載失敗"
 
-    async def get_video_info_without_download(self, url: str, interaction: discord.Interaction) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """Get video information without downloading.
-
-        Args:
-            url: The YouTube video URL.
-            interaction: The Discord interaction object.
-
-        Returns:
-            A tuple of (video_info, error_message).
-        """
+    async def get_video_info_without_download(self, url, interaction):
         try:
             ydl_opts = {
                 'format': 'bestaudio/best',
@@ -277,7 +257,7 @@ class YouTubeManager:
                 "author": info_dict.get('uploader', '未知上傳者'),
                 "views": info_dict.get('view_count', 0),
                 "requester": interaction.user,
-                "user_avatar": interaction.user.display_avatar.url,
+                "user_avatar": interaction.user.avatar.url,
                 "is_live": is_live
             }
 
@@ -287,17 +267,7 @@ class YouTubeManager:
             log.error(f"[音樂] 取得影片資訊失敗: {e}")
             return None, "取得影片資訊失敗"
 
-    async def download_audio(self, url: str, folder: str, interaction: discord.Interaction) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """Download audio from YouTube.
-
-        Args:
-            url: The YouTube video URL.
-            folder: The destination folder path.
-            interaction: The Discord interaction object.
-
-        Returns:
-            A tuple of (video_info, error_message).
-        """
+    async def download_audio(self, url, folder, interaction):
         try:
             await asyncio.to_thread(os.makedirs, folder, exist_ok=True)
             output_template = os.path.join(folder, '%(id)s')
@@ -415,7 +385,7 @@ class YouTubeManager:
                                 "author": info_dict.get('uploader', '未知上傳者'),
                                 "views": info_dict.get('view_count', 0),
                                 "requester": interaction.user,
-                                "user_avatar": interaction.user.display_avatar.url,
+                                "user_avatar": interaction.user.avatar.url,
                                 "is_live": True,
                             }, None
 
@@ -484,7 +454,7 @@ class YouTubeManager:
                 "author": info_dict.get('uploader', '未知上傳者'),
                 "views": info_dict.get('view_count', 0),
                 "requester": interaction.user,
-                "user_avatar": interaction.user.display_avatar.url,
+                "user_avatar": interaction.user.avatar.url,
                 "is_live": False,
             }, None
 
@@ -515,20 +485,7 @@ class YouTubeManager:
     def get_thumbnail_url(self, video_id):
         return f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
 
-    async def get_related_videos(self, video_id: str, title: str, author: str, interaction: discord.Interaction, limit: int = 5, exclude_ids: Optional[Set[str]] = None) -> tuple[List[Dict[str, Any]], Optional[str]]:
-        """Get related videos for a YouTube video.
-
-        Args:
-            video_id: The YouTube video ID.
-            title: The title of the video.
-            author: The author/channel of the video.
-            interaction: The Discord interaction object.
-            limit: The maximum number of recommendations.
-            exclude_ids: A set of video IDs to exclude.
-
-        Returns:
-            A tuple of (related_videos, error_message).
-        """
+    async def get_related_videos(self, video_id: str, title: str, author: str, interaction: discord.Interaction, limit: int = 5, exclude_ids: set = None):
         if exclude_ids is None:
             exclude_ids = set()
         
@@ -555,7 +512,7 @@ class YouTubeManager:
                         "author": video.get('author', '未知上傳者'),
                         "views": video.get('views', 0),
                         "requester": interaction.user,
-                        "user_avatar": interaction.user.display_avatar.url,
+                        "user_avatar": interaction.user.avatar.url,
                         "is_live": False
                     })
                     exclude_ids.add(video_id_res)
@@ -661,7 +618,7 @@ class YouTubeManager:
                                     "author": entry.get('uploader', '未知上傳者'),
                                     "views": entry.get('view_count', 0),
                                     "requester": interaction.user,
-                                    "user_avatar": interaction.user.display_avatar.url,
+                                    "user_avatar": interaction.user.avatar.url,
                                     "is_live": False
                                 })
                                 exclude_ids.add(entry_id)

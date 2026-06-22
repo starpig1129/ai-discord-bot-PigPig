@@ -7,7 +7,7 @@ from addons.logging import get_logger
 log = get_logger(source=__name__, server_id="system")
 logger = log
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Any
+from typing import Optional
 
 from addons.settings import music_config
 from .music_lib.youtube import YouTubeManager
@@ -275,13 +275,8 @@ class YTMusic(commands.Cog):
         
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
-    async def play_next(self, interaction: discord.Interaction, force_new: bool = False) -> None:
-        """Play the next song in the queue.
-
-        Args:
-            interaction: The Discord interaction object.
-            force_new: Whether to force playing a new song instead of looping.
-        """
+    async def play_next(self, interaction: discord.Interaction, force_new: bool = False):
+        """Play the next song in queue"""
         guild_id = interaction.guild.id
         guild_id_str = str(guild_id)
         voice_client = interaction.guild.voice_client
@@ -304,16 +299,13 @@ class YTMusic(commands.Cog):
                 title = self.lang_manager.translate(guild_id_str, "commands", "play", "responses", "queue_finished")
                 embed = discord.Embed(title=f"🌟 | {title}", color=discord.Color.blue())
                 # Use followup if interaction is available, otherwise use channel.send
-                message = None
-                try:
-                    if hasattr(interaction, 'followup') and not interaction.response.is_done():
-                         message = await interaction.followup.send(embed=embed)
-                    elif interaction.channel:
-                         message = await interaction.channel.send(embed=embed)
-                except discord.errors.Forbidden:
-                    logger.warning(f"[Music] Guild ID: {guild_id} - Failed to send queue finished message due to Forbidden (Missing Access).")
-                except Exception as send_err:
-                    logger.error(f"[Music] Guild ID: {guild_id} - Failed to send queue finished message: {send_err}")
+                if hasattr(interaction, 'followup') and not interaction.response.is_done():
+                     message = await interaction.followup.send(embed=embed)
+                elif interaction.channel:
+                     message = await interaction.channel.send(embed=embed)
+                else: # Fallback if channel is not available either
+                     logger.warning("Cannot send queue finished message: no interaction followup or channel.")
+                     message = None
 
                 if message:
                     state = self.state_manager.get_state(guild_id)
@@ -329,27 +321,16 @@ class YTMusic(commands.Cog):
             await func.report_error(e, f"playing next song in guild {guild_id}")
             title = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "playback_error")
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-            
-            message = None
-            try:
-                if hasattr(interaction, 'followup') and not interaction.response.is_done():
-                     message = await interaction.followup.send(embed=embed)
-                elif interaction.channel:
-                     message = await interaction.channel.send(embed=embed)
-            except discord.errors.Forbidden:
-                logger.warning(f"[Music] Guild ID: {guild_id} - Failed to send playback error message due to Forbidden.")
-            except Exception as send_err:
-                logger.error(f"[Music] Guild ID: {guild_id} - Failed to send playback error message: {send_err}")
+            if hasattr(interaction, 'followup') and not interaction.response.is_done():
+                 message = await interaction.followup.send(embed=embed)
+            elif interaction.channel:
+                 message = await interaction.channel.send(embed=embed)
+            else:
+                 message = None
 
             if message:
                 state = self.state_manager.get_state(guild_id)
                 state.ui_messages.append(message)
-                
-            # Avoid infinite loop if the error is Forbidden (e.g. if we somehow still got it)
-            if isinstance(e, discord.errors.Forbidden):
-                logger.error(f"[Music] Guild ID: {guild_id} - Forbidden error encountered. Stopping playback attempts to prevent infinite loop.")
-                return
-                
             await self.play_next(interaction, force_new=True)
 
     async def _handle_single_loop(self, interaction: discord.Interaction, state, voice_client):
@@ -427,7 +408,7 @@ class YTMusic(commands.Cog):
         if queue_copy:
             self.queue_manager.set_queue(guild_id, new_queue)
 
-    async def _play_song(self, interaction: discord.Interaction, song: dict, voice_client: Any) -> None:
+    async def _play_song(self, interaction: discord.Interaction, song: dict, voice_client):
         """Play a song and update UI"""
         await self._cancel_disconnect_timer(interaction.guild.id)
         if voice_client.is_playing():
@@ -449,13 +430,8 @@ class YTMusic(commands.Cog):
             task = self.bot.loop.create_task(self._player_loop(interaction, song))
             self.state_manager.update_state(interaction.guild.id, player_loop_task=task)
 
-    async def _handle_after_play(self, interaction: discord.Interaction, song: dict) -> None:
-        """Handle cleanup and queue transitions after a song finishes playing.
-
-        Args:
-            interaction: The Discord interaction object.
-            song: The song dictionary that just finished playing.
-        """
+    async def _handle_after_play(self, interaction: discord.Interaction, song: dict):
+        """Handle cleanup after song finishes playing"""
         guild_id = interaction.guild.id
         guild_id_str = str(guild_id)
         channel = interaction.channel
@@ -505,8 +481,6 @@ class YTMusic(commands.Cog):
                 try:
                     # Try to play next song
                     await self.play_next(new_interaction)
-                except discord.errors.Forbidden as e:
-                    logger.warning(f"[Music] Guild ID: {guild_id} - Forbidden error when playing next song in _handle_after_play, stopping playback.")
                 except Exception as e:
                     await func.report_error(e, "playing next song in _handle_after_play")
                     if channel:
@@ -530,8 +504,6 @@ class YTMusic(commands.Cog):
                             
                             # Try one more time with force_new
                             await self.play_next(new_interaction, force_new=True)
-                        except discord.errors.Forbidden:
-                            logger.warning(f"[Music] Guild ID: {guild_id} - Failed to send fallback/retry error message due to Forbidden.")
                         except Exception as retry_error:
                             await func.report_error(retry_error, "retrying to play next song in _handle_after_play")
                             try:
@@ -546,8 +518,6 @@ class YTMusic(commands.Cog):
                                 message = await channel.send(embed=embed)
                                 state = self.state_manager.get_state(guild_id)
                                 state.ui_messages.append(message)
-                            except discord.errors.Forbidden:
-                                logger.warning(f"[Music] Guild ID: {guild_id} - Failed to send final error message due to Forbidden.")
                             except Exception as final_error:
                                  await func.report_error(final_error, "sending final error message in _handle_after_play")
             
@@ -802,12 +772,8 @@ class YTMusic(commands.Cog):
         
         return text if text.strip() else self.lang_manager.translate(guild_id_str, "system", "music", "player", "queue_empty")
 
-    async def _fill_autoplay_queue(self, interaction: discord.Interaction) -> None:
-        """Fills the queue with recommended songs when autoplay is on.
-
-        Args:
-            interaction: The Discord interaction object.
-        """
+    async def _fill_autoplay_queue(self, interaction: discord.Interaction):
+        """Fills the queue with recommended songs when autoplay is on."""
         guild_id = interaction.guild.id
         state = self.state_manager.get_state(guild_id)
         
@@ -837,10 +803,7 @@ class YTMusic(commands.Cog):
                             title=f"🎶 | 已自動為您加入 {len(related_videos)} 首推薦歌曲",
                             color=discord.Color.blue()
                         )
-                        try:
-                            await channel.send(embed=embed, delete_after=15)
-                        except discord.errors.Forbidden:
-                            logger.warning(f"[Music] Guild ID: {guild_id} - Failed to send autoplay notification due to Forbidden.")
+                        await channel.send(embed=embed, delete_after=15)
                 else:
                     logger.warning(f"無法獲取推薦影片: {error}")
 
