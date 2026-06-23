@@ -117,7 +117,7 @@ class YTMusic(commands.Cog):
                 await func.report_error(e, "music.py/play/channel.connect")
                 title = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "voice_connect_failed")
                 embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                await interaction.edit_original_response(embed=embed)
                 return
 
         # 如果沒有提供查詢，刷新UI
@@ -136,10 +136,10 @@ class YTMusic(commands.Cog):
                     self
                 )
                 refresh_message = self.lang_manager.translate(str(guild_id), "commands", "play", "responses", "refreshed_ui")
-                await interaction.followup.send(refresh_message, ephemeral=True)
+                await interaction.edit_original_response(content=refresh_message)
             else:
                 no_song_message = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "nothing_playing")
-                await interaction.followup.send(no_song_message, ephemeral=True)
+                await interaction.edit_original_response(content=no_song_message)
             return
 
         # 如果有提供查詢，將音樂加入播放清單
@@ -172,7 +172,7 @@ class YTMusic(commands.Cog):
         if error:
             title = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "playlist_download_failed", error=error)
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.edit_original_response(embed=embed)
             return
             
         # Attribute ownership to the user for all playlist items
@@ -202,7 +202,7 @@ class YTMusic(commands.Cog):
             description=description,
             color=discord.Color.blue()
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.edit_original_response(embed=embed)
 
     async def _handle_single_video(self, interaction: discord.Interaction, url: str) -> bool:
         """Handle single video URL"""
@@ -221,7 +221,7 @@ class YTMusic(commands.Cog):
         if error:
             title = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "video_info_failed", error=error)
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.edit_original_response(embed=embed)
             return False
             
         video_info['added_by'] = interaction.user.id
@@ -232,7 +232,7 @@ class YTMusic(commands.Cog):
         if success:
             title = self.lang_manager.translate(guild_id_str, "commands", "play", "responses", "song_added", title=video_info['title'])
             embed = discord.Embed(title=f"✅ | {title}", color=discord.Color.blue())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.edit_original_response(embed=embed)
             return True
         else:
             title = self.lang_manager.translate(guild_id_str, "commands", "play", "errors", "queue_full_title")
@@ -242,7 +242,7 @@ class YTMusic(commands.Cog):
                 description=desc,
                 color=discord.Color.red()
             )
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.edit_original_response(embed=embed)
             return False
 
     async def _handle_search(self, interaction: discord.Interaction, query: str):
@@ -252,7 +252,7 @@ class YTMusic(commands.Cog):
         if not results:
             title = self.lang_manager.translate(str(guild_id), "commands", "play", "errors", "no_results")
             embed = discord.Embed(title=f"❌ | {title}", color=discord.Color.red())
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.edit_original_response(embed=embed)
             return
         
         # Format durations properly
@@ -273,7 +273,7 @@ class YTMusic(commands.Cog):
             color=discord.Color.blue()
         )
         
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        await interaction.edit_original_response(embed=embed, view=view)
 
     async def play_next(self, interaction: discord.Interaction, force_new: bool = False) -> None:
         """Play the next song in the queue.
