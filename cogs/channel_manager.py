@@ -277,6 +277,45 @@ class ChannelManager(commands.Cog):
         
         await interaction.followup.send(success_message, ephemeral=True)
 
+    @app_commands.command(name="view_channel_config", description="View the current channel and server configurations")
+    async def view_channel_config(self, interaction: discord.Interaction):
+        """View the current global and per-channel response settings."""
+        if not await self.check_admin_permissions(interaction, defer=True):
+            return
+
+        guild_id = str(interaction.guild_id)
+        config = self.load_config(guild_id)
+
+        embed = discord.Embed(title="Channel Configuration", color=discord.Color.blue())
+
+        # Server Mode
+        server_mode = config.get("mode", "unrestricted")
+        embed.add_field(name="Server Mode", value=server_mode.capitalize(), inline=False)
+
+        # Whitelist
+        whitelist = config.get("whitelist", [])
+        whitelist_val = " ".join([f"<#{c}>" for c in whitelist]) if whitelist else "None"
+        embed.add_field(name="Whitelist", value=whitelist_val, inline=False)
+
+        # Blacklist
+        blacklist = config.get("blacklist", [])
+        blacklist_val = " ".join([f"<#{c}>" for c in blacklist]) if blacklist else "None"
+        embed.add_field(name="Blacklist", value=blacklist_val, inline=False)
+
+        # Channel Modes
+        channel_modes = config.get("channel_modes", {})
+        modes_list = [f"<#{c}>: {m}" for c, m in channel_modes.items()]
+        modes_val = "\n".join(modes_list) if modes_list else "None"
+        embed.add_field(name="Special Channel Modes", value=modes_val, inline=False)
+
+        # Auto Responses
+        auto_responses = config.get("auto_response", {})
+        auto_list = [f"<#{c}>" for c, enabled in auto_responses.items() if enabled]
+        auto_val = " ".join(auto_list) if auto_list else "None"
+        embed.add_field(name="Auto Response Enabled", value=auto_val, inline=False)
+
+        await interaction.edit_original_response(embed=embed)
+
     def is_allowed_channel(self, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], guild_id: str) -> Tuple[bool, bool, Optional[str]]:
         """
         Determine if the bot is allowed to respond in a channel and get its effective mode.
