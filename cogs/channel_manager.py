@@ -91,7 +91,10 @@ class ChannelManager(commands.Cog):
             error_message = "You do not have permission to perform this action. Restricted to administrators."
         
         if interaction.response.is_done():
-            await interaction.followup.send(error_message, ephemeral=True)
+            try:
+                await interaction.edit_original_response(content=error_message)
+            except discord.NotFound:
+                await interaction.followup.send(error_message, ephemeral=True)
         else:
             await interaction.response.send_message(error_message, ephemeral=True)
         return False

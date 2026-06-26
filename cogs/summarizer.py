@@ -119,7 +119,7 @@ class SummarizerCog(commands.Cog):
 
             if not dialogue_history or human_msg_count == 0:
                 no_msg_text = self.lang_manager.translate(guild_id, "commands", "summarize", "responses", "no_messages") if self.lang_manager else "No messages to summarize."
-                await interaction.followup.send(no_msg_text, ephemeral=True)
+                await interaction.edit_original_response(content=no_msg_text)
                 return
 
             # Localization for AI prompt
