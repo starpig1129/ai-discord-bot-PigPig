@@ -15,6 +15,7 @@ class OrchestratorRequest:
     bot: Any
     message: Message
     logger: Any
+    announce_new_version: bool = False
 
 class OrchestratorResponse(BaseModel):
     """Response model returned by the orchestrator.
@@ -30,4 +31,4 @@ class OrchestratorResponse(BaseModel):
     )
 
 
-__all__ = ["OrchestratorResponse"]
+__all__ = ["OrchestratorRequest", "OrchestratorResponse"]

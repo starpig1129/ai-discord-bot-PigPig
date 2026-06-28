@@ -304,8 +304,25 @@ class PigPig(commands.Bot):
                         is_reply_to_bot = True
 
                 if is_allowed and (self.user.id in message.raw_mentions and not message.mention_everyone or auto_response_enabled or is_reply_to_bot):
+                    # Check if this is the first guild message after a version update.
+                    _announce = False
+                    if hasattr(self, "version_storage"):
+                        _current_ver = getattr(base_config, "version", None)
+                        if _current_ver:
+                            _seen_ver = self.version_storage.get_seen_version(guild_id)
+                            _announce = (_seen_ver != _current_ver)
+
                     message_edit = await message.reply("...")
-                    await self.orchestrator.handle_message(self, message_edit, message, bound_log)
+                    await self.orchestrator.handle_message(
+                        self, message_edit, message, bound_log,
+                        announce_new_version=_announce,
+                    )
+
+                    # Mark guild as having seen this version only after a successful reply.
+                    if _announce and hasattr(self, "version_storage"):
+                        _current_ver = getattr(base_config, "version", None)
+                        if _current_ver:
+                            self.version_storage.set_seen_version(guild_id, _current_ver)
         except Exception as e:
             await func.report_error(e, f"on_message: {e}")
             
@@ -431,6 +448,13 @@ class PigPig(commands.Bot):
 
         # Initialize Orchestrator after cogs are loaded so UserDataCog is available
         self.orchestrator = Orchestrator(self)
+
+        # Version announcement storage — independent of the memory subsystem.
+        from cogs.memory.db.version_storage import GuildVersionStorage
+        from addons.settings import memory_config
+        _version_db_path = getattr(memory_config, "db_path", "data/pigpig.db")
+        self.version_storage = GuildVersionStorage(_version_db_path)
+        log.info("GuildVersionStorage initialized")
 
         # Provide running event loop to storage (for thread-safe coroutine submission) if supported.
         if getattr(memory_config, "enabled", True) and getattr(self, "storage", None):

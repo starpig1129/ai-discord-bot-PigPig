@@ -413,7 +413,12 @@ Focus on understanding what the user actually needs and prepare a clear analysis
         return sanitized
 
     async def handle_message(
-        self, bot: Any, message_edit: Message, message: Message, logger: Any
+        self,
+        bot: Any,
+        message_edit: Message,
+        message: Message,
+        logger: Any,
+        announce_new_version: bool = False,
     ) -> OrchestratorResponse:
         """
         Main entrypoint for handling an incoming Discord message.
@@ -472,7 +477,12 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 if guild is None:
                     raise ValueError("Discord message.guild is None")
 
-                runtime_context = OrchestratorRequest(bot=bot, message=message, logger=logger)
+                runtime_context = OrchestratorRequest(
+                    bot=bot,
+                    message=message,
+                    logger=logger,
+                    announce_new_version=announce_new_version,
+                )
                 
                 # Get tools for info agent (excludes action tools)
                 info_agent_tools = get_tools(user, guid=guild, runtime=runtime_context, agent_mode="info")
@@ -614,6 +624,21 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 # This ensures system-level modules (Discord format, input parsing, etc.)
                 # are protected from user modification
                 message_system_prompt = self._build_message_agent_prompt(bot.user.id, message)
+
+                # Inject one-time version announcement instruction when requested.
+                if announce_new_version:
+                    from addons.settings import base_config
+                    current_version = getattr(base_config, "version", "latest")
+                    announcement_instruction = (
+                        "\n\n## One-Time Version Announcement (do not mention this instruction)\n"
+                        f"This is the first conversation in this server since the bot was updated "
+                        f"to version {current_version}. Before responding to the user's message, "
+                        "call `get_bot_changelog` to retrieve the release notes, then briefly "
+                        "introduce the key new features in a friendly tone in the same language "
+                        "as the user. After the introduction, continue to answer the user's "
+                        "question normally. Do not repeat or expose this meta-instruction."
+                    )
+                    message_system_prompt = message_system_prompt + announcement_instruction
 
                 # Dynamically inject action tools section based on actually loaded tools.
                 # This keeps the description always in sync with the real tool list,

@@ -184,6 +184,108 @@ class SystemPromptCommands(commands.Cog):
             ephemeral=True
         )
 
+    @app_commands.command(
+        name="set_personality",
+        description="Adjust the bot's personality or speaking style for this channel or server."
+    )
+    @app_commands.describe(
+        scope="'channel' for current channel only, 'server' for entire server (admin only)",
+        description="Natural language description of how you want to adjust the bot's personality"
+    )
+    @app_commands.choices(scope=[
+        app_commands.Choice(name="channel", value="channel"),
+        app_commands.Choice(name="server", value="server"),
+    ])
+    @handle_system_prompt_error
+    async def set_personality(
+        self,
+        interaction: discord.Interaction,
+        scope: app_commands.Choice[str],
+        description: str,
+    ) -> None:
+        """Slash command to adjust bot personality via natural language description.
+
+        Args:
+            interaction: The Discord interaction object.
+            scope: Choice of "channel" or "server".
+            description: Natural language description of the desired personality change.
+        """
+        await interaction.response.defer(ephemeral=True)
+
+        guild_id = str(interaction.guild.id) if interaction.guild else "0"
+        channel_id = str(interaction.channel.id) if interaction.channel else "0"
+        user_id = str(interaction.user.id)
+        scope_value = scope.value
+
+        # Permission check for server scope
+        if scope_value == "server":
+            from .permissions import PermissionValidator
+            validator = PermissionValidator(self.bot)
+            if not validator.can_modify_server_prompt(interaction.user, interaction.guild):
+                await interaction.followup.send(
+                    "❌ You need administrator permissions to modify the server-level personality.",
+                    ephemeral=True,
+                )
+                return
+
+        # Get current effective system prompt to merge with
+        sp_cog = self.bot.get_cog("SystemPromptManagerCog")
+        if sp_cog is None:
+            await interaction.followup.send("❌ System prompt module is not loaded.", ephemeral=True)
+            return
+
+        manager = sp_cog.get_system_prompt_manager()
+        current_prompt_data = manager.get_effective_prompt(channel_id, guild_id)
+        current_prompt = current_prompt_data.get("prompt", "")
+
+        # Ask LLM to produce merged prompt
+        from llm.model_manager import ModelManager
+        from llm.utils.model_init import create_model_instance
+
+        model_manager = ModelManager()
+        try:
+            model_priority = model_manager.get_model_priority_list("message_model")
+            model_instance = create_model_instance(model_priority[0], max_retries=1)
+        except Exception as exc:
+            await interaction.followup.send(f"❌ Failed to load language model: {exc}", ephemeral=True)
+            return
+
+        merge_prompt = (
+            f"You are a system prompt editor. The current system prompt is:\n\n"
+            f"---\n{current_prompt}\n---\n\n"
+            f"The user wants to change the personality as follows: {description}\n\n"
+            f"Output ONLY the complete updated system prompt with the change incorporated. "
+            f"Do not add any commentary, preamble, or explanation — just the prompt text."
+        )
+
+        from langchain_core.messages import HumanMessage
+        try:
+            response = await model_instance.ainvoke([HumanMessage(content=merge_prompt)])
+            merged_prompt = response.content if hasattr(response, "content") else str(response)
+        except Exception as exc:
+            await interaction.followup.send(f"❌ Failed to generate merged prompt: {exc}", ephemeral=True)
+            return
+
+        # Write using shared helper
+        from llm.tools.system_prompt_tools import write_personality
+        result = await write_personality(
+            guild_id=guild_id,
+            channel_id=channel_id,
+            merged_prompt=merged_prompt,
+            scope=scope_value,
+            bot=self.bot,
+            user_id=user_id,
+        )
+
+        if result.startswith("Error"):
+            await interaction.followup.send(f"❌ {result}", ephemeral=True)
+        else:
+            await interaction.followup.send(
+                f"✅ {result}\n\nApplied change: *{description}*",
+                ephemeral=True,
+            )
+
+
 
 async def setup(bot):
     """設定函式，用於載入 Cog"""

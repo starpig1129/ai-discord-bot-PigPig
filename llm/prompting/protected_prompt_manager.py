@@ -35,6 +35,7 @@ class ProtectedPromptManager:
         "information_handling",    # Priority order for information sources
         "error_handling",          # How to handle errors
         "reminders",               # Final critical reminders
+        "personality_modification", # Instructions for self-modifying personality via tool call
     }
     
     # Define which modules users can customize
