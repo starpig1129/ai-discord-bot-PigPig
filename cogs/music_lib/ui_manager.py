@@ -52,8 +52,19 @@ class UIManager:
         return self.views.get(guild_id)
 
     async def update_player_ui(self, interaction: discord.Interaction, item: Dict[str, Any],
-                             current_message: Optional[discord.Message], youtube_manager, music_cog) -> discord.Message:
-        """Update or create the music player UI"""
+                             current_message: Optional[discord.Message], youtube_manager: Any, music_cog: Any) -> Optional[discord.Message]:
+        """Update or create the music player UI.
+
+        Args:
+            interaction: The Discord interaction object.
+            item: A dictionary containing song information.
+            current_message: The current player message to update or delete.
+            youtube_manager: The YouTube manager instance.
+            music_cog: The music cog instance.
+
+        Returns:
+            The sent Discord Message object, or None if the message could not be sent.
+        """
         try:
             guild_id = interaction.guild.id
             guild_id_str = str(guild_id)
@@ -93,23 +104,27 @@ class UIManager:
             state.ui_messages.clear()
 
             # Always send a new message to ensure it's at the bottom
-            message = await interaction.channel.send(embed=embed, view=view)
-            
-            if not message:
-                raise RuntimeError("Failed to send the new player message.")
+            message = None
+            try:
+                message = await interaction.channel.send(embed=embed, view=view)
+            except discord.errors.Forbidden:
+                log.warning(f"Failed to send player UI in guild {guild_id}: Forbidden (Missing Access). Music will play without UI.")
 
-            # Track the new player message
-            state.current_message = message
-            state.ui_messages.append(message)
-            
-            view.message = message
-            view.current_embed = embed
-            
-            await view.update_button_state()
-            
-            # Only start progress updater if not live
-            if not item.get('is_live', False):
-                view.start_progress_updater(item['duration'])
+            if message:
+                # Track the new player message
+                state.current_message = message
+                state.ui_messages.append(message)
+                
+                view.message = message
+                view.current_embed = embed
+                
+                await view.update_button_state()
+                
+                # Only start progress updater if not live
+                if not item.get('is_live', False):
+                    view.start_progress_updater(item['duration'])
+            else:
+                state.current_message = None
             
             return message
             

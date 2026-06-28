@@ -80,7 +80,7 @@ class BotInfoTools:
                 logger.warning(f"get_bot_changelog failed: {e}")
                 return f"Error retrieving version info: {e}"
 
-        _info_meta = {"target_agent_mode": "info"}
+        _info_meta = {"target_agent_mode": "all"}
         return [
             StructuredTool.from_function(
                 func=None,

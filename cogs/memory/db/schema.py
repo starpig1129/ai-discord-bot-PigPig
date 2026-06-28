@@ -94,4 +94,15 @@ def create_tables(conn: sqlite3.Connection) -> None:
         """
     )
 
+    # Table for tracking seen bot versions per guild (independent of memory cog state)
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS guild_version_seen (
+            guild_id     TEXT PRIMARY KEY,
+            seen_version TEXT NOT NULL,
+            seen_at      REAL NOT NULL
+        );
+        """
+    )
+
     logger.info("Database tables created or verified successfully.")
