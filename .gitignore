@@ -18,6 +18,7 @@ data/serverconfig
 data/memory
 data/story
 !data/schedule/template.yaml
+data
 
 # 忽略模型與日誌檔案
 models/
