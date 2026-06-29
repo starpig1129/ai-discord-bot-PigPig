@@ -277,6 +277,72 @@ class ChannelManager(commands.Cog):
         
         await interaction.followup.send(success_message, ephemeral=True)
 
+    @app_commands.command(name="channel_status", description="Show current channel management configuration")
+    async def channel_status_command(self, interaction: discord.Interaction):
+        """Show current channel management configuration."""
+        if not await self.check_admin_permissions(interaction, defer=True):
+            return
+
+        guild_id = str(interaction.guild_id)
+        config = self.load_config(guild_id)
+
+        # Check if translation exists, fallback if not
+        title = "Channel Management Configuration"
+        server_mode_title = "Server Mode"
+        whitelist_title = "Whitelist"
+        blacklist_title = "Blacklist"
+        channel_modes_title = "Channel Modes"
+        auto_response_title = "Auto Response"
+        none_text = "None"
+
+        if self.lang_manager:
+            try:
+                translated_title = self.lang_manager.translate(guild_id, "commands", "channel_manager", "channel_status", "title")
+                if translated_title and not translated_title.startswith("[Missing"):
+                    title = translated_title
+                    server_mode_title = self.lang_manager.translate(guild_id, "commands", "channel_manager", "channel_status", "server_mode")
+                    whitelist_title = self.lang_manager.translate(guild_id, "commands", "channel_manager", "channel_status", "whitelist")
+                    blacklist_title = self.lang_manager.translate(guild_id, "commands", "channel_manager", "channel_status", "blacklist")
+                    channel_modes_title = self.lang_manager.translate(guild_id, "commands", "channel_manager", "channel_status", "channel_modes")
+                    auto_response_title = self.lang_manager.translate(guild_id, "commands", "channel_manager", "channel_status", "auto_response")
+                    none_text = self.lang_manager.translate(guild_id, "commands", "channel_manager", "channel_status", "none")
+            except Exception:
+                pass
+
+        embed = discord.Embed(title=title, color=discord.Color.blue())
+
+        # Server Mode
+        embed.add_field(name=server_mode_title, value=config.get("mode", "unrestricted").capitalize(), inline=False)
+
+        # Whitelist
+        whitelist = config.get("whitelist", [])
+        whitelist_text = ", ".join([f"<#{cid}>" for cid in whitelist]) if whitelist else none_text
+        embed.add_field(name=whitelist_title, value=whitelist_text, inline=False)
+
+        # Blacklist
+        blacklist = config.get("blacklist", [])
+        blacklist_text = ", ".join([f"<#{cid}>" for cid in blacklist]) if blacklist else none_text
+        embed.add_field(name=blacklist_title, value=blacklist_text, inline=False)
+
+        # Channel Modes
+        channel_modes = config.get("channel_modes", {})
+        if channel_modes:
+            modes_text = "\n".join([f"<#{cid}>: {mode}" for cid, mode in channel_modes.items()])
+        else:
+            modes_text = none_text
+        embed.add_field(name=channel_modes_title, value=modes_text, inline=False)
+
+        # Auto Response
+        auto_responses = config.get("auto_response", {})
+        enabled_responses = [cid for cid, enabled in auto_responses.items() if enabled]
+        if enabled_responses:
+            auto_text = "\n".join([f"<#{cid}>: Enabled" for cid in enabled_responses])
+        else:
+            auto_text = none_text
+        embed.add_field(name=auto_response_title, value=auto_text, inline=False)
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     def is_allowed_channel(self, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], guild_id: str) -> Tuple[bool, bool, Optional[str]]:
         """
         Determine if the bot is allowed to respond in a channel and get its effective mode.
