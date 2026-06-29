@@ -256,6 +256,25 @@ class ChannelManager(commands.Cog):
             
             await interaction.followup.send(not_found_message, ephemeral=True)
 
+    @app_commands.command(name="channel_status", description="Check the current response mode and auto-response status for the channel")
+    async def channel_status_command(self, interaction: discord.Interaction):
+        """View the current response mode and auto-response settings for the current channel."""
+        guild_id = str(interaction.guild_id)
+        config = self.load_config(guild_id)
+        channel_id = str(interaction.channel_id)
+
+        is_allowed, auto_response_enabled, effective_mode = self.is_allowed_channel(interaction.channel, guild_id)
+
+        status_message = (
+            f"**Channel Status:** <#{channel_id}>\n"
+            f"**Effective Mode:** {effective_mode.capitalize()}\n"
+            f"**Bot Allowed to Respond:** {'Yes' if is_allowed else 'No'}\n"
+            f"**Auto-Response Enabled:** {'Yes' if auto_response_enabled else 'No'}\n\n"
+            f"**Server-wide Mode:** {config.get('mode', 'unrestricted').capitalize()}"
+        )
+
+        await interaction.response.send_message(status_message, ephemeral=True)
+
     @app_commands.command(name="auto_response", description="Set channel auto-response")
     async def auto_response_command(self, interaction: discord.Interaction, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], enabled: bool):
         """Enable or disable automatic bot responses in a specific channel."""
