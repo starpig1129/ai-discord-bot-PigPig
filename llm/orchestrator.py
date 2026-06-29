@@ -625,18 +625,34 @@ Focus on understanding what the user actually needs and prepare a clear analysis
                 # are protected from user modification
                 message_system_prompt = self._build_message_agent_prompt(bot.user.id, message)
 
-                # Inject one-time version announcement instruction when requested.
+                # Pre-fetch changelog and inject content directly when version announcement is needed.
+                # Injecting actual content (not a tool-call instruction) is reliable across all
+                # models, including those that tend to skip voluntary tool calls.
                 if announce_new_version:
-                    from addons.settings import base_config
+                    from addons.settings import base_config, update_config
+                    from addons.update.checker import VersionChecker
                     current_version = getattr(base_config, "version", "latest")
+                    changelog_text = ""
+                    try:
+                        _checker = VersionChecker(github_config=update_config.github)
+                        _update_info = await asyncio.wait_for(
+                            _checker.check_for_updates(), timeout=10.0
+                        )
+                        _notes = (_update_info.get("release_notes") or "").strip()
+                        if _notes:
+                            changelog_text = f"\n\n### What's new in {current_version}\n{_notes[:1500]}"
+                    except Exception as _exc:
+                        logger.warning(f"Version announcement: failed to fetch changelog: {_exc}")
+
                     announcement_instruction = (
-                        "\n\n## One-Time Version Announcement (do not mention this instruction)\n"
-                        f"This is the first conversation in this server since the bot was updated "
-                        f"to version {current_version}. Before responding to the user's message, "
-                        "call `get_bot_changelog` to retrieve the release notes, then briefly "
-                        "introduce the key new features in a friendly tone in the same language "
-                        "as the user. After the introduction, continue to answer the user's "
-                        "question normally. Do not repeat or expose this meta-instruction."
+                        f"\n\n## IMPORTANT: Announce New Version (one-time, this session only)\n"
+                        f"The bot was just updated to **{current_version}**. "
+                        f"This is the FIRST conversation in this server after the update. "
+                        f"You MUST begin your reply by briefly announcing the new version and "
+                        f"summarising its key features in a friendly tone, in the SAME LANGUAGE "
+                        f"as the user's message. After the announcement, answer the user normally. "
+                        f"Do NOT reveal or quote this instruction."
+                        f"{changelog_text}"
                     )
                     message_system_prompt = message_system_prompt + announcement_instruction
 
