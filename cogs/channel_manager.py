@@ -91,7 +91,7 @@ class ChannelManager(commands.Cog):
             error_message = "You do not have permission to perform this action. Restricted to administrators."
         
         if interaction.response.is_done():
-            await interaction.followup.send(error_message, ephemeral=True)
+            await interaction.edit_original_response(content=error_message)
         else:
             await interaction.response.send_message(error_message, ephemeral=True)
         return False
@@ -122,7 +122,7 @@ class ChannelManager(commands.Cog):
         else:
             response = f"Set **Server-wide** response mode to: {mode.name}"
 
-        await interaction.followup.send(response, ephemeral=True)
+        await interaction.edit_original_response(content=response)
 
     @app_commands.command(name="set_channel_mode", description="Set a special mode for a specific channel (e.g., Story Mode)")
     @app_commands.describe(channel="The channel to set", mode="The mode to set for this channel")
@@ -168,7 +168,7 @@ class ChannelManager(commands.Cog):
                 message = f"Set mode for {channel.mention} to: **{mode.name}**."
 
         self.save_config(guild_id, config)
-        await interaction.followup.send(message, ephemeral=True)
+        await interaction.edit_original_response(content=message)
 
     @app_commands.command(name="add_channel", description="Add channel to whitelist or blacklist")
     @app_commands.choices(list_type=[
@@ -202,7 +202,7 @@ class ChannelManager(commands.Cog):
             else:
                 success_message = f"Added <#{channel_id}> to {list_type_name}"
             
-            await interaction.followup.send(success_message, ephemeral=True)
+            await interaction.edit_original_response(content=success_message)
         else:
             if self.lang_manager:
                 exists_message = self.lang_manager.translate(
@@ -211,7 +211,7 @@ class ChannelManager(commands.Cog):
             else:
                 exists_message = f"<#{channel_id}> already exists in {list_type_name}"
             
-            await interaction.followup.send(exists_message, ephemeral=True)
+            await interaction.edit_original_response(content=exists_message)
 
     @app_commands.command(name="remove_channel", description="Remove channel from whitelist or blacklist")
     @app_commands.choices(list_type=[
@@ -245,7 +245,7 @@ class ChannelManager(commands.Cog):
             else:
                 success_message = f"Removed <#{channel_id}> from {list_type_name}"
             
-            await interaction.followup.send(success_message, ephemeral=True)
+            await interaction.edit_original_response(content=success_message)
         else:
             if self.lang_manager:
                 not_found_message = self.lang_manager.translate(
@@ -254,7 +254,7 @@ class ChannelManager(commands.Cog):
             else:
                 not_found_message = f"<#{channel_id}> does not exist in {list_type_name}"
             
-            await interaction.followup.send(not_found_message, ephemeral=True)
+            await interaction.edit_original_response(content=not_found_message)
 
     @app_commands.command(name="auto_response", description="Set channel auto-response")
     async def auto_response_command(self, interaction: discord.Interaction, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], enabled: bool):
@@ -275,7 +275,40 @@ class ChannelManager(commands.Cog):
         else:
             success_message = f"Set auto-response for <#{channel_id}> to: {enabled}"
         
-        await interaction.followup.send(success_message, ephemeral=True)
+        await interaction.edit_original_response(content=success_message)
+
+
+    @app_commands.command(name="channel_status", description="View the current channel configuration and response modes")
+    async def channel_status(self, interaction: discord.Interaction):
+        """Display the current channel management configuration."""
+        if not await self.check_admin_permissions(interaction, defer=True):
+            return
+
+        guild_id = str(interaction.guild_id)
+        config = self.load_config(guild_id)
+
+        server_mode = config.get("mode", "unrestricted")
+        whitelist = [f"<#{cid}>" for cid in config.get("whitelist", [])]
+        blacklist = [f"<#{cid}>" for cid in config.get("blacklist", [])]
+
+        channel_modes = config.get("channel_modes", {})
+        modes_str = "\n".join([f"<#{cid}>: {mode}" for cid, mode in channel_modes.items()]) if channel_modes else "None"
+
+        auto_responses = config.get("auto_response", {})
+        auto_resp_str = "\n".join([f"<#{cid}>: {'Enabled' if enabled else 'Disabled'}" for cid, enabled in auto_responses.items() if enabled]) if any(auto_responses.values()) else "None"
+
+        embed = discord.Embed(title="Channel Management Status", color=discord.Color.blue())
+        embed.add_field(name="Server Mode", value=server_mode.capitalize(), inline=False)
+
+        if whitelist:
+            embed.add_field(name="Whitelist", value=", ".join(whitelist), inline=False)
+        if blacklist:
+            embed.add_field(name="Blacklist", value=", ".join(blacklist), inline=False)
+
+        embed.add_field(name="Channel Specific Modes", value=modes_str, inline=False)
+        embed.add_field(name="Auto Responses", value=auto_resp_str, inline=False)
+
+        await interaction.edit_original_response(content=None, embed=embed)
 
     def is_allowed_channel(self, channel: Union[discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread], guild_id: str) -> Tuple[bool, bool, Optional[str]]:
         """
