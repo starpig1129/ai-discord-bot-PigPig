@@ -1,10 +1,11 @@
 """Permission verification middleware for the dashboard.
 
 Provides FastAPI dependencies for role-based access control:
-- ``get_current_user``  — extracts and validates JWT from Authorization header
-- ``require_owner``     — restricts to Bot Owner only
-- ``require_admin``     — restricts to Server Admin or Bot Owner
-- ``require_guild_access`` — validates access to a specific guild
+- ``get_current_user``         — extracts and validates JWT from Authorization header
+- ``require_owner``            — restricts to Bot Owner only
+- ``require_admin``            — restricts to Server Admin or Bot Owner
+- ``require_guild_access``     — read-only membership check for a guild
+- ``require_guild_admin_access`` — admin-level check for write operations on a guild
 """
 
 from __future__ import annotations
@@ -78,17 +79,18 @@ async def require_admin(user: dict[str, Any] = Depends(get_current_user)) -> dic
 
 
 def require_guild_access(guild_id: str, user: dict[str, Any]) -> None:
-    """Verify that the user has access to the specified guild.
+    """Verify that the user is a member of the specified guild (read access).
 
-    Bot Owners have access to all guilds.  Server Admins are restricted
-    to guilds listed in their JWT ``guild_ids`` claim.
+    Bot Owners have access to all guilds. All other authenticated users are
+    restricted to guilds listed in their JWT ``guild_ids`` claim (all guilds
+    they have joined). Use ``require_guild_admin_access`` for write operations.
 
     Args:
         guild_id: The guild ID being accessed.
         user: Decoded JWT payload.
 
     Raises:
-        HTTPException: 403 if the user lacks access to the guild.
+        HTTPException: 403 if the user is not a member of the guild.
     """
     if user.get("role") == "owner":
         return  # Owner has unrestricted access
@@ -98,4 +100,32 @@ def require_guild_access(guild_id: str, user: dict[str, Any]) -> None:
         raise HTTPException(
             status_code=403,
             detail=f"No access to guild {guild_id}",
+        )
+
+
+def require_guild_admin_access(guild_id: str, user: dict[str, Any]) -> None:
+    """Verify that the user holds administrator permissions for the specified guild.
+
+    Bot Owners have unrestricted access. All other users must have the target
+    guild listed in the ``admin_guild_ids`` JWT claim, which is populated only
+    for guilds where they hold Discord administrator permissions.
+
+    Use this function (instead of ``require_guild_access``) on any endpoint
+    that mutates guild configuration.
+
+    Args:
+        guild_id: The guild ID being modified.
+        user: Decoded JWT payload.
+
+    Raises:
+        HTTPException: 403 if the user does not have admin rights for the guild.
+    """
+    if user.get("role") == "owner":
+        return  # Owner has unrestricted access
+
+    admin_guilds = user.get("admin_guild_ids", [])
+    if guild_id not in admin_guilds:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Administrator access required for guild {guild_id}",
         )

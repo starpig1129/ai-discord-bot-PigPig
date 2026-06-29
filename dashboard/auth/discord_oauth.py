@@ -6,6 +6,8 @@ login → Discord authorize → callback → JWT issuance.
 
 from __future__ import annotations
 
+import hmac
+import secrets
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -71,17 +73,37 @@ def _get_bot(request: Request):
 async def discord_login(request: Request) -> RedirectResponse:
     """Redirect the user to the Discord OAuth2 authorization page.
 
+    Generates a cryptographically random ``state`` value, stores it in a
+    short-lived HttpOnly cookie, and includes it in the authorization URL so
+    it can be validated on the callback to prevent CSRF attacks.
+
     Returns:
-        302 redirect to Discord authorize URL.
+        302 redirect to Discord authorize URL with ``state`` parameter.
     """
+    state = secrets.token_urlsafe(32)
+    is_https = (
+        request.url.scheme == "https"
+        or request.headers.get("x-forwarded-proto") == "https"
+    )
     params = {
         "client_id": tokens.client_id,
         "redirect_uri": _get_redirect_uri(request),
         "response_type": "code",
         "scope": SCOPES,
+        "state": state,
     }
     url = f"{DISCORD_AUTHORIZE_URL}?{urlencode(params)}"
-    return RedirectResponse(url)
+    response = RedirectResponse(url)
+    response.set_cookie(
+        key="oauth_state",
+        value=state,
+        httponly=True,
+        secure=is_https,
+        samesite="lax",
+        max_age=300,
+        path="/auth/discord/callback",
+    )
+    return response
 
 
 @router.get("/discord/authorize-url")
@@ -222,6 +244,7 @@ async def discord_exchange(request: Request) -> JSONResponse:
         avatar = user_data.get("avatar", "")
         access_token = create_access_token(
             user_id=user_id, role=role, guild_ids=guild_ids,
+            admin_guild_ids=admin_guild_ids,
             avatar=avatar, username=username,
         )
         refresh_token = create_refresh_token(user_id=user_id)
@@ -250,24 +273,39 @@ async def discord_exchange(request: Request) -> JSONResponse:
 
 
 @router.get("/discord/callback")
-async def discord_callback(request: Request, code: Optional[str] = None) -> Response:
+async def discord_callback(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+) -> Response:
     """Handle the Discord OAuth2 callback.
 
-    Exchanges the authorization code for an access token, fetches user
-    info + guild list, determines the permission role, and issues JWT
-    access + refresh tokens.
+    Validates the ``state`` parameter against the cookie stored by
+    ``discord_login`` to prevent CSRF attacks, then exchanges the
+    authorization code for an access token, fetches user info + guild list,
+    determines the permission role, and issues JWT access + refresh tokens.
+
+    The JWT access token is delivered via the URL fragment (``#access_token=``),
+    not as a query parameter, so it is not sent in Referer headers and does
+    not appear in server access logs.
 
     Args:
         request: The current FastAPI request.
         code: The authorization code from Discord.
+        state: The CSRF state token echoed back by Discord.
 
     Returns:
-        JSON response with access_token and user info; refresh token set
-        as HttpOnly cookie.
+        302 redirect to ``{frontend}/callback#access_token=<JWT>``; refresh
+        token set as HttpOnly Secure cookie.
 
     Raises:
-        HTTPException: On missing code or Discord API failure.
+        HTTPException: On CSRF state mismatch, missing code, or Discord API failure.
     """
+    # Validate CSRF state before touching the authorization code.
+    stored_state = request.cookies.get("oauth_state")
+    if not state or not stored_state or not hmac.compare_digest(state, stored_state):
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
@@ -338,6 +376,7 @@ async def discord_callback(request: Request, code: Optional[str] = None) -> Resp
         user_id=user_id,
         role=role,
         guild_ids=guild_ids,
+        admin_guild_ids=admin_guild_ids,
         avatar=avatar,
         username=username,
     )
@@ -348,21 +387,25 @@ async def discord_callback(request: Request, code: Optional[str] = None) -> Resp
     # Get frontend URL from config
     dashboard_cfg = getattr(base_config, "dashboard", {})
     cors_origins = dashboard_cfg.get("cors_origins", ["http://localhost:5173"])
-    frontend_url = cors_origins[0].rstrip('/')
+    frontend_url = cors_origins[0].rstrip("/")
 
-    redirect_url = f"{frontend_url}/callback?access_token={access_token}"
-    log.info(f"OAuth redirect → {frontend_url}/callback?access_token=<JWT:{len(access_token)}chars>")
+    # Deliver the access token via URL fragment, not query string, so it is
+    # excluded from server access logs and Referer headers.
+    redirect_url = f"{frontend_url}/callback#{urlencode({'access_token': access_token})}"
+    log.info(f"OAuth redirect → {frontend_url}/callback#access_token=<JWT:{len(access_token)}chars>")
     response = RedirectResponse(url=redirect_url)
-    
+
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        secure=False,  # Set True in production with HTTPS
+        secure=True,
         samesite="lax",
         max_age=7 * 86400,
         path="/auth",
     )
+    # Consume the one-time state cookie
+    response.delete_cookie(key="oauth_state", path="/auth/discord/callback")
     return response
 
 
@@ -385,12 +428,13 @@ async def refresh(request: Request) -> JSONResponse:
     bot_owner_id = str(getattr(tokens, "bot_owner_id", 0))
     bot = _get_bot(request)
 
+    admin_guild_ids: list[str] = []
     if user_id == bot_owner_id:
         role = "owner"
         guild_ids = [str(g.id) for g in bot.guilds] if bot else []
+        admin_guild_ids = list(guild_ids)
     elif bot:
         guild_ids = []
-        admin_guild_ids = []
         for guild in bot.guilds:
             member = guild.get_member(int(user_id))
             if member:
@@ -415,6 +459,7 @@ async def refresh(request: Request) -> JSONResponse:
         user_id=user_id,
         role=role,
         guild_ids=guild_ids,
+        admin_guild_ids=admin_guild_ids,
         avatar=avatar,
         username=username,
     )

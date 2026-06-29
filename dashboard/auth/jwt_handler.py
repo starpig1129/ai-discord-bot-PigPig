@@ -36,6 +36,7 @@ def create_access_token(
     user_id: str,
     role: str,
     guild_ids: list[str],
+    admin_guild_ids: list[str] | None = None,
     avatar: str = "",
     username: str = "",
 ) -> str:
@@ -44,7 +45,10 @@ def create_access_token(
     Args:
         user_id: Discord user ID.
         role: Permission role ("owner", "admin", "user").
-        guild_ids: List of guild IDs the user belongs to.
+        guild_ids: List of all guild IDs the user belongs to.
+        admin_guild_ids: List of guild IDs where the user has administrator
+            permissions. Used by ``require_guild_admin_access`` to gate write
+            operations on guild-scoped endpoints.
         avatar: Discord avatar hash.
         username: Discord username.
 
@@ -56,6 +60,7 @@ def create_access_token(
         "sub": user_id,
         "role": role,
         "guild_ids": guild_ids,
+        "admin_guild_ids": admin_guild_ids or [],
         "avatar": avatar,
         "username": username,
         "iat": now,

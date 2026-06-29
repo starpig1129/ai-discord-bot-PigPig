@@ -25,7 +25,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from addons.logging import get_logger
-from dashboard.middleware.permission import get_current_user, require_guild_access
+from dashboard.middleware.permission import (
+    get_current_user,
+    require_guild_access,
+    require_guild_admin_access,
+)
 from function import ROOT_DIR
 
 log = get_logger(server_id="Bot", source=__name__)
@@ -202,7 +206,7 @@ async def update_channel(
     Returns:
         JSON confirmation with updated settings.
     """
-    require_guild_access(guild_id, user)
+    require_guild_admin_access(guild_id, user)
 
     body: dict[str, Any] = await request.json()
     cfg = _read_guild_config(guild_id)
@@ -442,7 +446,7 @@ async def update_prompt_module(
         HTTPException 403: If the module is protected.
         HTTPException 400: If the module name is unknown.
     """
-    require_guild_access(guild_id, user)
+    require_guild_admin_access(guild_id, user)
 
     if module_name in _PROTECTED_MODULES:
         raise HTTPException(
@@ -533,7 +537,7 @@ async def update_prompt(
     Returns:
         JSON confirmation.
     """
-    require_guild_access(guild_id, user)
+    require_guild_admin_access(guild_id, user)
 
     body: dict[str, Any] = await request.json()
     cfg = _read_guild_config(guild_id)
@@ -609,7 +613,7 @@ async def update_channel_prompt(
     Returns:
         JSON confirmation.
     """
-    require_guild_access(guild_id, user)
+    require_guild_admin_access(guild_id, user)
 
     body: dict[str, Any] = await request.json()
     cfg = _read_guild_config(guild_id)
@@ -813,7 +817,7 @@ async def update_channel_prompt_module(
     Returns:
         JSON confirmation.
     """
-    require_guild_access(guild_id, user)
+    require_guild_admin_access(guild_id, user)
 
     if module_name in _PROTECTED_MODULES:
         raise HTTPException(
