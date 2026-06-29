@@ -1,10 +1,5 @@
 {
-    "choices": {
-        "no_loop": "ループなし",
-        "loop_queue": "キュー全体ループ",
-        "loop_single": "シングルループ"
-    },
     "responses": {
-        "success": "再生モードを {mode} に設定しました。"
+        "success": "モードの切り替えに成功しました。"
     }
 }

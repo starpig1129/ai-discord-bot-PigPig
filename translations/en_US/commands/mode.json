@@ -1,10 +1,5 @@
 {
-    "choices": {
-        "no_loop": "No Loop",
-        "loop_queue": "Loop Queue",
-        "loop_single": "Loop Single"
-    },
     "responses": {
-        "success": "Playback mode has been set to {mode}."
+        "success": "Mode switched successfully."
     }
 }
