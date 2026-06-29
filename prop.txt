@@ -1,0 +1,20 @@
+Title: `[Perf] Propose refactoring ShortTermMemoryProvider to fix sequential procedural fetch`
+
+Description:
+**1. What was found (the specific problem):**
+In `ContextManager.get_context()`, there is a significant overarching sequential bottleneck where procedural memories for additionally mentioned users (`additional_procedural`) are fetched only *after* the `_fetch_short_term()` call completes entirely.
+
+**2. Where it is:**
+`llm/context_manager.py` (lines 118-140)
+
+**3. Why it matters:**
+`_fetch_short_term()` calls `ShortTermMemoryProvider.get()`, which is an extremely slow, I/O-heavy operation because it concurrently downloads and processes all media attachments from the last 10 Discord messages. Because `additional_ids` (users mentioned in those past messages) are only extracted *after* `_fetch_short_term()` finishes, the pipeline incurs this massive latency penalty sequentially before it can even *begin* querying the database to fetch the procedural memory for those mentioned users.
+
+**4. What is proposed:**
+I propose a structural refactoring of `ShortTermMemoryProvider`. It should be split to expose two methods:
+1. `get_raw_history()`: Rapidly fetches the last 10 messages from Discord.
+2. `process_messages()`: Processes those messages and attachments into `BaseMessage` format.
+
+This would allow `ContextManager` to fetch the raw messages quickly, extract all `additional_ids` immediately, and then launch `_fetch_procedural(all_uids)` **concurrently** with the slow `process_messages()` attachment processing phase. This completely eliminates the sequential dependency wait time. I did not implement this change directly as it requires modifying a public interface across the project.
+
+*Note: Alternate attempts to patch this within `ContextManager` directly by duplicating the `channel.history()` API call were rejected as they introduce redundant network load.*
