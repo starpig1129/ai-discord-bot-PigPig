@@ -6,7 +6,7 @@ ipc_server:
   port: 8000
   enable: false
 
-version: "v3.3.0"
+version: "v3.3.1"
 logging:
   # Console output settings
   console:
