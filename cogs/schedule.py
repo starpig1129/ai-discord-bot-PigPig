@@ -51,13 +51,13 @@ class ScheduleManager(commands.Cog):
             success_msg = self.lang_manager.translate(
                 guild_id, "commands", "upload_schedule", "responses", "success"
             ) if self.lang_manager else "行程表已成功上傳！"
-            await interaction.followup.send(success_msg)
+            await interaction.edit_original_response(content=success_msg)
         except Exception as e:
             await func.report_error(e, "uploading schedule")
             error_msg = self.lang_manager.translate(
                 guild_id, "commands", "upload_schedule", "responses", "error", error=str(e)
             ) if self.lang_manager else f"上傳行程表時發生錯誤：{str(e)}"
-            await interaction.followup.send(error_msg)
+            await interaction.edit_original_response(content=error_msg)
 
     async def _core_upload_schedule(self, user_id: int, channel_id: int, yaml_data: bytes):
         try:
@@ -95,13 +95,13 @@ class ScheduleManager(commands.Cog):
         try:
             target_user_id = target_user.id if target_user else interaction.user.id
             result = await self._core_query_schedule(interaction, query_type.value, target_user_id, time, day.value if day else None)
-            await interaction.followup.send(result)
+            await interaction.edit_original_response(content=result)
         except Exception as e:
             await func.report_error(e, "querying schedule")
             error_msg = self.lang_manager.translate(
                 guild_id, "commands", "query_schedule", "responses", "error", error=str(e)
             ) if self.lang_manager else f"查詢行程表時發生錯誤：{str(e)}"
-            await interaction.followup.send(error_msg)
+            await interaction.edit_original_response(content=error_msg)
 
     async def _core_query_schedule(self, interaction_or_ctx, query_type: str, target_user_id:int, time: str = None, day: str = None):
         guild_id = str(interaction_or_ctx.guild_id) if hasattr(interaction_or_ctx, 'guild_id') and interaction_or_ctx.guild_id else str(interaction_or_ctx.guild.id) if hasattr(interaction_or_ctx, 'guild') else "0"

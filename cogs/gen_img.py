@@ -221,7 +221,7 @@ class ImageGenerationCog(commands.Cog, name="ImageGenerationCog"):
 
         # Slash command still uses immediate reply but supports attachments (base64 → discord.File)
         if "error" in result:
-            await interaction.followup.send(result["error"])
+            await interaction.edit_original_response(content=result["error"])
         else:
             files = []
             attachments = result.get("attachments") or []
