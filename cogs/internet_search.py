@@ -138,15 +138,16 @@ class InternetSearchCog(commands.Cog):
                 chunks = _split_markdown(result, limit=1900)
                 try:
                     if not chunks:
-                        await interaction.followup.send(content=result[:1900])
+                        await interaction.edit_original_response(content=result[:1900])
                     else:
-                        for chunk in chunks:
+                        await interaction.edit_original_response(content=chunks[0])
+                        for chunk in chunks[1:]:
                             await interaction.followup.send(content=chunk)
                 except Exception as send_err:
                     await func.report_error(send_err, f"search_command send followup failed: {send_err}")
                     try:
                         short = (result[:1900] + "...") if len(result) > 1900 else result
-                        await interaction.followup.send(content=short)
+                        await interaction.edit_original_response(content=short)
                     except Exception:
                         pass
             else:
@@ -163,7 +164,7 @@ class InternetSearchCog(commands.Cog):
                         ) if self.lang_manager else f"Search for '{query}' completed."
                         if len(confirmation) > 1900:
                             confirmation = confirmation[:1897] + "..."
-                        await interaction.followup.send(content=confirmation)
+                        await interaction.edit_original_response(content=confirmation)
                 except Exception as notify_err:
                     await func.report_error(notify_err, f"search_command confirmation send failed: {notify_err}")
                     pass
@@ -178,9 +179,9 @@ class InternetSearchCog(commands.Cog):
                     ) if self.lang_manager else "❌ 搜尋服務暫時不可用，請稍後再試。(Search service is temporarily unavailable, please try again later.)"
                     if blocked_msg.startswith("[Translation not found"):
                         blocked_msg = "❌ 搜尋服務暫時不可用，請稍後再試。(Search service is temporarily unavailable, please try again later.)"
-                    await interaction.followup.send(content=blocked_msg)
+                    await interaction.edit_original_response(content=blocked_msg)
                 else:
-                    await interaction.followup.send(content=f"Search failed: {e}")
+                    await interaction.edit_original_response(content=f"Search failed: {e}")
             except Exception:
                 pass
 
