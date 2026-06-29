@@ -17,6 +17,7 @@ sys.modules["discord"] = discord
 # real attachment/memory symbols (see that file) so downstream modules remain
 # importable.
 
+import discord          # noqa: F401  — side-effect: caches real module
 import addons.settings  # noqa: F401  — side-effect: caches real module
 import sys
 import discord
