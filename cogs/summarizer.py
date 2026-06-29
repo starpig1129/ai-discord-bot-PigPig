@@ -119,7 +119,7 @@ class SummarizerCog(commands.Cog):
 
             if not dialogue_history or human_msg_count == 0:
                 no_msg_text = self.lang_manager.translate(guild_id, "commands", "summarize", "responses", "no_messages") if self.lang_manager else "No messages to summarize."
-                await interaction.followup.send(no_msg_text, ephemeral=True)
+                await interaction.edit_original_response(content=no_msg_text)
                 return
 
             # Localization for AI prompt
@@ -187,7 +187,7 @@ class SummarizerCog(commands.Cog):
                 footer_text = f"Analyzed {human_msg_count} messages. {current_char_count}/{self.MAX_CHAR_COUNT} chars."
                 
             main_embed.set_footer(text=footer_text)
-            await interaction.followup.send(embed=main_embed)
+            await interaction.edit_original_response(embed=main_embed)
             
             if len(summary_chunks) > 1:
                 log.info(f"Summary long, splitting into {len(summary_chunks)} messages.")
@@ -211,7 +211,7 @@ class SummarizerCog(commands.Cog):
         except Exception as e:
             await func.report_error(e, "summarizing channel")
             error_text = self.lang_manager.translate(guild_id, "commands", "summarize", "responses", "error", error=str(e)) if self.lang_manager else f"Error: {e}"
-            await interaction.followup.send(error_text, ephemeral=True)
+            await interaction.edit_original_response(content=error_text)
 
 
 async def setup(bot: commands.Bot):
